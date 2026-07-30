@@ -9,32 +9,33 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import {
+  type CapabilityHandler,
   getNamedFunctionName,
   resolveSavedFunctionReferences,
   runInSandbox,
   validateTypeScript,
-  type CapabilityHandler,
 } from "./sandbox.js";
 import {
   FUNCTION_ENTRY_TYPE,
+  type FunctionActivity,
+  type FunctionEntry,
+  type FunctionRegistry,
   reconstructFunctions,
   registerFunctionManager,
   validateRegistryCapacity,
   validateSavedFunctionName,
-  type FunctionActivity,
-  type FunctionEntry,
-  type FunctionRegistry,
 } from "./saved-functions.js";
 
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
-import { handleWorkspace, resolveWorkspacePath, WORKSPACE_METHODS } from "./workspace.js";
+
 import {
   CODE_DESCRIPTION,
+  createToolDescription,
   PARAMS_DESCRIPTION,
   PROMPT_GUIDELINES,
   PROMPT_SNIPPET,
-  createToolDescription,
 } from "./tool-metadata.js";
+import { handleWorkspace, resolveWorkspacePath, WORKSPACE_METHODS } from "./workspace.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
 export const CAPABILITY_METHODS = {
@@ -56,14 +57,18 @@ interface TypeScriptDetails {
 }
 
 async function readHttpBody(response: Response): Promise<{ body: string; truncated: boolean }> {
-  if (!response.body) return { body: "", truncated: false };
+  if (!response.body) {
+    return { body: "", truncated: false };
+  }
   const reader = response.body.getReader();
   const chunks: Buffer[] = [];
   let bytes = 0;
   let truncated = false;
-  while (true) {
+  for (;;) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      break;
+    }
     const remaining = MAX_HTTP_BYTES - bytes;
     if (value.byteLength > remaining) {
       chunks.push(Buffer.from(value.subarray(0, remaining)));
@@ -76,7 +81,10 @@ async function readHttpBody(response: Response): Promise<{ body: string; truncat
     bytes += value.byteLength;
     if (bytes === MAX_HTTP_BYTES) {
       const next = await reader.read();
-      if (!next.done) { truncated = true; await reader.cancel(); }
+      if (!next.done) {
+        truncated = true;
+        await reader.cancel();
+      }
       break;
     }
   }
@@ -91,7 +99,9 @@ function object(value: unknown, label: string): Record<string, unknown> {
 }
 
 function string(value: unknown, label: string): string {
-  if (typeof value !== "string") throw new TypeError(`${label} must be a string`);
+  if (typeof value !== "string") {
+    throw new TypeError(`${label} must be a string`);
+  }
   return value;
 }
 
@@ -108,22 +118,35 @@ async function executeHostProcess(
   if (options.raise !== undefined && typeof options.raise !== "boolean") {
     throw new TypeError("options.raise must be a boolean");
   }
-  const cwd = options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
+  const cwd =
+    options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
   onShellCommand(displayCommand);
   const result = await pi.exec(program, args, {
     cwd,
     ...(signal ? { signal } : {}),
     timeout: Number(options.timeoutMs ?? 120_000),
   });
-  const stdout = truncateTail(result.stdout, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
-  const stderr = truncateTail(result.stderr, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+  const stdout = truncateTail(result.stdout, {
+    maxBytes: DEFAULT_MAX_BYTES,
+    maxLines: DEFAULT_MAX_LINES,
+  });
+  const stderr = truncateTail(result.stderr, {
+    maxBytes: DEFAULT_MAX_BYTES,
+    maxLines: DEFAULT_MAX_LINES,
+  });
   if (options.raise === true && result.code !== 0) {
-    const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4_000);
+    const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4000);
     throw new Error(
-      `Command failed with exit code ${result.code}: ${displayCommand}` + (detail ? `\n${detail}` : ""),
+      `Command failed with exit code ${result.code}: ${displayCommand}` +
+        (detail ? `\n${detail}` : ""),
     );
   }
-  return { stdout: stdout.content, stderr: stderr.content, code: result.code, truncated: stdout.truncated || stderr.truncated };
+  return {
+    stdout: stdout.content,
+    stderr: stderr.content,
+    code: result.code,
+    truncated: stdout.truncated || stderr.truncated,
+  };
 }
 
 function createCapabilities(
@@ -142,18 +165,39 @@ function createCapabilities(
     if (capability === "shell" && method === "exec") {
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
-      return executeHostProcess(pi, "/bin/sh", ["-lc", command], command, options, ctx.cwd, onShellCommand, signal);
+      return executeHostProcess(
+        pi,
+        "/bin/sh",
+        ["-lc", command],
+        command,
+        options,
+        ctx.cwd,
+        onShellCommand,
+        signal,
+      );
     }
 
     if (capability === "shell" && method === "execFile") {
       const program = string(args[0], "program");
-      if (!Array.isArray(args[1]) || !args[1].every((value) => typeof value === "string")) {
+      if (!(Array.isArray(args[1]) && args[1].every((value) => typeof value === "string"))) {
         throw new TypeError("args must be an array of strings");
       }
       const processArgs = args[1] as string[];
       const options = args[2] === undefined ? {} : object(args[2], "options");
-      const display = [program, ...processArgs.map((value) => JSON.stringify(value))].join(" ");
-      return executeHostProcess(pi, program, processArgs, display, options, ctx.cwd, onShellCommand, signal);
+      const commandDisplay = [
+        program,
+        ...processArgs.map((argument) => JSON.stringify(argument)),
+      ].join(" ");
+      return executeHostProcess(
+        pi,
+        program,
+        processArgs,
+        commandDisplay,
+        options,
+        ctx.cwd,
+        onShellCommand,
+        signal,
+      );
     }
 
     if (capability === "http" && method === "request") {
@@ -161,7 +205,9 @@ function createCapabilities(
       const options = args[1] === undefined ? {} : object(args[1], "options");
       const response = await fetch(url, {
         ...(options.method === undefined ? {} : { method: string(options.method, "method") }),
-        ...(options.headers === undefined ? {} : { headers: options.headers as Record<string, string> }),
+        ...(options.headers === undefined
+          ? {}
+          : { headers: options.headers as Record<string, string> }),
         ...(options.body === undefined ? {} : { body: string(options.body, "body") }),
         ...(signal ? { signal } : {}),
       });
@@ -176,22 +222,39 @@ function createCapabilities(
     }
 
     if (capability === "ui") {
-      if (!ctx.hasUI) throw new Error("UI is not available in this mode");
+      if (!ctx.hasUI) {
+        throw new Error("UI is not available in this mode");
+      }
       switch (method) {
-        case "confirm": return ctx.ui.confirm(string(args[0], "title"), string(args[1], "message"));
-        case "input": return ctx.ui.input(string(args[0], "title"), args[1] === undefined ? undefined : string(args[1], "placeholder"));
+        case "confirm":
+          return ctx.ui.confirm(string(args[0], "title"), string(args[1], "message"));
+        case "input":
+          return ctx.ui.input(
+            string(args[0], "title"),
+            args[1] === undefined ? undefined : string(args[1], "placeholder"),
+          );
         case "select": {
-          if (!Array.isArray(args[1])) throw new Error("options must be an array");
+          if (!Array.isArray(args[1])) {
+            throw new Error("options must be an array");
+          }
           return ctx.ui.select(string(args[0], "title"), args[1].map(String));
         }
-        case "notify": ctx.ui.notify(string(args[0], "message"), (args[1] as "info" | "warning" | "error") ?? "info"); return null;
-        default: throw new Error(`Unknown ui method: ${method}`);
+        case "notify":
+          ctx.ui.notify(
+            string(args[0], "message"),
+            (args[1] as "info" | "warning" | "error" | undefined) ?? "info",
+          );
+          return null;
+        default:
+          throw new Error(`Unknown ui method: ${method}`);
       }
     }
 
     if (capability === "__pit" && method === "savedFunctionRun") {
       const name = string(args[0], "saved function name");
-      if (!registry.has(name)) throw new Error(`Saved function "${name}" is unavailable`);
+      if (!registry.has(name)) {
+        throw new Error(`Saved function "${name}" is unavailable`);
+      }
       activity.push({ action: "run", name });
       return null;
     }
@@ -212,10 +275,17 @@ function createCapabilities(
 }
 
 export function display(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === undefined) return "undefined";
-  try { return JSON.stringify(value, null, 2); }
-  catch { return String(value); }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === undefined) {
+    return "undefined";
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 export default function pit(pi: ExtensionAPI) {
@@ -238,17 +308,22 @@ export default function pit(pi: ExtensionAPI) {
     parameters: Type.Object({
       code: Type.String({ description: CODE_DESCRIPTION }),
       params: Type.Optional(Type.Unknown({ description: PARAMS_DESCRIPTION })),
-      timeoutMs: Type.Optional(Type.Integer({
-        minimum: 1,
-        maximum: 300_000,
-        description: "Maximum wall-clock time for the entire invocation in milliseconds (default: 30000).",
-      })),
+      timeoutMs: Type.Optional(
+        Type.Integer({
+          minimum: 1,
+          maximum: 300_000,
+          description:
+            "Maximum wall-clock time for the entire invocation in milliseconds (default: 30000).",
+        }),
+      ),
     }),
     renderCall(args, theme, context) {
       const code = typeof args.code === "string" ? args.code : "";
       const lines = code ? highlightCode(code, "typescript") : [];
       const shown = context.expanded ? lines : lines.slice(0, COLLAPSED_CODE_LINES);
-      const state = context.argsComplete ? `${lines.length} line${lines.length === 1 ? "" : "s"}` : "generating…";
+      const state = context.argsComplete
+        ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
+        : "generating…";
       let text = theme.fg("toolTitle", theme.bold("typescript"));
       text += theme.fg("dim", ` (${state})`);
       if (args.timeoutMs !== undefined) {
@@ -269,9 +344,15 @@ export default function pit(pi: ExtensionAPI) {
         if (context.expanded) {
           let remaining = MAX_EXPANDED_SAVED_TOTAL_LINES;
           for (const reference of savedReferences) {
-            if (remaining <= 0) break;
+            if (remaining <= 0) {
+              break;
+            }
             const highlighted = highlightCode(reference.source, "typescript");
-            const count = Math.min(highlighted.length, MAX_EXPANDED_SAVED_FUNCTION_LINES, remaining);
+            const count = Math.min(
+              highlighted.length,
+              MAX_EXPANDED_SAVED_FUNCTION_LINES,
+              remaining,
+            );
             const displayed = highlighted.slice(0, count);
             const role = reference.direct ? "saved function" : "saved dependency";
             text += `\n\n${theme.fg("toolTitle", theme.bold(`${role}: ${reference.name}`))}`;
@@ -281,8 +362,15 @@ export default function pit(pi: ExtensionAPI) {
             }
             remaining -= count;
           }
-          const displayedCount = savedReferences.reduce((total, reference) =>
-            total + Math.min(highlightCode(reference.source, "typescript").length, MAX_EXPANDED_SAVED_FUNCTION_LINES), 0);
+          const displayedCount = savedReferences.reduce(
+            (total, reference) =>
+              total +
+              Math.min(
+                highlightCode(reference.source, "typescript").length,
+                MAX_EXPANDED_SAVED_FUNCTION_LINES,
+              ),
+            0,
+          );
           if (displayedCount > MAX_EXPANDED_SAVED_TOTAL_LINES) {
             text += `\n${theme.fg("muted", "… additional saved source omitted by the 500-line display limit")}`;
           }
@@ -322,12 +410,15 @@ export default function pit(pi: ExtensionAPI) {
         ? "truncated"
         : `${lines.length} line${lines.length === 1 ? "" : "s"}`;
       let text = "";
-      if (details?.functions?.length) {
-        const operations = details.functions.map((operation) => {
-          if (operation.action === "set") return `${operation.replaced ? "replaced" : "saved"} ${operation.name}`;
+      const functionActivity = details?.functions;
+      if (functionActivity && functionActivity.length > 0) {
+        const operations = functionActivity.map((operation) => {
+          if (operation.action === "set") {
+            return `${operation.replaced ? "replaced" : "saved"} ${operation.name}`;
+          }
           return `ran ${operation.name}`;
         });
-        text += theme.fg("accent", `functions: ${operations.join(", ")}`) + "\n";
+        text += `${theme.fg("accent", `functions: ${operations.join(", ")}`)}\n`;
       }
       text += theme.fg("toolTitle", theme.bold("result"));
       text += theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`);
@@ -351,16 +442,28 @@ export default function pit(pi: ExtensionAPI) {
         validateTypeScript(params.code, savedFunctions, params.params);
         const replaced = savedFunctions.has(namedFunction);
         savedFunctions.set(namedFunction, params.code);
-        pi.appendEntry(FUNCTION_ENTRY_TYPE, { name: namedFunction, source: params.code } satisfies FunctionEntry);
+        pi.appendEntry(FUNCTION_ENTRY_TYPE, {
+          name: namedFunction,
+          source: params.code,
+        } satisfies FunctionEntry);
         functionActivity.push({ action: "set", name: namedFunction, replaced });
       }
       const value = await runInSandbox(
         params.code,
-        createCapabilities(pi, ctx, savedFunctions, functionActivity, (command) => {
-          const count = (shellCommandUses.get(command) ?? 0) + 1;
-          shellCommandUses.set(command, count);
-          if (count >= 2 && !suggestedShellCommands.has(command)) repeatedShellCommands.add(command);
-        }, signal),
+        createCapabilities(
+          pi,
+          ctx,
+          savedFunctions,
+          functionActivity,
+          (command) => {
+            const count = (shellCommandUses.get(command) ?? 0) + 1;
+            shellCommandUses.set(command, count);
+            if (count >= 2 && !suggestedShellCommands.has(command)) {
+              repeatedShellCommands.add(command);
+            }
+          },
+          signal,
+        ),
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
@@ -369,28 +472,39 @@ export default function pit(pi: ExtensionAPI) {
         },
       );
       const rendered = display(value);
-      const output = truncateHead(rendered, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+      const output = truncateHead(rendered, {
+        maxBytes: DEFAULT_MAX_BYTES,
+        maxLines: DEFAULT_MAX_LINES,
+      });
       const savedNotice = namedFunction
         ? `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
         : "";
-      const reusableCandidates = functionActivity.length === 0
-        ? [...repeatedShellCommands]
-        : [];
-      for (const command of reusableCandidates) suggestedShellCommands.add(command);
+      const reusableCandidates = functionActivity.length === 0 ? [...repeatedShellCommands] : [];
+      for (const command of reusableCandidates) {
+        suggestedShellCommands.add(command);
+      }
       const available = [...savedFunctions.keys()].sort();
-      const savedContext = available.length ? ` Existing saved functions: ${available.join(", ")}.` : "";
-      const reuseNotice = reusableCandidates.length
-        ? `\n[Repeated shell command detected: ${reusableCandidates.map((command) => JSON.stringify(command)).join(", ")}. Before saving this command alone, consider whether it belongs to a recurring multi-step workflow. Compose existing saved functions into a higher-level named workflow.${savedContext}]`
-        : "";
+      const savedContext =
+        available.length > 0 ? ` Existing saved functions: ${available.join(", ")}.` : "";
+      const reuseNotice =
+        reusableCandidates.length > 0
+          ? `\n[Repeated shell command detected: ${reusableCandidates.map((command) => JSON.stringify(command)).join(", ")}. Before saving this command alone, consider whether it belongs to a recurring multi-step workflow. Compose existing saved functions into a higher-level named workflow.${savedContext}]`
+          : "";
       return {
-        content: [{
-          type: "text",
-          text: output.content + (output.truncated ? "\n[Result truncated]" : "") + savedNotice + reuseNotice,
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              output.content +
+              (output.truncated ? "\n[Result truncated]" : "") +
+              savedNotice +
+              reuseNotice,
+          },
+        ],
         details: {
           value: output.truncated ? undefined : value,
           truncated: output.truncated,
-          ...(functionActivity.length ? { functions: functionActivity } : {}),
+          ...(functionActivity.length > 0 ? { functions: functionActivity } : {}),
         },
       };
     },

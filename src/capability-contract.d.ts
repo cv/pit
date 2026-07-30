@@ -1,8 +1,5 @@
 type PitJsonPrimitive = null | boolean | number | string;
-type PitJsonValue =
-  | PitJsonPrimitive
-  | PitJsonValue[]
-  | { [key: string]: PitJsonValue | undefined };
+type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
 type PitResult = PitJsonValue | undefined;
 
 type PitReadTextResult = {
@@ -19,15 +16,9 @@ type PitWorkspaceEntry = {
 };
 
 interface PitWorkspaceCapability {
-  readText(
-    path: string,
-    options?: { offset?: number; limit?: number },
-  ): Promise<PitReadTextResult>;
+  readText(path: string, options?: { offset?: number; limit?: number }): Promise<PitReadTextResult>;
 
-  writeText(
-    path: string,
-    contents: string,
-  ): Promise<{ path: string; bytes: number }>;
+  writeText(path: string, contents: string): Promise<{ path: string; bytes: number }>;
 
   editText(
     path: string,
@@ -35,13 +26,20 @@ interface PitWorkspaceCapability {
   ): Promise<{ path: string; edits: number }>;
 
   applyPatch(patch: string): Promise<{
-    files: Array<{ path: string; kind: "create" | "modify" | "delete"; hunks: number; bytes: number }>;
+    files: Array<{
+      path: string;
+      kind: "create" | "modify" | "delete";
+      hunks: number;
+      bytes: number;
+    }>;
   }>;
 
-  batch(operations: Array<
-    | { kind: "write"; path: string; contents: string }
-    | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
-  >): Promise<{
+  batch(
+    operations: Array<
+      | { kind: "write"; path: string; contents: string }
+      | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
+    >,
+  ): Promise<{
     files: Array<{ path: string; kind: "write" | "edit"; bytes: number; edits?: number }>;
   }>;
 
@@ -69,7 +67,14 @@ interface PitWorkspaceCapability {
       dot?: boolean;
     },
   ): Promise<{
-    matches: Array<{ path: string; line: number; column: number; text: string; before: string[]; after: string[] }>;
+    matches: Array<{
+      path: string;
+      line: number;
+      column: number;
+      text: string;
+      before: string[];
+      after: string[];
+    }>;
     truncated: boolean;
     filesSearched: number;
     filesSkipped: number;
@@ -127,10 +132,7 @@ interface PitUiCapability {
   confirm(title: string, message: string): Promise<boolean>;
   input(title: string, placeholder?: string): Promise<string | undefined>;
   select(title: string, options: string[]): Promise<string | undefined>;
-  notify(
-    message: string,
-    level?: "info" | "warning" | "error",
-  ): Promise<null>;
+  notify(message: string, level?: "info" | "warning" | "error"): Promise<null>;
 }
 
 interface PitContextCapability {

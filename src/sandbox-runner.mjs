@@ -26,9 +26,15 @@ function call(capability, method, args) {
 function capabilityProxy(capability) {
   return new Proxy(Object.create(null), {
     get(_target, method) {
-      if (method === "then") return undefined;
-      if (method === Symbol.toStringTag) return "PitCapability";
-      if (typeof method !== "string") return undefined;
+      if (method === "then") {
+        return;
+      }
+      if (method === Symbol.toStringTag) {
+        return "PitCapability";
+      }
+      if (typeof method !== "string") {
+        return;
+      }
       return (...args) => call(capability, method, args);
     },
   });
@@ -36,8 +42,12 @@ function capabilityProxy(capability) {
 
 const capabilities = new Proxy(Object.create(null), {
   get(_target, capability) {
-    if (capability === Symbol.toStringTag) return "PitCapabilities";
-    if (typeof capability !== "string") return undefined;
+    if (capability === Symbol.toStringTag) {
+      return "PitCapabilities";
+    }
+    if (typeof capability !== "string") {
+      return;
+    }
     return capabilityProxy(capability);
   },
 });
@@ -62,7 +72,9 @@ process.stdin.on("data", (chunk) => {
   buffer += chunk;
   while (true) {
     const newline = buffer.indexOf("\n");
-    if (newline < 0) return;
+    if (newline < 0) {
+      return;
+    }
     const line = buffer.slice(0, newline);
     buffer = buffer.slice(newline + 1);
     let message;
@@ -76,13 +88,20 @@ process.stdin.on("data", (chunk) => {
       void start(message.value, message.input);
       continue;
     }
-    if (message.token !== token) continue;
+    if (message.token !== token) {
+      continue;
+    }
     if (message.type === "response" && typeof message.id === "number") {
       const request = pending.get(message.id);
-      if (!request) continue;
+      if (!request) {
+        continue;
+      }
       pending.delete(message.id);
-      if (typeof message.error === "string") request.reject(new Error(message.error));
-      else request.resolve(message.value);
+      if (typeof message.error === "string") {
+        request.reject(new Error(message.error));
+      } else {
+        request.resolve(message.value);
+      }
     }
   }
 });

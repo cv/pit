@@ -24,7 +24,7 @@ describe("host capabilities", () => {
     expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
 
     await run(`async function runChecks({ shell }) { return shell.exec("npm run check"); }`);
-    const namedRepeat = await run(`runChecks()`);
+    const namedRepeat = await run("runChecks()");
     expect(namedRepeat.content[0].text).not.toContain("Repeated shell command");
 
     const pushSource = `async ({ shell }) => shell.exec("git push")`;
@@ -42,21 +42,44 @@ describe("host capabilities", () => {
       .mockResolvedValueOnce({ stdout: "first", stderr: "warning", code: 2 })
       .mockResolvedValueOnce({ stdout: "second", stderr: "", code: 0 });
     const controller = new AbortController();
-    const result = await run(`async ({ shell }) => [
+    const result = await run(
+      `async ({ shell }) => [
       await shell.exec("first"),
       await shell.exec("second", { cwd: ".", timeoutMs: 50 }),
-    ]`, context(), controller.signal);
-    expect(result.details.value[0]).toMatchObject({ stdout: "first", stderr: "warning", code: 2, truncated: false });
-    expect(execMock).toHaveBeenNthCalledWith(1, "/bin/sh", ["-lc", "first"], expect.objectContaining({ cwd, signal: controller.signal, timeout: 120_000 }));
-    expect(execMock).toHaveBeenNthCalledWith(2, "/bin/sh", ["-lc", "second"], expect.objectContaining({ timeout: 50 }));
+    ]`,
+      context(),
+      controller.signal,
+    );
+    expect(result.details.value[0]).toMatchObject({
+      stdout: "first",
+      stderr: "warning",
+      code: 2,
+      truncated: false,
+    });
+    expect(execMock).toHaveBeenNthCalledWith(
+      1,
+      "/bin/sh",
+      ["-lc", "first"],
+      expect.objectContaining({ cwd, signal: controller.signal, timeout: 120_000 }),
+    );
+    expect(execMock).toHaveBeenNthCalledWith(
+      2,
+      "/bin/sh",
+      ["-lc", "second"],
+      expect.objectContaining({ timeout: 50 }),
+    );
   });
 
   it("executes argument arrays without shell interpolation", async () => {
     execMock.mockResolvedValueOnce({ stdout: "committed", stderr: "", code: 0 });
     const controller = new AbortController();
-    const result = await run(`async ({ shell }) => shell.execFile("git", ["commit", "-m", "$(touch unsafe)"], {
+    const result = await run(
+      `async ({ shell }) => shell.execFile("git", ["commit", "-m", "$(touch unsafe)"], {
       cwd: ".", timeoutMs: 5000, raise: true,
-    })`, context(), controller.signal);
+    })`,
+      context(),
+      controller.signal,
+    );
     expect(result.details.value).toMatchObject({ stdout: "committed", code: 0 });
     expect(execMock).toHaveBeenCalledWith(
       "git",
@@ -65,12 +88,15 @@ describe("host capabilities", () => {
     );
 
     execMock.mockResolvedValueOnce({ stdout: "status", stderr: "", code: 0 });
-    expect(await value(`async ({ shell }) => shell.execFile("git", ["status"])`))
-      .toMatchObject({ stdout: "status", code: 0 });
+    expect(await value(`async ({ shell }) => shell.execFile("git", ["status"])`)).toMatchObject({
+      stdout: "status",
+      code: 0,
+    });
 
     execMock.mockResolvedValueOnce({ stdout: "", stderr: "failed", code: 9 });
-    await expect(run(`async ({ shell }) => shell.execFile("git", ["push"], { raise: true })`))
-      .rejects.toThrow(/Command failed with exit code 9: git "push"[^]*failed/);
+    await expect(
+      run(`async ({ shell }) => shell.execFile("git", ["push"], { raise: true })`),
+    ).rejects.toThrow(/Command failed with exit code 9: git "push"[\s\S]*failed/);
   });
 
   it("validates shell.execFile arguments", async () => {
@@ -96,24 +122,30 @@ describe("host capabilities", () => {
 
   it("raises on nonzero shell exits when requested", async () => {
     execMock.mockResolvedValueOnce({ stdout: "partial output", stderr: "command failed", code: 7 });
-    await expect(run(`async ({ shell }) => shell.exec("failing", { raise: true })`))
-      .rejects.toThrow(/Command failed with exit code 7: failing[^]*command failed/);
+    await expect(
+      run(`async ({ shell }) => shell.exec("failing", { raise: true })`),
+    ).rejects.toThrow(/Command failed with exit code 7: failing[\s\S]*command failed/);
 
     execMock.mockResolvedValueOnce({ stdout: "ok", stderr: "", code: 0 });
-    expect(await value(`async ({ shell }) => shell.exec("passing", { raise: true })`))
-      .toMatchObject({ stdout: "ok", code: 0 });
+    expect(
+      await value(`async ({ shell }) => shell.exec("passing", { raise: true })`),
+    ).toMatchObject({ stdout: "ok", code: 0 });
 
     execMock.mockResolvedValueOnce({ stdout: "stdout failure", stderr: "", code: 2 });
-    await expect(run(`async ({ shell }) => shell.exec("stdout-only", { raise: true })`))
-      .rejects.toThrow(/stdout-only[^]*stdout failure/);
+    await expect(
+      run(`async ({ shell }) => shell.exec("stdout-only", { raise: true })`),
+    ).rejects.toThrow(/stdout-only[\s\S]*stdout failure/);
     execMock.mockResolvedValueOnce({ stdout: "", stderr: "", code: 3 });
-    await expect(run(`async ({ shell }) => shell.exec("silent", { raise: true })`))
-      .rejects.toThrow("Command failed with exit code 3: silent");
+    await expect(run(`async ({ shell }) => shell.exec("silent", { raise: true })`)).rejects.toThrow(
+      "Command failed with exit code 3: silent",
+    );
 
-    await expect(run(`async ({ shell }) => shell.exec("bad", { raise: "yes" })`))
-      .rejects.toThrow(/string.*boolean/);
-    await expect(run(`async ({ shell }) => (shell as any).exec("bad", { raise: "yes" })`))
-      .rejects.toThrow("options.raise must be a boolean");
+    await expect(run(`async ({ shell }) => shell.exec("bad", { raise: "yes" })`)).rejects.toThrow(
+      /string.*boolean/,
+    );
+    await expect(
+      run(`async ({ shell }) => (shell as any).exec("bad", { raise: "yes" })`),
+    ).rejects.toThrow("options.raise must be a boolean");
   });
 
   it("validates shell calls and rejects unknown capabilities", async () => {
@@ -123,24 +155,41 @@ describe("host capabilities", () => {
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
       return [await capture(() => shell.exec(1)), await capture(() => shell.exec("x", "bad")), await capture(() => mystery.go())];
     }`);
-    expect(errors).toEqual(["command must be a string", "options must be an object", "Unknown capability or method: mystery.go"]);
+    expect(errors).toEqual([
+      "command must be a string",
+      "options must be an object",
+      "Unknown capability or method: mystery.go",
+    ]);
   });
 
   it("performs HTTP requests and truncates large responses", async () => {
-    const fetchMock = vi.fn(async () => new Response("x".repeat(1_000_100), {
-      status: 201, headers: { "x-test": "yes" },
-    }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("x".repeat(1_000_100), {
+          status: 201,
+          headers: { "x-test": "yes" },
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
-    const result = (await run(`async ({ http }) => {
+    const result = (
+      await run(
+        `async ({ http }) => {
       const response = await http.request("https://example.test", {
         method: "POST", headers: { "x-input": "yes" }, body: "payload",
       });
       return { ...response, body: response.body.length };
-    }`, context(), controller.signal)).details.value;
+    }`,
+        context(),
+        controller.signal,
+      )
+    ).details.value;
     expect(result).toMatchObject({ status: 201, ok: true, body: 1_000_000, truncated: true });
     expect(result.headers["x-test"]).toBe("yes");
-    expect(fetchMock).toHaveBeenCalledWith("https://example.test", expect.objectContaining({ method: "POST", body: "payload", signal: controller.signal }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.test",
+      expect.objectContaining({ method: "POST", body: "payload", signal: controller.signal }),
+    );
   });
 
   it("handles empty and exact-limit HTTP response bodies", async () => {
@@ -151,7 +200,8 @@ describe("host capabilities", () => {
         controller.close();
       },
     });
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response("x".repeat(1_000_000)))
       .mockResolvedValueOnce(new Response(chunked));
@@ -170,7 +220,10 @@ describe("host capabilities", () => {
   });
 
   it("uses default HTTP options and validates arguments", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("small")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("small")),
+    );
     const result = await value(`async ({ http }) => {
       const ok = await http.request("https://example.test");
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
@@ -178,12 +231,17 @@ describe("host capabilities", () => {
       return [ok, await capture(() => raw.request(1)), await capture(() => raw.request("x", "bad")), await capture(() => raw.nope("x"))];
     }`);
     expect(result[0]).toMatchObject({ body: "small", truncated: false });
-    expect(result.slice(1)).toEqual(["url must be a string", "options must be an object", "Unknown capability or method: http.nope"]);
+    expect(result.slice(1)).toEqual([
+      "url must be a string",
+      "options must be an object",
+      "Unknown capability or method: http.nope",
+    ]);
   });
 
   it("provides UI and context capabilities", async () => {
     const ctx = context();
-    const result = await value(`async ({ ui, context }) => ({
+    const result = await value(
+      `async ({ ui, context }) => ({
       confirmed: await ui.confirm("Confirm", "Sure?"),
       input: await ui.input("Input"),
       inputWithPlaceholder: await ui.input("Input", "hint"),
@@ -191,10 +249,21 @@ describe("host capabilities", () => {
       notified: await ui.notify("Done", "warning"),
       defaultNotify: await ui.notify("Again"),
       context: await context.get(),
-    })`, ctx);
-    expect(result).toMatchObject({ confirmed: true, input: "typed", selected: "b", notified: null });
+    })`,
+      ctx,
+    );
+    expect(result).toMatchObject({
+      confirmed: true,
+      input: "typed",
+      selected: "b",
+      notified: null,
+    });
     expect(result.context).toMatchObject({
-      cwd, mode: "interactive", model: "test/model", thinkingLevel: "medium", savedFunctions: [],
+      cwd,
+      mode: "interactive",
+      model: "test/model",
+      thinkingLevel: "medium",
+      savedFunctions: [],
     });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Done", "warning");
     expect(ctx.ui.notify).toHaveBeenCalledWith("Again", "info");
@@ -202,7 +271,9 @@ describe("host capabilities", () => {
 
   it("handles unavailable and invalid UI operations", async () => {
     const noUi = context({ hasUI: false });
-    await expect(run(`async ({ ui }) => ui.confirm("x", "y")`, noUi)).rejects.toThrow("UI is not available");
+    await expect(run(`async ({ ui }) => ui.confirm("x", "y")`, noUi)).rejects.toThrow(
+      "UI is not available",
+    );
 
     const errors = await value(`async ({ ui }) => {
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
@@ -213,18 +284,23 @@ describe("host capabilities", () => {
         await capture(() => raw.nope()),
       ];
     }`);
-    expect(errors).toEqual(["title must be a string", "options must be an array", "Unknown ui method: nope"]);
+    expect(errors).toEqual([
+      "title must be a string",
+      "options must be an array",
+      "Unknown ui method: nope",
+    ]);
   });
 
   it("handles missing model and renders primitive results", async () => {
     const noModel = context({ model: undefined });
-    expect(await value(`async ({ context }) => context.get()`, noModel)).toMatchObject({ cwd });
+    expect(await value("async ({ context }) => context.get()", noModel)).toMatchObject({ cwd });
     expect((await run(`() => "plain text"`)).content[0].text).toBe("plain text");
-    expect((await run(`() => undefined`)).content[0].text).toBe("undefined");
+    expect((await run("() => undefined")).content[0].text).toBe("undefined");
   });
 
   it("truncates oversized tool output", async () => {
     const result = await run(`() => "x".repeat(200000)`);
     expect(result.content[0].text).toContain("[Result truncated]");
     expect(result.details).toEqual({ value: undefined, truncated: true });
-  });});
+  });
+});

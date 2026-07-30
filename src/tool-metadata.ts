@@ -1,6 +1,7 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
 
-export const PROMPT_SNIPPET = "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions";
+export const PROMPT_SNIPPET =
+  "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions";
 
 export const PROMPT_GUIDELINES = [
   "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
@@ -15,9 +16,11 @@ export const PROMPT_GUIDELINES = [
   "Return a compact JSON-serializable summary from typescript and use only capabilities for external effects.",
 ] as const;
 
-export const CODE_DESCRIPTION = "A contextually type-checked TypeScript expression. Use an anonymous function for one-shot work, a named top-level function such as async function runTests({ shell }) { return shell.execFile(\"npm\", [\"test\"], { raise: true }); } for recurring work, or runTests() to invoke a saved function. Start independent calls with Promise.all, await capability promises, do not import modules, and return compact JSON-serializable data.";
+export const CODE_DESCRIPTION =
+  'A contextually type-checked TypeScript expression. Use an anonymous function for one-shot work, a named top-level function such as async function runTests({ shell }) { return shell.execFile("npm", ["test"], { raise: true }); } for recurring work, or runTests() to invoke a saved function. Start independent calls with Promise.all, await capability promises, do not import modules, and return compact JSON-serializable data.';
 
-export const PARAMS_DESCRIPTION = "Optional JSON-serializable input passed as the function second argument. Annotate a named function input parameter to validate initial params and later calls.";
+export const PARAMS_DESCRIPTION =
+  "Optional JSON-serializable input passed as the function second argument. Annotate a named function input parameter to validate initial params and later calls.";
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
@@ -29,8 +32,8 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "async ({ workspace, shell }) => {",
     "  const [file, status] = await Promise.all([",
-    "    workspace.readText(\"package.json\"),",
-    "    shell.execFile(\"git\", [\"status\", \"--short\"]),",
+    '    workspace.readText("package.json"),',
+    '    shell.execFile("git", ["status", "--short"]),',
     "  ]);",
     "  return { packageJson: JSON.parse(file.text), status };",
     "}",
@@ -52,14 +55,16 @@ export function createToolDescription(maxOutputBytes: number): string {
     "Named top-level functions execute and save automatically on the active branch:",
     "",
     "async function runTests({ shell }, input: { coverage?: boolean } = {}) {",
-    "  const args = input.coverage ? [\"run\", \"coverage\"] : [\"test\"];",
-    "  return shell.execFile(\"npm\", args, { raise: true });",
+    '  const args = input.coverage ? ["run", "coverage"] : ["test"];',
+    '  return shell.execFile("npm", args, { raise: true });',
     "}",
     "",
     "Provide top-level params for initial input. Later invoke runTests() or runTests({ coverage: true }). Only referenced saved functions and transitive dependencies are injected. Use context.get().savedFunctions or /functions to inspect names.",
     "",
     "Compose recurring sequences into higher-level named workflows. For example, publishChanges can await runValidation(), then use shell.execFile for git add, commit, and push with { raise: true }.",
     "",
-    "Paths are relative to Pi cwd unless absolute. Output is limited to " + formatSize(maxOutputBytes) + ".",
+    "Paths are relative to Pi cwd unless absolute. Output is limited to " +
+      formatSize(maxOutputBytes) +
+      ".",
   ].join("\n");
 }

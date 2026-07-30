@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
@@ -52,6 +52,7 @@ function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
   cache.delete(key);
   cache.set(key, value);
   if (cache.size > MAX_CACHE_ENTRIES) {
+    // biome-ignore lint/style/noNonNullAssertion: a non-empty oversized map always has an oldest key.
     cache.delete(cache.keys().next().value!);
   }
 }
@@ -90,16 +91,21 @@ declare const process: {
 
 export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
-  if (!diagnostic.file || diagnostic.start === undefined) return message;
+  if (!diagnostic.file || diagnostic.start === undefined) {
+    return message;
+  }
   const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-  const location = diagnostic.file.fileName !== PROGRAM_FILE
-    ? `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1}`
-    // Submitted source starts on line two of the wrapper, so its one-based
-    // line number is equal to the wrapper's zero-based line number.
-    : `${Math.max(1, position.line)}:${position.character + 1}`;
+  const location =
+    diagnostic.file.fileName === PROGRAM_FILE
+      ? `${Math.max(1, position.line)}:${position.character + 1}`
+      : // Submitted source starts on line two of the wrapper, so its one-based
+        // line number is equal to the wrapper's zero-based line number.
+        `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1}`;
   const sourceLine = diagnostic.file.text.split("\n")[position.line];
-  if (sourceLine === undefined) return `${location} ${message}`;
-  const caret = " ".repeat(position.character) + "^";
+  if (sourceLine === undefined) {
+    return `${location} ${message}`;
+  }
+  const caret = `${" ".repeat(position.character)}^`;
   return `${location} ${message}\n  ${sourceLine}\n  ${caret}`;
 }
 
@@ -112,9 +118,13 @@ function submissionExpression(source: string): ts.Expression | undefined {
     ts.ScriptKind.TS,
   );
   const statement = file.statements[0];
-  if (!statement || !ts.isVariableStatement(statement)) return undefined;
+  if (!(statement && ts.isVariableStatement(statement))) {
+    return;
+  }
   let expression = statement.declarationList.declarations[0]?.initializer;
-  while (expression && ts.isParenthesizedExpression(expression)) expression = expression.expression;
+  while (expression && ts.isParenthesizedExpression(expression)) {
+    expression = expression.expression;
+  }
   return expression;
 }
 
@@ -136,9 +146,12 @@ function referencedNames(source: string, candidates: ReadonlySet<string>): Set<s
         (ts.isParameter(parent) && parent.name === node);
       const isPropertyName =
         (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
-        ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent)) && parent.name === node);
+        ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent)) &&
+          parent.name === node);
       const isTypePosition = ts.isTypeReferenceNode(parent) || ts.isTypeQueryNode(parent);
-      if (!isDeclarationName && !isPropertyName && !isTypePosition) references.add(node.text);
+      if (!(isDeclarationName || isPropertyName || isTypePosition)) {
+        references.add(node.text);
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -162,25 +175,37 @@ export function resolveSavedFunctionReferences(
   const visiting = new Set<string>();
   const visit = (name: string, isDirect: boolean): void => {
     const savedSource = savedFunctions.get(name);
-    if (savedSource === undefined || visiting.has(name)) return;
+    if (savedSource === undefined || visiting.has(name)) {
+      return;
+    }
     const existing = resolved.get(name);
     if (existing) {
-      if (isDirect) existing.direct = true;
+      if (isDirect) {
+        existing.direct = true;
+      }
       return;
     }
     visiting.add(name);
-    const dependencies = [...referencedNames(savedSource, names)].filter((dependency) => dependency !== name).sort();
-    for (const dependency of dependencies) visit(dependency, false);
+    const dependencies = [...referencedNames(savedSource, names)]
+      .filter((dependency) => dependency !== name)
+      .sort((a, b) => a.localeCompare(b));
+    for (const dependency of dependencies) {
+      visit(dependency, false);
+    }
     visiting.delete(name);
     resolved.set(name, { name, source: savedSource, direct: isDirect });
   };
-  for (const name of [...direct].sort()) visit(name, true);
+  for (const name of [...direct].sort((a, b) => a.localeCompare(b))) {
+    visit(name, true);
+  }
   return [...resolved.values()];
 }
 
 function isProgramExpression(source: string): boolean {
   const expression = submissionExpression(source);
-  return Boolean(expression && (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)));
+  return Boolean(
+    expression && (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)),
+  );
 }
 
 export function getNamedFunctionName(source: string): string | undefined {
@@ -195,16 +220,19 @@ function savedEntries(savedFunctions: ReadonlyMap<string, string>) {
 }
 
 function savedDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
-  return savedEntries(savedFunctions).map(([name], index) =>
-    `declare const ${name}: (input?: PitSavedInput<typeof __pit_signature_${index}>) => Promise<Awaited<ReturnType<typeof __pit_signature_${index}>>>;`,
-  ).join("\n");
+  return savedEntries(savedFunctions)
+    .map(
+      ([name], index) =>
+        `declare const ${name}: (input?: PitSavedInput<typeof __pit_signature_${index}>) => Promise<Awaited<ReturnType<typeof __pit_signature_${index}>>>;`,
+    )
+    .join("\n");
 }
 
 function savedSignatures(savedFunctions: ReadonlyMap<string, string>): string {
-  const signatures = savedEntries(savedFunctions).map(([, source], index) =>
-    `const __pit_signature_${index} = (${source}) satisfies PitProgram;`,
+  const signatures = savedEntries(savedFunctions).map(
+    ([, source], index) => `const __pit_signature_${index} = (${source}) satisfies PitProgram;`,
   );
-  return signatures.length ? signatures.join("\n") : "void 0;";
+  return signatures.length > 0 ? signatures.join("\n") : "void 0;";
 }
 
 /** Semantically validate model code against the capability contract. */
@@ -227,13 +255,16 @@ export function validateTypeScript(
   if (validationCache.has(cacheKey)) {
     validationCacheHits++;
     const cachedError = validationCache.get(cacheKey);
-    if (cachedError) throw new Error(cachedError);
+    if (cachedError) {
+      throw new Error(cachedError);
+    }
     return;
   }
 
-  const invocation = input === undefined || !programExpression
-    ? ""
-    : `program({} as PitCapabilities, ${inputSource});\n`;
+  const invocation =
+    input === undefined || !programExpression
+      ? ""
+      : `program({} as PitCapabilities, ${inputSource});\n`;
   const wrapped = programExpression
     ? `const program = (\n${source}\n) satisfies PitProgram;\nvoid program;\n${invocation}`
     : `${EXPRESSION_PREFIX}${source}\n);\nvoid program;\n`;
@@ -251,7 +282,10 @@ export function validateTypeScript(
   };
   const baseHost = ts.createCompilerHost(options, true);
   const sources = new Map([
-    [CONTRACT_FILE, CAPABILITY_CONTRACT + SANDBOX_GLOBALS + "\n" + savedDeclarations(savedFunctions)],
+    [
+      CONTRACT_FILE,
+      `${CAPABILITY_CONTRACT + SANDBOX_GLOBALS}\n${savedDeclarations(savedFunctions)}`,
+    ],
     [PROGRAM_FILE, wrapped],
     [SIGNATURES_FILE, savedSignatures(savedFunctions)],
   ]);
@@ -268,25 +302,31 @@ export function validateTypeScript(
   };
   const program = ts.createProgram([CONTRACT_FILE, SIGNATURES_FILE, PROGRAM_FILE], options, host);
   const syntactic = program.getSyntacticDiagnostics();
-  const diagnostics = (syntactic.length > 0
-    ? syntactic
-    : [
-        ...program.getOptionsDiagnostics(),
-        ...program.getGlobalDiagnostics(),
-        ...program.getSemanticDiagnostics(),
-      ])
-    .filter((diagnostic) => !IGNORED_DIAGNOSTIC_CODES.has(diagnostic.code));
+  const diagnostics = (
+    syntactic.length > 0
+      ? syntactic
+      : [
+          ...program.getOptionsDiagnostics(),
+          ...program.getGlobalDiagnostics(),
+          ...program.getSemanticDiagnostics(),
+        ]
+  ).filter((diagnostic) => !IGNORED_DIAGNOSTIC_CODES.has(diagnostic.code));
   if (diagnostics.length > 0) {
-    const unique = [...new Map(diagnostics.map((diagnostic) => [
-      `${diagnostic.code}:${diagnostic.file?.fileName}:${diagnostic.start}:${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
-      diagnostic,
-    ])).values()];
+    const unique = [
+      ...new Map(
+        diagnostics.map((diagnostic) => [
+          `${diagnostic.code}:${diagnostic.file?.fileName}:${diagnostic.start}:${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
+          diagnostic,
+        ]),
+      ).values(),
+    ];
     const displayed = unique.slice(0, MAX_DIAGNOSTICS);
     const messages = displayed.map(formatDiagnostic);
     const omitted = unique.length - displayed.length;
-    const savedHint = diagnostics.some((diagnostic) => diagnostic.code === 2304) && names.length
-      ? `\nAvailable saved functions: ${names.join(", ")}`
-      : "";
+    const savedHint =
+      diagnostics.some((diagnostic) => diagnostic.code === 2304) && names.length > 0
+        ? `\nAvailable saved functions: ${names.join(", ")}`
+        : "";
     const error =
       `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
       (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
@@ -297,16 +337,14 @@ export function validateTypeScript(
   cacheSet(validationCache, cacheKey, null);
 }
 
-function runtimeProgram(
-  source: string,
-  savedFunctions: ReadonlyMap<string, string>,
-): string {
+function runtimeProgram(source: string, savedFunctions: ReadonlyMap<string, string>): string {
   const entries = savedEntries(savedFunctions);
-  const raw = entries.map(([, savedSource], index) =>
-    `const __pit_saved_${index} = (${savedSource});`,
+  const raw = entries.map(
+    ([, savedSource], index) => `const __pit_saved_${index} = (${savedSource});`,
   );
-  const bound = entries.map(([name], index) =>
-    `const ${name} = async (__pit_input) => { if (__pit_saved_depth >= 32) throw new Error("Saved function call depth exceeded 32"); await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); __pit_saved_depth++; try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } finally { __pit_saved_depth--; } };`,
+  const bound = entries.map(
+    ([name], index) =>
+      `const ${name} = async (__pit_input) => { if (__pit_saved_depth >= 32) throw new Error("Saved function call depth exceeded 32"); await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); __pit_saved_depth++; try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } finally { __pit_saved_depth--; } };`,
   );
   const invocation = isProgramExpression(source)
     ? `const __pit_submission = (${source}); return await __pit_submission(__pit_capabilities, __pit_input);`
@@ -355,7 +393,9 @@ export async function runInSandbox(
 
   const savedFunctions = options.savedFunctions ?? new Map<string, string>();
   const referenced = resolveSavedFunctionReferences(source, savedFunctions);
-  const injectedFunctions = new Map(referenced.map((reference) => [reference.name, reference.source]));
+  const injectedFunctions = new Map(
+    referenced.map((reference) => [reference.name, reference.source]),
+  );
   validateTypeScript(source, injectedFunctions, options.input, savedFunctions.keys());
 
   const compiled = await compileTypeScript(runtimeProgram(source, injectedFunctions));
@@ -380,13 +420,18 @@ export async function runInSandbox(
     let stdout = "";
     let stderr = "";
     const finish = (error?: Error, value?: unknown) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
       child.kill("SIGKILL");
-      if (error) reject(error);
-      else resolve(value);
+      if (error) {
+        reject(error);
+      } else {
+        resolve(value);
+      }
     };
     const onAbort = () => finish(new Error("TypeScript execution cancelled"));
     const timer = setTimeout(
@@ -395,11 +440,13 @@ export async function runInSandbox(
     );
     timer.unref?.();
     options.signal?.addEventListener("abort", onAbort, { once: true });
-    if (options.signal?.aborted) return onAbort();
+    if (options.signal?.aborted) {
+      return onAbort();
+    }
 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
-      stderr = (stderr + chunk).slice(-8_192);
+      stderr = (stderr + chunk).slice(-8192);
     });
     child.on("error", (error) => finish(error));
     child.on("exit", (code, signal) => {
@@ -418,9 +465,11 @@ export async function runInSandbox(
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
-      while (true) {
+      for (;;) {
         const newline = stdout.indexOf("\n");
-        if (newline < 0) break;
+        if (newline < 0) {
+          break;
+        }
         const line = stdout.slice(0, newline);
         stdout = stdout.slice(newline + 1);
         let message: WireMessage;
@@ -429,9 +478,15 @@ export async function runInSandbox(
         } catch {
           continue; // Ignore untrusted writes to stdout.
         }
-        if (message.token !== token) continue;
-        if (message.type === "result") return finish(undefined, message.value);
-        if (message.type === "fatal") return finish(new Error(message.error));
+        if (message.token !== token) {
+          continue;
+        }
+        if (message.type === "result") {
+          return finish(undefined, message.value);
+        }
+        if (message.type === "fatal") {
+          return finish(new Error(message.error));
+        }
         if (
           message.type === "call" &&
           typeof message.id === "number" &&
@@ -440,13 +495,14 @@ export async function runInSandbox(
           Array.isArray(message.args)
         ) {
           const id = message.id;
-          void Promise.resolve(handler(message.capability, message.method, message.args)).then(
+          Promise.resolve(handler(message.capability, message.method, message.args)).then(
             (value) => send({ type: "response", id, value }),
-            (error) => send({
-              type: "response",
-              id,
-              error: error instanceof Error ? error.message : String(error),
-            }),
+            (error) =>
+              send({
+                type: "response",
+                id,
+                error: error instanceof Error ? error.message : String(error),
+              }),
           );
         }
       }

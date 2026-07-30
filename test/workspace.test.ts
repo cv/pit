@@ -2,13 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  cleanupHarness,
-  cwd,
-  run,
-  setupHarness,
-  value,
-} from "./extension-fixture.js";
+import { cleanupHarness, cwd, run, setupHarness, value } from "./extension-fixture.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
@@ -40,11 +34,13 @@ describe("workspace capability", () => {
     expect(result.edited.edits).toBe(2);
     expect(result.read).toMatchObject({ text: "two", offset: 2, lines: 1, totalLines: 4 });
     expect(result.stat).toMatchObject({ size: 12, directory: false, file: true });
-    expect(result.list).toEqual(expect.arrayContaining([
-      { name: "existing.txt", type: "file" },
-      { name: "link.txt", type: "symlink" },
-      { name: "nested", type: "directory" },
-    ]));
+    expect(result.list).toEqual(
+      expect.arrayContaining([
+        { name: "existing.txt", type: "file" },
+        { name: "link.txt", type: "symlink" },
+        { name: "nested", type: "directory" },
+      ]),
+    );
     expect(result.nestedList).toEqual([{ name: "new.txt", type: "file" }]);
     expect(result.glob).toContain("nested/new.txt");
     expect(result.defaultGlob).toContain("nested");
@@ -63,8 +59,22 @@ describe("workspace capability", () => {
       path: "search", glob: "**/*", caseSensitive: false, contextLines: 1, limit: 10,
     })`);
     expect(result.matches).toEqual([
-      { path: "search/a.txt", line: 2, column: 1, text: "needle one", before: ["Alpha"], after: ["NEEDLE two"] },
-      { path: "search/a.txt", line: 3, column: 1, text: "NEEDLE two", before: ["needle one"], after: ["end"] },
+      {
+        path: "search/a.txt",
+        line: 2,
+        column: 1,
+        text: "needle one",
+        before: ["Alpha"],
+        after: ["NEEDLE two"],
+      },
+      {
+        path: "search/a.txt",
+        line: 3,
+        column: 1,
+        text: "NEEDLE two",
+        before: ["needle one"],
+        after: ["end"],
+      },
     ]);
     expect(result).toMatchObject({ truncated: false, filesSearched: 2, filesSkipped: 3 });
     await chmod(join(cwd, "search/unreadable.txt"), 0o600);
@@ -131,28 +141,38 @@ describe("workspace capability", () => {
     expect(result.files).toHaveLength(2);
     expect(result.files[0]).toMatchObject({ kind: "edit", edits: 1 });
 
-    await expect(run(`async ({ workspace }) => workspace.batch([
+    await expect(
+      run(`async ({ workspace }) => workspace.batch([
       { kind: "write", path: "untouched.txt", contents: "must not exist" },
       { kind: "edit", path: "a.txt", edits: [{ oldText: "missing", newText: "x" }] },
-    ])`)).rejects.toThrow("oldText was not found");
-    await expect(readFile(join(cwd, "untouched.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    ])`),
+    ).rejects.toThrow("oldText was not found");
+    await expect(readFile(join(cwd, "untouched.txt"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(await readFile(join(cwd, "a.txt"), "utf8")).toBe("after");
   });
 
   it("rolls back committed batch writes after a later write failure", async () => {
     await writeFile(join(cwd, "a-existing.txt"), "original", "utf8");
     await writeFile(join(cwd, "z-parent"), "not a directory", "utf8");
-    await expect(run(`async ({ workspace }) => workspace.batch([
+    await expect(
+      run(`async ({ workspace }) => workspace.batch([
       { kind: "write", path: "a-existing.txt", contents: "changed" },
       { kind: "write", path: "z-parent/child.txt", contents: "fails" },
-    ])`)).rejects.toThrow();
+    ])`),
+    ).rejects.toThrow();
     expect(await readFile(join(cwd, "a-existing.txt"), "utf8")).toBe("original");
 
-    await expect(run(`async ({ workspace }) => workspace.batch([
+    await expect(
+      run(`async ({ workspace }) => workspace.batch([
       { kind: "write", path: "a-new.txt", contents: "temporary" },
       { kind: "write", path: "z-parent/child.txt", contents: "fails" },
-    ])`)).rejects.toThrow();
-    await expect(readFile(join(cwd, "a-new.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    ])`),
+    ).rejects.toThrow();
+    await expect(readFile(join(cwd, "a-new.txt"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("validates workspace batch operations", async () => {
@@ -190,10 +210,21 @@ describe("workspace capability", () => {
     await writeFile(join(cwd, "first.txt"), "old first\n", "utf8");
     await writeFile(join(cwd, "second.txt"), "old second\n", "utf8");
     const patch = [
-      "--- a/first.txt", "+++ b/first.txt", "@@ -1 +1 @@", "-old first", "+new first",
-      "--- a/second.txt", "+++ b/second.txt", "@@ -1 +1 @@", "-old second", "+new second", "",
+      "--- a/first.txt",
+      "+++ b/first.txt",
+      "@@ -1 +1 @@",
+      "-old first",
+      "+new first",
+      "--- a/second.txt",
+      "+++ b/second.txt",
+      "@@ -1 +1 @@",
+      "-old second",
+      "+new second",
+      "",
     ].join("\n");
-    const result = await value(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`);
+    const result = await value(
+      `async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`,
+    );
     expect(await readFile(join(cwd, "first.txt"), "utf8")).toBe("new first\n");
     expect(await readFile(join(cwd, "second.txt"), "utf8")).toBe("new second\n");
     expect(result.files).toEqual([
@@ -205,12 +236,23 @@ describe("workspace capability", () => {
   it("creates and deletes files with unified patches", async () => {
     await writeFile(join(cwd, "delete.txt"), "remove me\n", "utf8");
     const patch = [
-      "--- /dev/null", "+++ b/created.txt", "@@ -0,0 +1 @@", "+created",
-      "--- a/delete.txt", "+++ /dev/null", "@@ -1 +0,0 @@", "-remove me", "",
+      "--- /dev/null",
+      "+++ b/created.txt",
+      "@@ -0,0 +1 @@",
+      "+created",
+      "--- a/delete.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-remove me",
+      "",
     ].join("\n");
-    const result = await value(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`);
+    const result = await value(
+      `async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`,
+    );
     expect(await readFile(join(cwd, "created.txt"), "utf8")).toBe("created\n");
-    await expect(readFile(join(cwd, "delete.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(cwd, "delete.txt"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(result.files.map((file: any) => file.kind)).toEqual(["create", "delete"]);
   });
 
@@ -218,11 +260,21 @@ describe("workspace capability", () => {
     await writeFile(join(cwd, "first.txt"), "original\n", "utf8");
     await writeFile(join(cwd, "second.txt"), "actual\n", "utf8");
     const patch = [
-      "--- a/first.txt", "+++ b/first.txt", "@@ -1 +1 @@", "-original", "+changed",
-      "--- a/second.txt", "+++ b/second.txt", "@@ -1 +1 @@", "-not actual", "+changed", "",
+      "--- a/first.txt",
+      "+++ b/first.txt",
+      "@@ -1 +1 @@",
+      "-original",
+      "+changed",
+      "--- a/second.txt",
+      "+++ b/second.txt",
+      "@@ -1 +1 @@",
+      "-not actual",
+      "+changed",
+      "",
     ].join("\n");
-    await expect(run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`))
-      .rejects.toThrow(/failed to apply[^]*rejected hunks/);
+    await expect(
+      run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`),
+    ).rejects.toThrow(/failed to apply[\s\S]*rejected hunks/);
     expect(await readFile(join(cwd, "first.txt"), "utf8")).toBe("original\n");
     expect(await readFile(join(cwd, "second.txt"), "utf8")).toBe("actual\n");
   });
@@ -243,10 +295,11 @@ describe("workspace capability", () => {
   });
 
   it("rejects unsupported unified patch features", async () => {
-    const apply = (patch: string) => run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`);
-    const changedPath = [
-      "--- a/old.txt", "+++ b/new.txt", "@@ -1 +1 @@", "-old", "+new", "",
-    ].join("\n");
+    const apply = (patch: string) =>
+      run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`);
+    const changedPath = ["--- a/old.txt", "+++ b/new.txt", "@@ -1 +1 @@", "-old", "+new", ""].join(
+      "\n",
+    );
     await expect(apply(changedPath)).rejects.toThrow("changes paths");
 
     const headerless = ["@@ -0,0 +1 @@", "+value", ""].join("\n");
@@ -256,61 +309,106 @@ describe("workspace capability", () => {
     await expect(apply(invalid)).rejects.toThrow("Invalid unified patch");
 
     const duplicate = [
-      "--- /dev/null", "+++ b/same.txt", "@@ -0,0 +1 @@", "+one",
-      "--- /dev/null", "+++ b/same.txt", "@@ -0,0 +1 @@", "+two", "",
+      "--- /dev/null",
+      "+++ b/same.txt",
+      "@@ -0,0 +1 @@",
+      "+one",
+      "--- /dev/null",
+      "+++ b/same.txt",
+      "@@ -0,0 +1 @@",
+      "+two",
+      "",
     ].join("\n");
     await expect(apply(duplicate)).rejects.toThrow("at most one diff per file");
 
     const binary = [
-      "diff --git a/file.bin b/file.bin", "Binary files a/file.bin and b/file.bin differ", "",
+      "diff --git a/file.bin b/file.bin",
+      "Binary files a/file.bin and b/file.bin differ",
+      "",
     ].join("\n");
     await expect(apply(binary)).rejects.toThrow("binary");
 
     const rename = [
-      "diff --git a/old.txt b/new.txt", "similarity index 100%", "rename from old.txt", "rename to new.txt", "",
+      "diff --git a/old.txt b/new.txt",
+      "similarity index 100%",
+      "rename from old.txt",
+      "rename to new.txt",
+      "",
     ].join("\n");
     await expect(apply(rename)).rejects.toThrow("renames and copies are not supported");
 
     const copy = [
-      "diff --git a/old.txt b/new.txt", "similarity index 100%", "copy from old.txt", "copy to new.txt", "",
+      "diff --git a/old.txt b/new.txt",
+      "similarity index 100%",
+      "copy from old.txt",
+      "copy to new.txt",
+      "",
     ].join("\n");
     await expect(apply(copy)).rejects.toThrow("renames and copies are not supported");
 
-    await expect(run(`async ({ workspace }) => (workspace as any).applyPatch("x".repeat(1_000_001))`))
-      .rejects.toThrow("patch exceeds");
+    await expect(
+      run(`async ({ workspace }) => (workspace as any).applyPatch("x".repeat(1_000_001))`),
+    ).rejects.toThrow("patch exceeds");
   });
 
   it("validates patch create and delete preconditions", async () => {
     await writeFile(join(cwd, "existing.txt"), "existing\n", "utf8");
     const createExisting = [
-      "--- /dev/null", "+++ b/existing.txt", "@@ -0,0 +1 @@", "+new", "",
+      "--- /dev/null",
+      "+++ b/existing.txt",
+      "@@ -0,0 +1 @@",
+      "+new",
+      "",
     ].join("\n");
-    await expect(run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(createExisting)})`))
-      .rejects.toThrow("cannot create an existing file");
+    await expect(
+      run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(createExisting)})`),
+    ).rejects.toThrow("cannot create an existing file");
 
-    const deleteMissing = [
-      "--- a/missing.txt", "+++ /dev/null", "@@ -1 +0,0 @@", "-old", "",
-    ].join("\n");
-    await expect(run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(deleteMissing)})`))
-      .rejects.toThrow("cannot delete a missing file");
+    const deleteMissing = ["--- a/missing.txt", "+++ /dev/null", "@@ -1 +0,0 @@", "-old", ""].join(
+      "\n",
+    );
+    await expect(
+      run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(deleteMissing)})`),
+    ).rejects.toThrow("cannot delete a missing file");
   });
 
   it("rolls back patches after a later filesystem failure", async () => {
     await writeFile(join(cwd, "a-existing.txt"), "original\n", "utf8");
     await writeFile(join(cwd, "z-parent"), "not a directory", "utf8");
     const patch = [
-      "--- a/a-existing.txt", "+++ b/a-existing.txt", "@@ -1 +1 @@", "-original", "+changed",
-      "--- /dev/null", "+++ b/z-parent/child.txt", "@@ -0,0 +1 @@", "+created", "",
+      "--- a/a-existing.txt",
+      "+++ b/a-existing.txt",
+      "@@ -1 +1 @@",
+      "-original",
+      "+changed",
+      "--- /dev/null",
+      "+++ b/z-parent/child.txt",
+      "@@ -0,0 +1 @@",
+      "+created",
+      "",
     ].join("\n");
-    await expect(run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`)).rejects.toThrow();
+    await expect(
+      run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(patch)})`),
+    ).rejects.toThrow();
     expect(await readFile(join(cwd, "a-existing.txt"), "utf8")).toBe("original\n");
 
     const createThenFail = [
-      "--- /dev/null", "+++ b/a-new.txt", "@@ -0,0 +1 @@", "+temporary",
-      "--- /dev/null", "+++ b/z-parent/child.txt", "@@ -0,0 +1 @@", "+created", "",
+      "--- /dev/null",
+      "+++ b/a-new.txt",
+      "@@ -0,0 +1 @@",
+      "+temporary",
+      "--- /dev/null",
+      "+++ b/z-parent/child.txt",
+      "@@ -0,0 +1 @@",
+      "+created",
+      "",
     ].join("\n");
-    await expect(run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(createThenFail)})`)).rejects.toThrow();
-    await expect(readFile(join(cwd, "a-new.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      run(`async ({ workspace }) => workspace.applyPatch(${JSON.stringify(createThenFail)})`),
+    ).rejects.toThrow();
+    await expect(readFile(join(cwd, "a-new.txt"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("supports @-prefixed workspace paths and default read options", async () => {
@@ -361,5 +459,4 @@ describe("workspace capability", () => {
     expect(manyMatches).toContain("matched 12 times");
     expect(manyMatches).toContain("and 2 more");
   });
-
 });

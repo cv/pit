@@ -4,16 +4,27 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import pit from "../src/index.js";
 
-export type RegisteredTool = {
+export interface RegisteredTool {
   label: string;
   description: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
-  parameters: { properties: { code: { description?: string }; params: { description?: string }; timeoutMs: { description?: string } } };
-  renderCall?: (args: any, theme: any, context: any) => { render(width: number): string[] };
-  renderResult?: (result: any, options: any, theme: any, context: any) => { render(width: number): string[] };
+  parameters: {
+    properties: {
+      code: { description?: string };
+      params: { description?: string };
+      timeoutMs: { description?: string };
+    };
+  };
+  renderCall?: (args: any, theme: any, context: any) => { render: (width: number) => string[] };
+  renderResult?: (
+    result: any,
+    options: any,
+    theme: any,
+    context: any,
+  ) => { render: (width: number) => string[] };
   execute: (...args: any[]) => Promise<any>;
-};
+}
 
 export let cwd: string;
 export let tool: RegisteredTool;
@@ -68,13 +79,21 @@ export async function setupHarness(): Promise<void> {
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   const pi = {
-    registerTool: vi.fn((registered: RegisteredTool) => { tool = registered; }),
+    registerTool: vi.fn((registered: RegisteredTool) => {
+      tool = registered;
+    }),
     registerCommand: vi.fn((name: string, command: typeof functionsCommand) => {
-      if (name === "functions") functionsCommand = command;
+      if (name === "functions") {
+        functionsCommand = command;
+      }
     }),
     on: vi.fn((event: string, callback: (...args: any[]) => void) => {
-      if (event === "session_start") sessionStart = callback;
-      if (event === "session_tree") sessionTree = callback;
+      if (event === "session_start") {
+        sessionStart = callback;
+      }
+      if (event === "session_tree") {
+        sessionTree = callback;
+      }
     }),
     appendEntry: vi.fn((customType: string, data: unknown) => {
       branchEntries.push({ type: "custom", customType, data });
