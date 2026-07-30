@@ -1,6 +1,12 @@
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import { formatDiagnostic, runInSandbox, validateTypeScript } from "../src/sandbox.js";
+import {
+  clearSandboxCaches,
+  formatDiagnostic,
+  getSandboxCacheStats,
+  runInSandbox,
+  validateTypeScript,
+} from "../src/sandbox.js";
 
 describe("validateTypeScript", () => {
   it("formats global and non-program diagnostics", () => {
@@ -43,6 +49,9 @@ describe("validateTypeScript", () => {
     const manyErrors = Array.from({ length: 10 }, (_, index) => `const broken${index} = ;`).join("\n");
     expect(() => validateTypeScript(`async () => {\n${manyErrors}\n}`))
       .toThrow(/more diagnostics? omitted/);
+    const nineErrors = Array.from({ length: 9 }, (_, index) => `const single${index} = ;`).join("\n");
+    expect(() => validateTypeScript(`async () => {\n${nineErrors}\n}`))
+      .toThrow("1 more diagnostic omitted");
   });
 
   it("allows evolving empty arrays, implicit helper parameters, and void results", () => {
@@ -71,6 +80,32 @@ describe("validateTypeScript", () => {
       .toThrow(/number.*string/);
     expect(() => validateTypeScript(`() => ({ pending: Promise.resolve(1) })`))
       .toThrow(/Promise<number>/);
+  });
+});
+
+describe("sandbox caches", () => {
+  it("caches successful and failed validation plus compiled output", async () => {
+    clearSandboxCaches();
+    const source = `() => ({ answer: 42 })`;
+    validateTypeScript(source);
+    validateTypeScript(source);
+
+    const invalid = `() => 1n`;
+    expect(() => validateTypeScript(invalid)).toThrow();
+    expect(() => validateTypeScript(invalid)).toThrow();
+
+    await runInSandbox(source, async () => null);
+    await runInSandbox(source, async () => null);
+    expect(getSandboxCacheStats()).toEqual({
+      validationEntries: 2,
+      compilationEntries: 1,
+      validationHits: 4,
+      compilationHits: 1,
+    });
+    clearSandboxCaches();
+    expect(getSandboxCacheStats()).toEqual({
+      validationEntries: 0, compilationEntries: 0, validationHits: 0, compilationHits: 0,
+    });
   });
 });
 

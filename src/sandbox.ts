@@ -38,6 +38,35 @@ const PROGRAM_FILE = "/pit/program.ts";
 const PROGRAM_PREFIX = "const program: PitProgram = (\n";
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
+const MAX_CACHE_ENTRIES = 128;
+const validationCache = new Map<string, string | null>();
+const compilationCache = new Map<string, Promise<string>>();
+let validationCacheHits = 0;
+let compilationCacheHits = 0;
+
+function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > MAX_CACHE_ENTRIES) {
+    cache.delete(cache.keys().next().value!);
+  }
+}
+
+export function clearSandboxCaches(): void {
+  validationCache.clear();
+  compilationCache.clear();
+  validationCacheHits = 0;
+  compilationCacheHits = 0;
+}
+
+export function getSandboxCacheStats() {
+  return {
+    validationEntries: validationCache.size,
+    compilationEntries: compilationCache.size,
+    validationHits: validationCacheHits,
+    compilationHits: compilationCacheHits,
+  };
+}
 const SANDBOX_GLOBALS = `
 declare const console: {
   log(...values: unknown[]): void;
@@ -72,6 +101,13 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
 
 /** Semantically validate model code against the capability contract. */
 export function validateTypeScript(source: string): void {
+  if (validationCache.has(source)) {
+    validationCacheHits++;
+    const cachedError = validationCache.get(source);
+    if (cachedError) throw new Error(cachedError);
+    return;
+  }
+
   const wrapped = `${PROGRAM_PREFIX}${source}\n);\nvoid program;\n`;
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
@@ -119,10 +155,32 @@ export function validateTypeScript(source: string): void {
     const displayed = unique.slice(0, MAX_DIAGNOSTICS);
     const messages = displayed.map(formatDiagnostic);
     const omitted = unique.length - displayed.length;
-    throw new Error(
+    const error =
       `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
-      (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : ""),
-    );
+      (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "");
+    cacheSet(validationCache, source, error);
+    throw new Error(error);
+  }
+  cacheSet(validationCache, source, null);
+}
+
+async function compileTypeScript(source: string): Promise<string> {
+  const cached = compilationCache.get(source);
+  if (cached) {
+    compilationCacheHits++;
+    return cached;
+  }
+  const compilation = transform(`(${source})`, {
+    loader: "ts",
+    target: "es2022",
+    sourcemap: "inline",
+  }).then((result) => result.code);
+  cacheSet(compilationCache, source, compilation);
+  try {
+    return await compilation;
+  } catch (error) {
+    compilationCache.delete(source);
+    throw error;
   }
 }
 
@@ -147,11 +205,7 @@ export async function runInSandbox(
 
   validateTypeScript(source);
 
-  const compiled = await transform(`(${source})`, {
-    loader: "ts",
-    target: "es2022",
-    sourcemap: "inline",
-  });
+  const compiled = await compileTypeScript(source);
   const token = randomBytes(24).toString("base64url");
   const child = spawn(
     process.execPath,
@@ -245,6 +299,6 @@ export async function runInSandbox(
       }
     });
 
-    send({ type: "start", value: compiled.code });
+    send({ type: "start", value: compiled });
   });
 }
