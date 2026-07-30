@@ -823,6 +823,9 @@ describe("pit extension", () => {
     const repeatedPush = await run(pushSource);
     expect(repeatedPush.content[0].text).toContain("Existing saved functions: runChecks");
     expect(repeatedPush.content[0].text).toContain("Compose existing saved functions");
+
+    sessionTree({}, context());
+    expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
   });
 
   it("executes shell commands with default and explicit options", async () => {
@@ -886,6 +889,32 @@ describe("pit extension", () => {
     expect(result).toMatchObject({ status: 201, ok: true, body: 1_000_000, truncated: true });
     expect(result.headers["x-test"]).toBe("yes");
     expect(fetchMock).toHaveBeenCalledWith("https://example.test", expect.objectContaining({ method: "POST", body: "payload", signal: controller.signal }));
+  });
+
+  it("handles empty and exact-limit HTTP response bodies", async () => {
+    const chunked = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1_000_000));
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response("x".repeat(1_000_000)))
+      .mockResolvedValueOnce(new Response(chunked));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await value(`async ({ http }) => {
+      const responses = [
+        await http.request("https://example.test/empty"),
+        await http.request("https://example.test/exact"),
+        await http.request("https://example.test/chunked"),
+      ];
+      return responses.map((response) => ({ ...response, body: response.body.length }));
+    }`);
+    expect(result[0]).toMatchObject({ status: 204, body: 0, truncated: false });
+    expect(result[1]).toMatchObject({ status: 200, body: 1_000_000, truncated: false });
+    expect(result[2]).toMatchObject({ status: 200, body: 1_000_000, truncated: true });
   });
 
   it("uses default HTTP options and validates arguments", async () => {

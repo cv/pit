@@ -54,6 +54,34 @@ interface TypeScriptDetails {
   functions?: FunctionActivity[];
 }
 
+async function readHttpBody(response: Response): Promise<{ body: string; truncated: boolean }> {
+  if (!response.body) return { body: "", truncated: false };
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  let truncated = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = MAX_HTTP_BYTES - bytes;
+    if (value.byteLength > remaining) {
+      chunks.push(Buffer.from(value.subarray(0, remaining)));
+      bytes += Math.max(0, remaining);
+      truncated = true;
+      await reader.cancel();
+      break;
+    }
+    chunks.push(Buffer.from(value));
+    bytes += value.byteLength;
+    if (bytes === MAX_HTTP_BYTES) {
+      const next = await reader.read();
+      if (!next.done) { truncated = true; await reader.cancel(); }
+      break;
+    }
+  }
+  return { body: Buffer.concat(chunks, bytes).toString("utf8"), truncated };
+}
+
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${label} must be an object`);
@@ -401,9 +429,14 @@ function createCapabilities(
         ...(options.body === undefined ? {} : { body: string(options.body, "body") }),
         ...(signal ? { signal } : {}),
       });
-      const body = await response.text();
-      const clipped = Buffer.byteLength(body) > MAX_HTTP_BYTES ? Buffer.from(body).subarray(0, MAX_HTTP_BYTES).toString("utf8") : body;
-      return { status: response.status, ok: response.ok, headers: Object.fromEntries(response.headers), body: clipped, truncated: clipped !== body };
+      const body = await readHttpBody(response);
+      return {
+        status: response.status,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers),
+        body: body.body,
+        truncated: body.truncated,
+      };
     }
 
     if (capability === "ui") {
@@ -453,6 +486,10 @@ export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
   const shellCommandUses = new Map<string, number>();
   const suggestedShellCommands = new Set<string>();
+  const resetWorkflowHints = () => {
+    shellCommandUses.clear();
+    suggestedShellCommands.clear();
+  };
 
   registerFunctionManager(pi, savedFunctions);
 
@@ -720,9 +757,11 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
 
   pi.on("session_start", (_event, ctx) => {
     reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
+    resetWorkflowHints();
     pi.setActiveTools(["typescript"]);
   });
   pi.on("session_tree", (_event, ctx) => {
     reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
+    resetWorkflowHints();
   });
 }
