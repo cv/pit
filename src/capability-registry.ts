@@ -42,7 +42,7 @@ export const CAPABILITY_REGISTRY = {
       writeText: {
         declaration:
           "writeText(path: string, contents: string): Promise<{ path: string; bytes: number }>;",
-        documentation: "workspace.writeText(path, contents)",
+        documentation: "workspace.writeText(path, contents) with cwd-relative result paths",
         minimumArguments: 2,
         maximumArguments: 2,
       },
@@ -51,7 +51,7 @@ export const CAPABILITY_REGISTRY = {
   path: string,
   edits: Array<{ oldText: string; newText: string }>,
 ): Promise<{ path: string; edits: number }>;`,
-        documentation: "workspace.editText(path, edits)",
+        documentation: "workspace.editText(path, edits) with cwd-relative result paths",
         minimumArguments: 2,
         maximumArguments: 2,
       },
@@ -64,7 +64,7 @@ export const CAPABILITY_REGISTRY = {
     bytes: number;
   }>;
 }>;`,
-        documentation: "workspace.applyPatch(patch)",
+        documentation: "workspace.applyPatch(patch) with cwd-relative result paths",
         minimumArguments: 1,
         maximumArguments: 1,
       },
@@ -77,7 +77,7 @@ export const CAPABILITY_REGISTRY = {
 ): Promise<{
   files: Array<{ path: string; kind: "write" | "edit"; bytes: number; edits?: number }>;
 }>;`,
-        documentation: "workspace.batch(operations)",
+        documentation: "workspace.batch(operations) with cwd-relative result paths",
         minimumArguments: 1,
         maximumArguments: 1,
       },

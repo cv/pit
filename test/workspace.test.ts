@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handleWorkspace } from "../src/workspace.js";
 import { cleanupHarness, cwd, run, setupHarness, value } from "./extension-fixture.js";
@@ -31,8 +31,8 @@ describe("workspace capability", () => {
     }`);
 
     expect(await readFile(join(cwd, "nested/new.txt"), "utf8")).toBe("goodbye moon");
-    expect(result.written.bytes).toBe(11);
-    expect(result.edited.edits).toBe(2);
+    expect(result.written).toMatchObject({ path: "nested/new.txt", bytes: 11 });
+    expect(result.edited).toMatchObject({ path: "nested/new.txt", edits: 2 });
     expect(result.read).toMatchObject({ text: "two", offset: 2, lines: 1, totalLines: 4 });
     expect(result.stat).toMatchObject({ size: 12, directory: false, file: true });
     expect(result.list).toEqual(
@@ -171,7 +171,8 @@ describe("workspace capability", () => {
     expect(await readFile(join(cwd, "a.txt"), "utf8")).toBe("after");
     expect(await readFile(join(cwd, "nested/b.txt"), "utf8")).toBe("created");
     expect(result.files).toHaveLength(2);
-    expect(result.files[0]).toMatchObject({ kind: "edit", edits: 1 });
+    expect(result.files[0]).toMatchObject({ path: "a.txt", kind: "edit", edits: 1 });
+    expect(result.files[1]).toMatchObject({ path: "nested/b.txt", kind: "write" });
 
     await expect(
       run(`async ({ workspace }) => workspace.batch([
@@ -260,8 +261,8 @@ describe("workspace capability", () => {
     expect(await readFile(join(cwd, "first.txt"), "utf8")).toBe("new first\n");
     expect(await readFile(join(cwd, "second.txt"), "utf8")).toBe("new second\n");
     expect(result.files).toEqual([
-      expect.objectContaining({ kind: "modify", hunks: 1 }),
-      expect.objectContaining({ kind: "modify", hunks: 1 }),
+      expect.objectContaining({ path: "first.txt", kind: "modify", hunks: 1 }),
+      expect.objectContaining({ path: "second.txt", kind: "modify", hunks: 1 }),
     ]);
   });
 
@@ -449,6 +450,22 @@ describe("workspace capability", () => {
     expect(result.truncated).toBe(true);
     expect(result.text.length).toBeLessThan(100_000);
     expect(result.totalLines).toBe(1);
+  });
+
+  it("normalizes absolute and outside-cwd mutation result paths", async () => {
+    const absolute = join(cwd, "absolute.txt");
+    const outsideName = `outside-${basename(cwd)}.txt`;
+    const outside = join(cwd, "..", outsideName);
+    try {
+      const result = await value(`async ({ workspace }) => [
+        await workspace.writeText(${JSON.stringify(absolute)}, "inside"),
+        await workspace.writeText(${JSON.stringify(outside)}, "outside"),
+      ]`);
+      expect(result[0].path).toBe("absolute.txt");
+      expect(result[1].path).toBe(`../${outsideName}`);
+    } finally {
+      await unlink(outside).catch(() => undefined);
+    }
   });
 
   it("does not commit cooperative workspace mutations after cancellation", async () => {

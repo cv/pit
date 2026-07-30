@@ -43,6 +43,10 @@ export function resolveWorkspacePath(cwd: string, value: unknown): string {
   return resolve(cwd, string(value, "path").replace(AT_PATH_PREFIX, ""));
 }
 
+function workspaceResultPath(cwd: string, path: string): string {
+  return relative(cwd, path).replaceAll("\\", "/");
+}
+
 async function readText(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   const options = args[1] === undefined ? {} : object(args[1], "options");
@@ -176,7 +180,7 @@ function editText(cwd: string, args: unknown[], signal?: AbortSignal) {
     const result = applyTextEdits(current, args[1]);
     checkAbort(signal);
     await writeFile(path, result.next, { encoding: "utf8", signal });
-    return { path, edits: result.edits };
+    return { path: workspaceResultPath(cwd, path), edits: result.edits };
   });
 }
 
@@ -259,7 +263,7 @@ function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
     }
     return {
       files: prepared.map((operation) => ({
-        path: operation.path,
+        path: workspaceResultPath(cwd, operation.path),
         kind: operation.kind,
         bytes: Buffer.byteLength(operation.next),
         ...(operation.edits === undefined ? {} : { edits: operation.edits }),
@@ -378,7 +382,7 @@ function applyWorkspacePatch(cwd: string, args: unknown[], signal?: AbortSignal)
     }
     return {
       files: prepared.map((target) => ({
-        path: target.path,
+        path: workspaceResultPath(cwd, target.path),
         kind: target.kind,
         hunks: target.patch.hunks.length,
         bytes: target.kind === "delete" ? 0 : Buffer.byteLength(target.next),
@@ -586,7 +590,7 @@ export async function handleWorkspace(
         checkAbort(signal);
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, contents, { encoding: "utf8", signal });
-        return { path, bytes: Buffer.byteLength(contents) };
+        return { path: workspaceResultPath(cwd, path), bytes: Buffer.byteLength(contents) };
       });
     }
     case "editText":

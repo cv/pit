@@ -120,7 +120,7 @@ async ({ workspace, shell }) => {
 - `context`
   - `get()` — cwd, mode, model, thinking level, session file, and saved function names
 
-Paths are resolved relative to Pi's current working directory. Absolute paths remain possible, matching Pi's normal tools.
+Paths are resolved relative to Pi's current working directory. Absolute paths remain possible, matching Pi's normal tools. Workspace mutation results report slash-normalized paths relative to that working directory; targets outside it are represented with `../` segments.
 
 ## Reusable functions
 
