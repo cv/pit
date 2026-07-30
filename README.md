@@ -71,9 +71,9 @@ Use top-level `params` as the data channel for large patches, generated file con
 
 ```json
 {
-  "code": "async ({ workspace }, input: { path: string; contents: string }) => workspace.writeText(input.path, input.contents)",
+  "code": "async ({ workspace }, input: { file: string; contents: string }) => workspace.edit(input.file, { revision: null, changes: [{ kind: 'replaceFile', content: input.contents }] })",
   "params": {
-    "path": "src/generated.ts",
+    "file": "src/generated.ts",
     "contents": "export const generated = true;\n"
   }
 }
@@ -88,7 +88,7 @@ For example, preserve successful inspection results when an optional file may no
 ```ts
 async ({ workspace, shell }) => {
   const [config, status] = await Promise.allSettled([
-    workspace.readText("optional.config.json"),
+    workspace.read("optional.config.json", { format: "raw" }),
     shell.execFile("git", ["status", "--short"]),
   ]);
   return { config, status };
@@ -98,12 +98,9 @@ async ({ workspace, shell }) => {
 ### Capabilities
 
 - `workspace`
-  - `readText(path, { offset?, limit? })`
-  - `writeText(path, contents)`
-  - `editText(path, [{ oldText, newText }, ...])`
-  - `editRange(path, { startLine, endLine, expectedText, newText })` — 1-based inclusive line replacement with stale-content protection and preserved trailing line endings
-  - `batch(operations, { failure?: "fail-fast" | "settled" })` — transactional all-mutation batches (including `editRange`) or concurrent all-read inspection batches; mixed batches are rejected
-  - `applyPatch(unifiedDiff)` — transactional multi-file unified patch, optionally enclosed by `*** Begin Patch` / `*** End Patch`
+  - `read(file, { format?: "hashed" | "raw", offset?, limit? })` — hashed line anchors by default with a whole-file revision; use raw for machine parsing
+  - `edit(file, { revision, changes })` — revision-checked anchored replacements, insertions, deletion, rewriting, and creation
+  - `batch(operations, { failure?: "fail-fast" | "settled" })` — concurrent all-read batches or transactional all-edit batches; mixed batches are rejected
   - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
   - `list(path?)`
   - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
@@ -123,6 +120,32 @@ async ({ workspace, shell }) => {
 
 Paths are resolved relative to Pi's current working directory. Absolute paths remain possible, matching Pi's normal tools. Workspace mutation results report slash-normalized paths relative to that working directory; targets outside it are represented with `../` segments.
 
+### Hashed reads and edits
+
+Hashed reads render each selected line as `line:hash|content` and return a revision for the complete UTF-8 file:
+
+```text
+41:k3F9q|function example() {
+42:7Qa2m|  return true;
+43:p91Xs|}
+```
+
+Use those opaque anchors and the revision in a later edit. All anchors resolve against the original revision, every change validates before writing, overlapping changes are rejected, and changes apply bottom-up:
+
+```ts
+await workspace.edit("src/example.ts", {
+  revision: "J8xM2pQa7vL4",
+  changes: [
+    { kind: "replace", start: "42:7Qa2m", content: "  return false;" },
+    { kind: "insertAfter", anchor: "43:p91Xs", content: "export { example };" },
+  ],
+});
+```
+
+Supported change kinds are `replace`, `delete`, `insertBefore`, `insertAfter`, `replaceFile`, and `deleteFile`. An end anchor extends a replacement or deletion range; otherwise it targets one line. Use `revision: null` with a sole `replaceFile` change to create a missing file. Existing-file rewrites and deletion require the current revision. Anchored content uses `\n`, which pit converts to the file's dominant line ending while preserving untouched bytes.
+
+Search matches and context lines include anchors, and each match includes its file revision, so search results can feed directly into edit. Read batches contain only `{ kind: "read", file, options? }` operations; edit batches contain only `{ kind: "edit", file, changes }` operations and validate every file before the first commit.
+
 ## Reusable functions
 
 Name a top-level function to execute it and save it automatically:
@@ -137,8 +160,8 @@ If the named function needs input on its first execution, provide optional top-l
 
 ```json
 {
-  "code": "async function inspect({ workspace }, input: { path: string }) { return workspace.readText(input.path); }",
-  "params": { "path": "README.md" }
+  "code": "async function inspect({ workspace }, input: { file: string }) { return workspace.read(input.file, { format: 'raw' }); }",
+  "params": { "file": "README.md" }
 }
 ```
 

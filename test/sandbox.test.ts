@@ -71,7 +71,7 @@ describe("validateTypeScript", () => {
       validateTypeScript(`async ({ workspace }) => {
       const files = [];
       const capture = async (fn) => fn();
-      files.push(await capture(() => workspace.readText("package.json")));
+      files.push(await capture(() => workspace.read("package.json", { format: "raw" })));
     }`),
     ).not.toThrow();
   });
@@ -79,23 +79,23 @@ describe("validateTypeScript", () => {
   it("contextually types capabilities without source annotations", () => {
     expect(() =>
       validateTypeScript(`async ({ workspace }) => {
-      const file = await workspace.readText("package.json");
-      return file.text;
+      const file = await workspace.read("package.json", { format: "raw" });
+      return file.content;
     }`),
     ).not.toThrow();
   });
 
   it("reports capability, await, argument, and result errors with source locations", () => {
-    expect(() => validateTypeScript(`async ({ workpace }) => workpace.readText("x")`)).toThrow(
+    expect(() => validateTypeScript(`async ({ workpace }) => workpace.read("x")`)).toThrow(
       /1:.*Property 'workpace' does not exist/,
     );
     expect(() =>
       validateTypeScript(`async ({ workspace }) => {
-      const file = workspace.readText("x");
-      return file.text;
+      const file = workspace.read("x");
+      return file.content;
     }`),
-    ).toThrow(/3:.*Property 'text' does not exist on type 'Promise/);
-    expect(() => validateTypeScript("async ({ workspace }) => workspace.readText(42)")).toThrow(
+    ).toThrow(/3:.*Property 'content' does not exist on type 'Promise/);
+    expect(() => validateTypeScript("async ({ workspace }) => workspace.read(42)")).toThrow(
       /number.*string/,
     );
     expect(() => validateTypeScript("() => ({ pending: Promise.resolve(1) })")).toThrow(

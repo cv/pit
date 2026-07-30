@@ -84,7 +84,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain("Promise.all");
     expect(tool.description).toContain("Promise.allSettled");
     expect(tool.description).toContain("contextually type-checked");
-    expect(tool.description).toContain("not a raw string");
+    expect(tool.description).toContain("defaults to hashed line anchors");
     expect(tool.description).toContain("Nonzero exits are data by default");
     expect(tool.description).toContain("workspace.search(query");
     expect(tool.description).toContain("shell.execFile(program, args");
@@ -139,9 +139,7 @@ describe("pit extension", () => {
   it("validates capability dispatch and arity from the registry", () => {
     expect(() => validateCapabilityCall("context", "get", [])).not.toThrow();
     expect(() => validateCapabilityCall("context", "get", [1])).toThrow(/expects 0 argument/);
-    expect(() => validateCapabilityCall("workspace", "readText", [])).toThrow(
-      /expects 1-2 argument/,
-    );
+    expect(() => validateCapabilityCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
     expect(() => validateCapabilityCall("unknown", "method", [])).toThrow(
       "Unknown capability or method",
     );

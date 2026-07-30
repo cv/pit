@@ -2,12 +2,41 @@ type PitJsonPrimitive = null | boolean | number | string;
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
 type PitResult = PitJsonValue | undefined;
 
-type PitReadTextResult = {
-  text: string;
-  truncated: boolean;
+type PitReadFormat = "hashed" | "raw";
+type PitLineAnchor = `${number}:${string}`;
+
+type PitEditChange =
+  | { kind: "replace"; start: PitLineAnchor; end?: PitLineAnchor; content: string }
+  | { kind: "delete"; start: PitLineAnchor; end?: PitLineAnchor }
+  | { kind: "insertBefore" | "insertAfter"; anchor: PitLineAnchor; content: string }
+  | { kind: "replaceFile"; content: string }
+  | { kind: "deleteFile" };
+
+type PitEditChangeSpec = {
+  revision: string | null;
+  changes: [PitEditChange, ...PitEditChange[]];
+};
+
+type PitReadResult = {
+  file: string;
+  format: PitReadFormat;
+  content: string;
+  revision: string;
   offset: number;
   lines: number;
   totalLines: number;
+  hasMore: boolean;
+  truncated: boolean;
+  lineEnding: "lf" | "crlf" | "mixed" | "none";
+  endsWithNewline: boolean;
+};
+
+type PitEditResult = {
+  file: string;
+  revision: string | null;
+  applied: number;
+  bytes: number;
+  deleted: boolean;
 };
 
 type PitWorkspaceEntry = {
@@ -15,83 +44,31 @@ type PitWorkspaceEntry = {
   type: "file" | "directory" | "symlink";
 };
 
-type PitLineRangeEdit = {
-  startLine: number;
-  endLine: number;
-  expectedText: string;
-  newText: string;
-};
-
-type PitBatchMutationOperation =
-  | { kind: "write"; path: string; contents: string }
-  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
-  | ({ kind: "editRange"; path: string } & PitLineRangeEdit);
-
-type PitBatchReadOperation =
-  | { kind: "readText"; path: string; options?: { offset?: number; limit?: number } }
-  | { kind: "stat"; path: string }
-  | { kind: "list"; path?: string }
+type PitBatchOperation =
   | {
-      kind: "glob";
-      patterns?: string | string[];
-      options?: { dot?: boolean; onlyFiles?: boolean; ignore?: string[]; limit?: number };
+      kind: "read";
+      file: string;
+      options?: { format?: PitReadFormat; offset?: number; limit?: number };
     }
-  | {
-      kind: "search";
-      query: string;
-      options?: {
-        path?: string;
-        glob?: string | string[];
-        regex?: boolean;
-        caseSensitive?: boolean;
-        contextLines?: number;
-        limit?: number;
-        ignore?: string[];
-        dot?: boolean;
-      };
-    };
+  | { kind: "edit"; file: string; changes: PitEditChangeSpec };
 
 interface PitWorkspaceCapability {
-  readText(path: string, options?: { offset?: number; limit?: number }): Promise<PitReadTextResult>;
+  read(
+    file: string,
+    options?: { format?: PitReadFormat; offset?: number; limit?: number },
+  ): Promise<PitReadResult>;
 
-  writeText(path: string, contents: string): Promise<{ path: string; bytes: number }>;
-
-  editText(
-    path: string,
-    edits: Array<{ oldText: string; newText: string }>,
-  ): Promise<{ path: string; edits: number }>;
-
-  editRange(
-    path: string,
-    edit: PitLineRangeEdit,
-  ): Promise<{ path: string; startLine: number; endLine: number }>;
-
-  applyPatch(patch: string): Promise<{
-    files: Array<{
-      path: string;
-      kind: "create" | "modify" | "delete";
-      hunks: number;
-      bytes: number;
-    }>;
-  }>;
+  edit(file: string, changes: PitEditChangeSpec): Promise<PitEditResult>;
 
   batch(
-    operations: Array<PitBatchMutationOperation | PitBatchReadOperation>,
+    operations: PitBatchOperation[],
     options?: { failure?: "fail-fast" | "settled" },
   ): Promise<
-    | {
-        files: Array<{
-          path: string;
-          kind: "write" | "edit" | "editRange";
-          bytes: number;
-          edits?: number;
-          range?: { startLine: number; endLine: number };
-        }>;
-      }
+    | { files: PitEditResult[] }
     | {
         results: Array<
-          | { kind: PitBatchReadOperation["kind"]; index: number; ok: true; value: PitResult }
-          | { kind: PitBatchReadOperation["kind"]; index: number; ok: false; error: string }
+          | { kind: "read"; index: number; ok: true; value: PitReadResult }
+          | { kind: "read"; index: number; ok: false; error: string }
         >;
       }
   >;
@@ -125,12 +102,14 @@ interface PitWorkspaceCapability {
     },
   ): Promise<{
     matches: Array<{
-      path: string;
+      file: string;
+      revision: string;
       line: number;
+      anchor: PitLineAnchor;
       column: number;
       text: string;
-      before: string[];
-      after: string[];
+      before: Array<{ line: number; anchor: PitLineAnchor; text: string }>;
+      after: Array<{ line: number; anchor: PitLineAnchor; text: string }>;
     }>;
     truncated: boolean;
     filesSearched: number;

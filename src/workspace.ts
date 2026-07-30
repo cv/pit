@@ -1,27 +1,23 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
-  formatSize,
   truncateHead,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
-import { applyPatch as applyUnifiedPatch, parsePatch, type StructuredPatch } from "diff";
 import fg from "fast-glob";
 import { CAPABILITY_METHODS } from "./capability-registry.js";
+import { fileRevision, lineAnchor, prepareEdit } from "./hashline.js";
 import { InterruptibleRegexMatcher } from "./regex-worker.js";
 
-const MAX_PATCH_BYTES = 1_000_000;
 const MAX_SEARCH_FILE_BYTES = 1_000_000;
 const MAX_SEARCH_FILES = 2000;
 const MAX_SEARCH_RESULTS = 500;
 const MAX_GLOB_RESULTS = 10_000;
 const AT_PATH_PREFIX = /^@/;
-const DIFF_PATH_PREFIX = /^(?:a|b)\//;
-const PATCH_WRAPPER_START = "*** Begin Patch";
-const PATCH_WRAPPER_END = "*** End Patch";
 export const WORKSPACE_METHODS = CAPABILITY_METHODS.workspace;
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -49,9 +45,26 @@ function workspaceResultPath(cwd: string, path: string): string {
   return relative(cwd, path).replaceAll("\\", "/");
 }
 
-async function readText(cwd: string, args: unknown[], signal?: AbortSignal) {
+function detectedLineEnding(lf: number, crlf: number): "lf" | "crlf" | "mixed" | "none" {
+  if (lf > 0 && crlf > 0) {
+    return "mixed";
+  }
+  if (crlf > 0) {
+    return "crlf";
+  }
+  if (lf > 0) {
+    return "lf";
+  }
+  return "none";
+}
+
+async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   const options = args[1] === undefined ? {} : object(args[1], "options");
+  const format = options.format ?? "hashed";
+  if (format !== "hashed" && format !== "raw") {
+    throw new Error('options.format must be "hashed" or "raw"');
+  }
   const offset = Number(options.offset ?? 1);
   const limit = Number(options.limit ?? DEFAULT_MAX_LINES);
   if (!Number.isInteger(offset) || offset < 1 || !Number.isInteger(limit) || limit < 1) {
@@ -60,10 +73,17 @@ async function readText(cwd: string, args: unknown[], signal?: AbortSignal) {
 
   const selectionEnd = offset + limit - 1;
   const maxCaptureCharacters = DEFAULT_MAX_BYTES + 1;
+  const selectedHashes: string[] = [];
   let selected = "";
   let selectionTruncated = false;
   let currentLine = 1;
   let totalLines = 1;
+  let lineHasher = createHash("sha256");
+  const revisionHasher = createHash("sha256");
+  let pendingCarriageReturn = false;
+  const endings = { lf: 0, crlf: 0 };
+  let endsWithNewline = false;
+  const selectedLine = () => currentLine >= offset && currentLine <= selectionEnd;
   const appendSelected = (value: string): void => {
     if (!value) {
       return;
@@ -76,186 +96,144 @@ async function readText(cwd: string, args: unknown[], signal?: AbortSignal) {
     selected += value.slice(0, remaining);
     selectionTruncated ||= value.length > remaining;
   };
+  const hashSegment = (segment: string): void => {
+    /* v8 ignore next 4 -- only a stream chunk boundary immediately after CR reaches this path. */
+    if (pendingCarriageReturn) {
+      lineHasher.update("\r");
+      pendingCarriageReturn = false;
+    }
+    if (segment.endsWith("\r")) {
+      lineHasher.update(segment.slice(0, -1));
+      pendingCarriageReturn = true;
+    } else {
+      lineHasher.update(segment);
+    }
+  };
+  const finishLine = (hasNewline: boolean): void => {
+    if (pendingCarriageReturn) {
+      if (hasNewline) {
+        endings.crlf++;
+      } else {
+        lineHasher.update("\r");
+      }
+      pendingCarriageReturn = false;
+    } else if (hasNewline) {
+      endings.lf++;
+    }
+    if (selectedLine()) {
+      selectedHashes.push(lineHasher.digest("base64url").slice(0, 5));
+    } else {
+      lineHasher.digest();
+    }
+    lineHasher = createHash("sha256");
+  };
 
   const stream = createReadStream(path, { encoding: "utf8", signal });
   for await (const rawChunk of stream) {
     const chunk = String(rawChunk);
+    revisionHasher.update(chunk);
     let start = 0;
     for (;;) {
       const newline = chunk.indexOf("\n", start);
       if (newline < 0) {
-        if (currentLine >= offset && currentLine <= selectionEnd) {
-          appendSelected(chunk.slice(start));
+        const segment = chunk.slice(start);
+        hashSegment(segment);
+        if (selectedLine()) {
+          appendSelected(segment);
+        }
+        if (segment) {
+          endsWithNewline = false;
         }
         break;
       }
-      if (currentLine >= offset && currentLine <= selectionEnd) {
-        appendSelected(chunk.slice(start, newline));
+      const segment = chunk.slice(start, newline);
+      hashSegment(segment);
+      if (selectedLine()) {
+        appendSelected(segment);
         if (currentLine < selectionEnd) {
           appendSelected("\n");
         }
       }
+      finishLine(true);
       totalLines++;
       currentLine++;
+      endsWithNewline = true;
       start = newline + 1;
     }
   }
+  finishLine(false);
 
-  const result = truncateHead(selected, { maxBytes: DEFAULT_MAX_BYTES, maxLines: limit });
+  let content = selected;
+  if (format === "hashed") {
+    const selectedLines = selectedHashes.length === 0 ? [] : selected.split("\n");
+    content = selectedLines
+      .slice(0, selectedHashes.length)
+      .map((line, index) => {
+        const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
+        // biome-ignore lint/style/noNonNullAssertion: selected lines are capped to available hashes.
+        return `${offset + index}:${selectedHashes[index]!}|${normalized}`;
+      })
+      .join("\n");
+  }
+  const result = truncateHead(content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: limit });
+  const resultLineEnding = detectedLineEnding(endings.lf, endings.crlf);
   return {
-    text: result.content,
-    truncated: result.truncated || selectionTruncated,
+    file: workspaceResultPath(cwd, path),
+    format,
+    content: result.content,
+    revision: revisionHasher.digest("base64url").slice(0, 12),
     offset,
     lines: result.outputLines,
     totalLines,
+    hasMore: selectionEnd < totalLines,
+    truncated: result.truncated || selectionTruncated,
+    lineEnding: resultLineEnding,
+    endsWithNewline,
   };
 }
 
-function sourceLocation(contents: string, index: number): string {
-  const before = contents.slice(0, index);
-  const line = before.split("\n").length;
-  const lastNewline = before.lastIndexOf("\n");
-  const column = index - lastNewline;
-  return `${line}:${column}`;
-}
-
-function occurrenceLocations(contents: string, search: string): number[] {
-  const locations: number[] = [];
-  let offset = 0;
-  while (offset <= contents.length - search.length) {
-    const found = contents.indexOf(search, offset);
-    if (found < 0) {
-      break;
-    }
-    locations.push(found);
-    offset = found + 1;
-  }
-  return locations;
-}
-
-function applyTextEdits(current: string, rawEdits: unknown): { next: string; edits: number } {
-  if (!Array.isArray(rawEdits) || rawEdits.length === 0) {
-    throw new Error("edits must be a non-empty array");
-  }
-  const replacements = rawEdits.map((raw: unknown, index: number) => {
-    const edit = object(raw, `edits[${index}]`);
-    const oldText = string(edit.oldText, `edits[${index}].oldText`);
-    const newText = string(edit.newText, `edits[${index}].newText`);
-    if (!oldText) {
-      throw new Error(`edits[${index}].oldText may not be empty`);
-    }
-    const occurrences = occurrenceLocations(current, oldText);
-    if (occurrences.length === 0) {
-      throw new Error(`edits[${index}].oldText was not found`);
-    }
-    if (occurrences.length > 1) {
-      const shown = occurrences.slice(0, 10).map((offset) => sourceLocation(current, offset));
-      const omitted = occurrences.length - shown.length;
-      throw new Error(
-        `edits[${index}].oldText is not unique; matched ${occurrences.length} times at ${shown.join(", ")}` +
-          (omitted ? ` (and ${omitted} more)` : ""),
-      );
-    }
-    // biome-ignore lint/style/noNonNullAssertion: the zero-occurrence case returned above.
-    const start = occurrences[0]!;
-    return { start, end: start + oldText.length, newText };
-  });
-  const ordered = [...replacements].sort((a, b) => a.start - b.start);
-  for (let i = 1; i < ordered.length; i++) {
-    // biome-ignore lint/style/noNonNullAssertion: loop bounds guarantee both entries.
-    if (ordered[i]!.start < ordered[i - 1]!.end) {
-      throw new Error("edits overlap");
-    }
-  }
-  let next = current;
-  for (const replacement of ordered.reverse()) {
-    next = next.slice(0, replacement.start) + replacement.newText + next.slice(replacement.end);
-  }
-  return { next, edits: replacements.length };
-}
-
-interface LineRangeEdit {
-  startLine: number;
-  endLine: number;
-  expectedText: string;
-  newText: string;
-}
-
-function parseLineRangeEdit(raw: unknown, label: string): LineRangeEdit {
-  const edit = object(raw, label);
-  const startLine = Number(edit.startLine);
-  const endLine = Number(edit.endLine);
-  if (!Number.isInteger(startLine) || startLine < 1) {
-    throw new Error(`${label}.startLine must be a positive integer`);
-  }
-  if (!Number.isInteger(endLine) || endLine < startLine) {
-    throw new Error(`${label}.endLine must be an integer at least startLine`);
-  }
-  return {
-    startLine,
-    endLine,
-    expectedText: string(edit.expectedText, `${label}.expectedText`),
-    newText: string(edit.newText, `${label}.newText`),
-  };
-}
-
-function applyLineRangeEdit(contents: string, raw: unknown, label: string) {
-  const edit = parseLineRangeEdit(raw, label);
-  const lineStarts = [0];
-  for (let index = 0; index < contents.length; index++) {
-    if (contents[index] === "\n") {
-      lineStarts.push(index + 1);
-    }
-  }
-  if (edit.endLine > lineStarts.length) {
-    throw new Error(
-      `${label} range ${edit.startLine}-${edit.endLine} exceeds ${lineStarts.length} lines`,
-    );
-  }
-  // biome-ignore lint/style/noNonNullAssertion: validated line bounds guarantee the start offset.
-  const start = lineStarts[edit.startLine - 1]!;
-  const nextLineStart = lineStarts[edit.endLine];
-  let end = nextLineStart === undefined ? contents.length : nextLineStart - 1;
-  if (end > start && contents[end - 1] === "\r") {
-    end--;
-  }
-  const selected = contents.slice(start, end);
-  if (selected !== edit.expectedText) {
-    throw new Error(`${label}.expectedText does not match lines ${edit.startLine}-${edit.endLine}`);
-  }
-  return {
-    next: contents.slice(0, start) + edit.newText + contents.slice(end),
-    startLine: edit.startLine,
-    endLine: edit.endLine,
-  };
-}
-
-function editRange(cwd: string, args: unknown[], signal?: AbortSignal) {
+function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   return withFileMutationQueue(path, async () => {
     checkAbort(signal);
-    const current = await readFile(path, "utf8");
-    const result = applyLineRangeEdit(current, args[1], "edit");
+    const snapshot = await readSnapshot(path);
+    const prepared = prepareEdit(snapshot.existed ? snapshot.contents : undefined, args[1]);
     checkAbort(signal);
-    await writeFile(path, result.next, { encoding: "utf8", signal });
+    if (prepared.deleted) {
+      await unlink(path);
+      return {
+        file: workspaceResultPath(cwd, path),
+        revision: null,
+        applied: prepared.applied,
+        bytes: 0,
+        deleted: true,
+      };
+    }
+    await mkdir(dirname(path), { recursive: true });
+    // biome-ignore lint/style/noNonNullAssertion: non-deleted edits always provide content.
+    const next = prepared.next!;
+    await writeFile(path, next, { encoding: "utf8", signal });
     return {
-      path: workspaceResultPath(cwd, path),
-      startLine: result.startLine,
-      endLine: result.endLine,
+      file: workspaceResultPath(cwd, path),
+      revision: fileRevision(next),
+      applied: prepared.applied,
+      bytes: Buffer.byteLength(next),
+      deleted: false,
     };
   });
 }
 
-function editText(cwd: string, args: unknown[], signal?: AbortSignal) {
-  const path = resolveWorkspacePath(cwd, args[0]);
-  return withFileMutationQueue(path, async () => {
-    checkAbort(signal);
-    const current = await readFile(path, "utf8");
-    const result = applyTextEdits(current, args[1]);
-    checkAbort(signal);
-    await writeFile(path, result.next, { encoding: "utf8", signal });
-    return { path: workspaceResultPath(cwd, path), edits: result.edits };
-  });
+async function readSnapshot(path: string): Promise<{ existed: boolean; contents: string }> {
+  try {
+    return { existed: true, contents: await readFile(path, "utf8") };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { existed: false, contents: "" };
+    }
+    /* v8 ignore next -- filesystem errors other than missing paths propagate unchanged. */
+    throw error;
+  }
 }
 
 function withMutationQueues<T>(paths: string[], task: () => Promise<T>): Promise<T> {
@@ -265,47 +243,9 @@ function withMutationQueues<T>(paths: string[], task: () => Promise<T>): Promise
     : withFileMutationQueue(path, () => withMutationQueues(rest, task));
 }
 
-async function readSnapshot(path: string): Promise<{ existed: boolean; contents: string }> {
-  try {
-    return { existed: true, contents: await readFile(path, "utf8") };
-  } catch (error) {
-    if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) {
-      return { existed: false, contents: "" };
-    }
-    throw error;
-  }
-}
-
-const READ_BATCH_KINDS = new Set(["readText", "stat", "list", "glob", "search"]);
-const MUTATION_BATCH_KINDS = new Set(["write", "edit", "editRange"]);
-
-function readBatchArguments(kind: string, operation: Record<string, unknown>): unknown[] {
-  switch (kind) {
-    case "readText":
-      return operation.options === undefined
-        ? [operation.path]
-        : [operation.path, operation.options];
-    case "stat":
-      return [operation.path];
-    case "list":
-      return operation.path === undefined ? [] : [operation.path];
-    case "glob":
-      return operation.options === undefined
-        ? [operation.patterns]
-        : [operation.patterns, operation.options];
-    case "search":
-      return operation.options === undefined
-        ? [operation.query]
-        : [operation.query, operation.options];
-    /* v8 ignore next -- batch kind validation rejects unknown read operations before dispatch. */
-    default:
-      throw new Error(`Batch read dispatcher disagrees with validated kind: ${kind}`);
-  }
-}
-
-async function batchReadWorkspace(
+async function batchReads(
   cwd: string,
-  operations: Array<{ kind: string; operation: Record<string, unknown>; index: number }>,
+  operations: Array<{ operation: Record<string, unknown>; index: number }>,
   rawOptions: unknown,
   signal?: AbortSignal,
 ) {
@@ -314,13 +254,16 @@ async function batchReadWorkspace(
   if (failure !== "fail-fast" && failure !== "settled") {
     throw new Error('options.failure must be "fail-fast" or "settled"');
   }
-  const execute = async ({ kind, operation, index }: (typeof operations)[number]) => ({
-    kind,
+  const tasks = operations.map(async ({ operation, index }) => ({
+    kind: "read" as const,
     index,
     ok: true as const,
-    value: await handleWorkspace(cwd, kind, readBatchArguments(kind, operation), signal),
-  });
-  const tasks = operations.map(execute);
+    value: await readWorkspace(
+      cwd,
+      operation.options === undefined ? [operation.file] : [operation.file, operation.options],
+      signal,
+    ),
+  }));
   if (failure === "fail-fast") {
     return { results: await Promise.all(tasks) };
   }
@@ -328,15 +271,88 @@ async function batchReadWorkspace(
     results: await Promise.all(
       tasks.map((task, index) =>
         task.catch((error) => ({
-          // biome-ignore lint/style/noNonNullAssertion: every task has a matching operation index.
-          kind: operations[index]!.kind,
+          kind: "read" as const,
           index,
           ok: false as const,
+          /* v8 ignore next -- workspace capability failures are normalized to Error instances. */
           error: (error instanceof Error ? error.message : String(error)).slice(0, 4000),
         })),
       ),
     ),
   };
+}
+
+function batchEdits(
+  cwd: string,
+  operations: Array<{ operation: Record<string, unknown>; index: number }>,
+  signal?: AbortSignal,
+) {
+  const targets = operations.map(({ operation, index }) => ({
+    path: resolveWorkspacePath(cwd, operation.file),
+    changes: operation.changes,
+    index,
+  }));
+  const paths = targets.map(({ path }) => path);
+  if (new Set(paths).size !== paths.length) {
+    throw new Error("edit batch operations must target unique files");
+  }
+  return withMutationQueues(
+    [...paths].sort((a, b) => a.localeCompare(b)),
+    async () => {
+      const snapshots = new Map(
+        await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)),
+      );
+      const prepared = targets.map((target) => {
+        // biome-ignore lint/style/noNonNullAssertion: every target has a snapshot.
+        const snapshot = snapshots.get(target.path)!;
+        return {
+          ...target,
+          snapshot,
+          edit: prepareEdit(snapshot.existed ? snapshot.contents : undefined, target.changes),
+        };
+      });
+      const committed: typeof prepared = [];
+      try {
+        for (const target of prepared) {
+          checkAbort(signal);
+          if (target.edit.deleted) {
+            await unlink(target.path);
+          } else {
+            await mkdir(dirname(target.path), { recursive: true });
+            // biome-ignore lint/style/noNonNullAssertion: non-deleted edits always provide content.
+            await writeFile(target.path, target.edit.next!, { encoding: "utf8", signal });
+          }
+          committed.push(target);
+        }
+      } catch (error) {
+        for (const target of committed.reverse()) {
+          try {
+            if (target.snapshot.existed) {
+              await writeFile(target.path, target.snapshot.contents, "utf8");
+            } else {
+              await unlink(target.path);
+            }
+          } catch {
+            // Preserve the original failure; rollback is best-effort.
+          }
+        }
+        throw error;
+      }
+      return {
+        files: prepared.map((target) => {
+          // biome-ignore lint/style/noNonNullAssertion: deleted results do not read the revision.
+          const next = target.edit.next!;
+          return {
+            file: workspaceResultPath(cwd, target.path),
+            revision: target.edit.deleted ? null : fileRevision(next),
+            applied: target.edit.applied,
+            bytes: target.edit.deleted ? 0 : Buffer.byteLength(next),
+            deleted: target.edit.deleted,
+          };
+        }),
+      };
+    },
+  );
 }
 
 function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
@@ -347,233 +363,37 @@ function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const parsed = rawOperations.map((raw, index) => {
     const operation = object(raw, `operations[${index}]`);
     const kind = string(operation.kind, `operations[${index}].kind`);
-    if (!(READ_BATCH_KINDS.has(kind) || MUTATION_BATCH_KINDS.has(kind))) {
+    if (kind !== "read" && kind !== "edit") {
       throw new Error(`Unknown batch operation: ${kind}`);
     }
     return { kind, operation, index };
   });
-  const readOnly = parsed.every(({ kind }) => READ_BATCH_KINDS.has(kind));
-  const mutationOnly = parsed.every(({ kind }) => MUTATION_BATCH_KINDS.has(kind));
-  if (!(readOnly || mutationOnly)) {
-    throw new Error("batch cannot mix read-only and mutation operations");
+  const reads = parsed.every(({ kind }) => kind === "read");
+  const edits = parsed.every(({ kind }) => kind === "edit");
+  if (!(reads || edits)) {
+    throw new Error("batch cannot mix read and edit operations");
   }
-  if (readOnly) {
-    return batchReadWorkspace(cwd, parsed, args[1], signal);
+  if (reads) {
+    return batchReads(cwd, parsed, args[1], signal);
   }
   if (args[1] !== undefined) {
-    throw new Error("batch options are only supported for read-only operations");
+    throw new Error("batch options are only supported for read operations");
   }
-  const operations = parsed.map(({ kind, operation, index }) => ({
-    kind: kind as "write" | "edit" | "editRange",
-    path: resolveWorkspacePath(cwd, operation.path),
-    operation,
-    index,
-  }));
-  const paths = operations.map((operation) => operation.path);
-  if (new Set(paths).size !== paths.length) {
-    throw new Error("batch operations must target unique paths");
-  }
-
-  return withMutationQueues([...paths].sort(), async () => {
-    const snapshots = new Map(
-      await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)),
-    );
-    const prepared = operations.map(({ kind, path, operation, index }) => {
-      // biome-ignore lint/style/noNonNullAssertion: snapshots are created for every operation path.
-      const snapshot = snapshots.get(path)!;
-      if (kind === "write") {
-        const contents = string(operation.contents, `operations[${index}].contents`);
-        return { kind, path, snapshot, next: contents, edits: undefined, range: undefined };
-      }
-      if (!snapshot.existed) {
-        throw new Error(`operations[${index}] cannot edit a missing file`);
-      }
-      if (kind === "edit") {
-        const result = applyTextEdits(snapshot.contents, operation.edits);
-        return { kind, path, snapshot, next: result.next, edits: result.edits, range: undefined };
-      }
-      const result = applyLineRangeEdit(snapshot.contents, operation, `operations[${index}]`);
-      return {
-        kind,
-        path,
-        snapshot,
-        next: result.next,
-        edits: 1,
-        range: { startLine: result.startLine, endLine: result.endLine },
-      };
-    });
-
-    const committed: typeof prepared = [];
-    try {
-      for (const operation of prepared) {
-        checkAbort(signal);
-        await mkdir(dirname(operation.path), { recursive: true });
-        await writeFile(operation.path, operation.next, { encoding: "utf8", signal });
-        committed.push(operation);
-      }
-    } catch (error) {
-      for (const operation of committed.reverse()) {
-        try {
-          if (operation.snapshot.existed) {
-            await writeFile(operation.path, operation.snapshot.contents, "utf8");
-          } else {
-            await unlink(operation.path);
-          }
-        } catch {
-          // Preserve the original write failure; rollback is best-effort.
-        }
-      }
-      throw error;
-    }
-    return {
-      files: prepared.map((operation) => ({
-        path: workspaceResultPath(cwd, operation.path),
-        kind: operation.kind,
-        bytes: Buffer.byteLength(operation.next),
-        ...(operation.edits === undefined ? {} : { edits: operation.edits }),
-        ...(operation.range === undefined ? {} : { range: operation.range }),
-      })),
-    };
-  });
+  return batchEdits(cwd, parsed, signal);
 }
 
-function normalizedPatchPath(fileName: string | undefined): string | undefined {
-  if (!fileName || fileName === "/dev/null") {
-    return;
-  }
-  return fileName.replace(DIFF_PATH_PREFIX, "");
-}
-
-function patchTarget(cwd: string, patch: StructuredPatch, index: number) {
-  if (patch.isBinary) {
-    throw new Error(`patch[${index}] is binary and cannot be applied`);
-  }
-  if (patch.isRename || patch.isCopy) {
-    throw new Error(`patch[${index}] renames and copies are not supported`);
-  }
-  if (patch.hunks.length === 0) {
-    throw new Error(`patch[${index}] has no hunks`);
-  }
-  const oldName = normalizedPatchPath(patch.oldFileName);
-  const newName = normalizedPatchPath(patch.newFileName);
-  const kind =
-    patch.isCreate || oldName === undefined
-      ? "create"
-      : patch.isDelete || newName === undefined
-        ? "delete"
-        : "modify";
-  if (kind === "modify" && oldName !== newName) {
-    throw new Error(`patch[${index}] changes paths; renames are not supported`);
-  }
-  const name = kind === "delete" ? oldName : newName;
-  if (!name) {
-    throw new Error(`patch[${index}] does not identify a target file`);
-  }
-  return { patch, kind, path: resolveWorkspacePath(cwd, name), index };
-}
-
-function unwrapPatchText(raw: string): string {
-  const lines = raw.trimEnd().split("\n");
-  const startsWrapped = lines[0]?.trim() === PATCH_WRAPPER_START;
-  const endsWrapped = lines.at(-1)?.trim() === PATCH_WRAPPER_END;
-  if (startsWrapped !== endsWrapped) {
-    throw new Error("patch wrapper must include both *** Begin Patch and *** End Patch");
-  }
-  return startsWrapped ? lines.slice(1, -1).join("\n") : raw;
-}
-
-function applyWorkspacePatch(cwd: string, args: unknown[], signal?: AbortSignal) {
-  const rawPatchText = string(args[0], "patch");
-  if (!rawPatchText.trim()) {
-    throw new Error("patch must not be empty");
-  }
-  if (Buffer.byteLength(rawPatchText) > MAX_PATCH_BYTES) {
-    throw new Error(`patch exceeds ${formatSize(MAX_PATCH_BYTES)}`);
-  }
-  const patchText = unwrapPatchText(rawPatchText);
-  let parsed: StructuredPatch[];
-  try {
-    parsed = parsePatch(patchText);
-  } catch (error) {
-    throw new Error(`Invalid unified patch: ${String(error)}`);
-  }
-  const targets = parsed.map((patch, index) => patchTarget(cwd, patch, index));
-  const paths = targets.map((target) => target.path);
-  if (new Set(paths).size !== paths.length) {
-    throw new Error("patch must contain at most one diff per file");
-  }
-
-  return withMutationQueues([...paths].sort(), async () => {
-    const snapshots = new Map(
-      await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)),
-    );
-    const prepared = targets.map((target) => {
-      // biome-ignore lint/style/noNonNullAssertion: snapshots are created for every patch target.
-      const snapshot = snapshots.get(target.path)!;
-      if (target.kind === "create" && snapshot.existed) {
-        throw new Error(`patch[${target.index}] cannot create an existing file: ${target.path}`);
-      }
-      if (target.kind !== "create" && !snapshot.existed) {
-        throw new Error(
-          `patch[${target.index}] cannot ${target.kind} a missing file: ${target.path}`,
-        );
-      }
-      const next = applyUnifiedPatch(snapshot.contents, target.patch, { fuzzFactor: 0 });
-      if (next === false) {
-        const hunkLines = target.patch.hunks
-          .map((hunk) => `-${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines}`)
-          .join(", ");
-        throw new Error(
-          `patch[${target.index}] failed to apply to ${target.path}; rejected hunks: ${hunkLines}`,
-        );
-      }
-      return { ...target, snapshot, next };
-    });
-
-    const committed: typeof prepared = [];
-    try {
-      for (const target of prepared) {
-        checkAbort(signal);
-        if (target.kind === "delete") {
-          await unlink(target.path);
-        } else {
-          await mkdir(dirname(target.path), { recursive: true });
-          await writeFile(target.path, target.next, { encoding: "utf8", signal });
-        }
-        committed.push(target);
-      }
-    } catch (error) {
-      for (const target of committed.reverse()) {
-        try {
-          if (target.snapshot.existed) {
-            await writeFile(target.path, target.snapshot.contents, "utf8");
-          } else {
-            await unlink(target.path);
-          }
-        } catch {
-          // Preserve the original write failure; rollback is best-effort.
-        }
-      }
-      throw error;
-    }
-    return {
-      files: prepared.map((target) => ({
-        path: workspaceResultPath(cwd, target.path),
-        kind: target.kind,
-        hunks: target.patch.hunks.length,
-        bytes: target.kind === "delete" ? 0 : Buffer.byteLength(target.next),
-      })),
-    };
-  });
-}
-
-interface SearchMatch {
-  path: string;
+interface SearchContextLine {
   line: number;
-  column: number;
+  anchor: string;
   text: string;
-  before: string[];
-  after: string[];
+}
+
+interface SearchMatch extends SearchContextLine {
+  file: string;
+  revision: string;
+  column: number;
+  before: SearchContextLine[];
+  after: SearchContextLine[];
 }
 
 async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
@@ -627,6 +447,7 @@ async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSigna
     });
     for await (const entry of stream) {
       discovered.push(String(entry));
+      /* v8 ignore next -- the hard file cap is impractical to exercise in unit fixtures. */
       if (discovered.length === MAX_SEARCH_FILES) {
         break;
       }
@@ -661,7 +482,17 @@ async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSigna
         continue;
       }
       filesSearched++;
-      const lines = buffer.toString("utf8").split("\n");
+      const contents = buffer.toString("utf8");
+      const revision = fileRevision(contents);
+      const filePath = workspaceResultPath(cwd, file);
+      const lines = contents
+        .split("\n")
+        .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
+      const contextLine = (lineIndex: number): SearchContextLine => {
+        // biome-ignore lint/style/noNonNullAssertion: callers use indices bounded by lines.length.
+        const text = lines[lineIndex]!;
+        return { line: lineIndex + 1, anchor: lineAnchor(lineIndex + 1, text), text };
+      };
       const regexMatches = regexMatcher
         ? await regexMatcher.match(lines, limit - matches.length)
         : [];
@@ -693,12 +524,19 @@ async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSigna
         }
         for (const column of columns) {
           matches.push({
-            path: relative(cwd, file).replaceAll("\\", "/"),
+            file: filePath,
+            revision,
             line: lineIndex + 1,
+            anchor: lineAnchor(lineIndex + 1, text),
             column: column + 1,
             text,
-            before: lines.slice(Math.max(0, lineIndex - contextLines), lineIndex),
-            after: lines.slice(lineIndex + 1, lineIndex + 1 + contextLines),
+            before: Array.from({ length: Math.min(contextLines, lineIndex) }, (_, index) =>
+              contextLine(lineIndex - Math.min(contextLines, lineIndex) + index),
+            ),
+            after: Array.from(
+              { length: Math.min(contextLines, lines.length - lineIndex - 1) },
+              (_, index) => contextLine(lineIndex + index + 1),
+            ),
           });
           if (matches.length >= limit) {
             truncated = true;
@@ -757,26 +595,12 @@ export async function handleWorkspace(
 ): Promise<unknown> {
   checkAbort(signal);
   switch (method) {
-    case "readText":
-      return readText(cwd, args, signal);
-    case "writeText": {
-      const path = resolveWorkspacePath(cwd, args[0]);
-      const contents = string(args[1], "contents");
-      return withFileMutationQueue(path, async () => {
-        checkAbort(signal);
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, contents, { encoding: "utf8", signal });
-        return { path: workspaceResultPath(cwd, path), bytes: Buffer.byteLength(contents) };
-      });
-    }
-    case "editText":
-      return editText(cwd, args, signal);
-    case "editRange":
-      return editRange(cwd, args, signal);
+    case "read":
+      return readWorkspace(cwd, args, signal);
+    case "edit":
+      return editWorkspace(cwd, args, signal);
     case "batch":
       return batchWorkspace(cwd, args, signal);
-    case "applyPatch":
-      return applyWorkspacePatch(cwd, args, signal);
     case "search":
       return searchWorkspace(cwd, args, signal);
     case "list": {

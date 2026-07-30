@@ -14,12 +14,41 @@ export const CAPABILITY_CONTRACT_PREAMBLE = `type PitJsonPrimitive = null | bool
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
 type PitResult = PitJsonValue | undefined;
 
-type PitReadTextResult = {
-  text: string;
-  truncated: boolean;
+type PitReadFormat = "hashed" | "raw";
+type PitLineAnchor = \`\${number}:\${string}\`;
+
+type PitEditChange =
+  | { kind: "replace"; start: PitLineAnchor; end?: PitLineAnchor; content: string }
+  | { kind: "delete"; start: PitLineAnchor; end?: PitLineAnchor }
+  | { kind: "insertBefore" | "insertAfter"; anchor: PitLineAnchor; content: string }
+  | { kind: "replaceFile"; content: string }
+  | { kind: "deleteFile" };
+
+type PitEditChangeSpec = {
+  revision: string | null;
+  changes: [PitEditChange, ...PitEditChange[]];
+};
+
+type PitReadResult = {
+  file: string;
+  format: PitReadFormat;
+  content: string;
+  revision: string;
   offset: number;
   lines: number;
   totalLines: number;
+  hasMore: boolean;
+  truncated: boolean;
+  lineEnding: "lf" | "crlf" | "mixed" | "none";
+  endsWithNewline: boolean;
+};
+
+type PitEditResult = {
+  file: string;
+  revision: string | null;
+  applied: number;
+  bytes: number;
+  deleted: boolean;
 };
 
 type PitWorkspaceEntry = {
@@ -27,117 +56,50 @@ type PitWorkspaceEntry = {
   type: "file" | "directory" | "symlink";
 };
 
-type PitLineRangeEdit = {
-  startLine: number;
-  endLine: number;
-  expectedText: string;
-  newText: string;
-};
-
-type PitBatchMutationOperation =
-  | { kind: "write"; path: string; contents: string }
-  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
-  | ({ kind: "editRange"; path: string } & PitLineRangeEdit);
-
-type PitBatchReadOperation =
-  | { kind: "readText"; path: string; options?: { offset?: number; limit?: number } }
-  | { kind: "stat"; path: string }
-  | { kind: "list"; path?: string }
+type PitBatchOperation =
   | {
-      kind: "glob";
-      patterns?: string | string[];
-      options?: { dot?: boolean; onlyFiles?: boolean; ignore?: string[]; limit?: number };
+      kind: "read";
+      file: string;
+      options?: { format?: PitReadFormat; offset?: number; limit?: number };
     }
-  | {
-      kind: "search";
-      query: string;
-      options?: {
-        path?: string;
-        glob?: string | string[];
-        regex?: boolean;
-        caseSensitive?: boolean;
-        contextLines?: number;
-        limit?: number;
-        ignore?: string[];
-        dot?: boolean;
-      };
-    };`;
+  | { kind: "edit"; file: string; changes: PitEditChangeSpec };`;
 
 export const CAPABILITY_REGISTRY = {
   workspace: {
     interfaceName: "PitWorkspaceCapability",
     methods: {
-      readText: {
-        declaration:
-          "readText(path: string, options?: { offset?: number; limit?: number }): Promise<PitReadTextResult>;",
+      read: {
+        declaration: `read(
+  file: string,
+  options?: { format?: PitReadFormat; offset?: number; limit?: number },
+): Promise<PitReadResult>;`,
         documentation:
-          "workspace.readText(path, options?) -> { text, truncated, offset, lines, totalLines } (not a raw string)",
+          'workspace.read(file, { format?: "hashed" | "raw", offset?, limit? }) defaults to hashed line anchors',
         minimumArguments: 1,
         maximumArguments: 2,
       },
-      writeText: {
-        declaration:
-          "writeText(path: string, contents: string): Promise<{ path: string; bytes: number }>;",
-        documentation: "workspace.writeText(path, contents) with cwd-relative result paths",
-        minimumArguments: 2,
-        maximumArguments: 2,
-      },
-      editText: {
-        declaration: `editText(
-  path: string,
-  edits: Array<{ oldText: string; newText: string }>,
-): Promise<{ path: string; edits: number }>;`,
-        documentation: "workspace.editText(path, edits) with cwd-relative result paths",
-        minimumArguments: 2,
-        maximumArguments: 2,
-      },
-      editRange: {
-        declaration: `editRange(
-  path: string,
-  edit: PitLineRangeEdit,
-): Promise<{ path: string; startLine: number; endLine: number }>;`,
+      edit: {
+        declaration: "edit(file: string, changes: PitEditChangeSpec): Promise<PitEditResult>;",
         documentation:
-          "workspace.editRange(path, { startLine, endLine, expectedText, newText }) with stale-content protection",
+          "workspace.edit(file, changes) applies revision-checked anchored or file-level changes",
         minimumArguments: 2,
         maximumArguments: 2,
-      },
-      applyPatch: {
-        declaration: `applyPatch(patch: string): Promise<{
-  files: Array<{
-    path: string;
-    kind: "create" | "modify" | "delete";
-    hunks: number;
-    bytes: number;
-  }>;
-}>;`,
-        documentation:
-          "workspace.applyPatch(patch) accepts unified diffs with optional *** Begin Patch wrappers",
-        minimumArguments: 1,
-        maximumArguments: 1,
       },
       batch: {
         declaration: `batch(
-  operations: Array<PitBatchMutationOperation | PitBatchReadOperation>,
+  operations: PitBatchOperation[],
   options?: { failure?: "fail-fast" | "settled" },
 ): Promise<
-  | {
-      files: Array<{
-        path: string;
-        kind: "write" | "edit" | "editRange";
-        bytes: number;
-        edits?: number;
-        range?: { startLine: number; endLine: number };
-      }>;
-    }
+  | { files: PitEditResult[] }
   | {
       results: Array<
-        | { kind: PitBatchReadOperation["kind"]; index: number; ok: true; value: PitResult }
-        | { kind: PitBatchReadOperation["kind"]; index: number; ok: false; error: string }
+        | { kind: "read"; index: number; ok: true; value: PitReadResult }
+        | { kind: "read"; index: number; ok: false; error: string }
       >;
     }
 >;`,
         documentation:
-          "workspace.batch(operations, { failure? }) for transactional mutations or concurrent read-only inspection",
+          "workspace.batch accepts all-read concurrent batches or all-edit transactional batches",
         minimumArguments: 1,
         maximumArguments: 2,
       },
@@ -180,18 +142,20 @@ export const CAPABILITY_REGISTRY = {
   },
 ): Promise<{
   matches: Array<{
-    path: string;
+    file: string;
+    revision: string;
     line: number;
+    anchor: PitLineAnchor;
     column: number;
     text: string;
-    before: string[];
-    after: string[];
+    before: Array<{ line: number; anchor: PitLineAnchor; text: string }>;
+    after: Array<{ line: number; anchor: PitLineAnchor; text: string }>;
   }>;
   truncated: boolean;
   filesSearched: number;
   filesSkipped: number;
 }>;`,
-        documentation: "workspace.search(query, options?)",
+        documentation: "workspace.search(query, options?) returns edit-ready anchors and revisions",
         minimumArguments: 1,
         maximumArguments: 2,
       },
