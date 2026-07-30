@@ -283,7 +283,7 @@ Invoke the saved function in a later tool call as ordinary TypeScript. Its curre
 runTests()
 runTests({ coverage: true })
 
-Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. A branch may contain up to 64 saved functions, 100 KB per function, and 1 MB of combined saved source. Saved functions are injected into new isolates as typed lexical bindings and may call one another. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
+Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. A branch may contain up to 64 saved functions, 100 KB per function, and 1 MB of combined saved source. Only referenced saved functions and their transitive dependencies are injected into new isolates as typed lexical bindings. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
 
 COMPOSING WORKFLOWS
 

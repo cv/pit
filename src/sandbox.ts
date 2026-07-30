@@ -212,16 +212,18 @@ export function validateTypeScript(
   source: string,
   savedFunctions: ReadonlyMap<string, string> = new Map(),
   input?: unknown,
+  availableNames: Iterable<string> = savedFunctions.keys(),
 ): void {
   const programExpression = isProgramExpression(source);
   const entries = savedEntries(savedFunctions);
-  const names = entries.map(([name]) => name);
+  const names = [...availableNames].sort();
   const registryKey = entries.map(([name, savedSource]) => `${name}\0${savedSource}`).join("\0");
+  const availableKey = names.join("\0");
   const inputSource = input === undefined ? "" : JSON.stringify(input);
   if (input !== undefined && !programExpression) {
     throw new Error("Top-level params can only be passed to a function expression");
   }
-  const cacheKey = `${programExpression ? "program" : "expression"}\0${registryKey}\0${inputSource}\0${source}`;
+  const cacheKey = `${programExpression ? "program" : "expression"}\0${registryKey}\0${availableKey}\0${inputSource}\0${source}`;
   if (validationCache.has(cacheKey)) {
     validationCacheHits++;
     const cachedError = validationCache.get(cacheKey);
@@ -352,9 +354,11 @@ export async function runInSandbox(
   }
 
   const savedFunctions = options.savedFunctions ?? new Map<string, string>();
-  validateTypeScript(source, savedFunctions, options.input);
+  const referenced = resolveSavedFunctionReferences(source, savedFunctions);
+  const injectedFunctions = new Map(referenced.map((reference) => [reference.name, reference.source]));
+  validateTypeScript(source, injectedFunctions, options.input, savedFunctions.keys());
 
-  const compiled = await compileTypeScript(runtimeProgram(source, savedFunctions));
+  const compiled = await compileTypeScript(runtimeProgram(source, injectedFunctions));
   const token = randomBytes(24).toString("base64url");
   const child = spawn(
     process.execPath,

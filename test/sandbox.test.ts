@@ -181,6 +181,7 @@ describe("runInSandbox", () => {
   it("injects saved functions as capability-bound expressions", async () => {
     const savedFunctions = new Map([
       ["answer", `async function answer(_capabilities, input) { return { answer: input.value }; }`],
+      ["unrelated", `42`],
     ]);
     const handler = vi.fn(async (capability: string, method: string) => {
       if (capability === "__pit" && method === "savedFunctionRun") return null;
@@ -189,6 +190,8 @@ describe("runInSandbox", () => {
     const result = await runInSandbox(`answer({ value: 42 })`, handler, { savedFunctions });
     expect(result).toEqual({ answer: 42 });
     expect(handler).toHaveBeenCalledWith("__pit", "savedFunctionRun", ["answer"]);
+    await expect(runInSandbox(`unrelated()`, handler, { savedFunctions }))
+      .rejects.toThrow(/number.*PitProgram/);
   });
 
   it("preserves saved function input and return types", () => {
