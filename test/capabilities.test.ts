@@ -70,6 +70,47 @@ describe("host capabilities", () => {
     );
   });
 
+  it("applies caller-controlled shell output budgets", async () => {
+    execMock
+      .mockResolvedValueOnce({
+        stdout: "one\ntwo\nthree\nfour",
+        stderr: "alpha\nbeta\ngamma",
+        code: 0,
+      })
+      .mockResolvedValueOnce({
+        stdout: "one\ntwo\nthree\nfour",
+        stderr: "",
+        code: 0,
+      });
+
+    const head = await value(`async ({ shell }) => shell.exec("head", {
+      maxLines: 2, truncate: "head",
+    })`);
+    expect(head).toMatchObject({ stdout: "one\ntwo", stderr: "alpha\nbeta", truncated: true });
+
+    const tail = await value(`async ({ shell }) => shell.exec("tail", {
+      maxLines: 2, maxBytes: 50, truncate: "tail",
+    })`);
+    expect(tail).toMatchObject({ stdout: "three\nfour", truncated: true });
+
+    const callsBeforeInvalid = execMock.mock.calls.length;
+    const errors = await value(`async ({ shell }) => {
+      const raw = shell as any;
+      const capture = async (options) => { try { await raw.exec("invalid", options); return "ok"; } catch (error) { return error.message; } };
+      return [
+        await capture({ maxBytes: 0 }),
+        await capture({ maxLines: 2001 }),
+        await capture({ truncate: "middle" }),
+      ];
+    }`);
+    expect(errors).toEqual([
+      "options.maxBytes must be an integer between 1 and 51200",
+      "options.maxLines must be an integer between 1 and 2000",
+      'options.truncate must be "head" or "tail"',
+    ]);
+    expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
+  });
+
   it("executes argument arrays without shell interpolation", async () => {
     execMock.mockResolvedValueOnce({ stdout: "committed", stderr: "", code: 0 });
     const controller = new AbortController();
@@ -217,6 +258,21 @@ describe("host capabilities", () => {
     expect(result[0]).toMatchObject({ status: 204, body: 0, truncated: false });
     expect(result[1]).toMatchObject({ status: 200, body: 1_000_000, truncated: false });
     expect(result[2]).toMatchObject({ status: 200, body: 1_000_000, truncated: true });
+  });
+
+  it("applies caller-controlled HTTP body budgets", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("abcdefghij")),
+    );
+    const result = await value(`async ({ http }) => http.request("https://example.test", {
+      maxBytes: 5,
+    })`);
+    expect(result).toMatchObject({ body: "abcde", truncated: true });
+
+    await expect(
+      run(`async ({ http }) => http.request("https://example.test", { maxBytes: 0 })`),
+    ).rejects.toThrow("options.maxBytes must be an integer between 1 and 1000000");
   });
 
   it("uses default HTTP options and validates arguments", async () => {

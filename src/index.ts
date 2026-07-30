@@ -52,7 +52,23 @@ interface TypeScriptDetails {
   functions?: FunctionActivity[];
 }
 
-async function readHttpBody(response: Response): Promise<{ body: string; truncated: boolean }> {
+function boundedInteger(
+  value: unknown,
+  label: string,
+  maximum: number,
+  defaultValue: number,
+): number {
+  const resolved = Number(value ?? defaultValue);
+  if (!Number.isInteger(resolved) || resolved < 1 || resolved > maximum) {
+    throw new Error(`${label} must be an integer between 1 and ${maximum}`);
+  }
+  return resolved;
+}
+
+async function readHttpBody(
+  response: Response,
+  maxBytes: number,
+): Promise<{ body: string; truncated: boolean }> {
   if (!response.body) {
     return { body: "", truncated: false };
   }
@@ -65,7 +81,7 @@ async function readHttpBody(response: Response): Promise<{ body: string; truncat
     if (done) {
       break;
     }
-    const remaining = MAX_HTTP_BYTES - bytes;
+    const remaining = maxBytes - bytes;
     if (value.byteLength > remaining) {
       chunks.push(Buffer.from(value.subarray(0, remaining)));
       bytes += Math.max(0, remaining);
@@ -75,7 +91,7 @@ async function readHttpBody(response: Response): Promise<{ body: string; truncat
     }
     chunks.push(Buffer.from(value));
     bytes += value.byteLength;
-    if (bytes === MAX_HTTP_BYTES) {
+    if (bytes === maxBytes) {
       const next = await reader.read();
       if (!next.done) {
         truncated = true;
@@ -116,20 +132,31 @@ async function executeHostProcess(
   }
   const cwd =
     options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
+  const maxBytes = boundedInteger(
+    options.maxBytes,
+    "options.maxBytes",
+    DEFAULT_MAX_BYTES,
+    DEFAULT_MAX_BYTES,
+  );
+  const maxLines = boundedInteger(
+    options.maxLines,
+    "options.maxLines",
+    DEFAULT_MAX_LINES,
+    DEFAULT_MAX_LINES,
+  );
+  const truncate = options.truncate ?? "tail";
+  if (truncate !== "head" && truncate !== "tail") {
+    throw new Error('options.truncate must be "head" or "tail"');
+  }
+  const truncateOutput = truncate === "head" ? truncateHead : truncateTail;
   onShellCommand(displayCommand);
   const result = await pi.exec(program, args, {
     cwd,
     ...(signal ? { signal } : {}),
     timeout: Number(options.timeoutMs ?? 120_000),
   });
-  const stdout = truncateTail(result.stdout, {
-    maxBytes: DEFAULT_MAX_BYTES,
-    maxLines: DEFAULT_MAX_LINES,
-  });
-  const stderr = truncateTail(result.stderr, {
-    maxBytes: DEFAULT_MAX_BYTES,
-    maxLines: DEFAULT_MAX_LINES,
-  });
+  const stdout = truncateOutput(result.stdout, { maxBytes, maxLines });
+  const stderr = truncateOutput(result.stderr, { maxBytes, maxLines });
   if (options.raise === true && result.code !== 0) {
     const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4000);
     throw new Error(
@@ -201,6 +228,12 @@ function createCapabilities(
     if (capability === "http" && method === "request") {
       const url = string(args[0], "url");
       const options = args[1] === undefined ? {} : object(args[1], "options");
+      const maxBytes = boundedInteger(
+        options.maxBytes,
+        "options.maxBytes",
+        MAX_HTTP_BYTES,
+        MAX_HTTP_BYTES,
+      );
       const response = await fetch(url, {
         ...(options.method === undefined ? {} : { method: string(options.method, "method") }),
         ...(options.headers === undefined
@@ -209,7 +242,7 @@ function createCapabilities(
         ...(options.body === undefined ? {} : { body: string(options.body, "body") }),
         ...(signal ? { signal } : {}),
       });
-      const body = await readHttpBody(response);
+      const body = await readHttpBody(response, maxBytes);
       return {
         status: response.status,
         ok: response.ok,

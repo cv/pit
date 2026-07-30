@@ -155,21 +155,14 @@ export const CAPABILITY_REGISTRY = {
         declaration: `execFile(
   program: string,
   args: string[],
-  options?: { cwd?: string; timeoutMs?: number; raise?: boolean },
-): Promise<{
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}>;`,
-        documentation: "shell.execFile(program, args, options?) for argument-safe direct execution",
-        minimumArguments: 2,
-        maximumArguments: 3,
-      },
-      exec: {
-        declaration: `exec(
-  command: string,
-  options?: { cwd?: string; timeoutMs?: number; raise?: boolean },
+  options?: {
+    cwd?: string;
+    timeoutMs?: number;
+    raise?: boolean;
+    maxBytes?: number;
+    maxLines?: number;
+    truncate?: "head" | "tail";
+  },
 ): Promise<{
   stdout: string;
   stderr: string;
@@ -177,7 +170,29 @@ export const CAPABILITY_REGISTRY = {
   truncated: boolean;
 }>;`,
         documentation:
-          "shell.exec(command, options?) for shell syntax; shell methods return { stdout, stderr, code, truncated }; Nonzero exits are data by default and { raise: true } throws",
+          "shell.execFile(program, args, { maxBytes?, maxLines?, truncate?, ... }) for bounded argument-safe execution",
+        minimumArguments: 2,
+        maximumArguments: 3,
+      },
+      exec: {
+        declaration: `exec(
+  command: string,
+  options?: {
+    cwd?: string;
+    timeoutMs?: number;
+    raise?: boolean;
+    maxBytes?: number;
+    maxLines?: number;
+    truncate?: "head" | "tail";
+  },
+): Promise<{
+  stdout: string;
+  stderr: string;
+  code: number;
+  truncated: boolean;
+}>;`,
+        documentation:
+          "shell.exec(command, { maxBytes?, maxLines?, truncate?, ... }) for bounded shell syntax; shell methods return { stdout, stderr, code, truncated }; Nonzero exits are data by default and { raise: true } throws",
         minimumArguments: 1,
         maximumArguments: 2,
       },
@@ -193,6 +208,7 @@ export const CAPABILITY_REGISTRY = {
     method?: string;
     headers?: Record<string, string>;
     body?: string;
+    maxBytes?: number;
   },
 ): Promise<{
   status: number;
@@ -201,7 +217,8 @@ export const CAPABILITY_REGISTRY = {
   body: string;
   truncated: boolean;
 }>;`,
-        documentation: "http.request(url, options?) -> { status, ok, headers, body, truncated }",
+        documentation:
+          "http.request(url, { maxBytes?, ... }) -> { status, ok, headers, body, truncated }",
         minimumArguments: 1,
         maximumArguments: 2,
       },

@@ -108,10 +108,10 @@ async ({ workspace, shell }) => {
   - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
   - `stat(path)`
 - `shell`
-  - `exec(command, { cwd?, timeoutMs?, raise? })` — shell syntax; set `raise: true` to throw on nonzero exit
-  - `execFile(program, args, { cwd?, timeoutMs?, raise? })` — argument-safe direct execution without shell interpolation
+  - `exec(command, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate? })` — shell syntax with caller-controlled output budgets; set `raise: true` to throw on nonzero exit
+  - `execFile(program, args, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate? })` — argument-safe direct execution with the same bounded output controls
 - `http`
-  - `request(url, { method?, headers?, body? })`
+  - `request(url, { method?, headers?, body?, maxBytes? })` — caller-selected body limit below the host maximum
 - `ui`
   - `confirm(title, message)`
   - `input(title, placeholder?)`

@@ -96,7 +96,14 @@ interface PitShellCapability {
   execFile(
     program: string,
     args: string[],
-    options?: { cwd?: string; timeoutMs?: number; raise?: boolean },
+    options?: {
+      cwd?: string;
+      timeoutMs?: number;
+      raise?: boolean;
+      maxBytes?: number;
+      maxLines?: number;
+      truncate?: "head" | "tail";
+    },
   ): Promise<{
     stdout: string;
     stderr: string;
@@ -106,7 +113,14 @@ interface PitShellCapability {
 
   exec(
     command: string,
-    options?: { cwd?: string; timeoutMs?: number; raise?: boolean },
+    options?: {
+      cwd?: string;
+      timeoutMs?: number;
+      raise?: boolean;
+      maxBytes?: number;
+      maxLines?: number;
+      truncate?: "head" | "tail";
+    },
   ): Promise<{
     stdout: string;
     stderr: string;
@@ -122,6 +136,7 @@ interface PitHttpCapability {
       method?: string;
       headers?: Record<string, string>;
       body?: string;
+      maxBytes?: number;
     },
   ): Promise<{
     status: number;
