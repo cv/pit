@@ -5,7 +5,6 @@ import {
   cwd,
   execMock,
   run,
-  sessionTree,
   setupHarness,
   tool,
   value,
@@ -15,29 +14,6 @@ beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
 describe("host capabilities", () => {
-  it("suggests naming repeatedly generated shell workflows once", async () => {
-    const source = `async ({ shell }) => shell.exec("npm test")`;
-    expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
-    const repeated = await run(source);
-    expect(repeated.content[0].text).toContain("Repeated shell command detected");
-    expect(repeated.content[0].text).toContain("recurring multi-step workflow");
-    expect(repeated.content[0].text).toContain("higher-level named workflow");
-    expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
-
-    await run(`async function runChecks({ shell }) { return shell.exec("npm run check"); }`);
-    const namedRepeat = await run("runChecks()");
-    expect(namedRepeat.content[0].text).not.toContain("Repeated shell command");
-
-    const pushSource = `async ({ shell }) => shell.exec("git push")`;
-    await run(pushSource);
-    const repeatedPush = await run(pushSource);
-    expect(repeatedPush.content[0].text).toContain("Existing saved functions: runChecks");
-    expect(repeatedPush.content[0].text).toContain("Compose existing saved functions");
-
-    sessionTree({}, context());
-    expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
-  });
-
   it("executes shell commands with default and explicit options", async () => {
     execMock
       .mockResolvedValueOnce({ stdout: "first", stderr: "warning", code: 2 })
@@ -140,6 +116,16 @@ describe("host capabilities", () => {
     expect(progress.output).toContain("warning");
     expect(progress.output).not.toContain(String.fromCharCode(27));
     expect(progress.output).not.toContain(String.fromCharCode(7));
+    const shellUpdates: any[] = [];
+    const shellResult = await tool.execute(
+      "stream-shell-call",
+      { code: 'async ({ shell }) => shell.exec("printf shell-progress")' },
+      undefined,
+      (update: any) => shellUpdates.push(update),
+      context(),
+    );
+    expect(shellResult.details.value.stdout).toBe("shell-progress");
+    expect(shellUpdates.at(-1).details.progress[0]).toMatchObject({ status: "done", code: 0 });
   });
 
   it("executes argument arrays without shell interpolation", async () => {

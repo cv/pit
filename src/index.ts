@@ -144,7 +144,6 @@ async function executeHostProcess(
   displayCommand: string,
   options: Record<string, unknown>,
   defaultCwd: string,
-  onShellCommand: (command: string) => void,
   onProgress?: (event: HostShellProgressEvent) => void,
   signal?: AbortSignal,
 ) {
@@ -171,7 +170,6 @@ async function executeHostProcess(
   }
   const truncateOutput = truncate === "head" ? truncateHead : truncateTail;
   const timeout = Number(options.timeoutMs ?? 120_000);
-  onShellCommand(displayCommand);
   onProgress?.({ phase: "start" });
   const result = onProgress
     ? await executeStreamingProcess(program, args, {
@@ -208,7 +206,6 @@ function createCapabilities(
   ctx: ExtensionContext,
   registry: FunctionRegistry,
   activity: FunctionActivity[],
-  onShellCommand: (command: string) => void,
   onShellProgress?: (event: ShellProgressEvent) => void,
 ): CapabilityHandler {
   let nextShellProgressId = 1;
@@ -234,7 +231,6 @@ function createCapabilities(
         command,
         options,
         ctx.cwd,
-        onShellCommand,
         progress,
         signal,
       );
@@ -263,7 +259,6 @@ function createCapabilities(
         commandDisplay,
         options,
         ctx.cwd,
-        onShellCommand,
         progress,
         signal,
       );
@@ -381,12 +376,6 @@ export function display(value: unknown): string {
 
 export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
-  const shellCommandUses = new Map<string, number>();
-  const suggestedShellCommands = new Set<string>();
-  const resetWorkflowHints = () => {
-    shellCommandUses.clear();
-    suggestedShellCommands.clear();
-  };
 
   registerFunctionManager(pi, savedFunctions);
 
@@ -569,7 +558,6 @@ export default function pit(pi: ExtensionAPI) {
             }
           }
         : undefined;
-      const repeatedShellCommands = new Set<string>();
       const namedFunction = getNamedFunctionName(params.code);
       let executionRegistry: FunctionRegistry = savedFunctions;
       let replacedNamedFunction = false;
@@ -591,20 +579,7 @@ export default function pit(pi: ExtensionAPI) {
       }
       const value = await runInSandbox(
         params.code,
-        createCapabilities(
-          pi,
-          ctx,
-          executionRegistry,
-          functionActivity,
-          (command) => {
-            const count = (shellCommandUses.get(command) ?? 0) + 1;
-            shellCommandUses.set(command, count);
-            if (count >= 2 && !suggestedShellCommands.has(command)) {
-              repeatedShellCommands.add(command);
-            }
-          },
-          onShellProgress,
-        ),
+        createCapabilities(pi, ctx, executionRegistry, functionActivity, onShellProgress),
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
@@ -627,26 +602,11 @@ export default function pit(pi: ExtensionAPI) {
       const savedNotice = namedFunction
         ? `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
         : "";
-      const reusableCandidates = functionActivity.length === 0 ? [...repeatedShellCommands] : [];
-      for (const command of reusableCandidates) {
-        suggestedShellCommands.add(command);
-      }
-      const available = [...savedFunctions.keys()].sort();
-      const savedContext =
-        available.length > 0 ? ` Existing saved functions: ${available.join(", ")}.` : "";
-      const reuseNotice =
-        reusableCandidates.length > 0
-          ? `\n[Repeated shell command detected: ${reusableCandidates.map((command) => JSON.stringify(command)).join(", ")}. Before saving this command alone, consider whether it belongs to a recurring multi-step workflow. Compose existing saved functions into a higher-level named workflow.${savedContext}]`
-          : "";
       return {
         content: [
           {
             type: "text",
-            text:
-              output.content +
-              (output.truncated ? "\n[Result truncated]" : "") +
-              savedNotice +
-              reuseNotice,
+            text: output.content + (output.truncated ? "\n[Result truncated]" : "") + savedNotice,
           },
         ],
         details: {
@@ -660,11 +620,9 @@ export default function pit(pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
-    resetWorkflowHints();
     pi.setActiveTools(["typescript"]);
   });
   pi.on("session_tree", (_event, ctx) => {
     reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
-    resetWorkflowHints();
   });
 }
