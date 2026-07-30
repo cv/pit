@@ -226,6 +226,7 @@ workspace
 - workspace.editText(path, edits) applies { oldText, newText } replacements; each oldText must be non-empty, unique in the original file, and non-overlapping.
 - workspace.batch(operations) validates and atomically commits multiple write/edit operations across unique files; validation failures make no changes and write failures trigger best-effort rollback.
 - workspace.applyPatch(patch) applies a standard unified diff transactionally across files, with exact hunk matching, clear rejected-hunk errors, and support for file creation and deletion.
+- workspace.search(query, { path?, glob?, regex?, caseSensitive?, contextLines?, limit?, ignore? }) returns structured { path, line, column, text, before, after } matches with bounded file and result limits.
 - workspace.list(path?) returns { name, type } entries.
 - workspace.glob(patterns?, { dot?, onlyFiles?, ignore? }) returns matching paths relative to the workspace.
 - workspace.stat(path) returns { size, modified, directory, file }.

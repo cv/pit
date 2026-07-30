@@ -8,10 +8,13 @@ import {
 import { applyPatch as applyUnifiedPatch, parsePatch, type StructuredPatch } from "diff";
 import fg from "fast-glob";
 import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 const MAX_PATCH_BYTES = 1_000_000;
-export const WORKSPACE_METHODS = ["readText", "writeText", "editText", "applyPatch", "batch", "list", "glob", "stat"] as const;
+const MAX_SEARCH_FILE_BYTES = 1_000_000;
+const MAX_SEARCH_FILES = 2_000;
+const MAX_SEARCH_RESULTS = 500;
+export const WORKSPACE_METHODS = ["readText", "writeText", "editText", "applyPatch", "batch", "list", "glob", "search", "stat"] as const;
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -275,6 +278,115 @@ async function applyWorkspacePatch(cwd: string, args: unknown[]) {
   });
 }
 
+interface SearchMatch {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+  before: string[];
+  after: string[];
+}
+
+async function searchWorkspace(cwd: string, args: unknown[]) {
+  const query = string(args[0], "query");
+  if (!query) throw new Error("query must not be empty");
+  const options = args[1] === undefined ? {} : object(args[1], "options");
+  const searchPath = options.path === undefined ? cwd : resolveWorkspacePath(cwd, options.path);
+  const regex = options.regex === undefined ? false : Boolean(options.regex);
+  const caseSensitive = options.caseSensitive === undefined ? true : Boolean(options.caseSensitive);
+  const contextLines = Number(options.contextLines ?? 0);
+  const limit = Number(options.limit ?? 100);
+  if (!Number.isInteger(contextLines) || contextLines < 0 || contextLines > 10) {
+    throw new Error("contextLines must be an integer between 0 and 10");
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_RESULTS) {
+    throw new Error(`limit must be an integer between 1 and ${MAX_SEARCH_RESULTS}`);
+  }
+
+  let expression: RegExp | undefined;
+  if (regex) {
+    try { expression = new RegExp(query, caseSensitive ? "g" : "gi"); }
+    catch (error) { throw new Error(`Invalid search regex: ${String(error)}`); }
+  }
+
+  const pathInfo = await stat(searchPath);
+  let files: string[];
+  if (pathInfo.isFile()) {
+    files = [searchPath];
+  } else if (pathInfo.isDirectory()) {
+    const patterns = typeof options.glob === "string" || Array.isArray(options.glob)
+      ? options.glob as string | string[]
+      : "**/*";
+    const ignore = ["**/.git/**", "**/node_modules/**", ...(Array.isArray(options.ignore) ? options.ignore.map(String) : [])];
+    files = (await fg(patterns, {
+      cwd: searchPath,
+      dot: Boolean(options.dot),
+      onlyFiles: true,
+      ignore,
+      followSymbolicLinks: false,
+      absolute: true,
+    })).sort().slice(0, MAX_SEARCH_FILES);
+  } else {
+    throw new Error("search path must be a file or directory");
+  }
+
+  const matches: SearchMatch[] = [];
+  let filesSearched = 0;
+  let filesSkipped = 0;
+  let truncated = false;
+  for (const file of files) {
+    let buffer: Buffer;
+    try {
+      const info = await stat(file);
+      if (info.size > MAX_SEARCH_FILE_BYTES) { filesSkipped++; continue; }
+      buffer = await readFile(file);
+    } catch {
+      filesSkipped++;
+      continue;
+    }
+    if (buffer.includes(0)) { filesSkipped++; continue; }
+    filesSearched++;
+    const lines = buffer.toString("utf8").split("\n");
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const text = lines[lineIndex]!;
+      const columns: number[] = [];
+      if (expression) {
+        expression.lastIndex = 0;
+        while (true) {
+          const match = expression.exec(text);
+          if (!match) break;
+          columns.push(match.index);
+          if (match[0].length === 0) expression.lastIndex++;
+        }
+      } else {
+        const haystack = caseSensitive ? text : text.toLowerCase();
+        const needle = caseSensitive ? query : query.toLowerCase();
+        let offset = 0;
+        while (offset <= haystack.length - needle.length) {
+          const found = haystack.indexOf(needle, offset);
+          if (found < 0) break;
+          columns.push(found);
+          offset = found + Math.max(1, needle.length);
+        }
+      }
+      for (const column of columns) {
+        matches.push({
+          path: relative(cwd, file).replaceAll("\\", "/"),
+          line: lineIndex + 1,
+          column: column + 1,
+          text,
+          before: lines.slice(Math.max(0, lineIndex - contextLines), lineIndex),
+          after: lines.slice(lineIndex + 1, lineIndex + 1 + contextLines),
+        });
+        if (matches.length >= limit) { truncated = true; break; }
+      }
+      if (truncated) break;
+    }
+    if (truncated) break;
+  }
+  return { matches, truncated, filesSearched, filesSkipped };
+}
+
 export async function handleWorkspace(
   cwd: string,
   method: string,
@@ -294,6 +406,7 @@ switch (method) {
   case "editText": return editText(cwd, args);
   case "batch": return batchWorkspace(cwd, args);
   case "applyPatch": return applyWorkspacePatch(cwd, args);
+  case "search": return searchWorkspace(cwd, args);
   case "list": {
     const path = args[0] === undefined ? cwd : resolveWorkspacePath(cwd, args[0]);
     const entries = await readdir(path, { withFileTypes: true });

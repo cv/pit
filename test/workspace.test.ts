@@ -1,4 +1,5 @@
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -47,6 +48,76 @@ describe("workspace capability", () => {
     expect(result.nestedList).toEqual([{ name: "new.txt", type: "file" }]);
     expect(result.glob).toContain("nested/new.txt");
     expect(result.defaultGlob).toContain("nested");
+  });
+
+  it("searches workspace text with structured bounded results", async () => {
+    await mkdir(join(cwd, "search"));
+    await writeFile(join(cwd, "search/a.txt"), "Alpha\nneedle one\nNEEDLE two\nend", "utf8");
+    await writeFile(join(cwd, "search/b.txt"), "nothing here", "utf8");
+    await writeFile(join(cwd, "search/binary.bin"), Buffer.from([0, 1, 2]));
+    await writeFile(join(cwd, "search/huge.txt"), "x".repeat(1_000_001), "utf8");
+    await writeFile(join(cwd, "search/unreadable.txt"), "needle", "utf8");
+    await chmod(join(cwd, "search/unreadable.txt"), 0o000);
+
+    const result = await value(`async ({ workspace }) => workspace.search("needle", {
+      path: "search", glob: "**/*", caseSensitive: false, contextLines: 1, limit: 10,
+    })`);
+    expect(result.matches).toEqual([
+      { path: "search/a.txt", line: 2, column: 1, text: "needle one", before: ["Alpha"], after: ["NEEDLE two"] },
+      { path: "search/a.txt", line: 3, column: 1, text: "NEEDLE two", before: ["needle one"], after: ["end"] },
+    ]);
+    expect(result).toMatchObject({ truncated: false, filesSearched: 2, filesSkipped: 3 });
+    await chmod(join(cwd, "search/unreadable.txt"), 0o600);
+
+    const regex = await value(`async ({ workspace }) => workspace.search("^n.*e", {
+      path: "search/a.txt", regex: true, caseSensitive: false, limit: 1,
+    })`);
+    expect(regex.matches[0]).toMatchObject({ line: 2, column: 1 });
+    expect(regex.truncated).toBe(true);
+
+    const zeroLength = await value(`async ({ workspace }) => workspace.search("^", {
+      path: "search/a.txt", regex: true, limit: 10,
+    })`);
+    expect(zeroLength.matches).toHaveLength(4);
+
+    const defaults = await value(`async ({ workspace }) => workspace.search("Alpha", {
+      glob: ["search/*.txt"], ignore: ["**/b.txt"], dot: true, regex: false,
+    })`);
+    expect(defaults.matches).toEqual([
+      expect.objectContaining({ path: "search/a.txt", line: 1, column: 1 }),
+    ]);
+  });
+
+  it("validates workspace search options", async () => {
+    execFileSync("mkfifo", [join(cwd, "search-pipe")]);
+    const errors = await value(`async ({ workspace }) => {
+      const raw = workspace as any;
+      const capture = async (query, options) => { try { await raw.search(query, options); return "ok"; } catch (error) { return error.message; } };
+      return [
+        await capture("", {}),
+        await capture("x", { contextLines: 11 }),
+        await capture("x", { limit: 0 }),
+        await capture("[", { regex: true }),
+        await capture("x", { contextLines: 1.5 }),
+        await capture("x", { contextLines: -1 }),
+        await capture("x", { limit: 501 }),
+        await capture("x", { limit: 1.5 }),
+        await capture(42, {}),
+        await capture("x", "bad"),
+        await capture("x", { path: "search-pipe" }),
+      ];
+    }`);
+    expect(errors[0]).toContain("must not be empty");
+    expect(errors[1]).toContain("contextLines");
+    expect(errors[2]).toContain("limit");
+    expect(errors[3]).toContain("Invalid search regex");
+    expect(errors[4]).toContain("contextLines");
+    expect(errors[5]).toContain("contextLines");
+    expect(errors[6]).toContain("limit");
+    expect(errors[7]).toContain("limit");
+    expect(errors[8]).toContain("query must be a string");
+    expect(errors[9]).toContain("options must be an object");
+    expect(errors[10]).toContain("search path must be a file or directory");
   });
 
   it("commits multi-file workspace batches transactionally", async () => {

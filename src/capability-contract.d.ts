@@ -56,6 +56,25 @@ interface PitWorkspaceCapability {
     },
   ): Promise<string[]>;
 
+  search(
+    query: string,
+    options?: {
+      path?: string;
+      glob?: string | string[];
+      regex?: boolean;
+      caseSensitive?: boolean;
+      contextLines?: number;
+      limit?: number;
+      ignore?: string[];
+      dot?: boolean;
+    },
+  ): Promise<{
+    matches: Array<{ path: string; line: number; column: number; text: string; before: string[]; after: string[] }>;
+    truncated: boolean;
+    filesSearched: number;
+    filesSkipped: number;
+  }>;
+
   stat(path: string): Promise<{
     size: number;
     modified: string;
