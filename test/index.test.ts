@@ -72,30 +72,31 @@ describe("display", () => {
 describe("pit extension", () => {
   it("registers clear model-facing usage metadata and activates the tool", () => {
     expect(tool.label).toBe("TypeScript Workspace");
-    expect(tool.promptSnippet).toContain("batched and parallel host capabilities plus reusable functions");
+    expect(tool.promptSnippet).toContain("reusable functions");
     expect(tool.description).toContain("async ({ workspace, shell })");
-    expect(tool.description).toContain("await Promise.all");
+    expect(tool.description).toContain("Promise.all");
     expect(tool.description).toContain("contextually type-checked");
-    expect(tool.description).toContain("does not return a raw string");
+    expect(tool.description).toContain("not a raw string");
     expect(tool.description).toContain("Nonzero exits are data by default");
-    expect(tool.parameters.properties.code.description).toContain("file.text");
-    expect(tool.parameters.properties.code.description).toContain("Promise.all");
-    expect(tool.parameters.properties.code.description).toContain("async function runTests");
+    expect(tool.description).toContain("workspace.search(query");
+    expect(tool.description).toContain("shell.execFile(program, args");
     expect(tool.description).toContain("runTests({ coverage: true })");
-    expect(tool.description).toContain("input: { coverage?: boolean }");
-    expect(tool.description).toContain("REUSABLE FUNCTIONS");
-    expect(tool.description).toContain("Named functions are executed and saved automatically");
-    expect(tool.description).toContain("savedFunctions lists the names");
+    expect(tool.description).toContain("REUSABLE AND COMPOSED FUNCTIONS");
+    expect(tool.description).toContain("publishChanges");
+    expect(tool.parameters.properties.code.description).toContain("async function runTests");
+    expect(tool.parameters.properties.code.description).toContain("Promise.all");
     expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(17);
-    expect(tool.description).toContain("shell.execFile(program, args");
-    expect(tool.description).toContain("COMPOSING WORKFLOWS");
-    expect(tool.description).toContain("async function publishChanges");
+    expect(tool.promptGuidelines).toHaveLength(10);
     expect(tool.promptGuidelines).toContain(
-      "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
+      "In typescript, start independent capability calls together with Promise.all; sequence only dependencies or conflicting side effects.",
     );
     expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(true);
+    const metadataChars = tool.description.length + (tool.promptSnippet?.length ?? 0) +
+      (tool.promptGuidelines?.join("\n").length ?? 0) +
+      (tool.parameters.properties.code.description?.length ?? 0) +
+      (tool.parameters.properties.params.description?.length ?? 0);
+    expect(metadataChars).toBeLessThan(6_500);
 
     sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);

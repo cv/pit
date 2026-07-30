@@ -2,7 +2,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
-  formatSize,
   highlightCode,
   truncateHead,
   truncateTail,
@@ -29,6 +28,13 @@ import {
 
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 import { handleWorkspace, resolveWorkspacePath, WORKSPACE_METHODS } from "./workspace.js";
+import {
+  CODE_DESCRIPTION,
+  PARAMS_DESCRIPTION,
+  PROMPT_GUIDELINES,
+  PROMPT_SNIPPET,
+  createToolDescription,
+} from "./tool-metadata.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
 export const CAPABILITY_METHODS = {
@@ -226,113 +232,12 @@ export default function pit(pi: ExtensionAPI) {
   pi.registerTool({
     name: "typescript",
     label: "TypeScript Workspace",
-    description: `Run a TypeScript expression in a fresh, permission-restricted process for batched coding operations.
-
-CALLING CONTRACT
-
-Pass an anonymous function expression for one-shot work. It should destructure only the host capabilities it needs:
-
-async ({ workspace, shell }) => {
-  const [packageFile, status] = await Promise.all([
-    workspace.readText("package.json"),
-    shell.exec("git status --short"),
-  ]);
-  return { packageJson: JSON.parse(packageFile.text), status };
-}
-
-Code is contextually type-checked against the capability contract, so capability names, methods, arguments, awaited values, and return values are validated without requiring source annotations. Capability calls begin immediately and return promises. Start independent calls together and await them with Promise.all. Sequence only operations with data dependencies or conflicting side effects. The function cannot use imports and must return a compact JSON-serializable value.
-
-CAPABILITIES
-
-workspace
-- workspace.readText(path, { offset?, limit? }) returns { text, truncated, offset, lines, totalLines }; it does not return a raw string.
-- workspace.writeText(path, contents) creates parent directories and replaces the complete file.
-- workspace.editText(path, edits) applies { oldText, newText } replacements; each oldText must be non-empty, unique in the original file, and non-overlapping.
-- workspace.batch(operations) validates and atomically commits multiple write/edit operations across unique files; validation failures make no changes and write failures trigger best-effort rollback.
-- workspace.applyPatch(patch) applies a standard unified diff transactionally across files, with exact hunk matching, clear rejected-hunk errors, and support for file creation and deletion.
-- workspace.search(query, { path?, glob?, regex?, caseSensitive?, contextLines?, limit?, ignore? }) returns structured { path, line, column, text, before, after } matches with bounded file and result limits.
-- workspace.list(path?) returns { name, type } entries.
-- workspace.glob(patterns?, { dot?, onlyFiles?, ignore? }) returns matching paths relative to the workspace.
-- workspace.stat(path) returns { size, modified, directory, file }.
-
-shell
-- shell.exec(command, { cwd?, timeoutMs?, raise? }) runs through /bin/sh and returns { stdout, stderr, code, truncated }.
-- shell.execFile(program, args, { cwd?, timeoutMs?, raise? }) executes an argv array directly without shell interpolation. Nonzero exits are data by default; set raise: true to throw.
-
-http
-- http.request(url, { method?, headers?, body? }) returns { status, ok, headers, body, truncated }.
-
-ui
-- ui.confirm(title, message), ui.input(title, placeholder?), ui.select(title, options), and ui.notify(message, level). UI may be unavailable outside interactive or RPC modes.
-
-context
-- context.get() returns cwd, mode, model, thinkingLevel, sessionFile, and savedFunctions.
-
-REUSABLE FUNCTIONS
-
-Give stable project workflows a top-level function name. Named functions are executed and saved automatically:
-
-async function runTests({ shell }, input: { coverage?: boolean } = {}) {
-  return shell.exec(input.coverage ? "npm run coverage" : "npm test", { raise: true });
-}
-
-Provide optional top-level params when the named function needs input on its first execution. Pit validates params against an annotated input type and passes it as the function's second argument.
-
-Invoke the saved function in a later tool call as ordinary TypeScript. Its current capabilities are bound automatically:
-
-runTests()
-runTests({ coverage: true })
-
-Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. A branch may contain up to 64 saved functions, 100 KB per function, and 1 MB of combined saved source. Only referenced saved functions and their transitive dependencies are injected into new isolates as typed lexical bindings. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
-
-COMPOSING WORKFLOWS
-
-When a multi-step sequence recurs, compose existing saved functions and new operations into a higher-level named workflow instead of saving each command separately. Build validation primitives with shell.exec(..., { raise: true }) so failures stop every composed caller:
-
-async function publishChanges({ shell }, input: { message: string }) {
-  const validation = await runValidation();
-  const stages = [
-    ["git", ["add", "-A"]],
-    ["git", ["commit", "-m", input.message]],
-    ["git", ["push"]],
-  ] as const;
-  const results = [];
-  for (const [program, args] of stages) {
-    results.push({ program, args, result: await shell.execFile(program, [...args], { raise: true }) });
-  }
-  return { published: true, validation, results };
-}
-
-Prefer layered names that reflect user intent: runValidation is a reusable primitive, publishChanges composes validation and Git operations, and a future release workflow can compose publishChanges with tagging.
-
-The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
-    promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
-    promptGuidelines: [
-      "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
-      "Call typescript with an anonymous async function for one-shot work, a named async function to save a recurring workflow, or an ordinary call expression such as runTests() to invoke a saved function.",
-      "Code passed to typescript is contextually type-checked against the capability contract; use validation diagnostics to correct capability names, arguments, missing awaits, and result types.",
-      "Capability calls in typescript begin immediately and return promises; await every capability promise before returning the final result.",
-      "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
-      "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state; use workspace.batch for structured transactional mutations or workspace.applyPatch for a transactional unified diff.",
-      "Batch related work into one typescript call instead of making several small tool calls.",
-      "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
-      "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",
-      "Saved functions invoked in typescript receive current capabilities automatically and are listed by context.get().savedFunctions.",
-      "In typescript, compose existing saved functions into higher-level named workflows when a multi-step sequence recurs; name the user intent rather than saving each shell command separately.",
-      "In typescript, annotate a saved function's input parameter so initial top-level params and later invocations retain input and return type checking.",
-      "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
-      "Remember that typescript shell.exec and shell.execFile return nonzero exit codes as data by default; use { raise: true } when a failed command should immediately stop a composed workflow.",
-      "In typescript, prefer shell.execFile(program, args) for ordinary commands with dynamic arguments; use shell.exec only when shell syntax such as pipes or redirection is required.",
-      "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
-      "Use only destructured capabilities for external effects in typescript; direct imports, filesystem access, network access, and subprocess creation are unavailable.",
-    ],
+    description: createToolDescription(DEFAULT_MAX_BYTES),
+    promptSnippet: PROMPT_SNIPPET,
+    promptGuidelines: [...PROMPT_GUIDELINES],
     parameters: Type.Object({
-      code: Type.String({
-        description: `Contextually type-checked TypeScript. Use an anonymous function expression for one-shot work: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Use a named top-level function for a recurring workflow: async function runTests({ shell }) { return shell.exec("npm test", { raise: true }); }. Named functions save automatically and can be invoked later with runTests(). Start independent operations together, await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
-      }),
-      params: Type.Optional(Type.Unknown({
-        description: "Optional JSON-serializable input passed as the function's second argument on this execution. For named definitions, annotate the input parameter so params are type-checked.",
-      })),
+      code: Type.String({ description: CODE_DESCRIPTION }),
+      params: Type.Optional(Type.Unknown({ description: PARAMS_DESCRIPTION })),
       timeoutMs: Type.Optional(Type.Integer({
         minimum: 1,
         maximum: 300_000,
