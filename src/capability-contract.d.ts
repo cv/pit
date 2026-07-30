@@ -84,6 +84,17 @@ interface PitWorkspaceCapability {
 }
 
 interface PitShellCapability {
+  execFile(
+    program: string,
+    args: string[],
+    options?: { cwd?: string; timeoutMs?: number; raise?: boolean },
+  ): Promise<{
+    stdout: string;
+    stderr: string;
+    code: number;
+    truncated: boolean;
+  }>;
+
   exec(
     command: string,
     options?: { cwd?: string; timeoutMs?: number; raise?: boolean },

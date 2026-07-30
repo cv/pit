@@ -51,6 +51,49 @@ describe("host capabilities", () => {
     expect(execMock).toHaveBeenNthCalledWith(2, "/bin/sh", ["-lc", "second"], expect.objectContaining({ timeout: 50 }));
   });
 
+  it("executes argument arrays without shell interpolation", async () => {
+    execMock.mockResolvedValueOnce({ stdout: "committed", stderr: "", code: 0 });
+    const controller = new AbortController();
+    const result = await run(`async ({ shell }) => shell.execFile("git", ["commit", "-m", "$(touch unsafe)"], {
+      cwd: ".", timeoutMs: 5000, raise: true,
+    })`, context(), controller.signal);
+    expect(result.details.value).toMatchObject({ stdout: "committed", code: 0 });
+    expect(execMock).toHaveBeenCalledWith(
+      "git",
+      ["commit", "-m", "$(touch unsafe)"],
+      expect.objectContaining({ cwd, timeout: 5000, signal: controller.signal }),
+    );
+
+    execMock.mockResolvedValueOnce({ stdout: "status", stderr: "", code: 0 });
+    expect(await value(`async ({ shell }) => shell.execFile("git", ["status"])`))
+      .toMatchObject({ stdout: "status", code: 0 });
+
+    execMock.mockResolvedValueOnce({ stdout: "", stderr: "failed", code: 9 });
+    await expect(run(`async ({ shell }) => shell.execFile("git", ["push"], { raise: true })`))
+      .rejects.toThrow(/Command failed with exit code 9: git "push"[^]*failed/);
+  });
+
+  it("validates shell.execFile arguments", async () => {
+    const errors = await value(`async ({ shell }) => {
+      const raw = shell as any;
+      const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
+      return [
+        await capture(() => raw.execFile(42, [])),
+        await capture(() => raw.execFile("git", "status")),
+        await capture(() => raw.execFile("git", ["status", 42])),
+        await capture(() => raw.execFile("git", [], "bad")),
+        await capture(() => raw.execFile("git", [], { raise: "yes" })),
+      ];
+    }`);
+    expect(errors).toEqual([
+      "program must be a string",
+      "args must be an array of strings",
+      "args must be an array of strings",
+      "options must be an object",
+      "options.raise must be a boolean",
+    ]);
+  });
+
   it("raises on nonzero shell exits when requested", async () => {
     execMock.mockResolvedValueOnce({ stdout: "partial output", stderr: "command failed", code: 7 });
     await expect(run(`async ({ shell }) => shell.exec("failing", { raise: true })`))

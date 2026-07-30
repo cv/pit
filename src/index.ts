@@ -33,7 +33,7 @@ import { handleWorkspace, resolveWorkspacePath, WORKSPACE_METHODS } from "./work
 const MAX_HTTP_BYTES = 1_000_000;
 export const CAPABILITY_METHODS = {
   workspace: WORKSPACE_METHODS,
-  shell: ["exec"],
+  shell: ["execFile", "exec"],
   http: ["request"],
   ui: ["confirm", "input", "select", "notify"],
   context: ["get"],
@@ -89,6 +89,37 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
+async function executeHostProcess(
+  pi: ExtensionAPI,
+  program: string,
+  args: string[],
+  displayCommand: string,
+  options: Record<string, unknown>,
+  defaultCwd: string,
+  onShellCommand: (command: string) => void,
+  signal?: AbortSignal,
+) {
+  if (options.raise !== undefined && typeof options.raise !== "boolean") {
+    throw new TypeError("options.raise must be a boolean");
+  }
+  const cwd = options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
+  onShellCommand(displayCommand);
+  const result = await pi.exec(program, args, {
+    cwd,
+    ...(signal ? { signal } : {}),
+    timeout: Number(options.timeoutMs ?? 120_000),
+  });
+  const stdout = truncateTail(result.stdout, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+  const stderr = truncateTail(result.stderr, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+  if (options.raise === true && result.code !== 0) {
+    const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4_000);
+    throw new Error(
+      `Command failed with exit code ${result.code}: ${displayCommand}` + (detail ? `\n${detail}` : ""),
+    );
+  }
+  return { stdout: stdout.content, stderr: stderr.content, code: result.code, truncated: stdout.truncated || stderr.truncated };
+}
+
 function createCapabilities(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
@@ -105,25 +136,18 @@ function createCapabilities(
     if (capability === "shell" && method === "exec") {
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
-      if (options.raise !== undefined && typeof options.raise !== "boolean") {
-        throw new TypeError("options.raise must be a boolean");
+      return executeHostProcess(pi, "/bin/sh", ["-lc", command], command, options, ctx.cwd, onShellCommand, signal);
+    }
+
+    if (capability === "shell" && method === "execFile") {
+      const program = string(args[0], "program");
+      if (!Array.isArray(args[1]) || !args[1].every((value) => typeof value === "string")) {
+        throw new TypeError("args must be an array of strings");
       }
-      const cwd = options.cwd === undefined ? ctx.cwd : resolveWorkspacePath(ctx.cwd, options.cwd);
-      onShellCommand(command);
-      const result = await pi.exec("/bin/sh", ["-lc", command], {
-        cwd,
-        ...(signal ? { signal } : {}),
-        timeout: Number(options.timeoutMs ?? 120_000),
-      });
-      const stdout = truncateTail(result.stdout, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
-      const stderr = truncateTail(result.stderr, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
-      if (options.raise === true && result.code !== 0) {
-        const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4_000);
-        throw new Error(
-          `Command failed with exit code ${result.code}: ${command}` + (detail ? `\n${detail}` : ""),
-        );
-      }
-      return { stdout: stdout.content, stderr: stderr.content, code: result.code, truncated: stdout.truncated || stderr.truncated };
+      const processArgs = args[1] as string[];
+      const options = args[2] === undefined ? {} : object(args[2], "options");
+      const display = [program, ...processArgs.map((value) => JSON.stringify(value))].join(" ");
+      return executeHostProcess(pi, program, processArgs, display, options, ctx.cwd, onShellCommand, signal);
     }
 
     if (capability === "http" && method === "request") {
@@ -232,7 +256,8 @@ workspace
 - workspace.stat(path) returns { size, modified, directory, file }.
 
 shell
-- shell.exec(command, { cwd?, timeoutMs?, raise? }) returns { stdout, stderr, code, truncated }. Nonzero exit codes are returned as data by default; set raise: true to throw and stop composed workflows immediately.
+- shell.exec(command, { cwd?, timeoutMs?, raise? }) runs through /bin/sh and returns { stdout, stderr, code, truncated }.
+- shell.execFile(program, args, { cwd?, timeoutMs?, raise? }) executes an argv array directly without shell interpolation. Nonzero exits are data by default; set raise: true to throw.
 
 http
 - http.request(url, { method?, headers?, body? }) returns { status, ok, headers, body, truncated }.
@@ -266,11 +291,14 @@ When a multi-step sequence recurs, compose existing saved functions and new oper
 
 async function publishChanges({ shell }, input: { message: string }) {
   const validation = await runValidation();
-  const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
-  const commands = ["git add -A", "git commit -m " + quote(input.message), "git push"];
+  const stages = [
+    ["git", ["add", "-A"]],
+    ["git", ["commit", "-m", input.message]],
+    ["git", ["push"]],
+  ] as const;
   const results = [];
-  for (const command of commands) {
-    results.push({ command, result: await shell.exec(command, { raise: true }) });
+  for (const [program, args] of stages) {
+    results.push({ program, args, result: await shell.execFile(program, [...args], { raise: true }) });
   }
   return { published: true, validation, results };
 }
@@ -293,7 +321,8 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, compose existing saved functions into higher-level named workflows when a multi-step sequence recurs; name the user intent rather than saving each shell command separately.",
       "In typescript, annotate a saved function's input parameter so initial top-level params and later invocations retain input and return type checking.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
-      "Remember that typescript shell.exec returns nonzero exit codes as data by default; use { raise: true } when a failed command should immediately stop a composed workflow.",
+      "Remember that typescript shell.exec and shell.execFile return nonzero exit codes as data by default; use { raise: true } when a failed command should immediately stop a composed workflow.",
+      "In typescript, prefer shell.execFile(program, args) for ordinary commands with dynamic arguments; use shell.exec only when shell syntax such as pipes or redirection is required.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
       "Use only destructured capabilities for external effects in typescript; direct imports, filesystem access, network access, and subprocess creation are unavailable.",
     ],

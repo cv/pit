@@ -77,7 +77,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain("await Promise.all");
     expect(tool.description).toContain("contextually type-checked");
     expect(tool.description).toContain("does not return a raw string");
-    expect(tool.description).toContain("Nonzero exit codes are returned as data");
+    expect(tool.description).toContain("Nonzero exits are data by default");
     expect(tool.parameters.properties.code.description).toContain("file.text");
     expect(tool.parameters.properties.code.description).toContain("Promise.all");
     expect(tool.parameters.properties.code.description).toContain("async function runTests");
@@ -88,7 +88,8 @@ describe("pit extension", () => {
     expect(tool.description).toContain("savedFunctions lists the names");
     expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(16);
+    expect(tool.promptGuidelines).toHaveLength(17);
+    expect(tool.description).toContain("shell.execFile(program, args");
     expect(tool.description).toContain("COMPOSING WORKFLOWS");
     expect(tool.description).toContain("async function publishChanges");
     expect(tool.promptGuidelines).toContain(

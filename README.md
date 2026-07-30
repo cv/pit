@@ -60,7 +60,8 @@ Each destructured capability is a local proxy. Calling one of its methods perfor
   - `glob(pattern | patterns, { dot?, onlyFiles?, ignore? })`
   - `stat(path)`
 - `shell`
-  - `exec(command, { cwd?, timeoutMs?, raise? })` — set `raise: true` to throw on nonzero exit
+  - `exec(command, { cwd?, timeoutMs?, raise? })` — shell syntax; set `raise: true` to throw on nonzero exit
+  - `execFile(program, args, { cwd?, timeoutMs?, raise? })` — argument-safe direct execution without shell interpolation
 - `http`
   - `request(url, { method?, headers?, body? })`
 - `ui`
