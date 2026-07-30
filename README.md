@@ -67,7 +67,19 @@ async ({ workspace, shell }) => {
 
 The expression is contextually type-checked before execution. No source annotations are required: destructured capabilities automatically receive the types declared in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
 
-Each destructured capability is a local proxy. Calling one of its methods performs an RPC to the trusted extension process. Calls begin immediately, so independent operations should be started together with `Promise.all`. Unknown capabilities and methods also fail closed at runtime.
+Each destructured capability is a local proxy. Calling one of its methods performs an RPC to the trusted extension process. Calls begin immediately. Use `Promise.all` when any failed operation should fail the invocation; use `Promise.allSettled` or a local catch for optional exploratory probes. Sequence dependent calls and conflicting mutations. Unknown capabilities and methods also fail closed at runtime.
+
+For example, preserve successful inspection results when an optional file may not exist:
+
+```ts
+async ({ workspace, shell }) => {
+  const [config, status] = await Promise.allSettled([
+    workspace.readText("optional.config.json"),
+    shell.execFile("git", ["status", "--short"]),
+  ]);
+  return { config, status };
+}
+```
 
 ### Capabilities
 

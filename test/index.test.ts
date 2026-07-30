@@ -77,6 +77,7 @@ describe("pit extension", () => {
     expect(tool.promptSnippet).toContain("reusable functions");
     expect(tool.description).toContain("async ({ workspace, shell })");
     expect(tool.description).toContain("Promise.all");
+    expect(tool.description).toContain("Promise.allSettled");
     expect(tool.description).toContain("contextually type-checked");
     expect(tool.description).toContain("not a raw string");
     expect(tool.description).toContain("Nonzero exits are data by default");
@@ -91,7 +92,7 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.promptGuidelines).toHaveLength(10);
     expect(tool.promptGuidelines).toContain(
-      "In typescript, start independent capability calls together with Promise.all; sequence only dependencies or conflicting side effects.",
+      "In typescript, use Promise.all for fail-fast independent work; use Promise.allSettled or local catches when exploratory probes are optional; sequence dependencies and conflicting mutations.",
     );
     expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(
       true,
