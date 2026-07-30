@@ -4,6 +4,9 @@ const write = process.stdout.write.bind(process.stdout);
 const parse = JSON.parse.bind(JSON);
 const stringify = JSON.stringify.bind(JSON);
 const pending = new Map();
+const functionToString = Function.prototype.toString.call.bind(Function.prototype.toString);
+const MAX_FUNCTION_DEPTH = 32;
+let functionDepth = 0;
 let nextId = 1;
 let token;
 let buffer = "";
@@ -23,7 +26,48 @@ function call(capability, method, args) {
   });
 }
 
+function functionsProxy() {
+  return new Proxy(Object.create(null), {
+    get(_target, method) {
+      if (method === "then") return undefined;
+      if (method === Symbol.toStringTag) return "PitFunctionsCapability";
+      if (method === "set") {
+        return (name, program) => {
+          if (typeof program !== "function") {
+            throw new TypeError("functions.set() expects a function");
+          }
+          return call("functions", "set", [name, functionToString(program)]);
+        };
+      }
+      if (method === "run") {
+        return async (name, input) => {
+          if (functionDepth >= MAX_FUNCTION_DEPTH) {
+            throw new Error(`Saved function call depth exceeded ${MAX_FUNCTION_DEPTH}`);
+          }
+          const source = await call("functions", "get", [name]);
+          const program = (0, eval)(`(${source})`);
+          if (typeof program !== "function") {
+            throw new TypeError(`Saved function ${String(name)} is not callable`);
+          }
+          functionDepth++;
+          try {
+            return await program(capabilities, input);
+          } finally {
+            functionDepth--;
+          }
+        };
+      }
+      if (method === "has" || method === "list" || method === "delete") {
+        return (...args) => call("functions", method, args);
+      }
+      if (typeof method !== "string") return undefined;
+      return () => Promise.reject(new Error(`Unknown functions method: ${method}`));
+    },
+  });
+}
+
 function capabilityProxy(capability) {
+  if (capability === "functions") return functionsProxy();
   return new Proxy(Object.create(null), {
     get(_target, method) {
       if (method === "then") return undefined;

@@ -66,6 +66,64 @@ describe("runInSandbox", () => {
     expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"]);
   });
 
+  it("serializes, stores, and runs functions through the registry capability", async () => {
+    const saved = new Map<string, string>();
+    const handler = vi.fn(async (_capability: string, method: string, args: unknown[]) => {
+      const name = String(args[0]);
+      if (method === "set") {
+        saved.set(name, String(args[1]));
+        return { name, replaced: false };
+      }
+      if (method === "get") return saved.get(name);
+      if (method === "has") return saved.has(name);
+      if (method === "list") return [...saved.keys()];
+      if (method === "delete") return saved.delete(name);
+      throw new Error("unexpected method");
+    });
+
+    const result = await runInSandbox(`async ({ functions }) => {
+      const saved = await functions.set("answer", async (_capabilities, input) => ({ answer: input.value }));
+      const beforeDelete = {
+        has: await functions.has("answer"),
+        names: await functions.list(),
+        value: await functions.run("answer", { value: 42 }),
+      };
+      const deleted = await functions.delete("answer");
+      return { saved, beforeDelete, deleted, hasAfterDelete: await functions.has("answer") };
+    }`, handler);
+
+    expect(result).toEqual({
+      saved: { name: "answer", replaced: false },
+      beforeDelete: { has: true, names: ["answer"], value: { answer: 42 } },
+      deleted: true,
+      hasAfterDelete: false,
+    });
+    expect(saved.get("answer")).toBeUndefined();
+    expect(handler).toHaveBeenCalledWith("functions", "set", ["answer", expect.stringContaining("async")]);
+  });
+
+  it("validates special function registry operations in the runner", async () => {
+    await expect(runInSandbox(`async ({ functions }) => (functions as any).set("bad", 42)`, async () => null))
+      .rejects.toThrow("expects a function");
+    await expect(runInSandbox(`async ({ functions }) => (functions as any).unknown()`, async () => null))
+      .rejects.toThrow("Unknown functions method");
+    await expect(runInSandbox(`async ({ functions }) => functions.run("bad")`, async () => "42"))
+      .rejects.toThrow("is not callable");
+  });
+
+  it("limits recursive saved function calls", async () => {
+    let source = "";
+    const handler = async (_capability: string, method: string, args: unknown[]) => {
+      if (method === "set") { source = String(args[1]); return { name: "loop", replaced: false }; }
+      if (method === "get") return source;
+      return null;
+    };
+    await expect(runInSandbox(`async ({ functions }) => {
+      await functions.set("loop", async ({ functions }) => functions.run("loop"));
+      return functions.run("loop");
+    }`, handler)).rejects.toThrow("call depth exceeded 32");
+  });
+
   it("propagates capability errors", async () => {
     await expect(runInSandbox(
       `async ({ context }) => context.get()`,

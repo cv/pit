@@ -92,6 +92,18 @@ interface PitUiCapability {
   ): Promise<null>;
 }
 
+interface PitFunctionsCapability {
+  set(
+    name: string,
+    program: PitProgram,
+  ): Promise<{ name: string; replaced: boolean }>;
+
+  run(name: string, input?: PitJsonValue): Promise<PitResult>;
+  has(name: string): Promise<boolean>;
+  list(): Promise<string[]>;
+  delete(name: string): Promise<boolean>;
+}
+
 interface PitContextCapability {
   get(): Promise<{
     cwd: string;
@@ -108,8 +120,10 @@ interface PitCapabilities {
   http: PitHttpCapability;
   ui: PitUiCapability;
   context: PitContextCapability;
+  functions: PitFunctionsCapability;
 }
 
 type PitProgram = (
   capabilities: PitCapabilities,
+  input?: any,
 ) => PitResult | Promise<PitResult>;

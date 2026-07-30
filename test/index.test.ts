@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import pit, { display } from "../src/index.js";
+import pit, { display, handleFunctions } from "../src/index.js";
 
 type RegisteredTool = {
   label: string;
@@ -67,6 +67,15 @@ afterEach(async () => {
   await rm(cwd, { recursive: true, force: true });
 });
 
+describe("function registry handler", () => {
+  it("rejects oversized sources and unknown methods", () => {
+    expect(() => handleFunctions(new Map(), "set", ["large", "x".repeat(100_001)]))
+      .toThrow("saved function source exceeds");
+    expect(() => handleFunctions(new Map(), "unknown", []))
+      .toThrow("Unknown functions method: unknown");
+  });
+});
+
 describe("display", () => {
   it("falls back when a value cannot be stringified", () => {
     const circular: Record<string, unknown> = {};
@@ -78,7 +87,7 @@ describe("display", () => {
 describe("pit extension", () => {
   it("registers clear model-facing usage metadata and activates the tool", () => {
     expect(tool.label).toBe("TypeScript Workspace");
-    expect(tool.promptSnippet).toContain("batched and parallel workspace");
+    expect(tool.promptSnippet).toContain("batched and parallel host capabilities plus reusable functions");
     expect(tool.description).toContain("async ({ workspace, shell })");
     expect(tool.description).toContain("await Promise.all");
     expect(tool.description).toContain("contextually type-checked");
@@ -86,8 +95,10 @@ describe("pit extension", () => {
     expect(tool.description).toContain("Nonzero exit codes are returned as data");
     expect(tool.parameters.properties.code.description).toContain("file.text");
     expect(tool.parameters.properties.code.description).toContain("Promise.all");
+    expect(tool.parameters.properties.code.description).toContain("functions.set");
+    expect(tool.description).toContain("functions.run(name, input?)");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(11);
+    expect(tool.promptGuidelines).toHaveLength(13);
     expect(tool.promptGuidelines).toContain(
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
     );
@@ -198,6 +209,54 @@ describe("pit extension", () => {
       { expanded: false, isPartial: false },
       { isError: true },
     )).toContain("TypeScript execution failed");
+  });
+
+  it("saves and reuses self-contained functions across tool calls", async () => {
+    const defined = await value(`async ({ functions }) => {
+      const saved = await functions.set("greet", async (_capabilities, input) => ({ greeting: "Hello, " + input.name + "!" }));
+      return { saved, has: await functions.has("greet"), names: await functions.list(), result: await functions.run("greet", { name: "Ada" }) };
+    }`);
+    expect(defined).toEqual({
+      saved: { name: "greet", replaced: false },
+      has: true,
+      names: ["greet"],
+      result: { greeting: "Hello, Ada!" },
+    });
+
+    expect(await value(`async ({ functions }) => functions.run("greet", { name: "Pi" })`))
+      .toEqual({ greeting: "Hello, Pi!" });
+    const replaced = await value(`async ({ functions }) => functions.set("greet", async () => ({ greeting: "replaced" }))`);
+    expect(replaced).toEqual({ name: "greet", replaced: true });
+    expect(await value(`async ({ functions }) => functions.run("greet")`)).toEqual({ greeting: "replaced" });
+    expect(await value(`async ({ functions }) => functions.delete("greet")`)).toBe(true);
+    expect(await value(`async ({ functions }) => ({ deletedAgain: await functions.delete("greet"), has: await functions.has("greet"), names: await functions.list() })`))
+      .toEqual({ deletedAgain: false, has: false, names: [] });
+  });
+
+  it("rejects saved closures, invalid names, and unknown functions", async () => {
+    const closureError = await value(`async ({ functions }) => {
+      const suffix = "!";
+      try { await functions.set("closed", async () => ({ greeting: suffix })); return "ok"; }
+      catch (error) { return error.message; }
+    }`);
+    expect(closureError).toMatch(/suffix/);
+
+    const errors = await value(`async ({ functions }) => {
+      const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
+      await functions.set("available", async () => "yes");
+      return [
+        await capture(() => (functions as any).set("bad name", async () => null)),
+        await capture(() => functions.run("missing")),
+        await capture(() => (functions as any).nope()),
+      ];
+    }`);
+    expect(errors[0]).toMatch(/function name must start/);
+    expect(errors[1]).toContain("Saved function \"missing\" was not found. Available functions: available");
+    expect(errors[2]).toBe("Unknown functions method: nope");
+  });
+
+  it("reports an empty registry when a function is missing", async () => {
+    await expect(run(`async ({ functions }) => functions.run("missing")`)).rejects.toThrow("No functions are saved");
   });
 
   it("reads, writes, edits, lists, globs, and stats workspace files", async () => {

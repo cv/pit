@@ -13,9 +13,12 @@ import { Type } from "typebox";
 import fg from "fast-glob";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { runInSandbox, type CapabilityHandler } from "./sandbox.js";
+import { runInSandbox, validateTypeScript, type CapabilityHandler } from "./sandbox.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
+const MAX_SAVED_FUNCTION_BYTES = 100_000;
+const SAVED_FUNCTION_NAME = /^[A-Za-z_$][A-Za-z0-9_$-]{0,63}$/;
+type FunctionRegistry = Map<string, string>;
 const COLLAPSED_CODE_LINES = 12;
 const COLLAPSED_RESULT_LINES = 12;
 
@@ -34,6 +37,14 @@ function object(value: unknown, label: string): Record<string, unknown> {
 function string(value: unknown, label: string): string {
   if (typeof value !== "string") throw new TypeError(`${label} must be a string`);
   return value;
+}
+
+function savedFunctionName(value: unknown): string {
+  const name = string(value, "function name");
+  if (!SAVED_FUNCTION_NAME.test(name)) {
+    throw new Error("function name must start with a letter, _, or $, contain only letters, numbers, _, $, or -, and be at most 64 characters");
+  }
+  return name;
 }
 
 function workspacePath(cwd: string, value: unknown): string {
@@ -89,7 +100,48 @@ async function editText(cwd: string, args: unknown[]) {
   });
 }
 
-function createCapabilities(pi: ExtensionAPI, ctx: ExtensionContext, signal?: AbortSignal): CapabilityHandler {
+export function handleFunctions(
+  functions: FunctionRegistry,
+  method: string,
+  args: unknown[],
+): unknown {
+  switch (method) {
+    case "set": {
+      const name = savedFunctionName(args[0]);
+      const source = string(args[1], "function source");
+      if (Buffer.byteLength(source) > MAX_SAVED_FUNCTION_BYTES) {
+        throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
+      }
+      validateTypeScript(source);
+      const replaced = functions.has(name);
+      functions.set(name, source);
+      return { name, replaced };
+    }
+    case "get": {
+      const name = savedFunctionName(args[0]);
+      const source = functions.get(name);
+      if (source === undefined) {
+        const available = [...functions.keys()].sort();
+        throw new Error(
+          `Saved function "${name}" was not found.` +
+          (available.length ? ` Available functions: ${available.join(", ")}` : " No functions are saved."),
+        );
+      }
+      return source;
+    }
+    case "has": return functions.has(savedFunctionName(args[0]));
+    case "list": return [...functions.keys()].sort();
+    case "delete": return functions.delete(savedFunctionName(args[0]));
+    default: throw new Error(`Unknown functions method: ${method}`);
+  }
+}
+
+function createCapabilities(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  functions: FunctionRegistry,
+  signal?: AbortSignal,
+): CapabilityHandler {
   return async (capability, method, args) => {
     if (capability === "workspace") {
       switch (method) {
@@ -173,6 +225,10 @@ function createCapabilities(pi: ExtensionAPI, ctx: ExtensionContext, signal?: Ab
       }
     }
 
+    if (capability === "functions") {
+      return handleFunctions(functions, method, args);
+    }
+
     if (capability === "context" && method === "get") {
       return {
         cwd: ctx.cwd,
@@ -195,6 +251,8 @@ export function display(value: unknown): string {
 }
 
 export default function pit(pi: ExtensionAPI) {
+  const savedFunctions: FunctionRegistry = new Map();
+
   pi.registerTool({
     name: "typescript",
     label: "TypeScript Workspace",
@@ -233,11 +291,16 @@ http
 ui
 - ui.confirm(title, message), ui.input(title, placeholder?), ui.select(title, options), and ui.notify(message, level). UI may be unavailable outside interactive or RPC modes.
 
+functions
+- functions.set(name, program) saves a self-contained, contextually typed PitProgram for reuse and returns { name, replaced }. Saved functions may not close over local variables; pass changing data through input.
+- functions.run(name, input?) executes a saved function with the current capabilities and optional JSON input.
+- functions.has(name), functions.list(), and functions.delete(name) inspect or mutate the process-local registry.
+
 context
 - context.get() returns cwd, mode, model, thinkingLevel, and sessionFile.
 
 The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
-    promptSnippet: "Run sandboxed TypeScript for batched and parallel workspace, shell, HTTP, UI, and context operations",
+    promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
     promptGuidelines: [
       "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
       "Call typescript with an async function expression that destructures the required capabilities, such as async ({ workspace, shell }) => { ... }.",
@@ -246,6 +309,8 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
       "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state.",
       "Batch related work into one typescript call instead of making several small tool calls.",
+      "In typescript, save repeated self-contained workflows with functions.set(name, program) and invoke them later with functions.run(name, input).",
+      "Saved functions in typescript receive fresh capabilities on every run, must not close over local variables, and should receive changing JSON data through their input parameter.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
       "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
@@ -253,7 +318,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     ],
     parameters: Type.Object({
       code: Type.String({
-        description: `A contextually type-checked TypeScript function expression receiving destructured capabilities; source annotations are optional. Example: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Start independent operations together with Promise.all. Sequence only dependent operations or conflicting mutations. Await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
+        description: `A contextually type-checked TypeScript function expression receiving destructured capabilities; source annotations are optional. Example: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Start independent operations together with Promise.all. Sequence only dependent operations or conflicting mutations. Repeated workflows can be saved with functions.set and reused with functions.run. Await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
       }),
       timeoutMs: Type.Optional(Type.Integer({
         minimum: 1,
@@ -325,7 +390,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       return new Text(text, 0, 0);
     },
     async execute(_id, params, signal, _update, ctx) {
-      const value = await runInSandbox(params.code, createCapabilities(pi, ctx, signal), {
+      const value = await runInSandbox(params.code, createCapabilities(pi, ctx, savedFunctions, signal), {
         ...(signal ? { signal } : {}),
         timeoutMs: params.timeoutMs ?? 30_000,
       });

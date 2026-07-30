@@ -65,10 +65,40 @@ Each destructured capability is a local proxy. Calling one of its methods perfor
   - `input(title, placeholder?)`
   - `select(title, options)`
   - `notify(message, "info" | "warning" | "error")`
+- `functions`
+  - `set(name, program)` — validate and save a self-contained function
+  - `run(name, input?)` — run a saved function with fresh capabilities
+  - `has(name)`
+  - `list()`
+  - `delete(name)`
 - `context`
   - `get()` — cwd, mode, model, thinking level, and session file
 
 Paths are resolved relative to Pi's current working directory. Absolute paths remain possible, matching Pi's normal tools.
+
+## Reusable functions
+
+Repeated workflows can be saved without changing the tool's single `code` parameter shape:
+
+```ts
+async ({ functions }) => {
+  await functions.set(
+    "test",
+    async ({ shell }, input) =>
+      shell.exec(input?.coverage ? "npm run coverage" : "npm test"),
+  );
+
+  return functions.run("test", { coverage: false });
+}
+```
+
+Later calls can reuse the definition:
+
+```ts
+async ({ functions }) => functions.run("test")
+```
+
+Saved functions are independently type-checked and must be self-contained. They cannot close over variables from the defining function; changing values should be supplied through the optional JSON input. Definitions live in the trusted extension process for the lifetime of the loaded extension, while every execution still receives fresh capability proxies inside a fresh restricted child process.
 
 ## Isolation model
 
