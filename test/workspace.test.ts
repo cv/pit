@@ -187,10 +187,30 @@ describe("workspace batch", () => {
         changes: { revision: ${JSON.stringify(fileRevision("delete"))}, changes: [{ kind: "deleteFile" }] },
       },
     ])`);
-    expect(result.files).toEqual([
-      expect.objectContaining({ file: "first.txt", applied: 1, deleted: false }),
-      expect.objectContaining({ file: "created.txt", applied: 1, deleted: false }),
-      expect.objectContaining({ file: "delete.txt", applied: 1, deleted: true, revision: null }),
+    expect(result.results).toEqual([
+      {
+        kind: "edit",
+        index: 0,
+        ok: true,
+        value: expect.objectContaining({ file: "first.txt", applied: 1, deleted: false }),
+      },
+      {
+        kind: "edit",
+        index: 1,
+        ok: true,
+        value: expect.objectContaining({ file: "created.txt", applied: 1, deleted: false }),
+      },
+      {
+        kind: "edit",
+        index: 2,
+        ok: true,
+        value: expect.objectContaining({
+          file: "delete.txt",
+          applied: 1,
+          deleted: true,
+          revision: null,
+        }),
+      },
     ]);
     expect(await readFile(join(cwd, "first.txt"), "utf8")).toBe("changed");
     expect(await readFile(join(cwd, "created.txt"), "utf8")).toBe("created");

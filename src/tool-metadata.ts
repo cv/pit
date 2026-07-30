@@ -52,7 +52,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "Change kinds: replace, delete, insertBefore, insertAfter, replaceFile, deleteFile. An optional end anchor extends replace/delete. Create a missing file with revision: null and one replaceFile change. On revision or anchor mismatch, re-read before retrying. Raw mode is for JSON or other machine parsing. Missing offset means 1, missing totalLines means lines, and missing hasMore/truncated means false.",
     "",
-    'Batch operations are { kind: "read", file, options? } or { kind: "edit", file, changes }. A batch must contain only reads or only edits.',
+    'Batch operations are { kind: "read", file, options? } or { kind: "edit", file, changes }. A batch must contain only reads or only edits and always returns { results }.',
     "",
     "CAPABILITIES",
     "",

@@ -61,15 +61,13 @@ interface PitWorkspaceCapability {
   batch(
     operations: PitBatchOperation[],
     options?: { failure?: "fail-fast" | "settled" },
-  ): Promise<
-    | { files: PitEditResult[] }
-    | {
-        results: Array<
-          | { kind: "read"; index: number; ok: true; value: PitReadResult }
-          | { kind: "read"; index: number; ok: false; error: string }
-        >;
-      }
-  >;
+  ): Promise<{
+    results: Array<
+      | { kind: "read"; index: number; ok: true; value: PitReadResult }
+      | { kind: "read"; index: number; ok: false; error: string }
+      | { kind: "edit"; index: number; ok: true; value: PitEditResult }
+    >;
+  }>;
 
   list(path?: string): Promise<PitWorkspaceEntry[]>;
 

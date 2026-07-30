@@ -28,19 +28,19 @@ Pit is distributed as a Git-based Pi package. The repository is private, so inst
 Install the pinned release globally:
 
 ```sh
-pi install git:git@github.com:cv/pit.git@v0.3.0
+pi install git:git@github.com:cv/pit.git@v0.3.1
 ```
 
 Install for the current project:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.3.0
+pi install -l git:git@github.com:cv/pit.git@v0.3.1
 ```
 
 Try it for one run without changing settings:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.3.0
+pi -e git:git@github.com:cv/pit.git@v0.3.1
 ```
 
 For local development:
@@ -100,7 +100,7 @@ async ({ workspace, shell }) => {
 - `workspace`
   - `read(file, { format?: "hashed" | "raw", offset?, limit? })` — hashed line anchors by default with a whole-file revision; use raw for machine parsing
   - `edit(file, { revision, changes })` — revision-checked anchored replacements, insertions, deletion, rewriting, and creation
-  - `batch(operations, { failure?: "fail-fast" | "settled" })` — concurrent all-read batches or transactional all-edit batches; mixed batches are rejected
+  - `batch(operations, { failure?: "fail-fast" | "settled" })` — concurrent all-read batches or transactional all-edit batches; mixed batches are rejected and both modes return `{ results }`
   - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
   - `list(path?)`
   - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
@@ -146,7 +146,7 @@ await workspace.edit("src/example.ts", {
 
 Supported change kinds are `replace`, `delete`, `insertBefore`, `insertAfter`, `replaceFile`, and `deleteFile`. An end anchor extends a replacement or deletion range; otherwise it targets one line. Use `revision: null` with a sole `replaceFile` change to create a missing file. Existing-file rewrites and deletion require the current revision. Anchored content uses `\n`, which pit converts to the file's dominant line ending while preserving untouched bytes.
 
-Search matches and context lines include anchors, and each match includes its file revision, so search results can feed directly into edit. Read batches contain only `{ kind: "read", file, options? }` operations; edit batches contain only `{ kind: "edit", file, changes }` operations and validate every file before the first commit.
+Search matches and context lines include anchors, and each match includes its file revision, so search results can feed directly into edit. Read batches contain only `{ kind: "read", file, options? }` operations; edit batches contain only `{ kind: "edit", file, changes }` operations and validate every file before the first commit. Both return `{ results }` with ordered `{ kind, index, ok, value }` entries; settled read failures use `{ kind, index, ok: false, error }`.
 
 ## Reusable functions
 

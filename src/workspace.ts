@@ -320,15 +320,20 @@ function batchEdits(
         throw error;
       }
       return {
-        files: prepared.map((target) => {
+        results: prepared.map((target) => {
           // biome-ignore lint/style/noNonNullAssertion: deleted results do not read the revision.
           const next = target.edit.next!;
           return {
-            file: workspaceResultPath(cwd, target.path),
-            revision: target.edit.deleted ? null : fileRevision(next),
-            applied: target.edit.applied,
-            bytes: target.edit.deleted ? 0 : Buffer.byteLength(next),
-            deleted: target.edit.deleted,
+            kind: "edit" as const,
+            index: target.index,
+            ok: true as const,
+            value: {
+              file: workspaceResultPath(cwd, target.path),
+              revision: target.edit.deleted ? null : fileRevision(next),
+              applied: target.edit.applied,
+              bytes: target.edit.deleted ? 0 : Buffer.byteLength(next),
+              deleted: target.edit.deleted,
+            },
           };
         }),
       };

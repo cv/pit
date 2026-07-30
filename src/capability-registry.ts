@@ -87,17 +87,15 @@ export const CAPABILITY_REGISTRY = {
         declaration: `batch(
   operations: PitBatchOperation[],
   options?: { failure?: "fail-fast" | "settled" },
-): Promise<
-  | { files: PitEditResult[] }
-  | {
-      results: Array<
-        | { kind: "read"; index: number; ok: true; value: PitReadResult }
-        | { kind: "read"; index: number; ok: false; error: string }
-      >;
-    }
->;`,
+): Promise<{
+  results: Array<
+    | { kind: "read"; index: number; ok: true; value: PitReadResult }
+    | { kind: "read"; index: number; ok: false; error: string }
+    | { kind: "edit"; index: number; ok: true; value: PitEditResult }
+  >;
+}>;`,
         documentation:
-          'workspace.batch accepts only { kind: "read", file, options? } operations or only { kind: "edit", file, changes } operations',
+          "workspace.batch accepts homogeneous read or edit operations and always returns ordered { results } entries",
         minimumArguments: 1,
         maximumArguments: 2,
       },
