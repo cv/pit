@@ -27,6 +27,7 @@ let sessionTree: (...args: any[]) => void;
 let branchEntries: any[];
 let execMock: ReturnType<typeof vi.fn>;
 let setActiveTools: ReturnType<typeof vi.fn>;
+let functionsCommand: { handler: (args: string, ctx: any) => Promise<void> };
 
 function context(overrides: Record<string, unknown> = {}) {
   return {
@@ -40,6 +41,7 @@ function context(overrides: Record<string, unknown> = {}) {
       input: vi.fn(async () => "typed"),
       select: vi.fn(async () => "b"),
       notify: vi.fn(),
+      custom: vi.fn(async () => undefined),
     },
     sessionManager: {
       getSessionFile: () => "/tmp/session.jsonl",
@@ -68,6 +70,9 @@ beforeEach(async () => {
   setActiveTools = vi.fn();
   const pi = {
     registerTool: vi.fn((registered: RegisteredTool) => { tool = registered; }),
+    registerCommand: vi.fn((name: string, command: typeof functionsCommand) => {
+      if (name === "functions") functionsCommand = command;
+    }),
     on: vi.fn((event: string, callback: (...args: any[]) => void) => {
       if (event === "session_start") sessionStart = callback;
       if (event === "session_tree") sessionTree = callback;
@@ -109,11 +114,14 @@ describe("function registry handler", () => {
       { type: "custom", customType: "other", data: {} },
       { type: "custom", customType: "pit-functions", data: null },
       { type: "custom", customType: "pit-functions", data: { name: "bad name", source } },
+      { type: "custom", customType: "pit-functions", data: { name: 42, source } },
       { type: "custom", customType: "pit-functions", data: { name: "missing-source", source: 42 } },
       { type: "custom", customType: "pit-functions", data: { name: "stale", source: "() => 1n" } },
       { type: "custom", customType: "pit-functions", data: { name: "active", source } },
+      { type: "custom", customType: "pit-functions", data: { name: "active", deleted: true } },
+      { type: "custom", customType: "pit-functions", data: { name: "remaining", source } },
     ]);
-    expect([...functions.keys()]).toEqual(["active"]);
+    expect([...functions.keys()]).toEqual(["remaining"]);
   });
 });
 
@@ -366,8 +374,9 @@ describe("pit extension", () => {
     const mediumComments = Array.from({ length: 170 }, (_, index) => `// medium line ${index + 1}`).join("\n");
     await run(`async function mediumTaskOne() {\n${mediumComments}\nreturn 1;\n}`);
     await run(`async function mediumTaskTwo() {\n${mediumComments}\nreturn 2;\n}`);
+    await run(`async function mediumTaskThree() {\n${mediumComments}\nreturn 3;\n}`);
     const limited = tool.renderCall?.(
-      { code: "longTask() + mediumTaskOne() + mediumTaskTwo()" },
+      { code: "longTask() + mediumTaskOne() + mediumTaskTwo() + mediumTaskThree()" },
       theme,
       { expanded: true, argsComplete: true },
     ).render(240).join("\n") ?? "";
@@ -396,6 +405,116 @@ describe("pit extension", () => {
     branchEntries = previousBranch;
     sessionTree({}, context());
     expect(await value(`persistent()`)).toEqual({ ok: true });
+  });
+
+  it("handles empty, missing, non-TUI, and cancelled function management", async () => {
+    const nonTui = context();
+    await functionsCommand.handler("", nonTui);
+    expect(nonTui.ui.notify).toHaveBeenCalledWith("No saved functions on this branch", "info");
+    await functionsCommand.handler("show missing", nonTui);
+    expect(nonTui.ui.notify).toHaveBeenCalledWith(`Saved function "missing" was not found`, "error");
+
+    const tui = context({ mode: "tui" });
+    await functionsCommand.handler("", tui);
+    expect(tui.ui.notify).toHaveBeenCalledWith("No saved functions on this branch", "info");
+
+    await run(`async function solo() { return true; }`);
+    await functionsCommand.handler("show solo", nonTui);
+    expect(nonTui.ui.notify).toHaveBeenCalledWith("Saved source inspection requires TUI mode", "error");
+
+    nonTui.ui.confirm = vi.fn(async () => false);
+    await functionsCommand.handler("delete solo", nonTui);
+    expect((await value(`async ({ context }) => context.get()`)).savedFunctions).toEqual(["solo"]);
+    nonTui.ui.confirm = vi.fn(async () => true);
+    await functionsCommand.handler("delete solo", nonTui);
+    expect((await value(`async ({ context }) => context.get()`)).savedFunctions).toEqual([]);
+    expect(nonTui.ui.notify).toHaveBeenCalledWith(`Deleted saved function: solo`, "info");
+  });
+
+  it("lists and deletes saved functions through the /functions command", async () => {
+    await run(`async function baseTask() { return 1; }`);
+    await run(`async function composedTask() { return (await baseTask()) + 1; }`);
+    const ctx = context();
+
+    await functionsCommand.handler("list", ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("baseTask"), "info");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("composedTask"), "info");
+
+    await functionsCommand.handler("delete baseTask", ctx);
+    expect(ctx.ui.confirm).toHaveBeenCalledWith(
+      "Delete baseTask?",
+      expect.stringContaining("Also delete dependents: composedTask"),
+    );
+    expect(branchEntries).toContainEqual(expect.objectContaining({
+      customType: "pit-functions",
+      data: { name: "baseTask", deleted: true },
+    }));
+    expect(branchEntries).toContainEqual(expect.objectContaining({
+      customType: "pit-functions",
+      data: { name: "composedTask", deleted: true },
+    }));
+    expect((await value(`async ({ context }) => context.get()`)).savedFunctions).toEqual([]);
+
+    await functionsCommand.handler("delete missing", ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(`Saved function "missing" was not found`, "error");
+    await functionsCommand.handler("unknown", ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage: /functions"), "error");
+  });
+
+  it("inspects saved source and drives the interactive /functions manager", async () => {
+    await run(`async function inspectMe() { return { ok: true }; }`);
+    const ctx = context({ mode: "tui" });
+    let rendered = "";
+    ctx.ui.custom = vi.fn(async (factory?: any) => {
+      if (!factory) return;
+      let closed = false;
+      const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+      const component = factory({}, theme, {}, () => { closed = true; });
+      rendered = component.render(120).join("\n");
+      component.invalidate();
+      component.handleInput("x");
+      expect(closed).toBe(false);
+      component.handleInput("\r");
+      expect(closed).toBe(true);
+      component.handleInput("\u001b");
+      component.handleInput("\u0003");
+      component.handleInput("q");
+    });
+
+    await functionsCommand.handler("show inspectMe", ctx);
+    expect(rendered).toContain("inspectMe");
+    expect(rendered).toContain("async function inspectMe");
+
+    const longSource = Array.from({ length: 505 }, (_, index) => `// viewer line ${index + 1}`).join("\n");
+    await run(`async function longViewer() {\n${longSource}\nreturn true;\n}`);
+    await functionsCommand.handler("show longViewer", ctx);
+    expect(rendered).toContain("source lines omitted");
+
+    ctx.ui.select = vi.fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) => options[0])
+      .mockResolvedValueOnce("Inspect source")
+      .mockImplementationOnce(async (_title: string, options: string[]) => options[0])
+      .mockResolvedValueOnce("Close");
+    await functionsCommand.handler("", ctx);
+    expect(ctx.ui.select).toHaveBeenCalledWith("Saved functions", expect.arrayContaining([expect.stringContaining("inspectMe")]));
+    expect(ctx.ui.custom).toHaveBeenCalledTimes(3);
+
+    ctx.ui.select = vi.fn().mockResolvedValueOnce("not an entry");
+    await functionsCommand.handler("", ctx);
+    ctx.ui.select = vi.fn().mockResolvedValueOnce(undefined);
+    await functionsCommand.handler("", ctx);
+
+    ctx.ui.select = vi.fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) => options[0])
+      .mockResolvedValueOnce(undefined);
+    await functionsCommand.handler("", ctx);
+
+    ctx.ui.select = vi.fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) => options.find((option) => option.startsWith("longViewer")))
+      .mockResolvedValueOnce("Delete")
+      .mockResolvedValueOnce(undefined);
+    await functionsCommand.handler("", ctx);
+    expect((await value(`async ({ context }) => context.get()`)).savedFunctions).toEqual(["inspectMe"]);
   });
 
   it("rejects reserved, oversized, and unknown saved functions", async () => {

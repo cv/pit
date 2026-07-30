@@ -104,6 +104,18 @@ Named functions are persisted as non-context session entries, survive reloads, a
 
 Saved functions can call one another. When a sequence such as validation, staging, committing, and pushing recurs, prefer a higher-level named function such as `publishChanges` over separate command wrappers. Give composed functions typed input and use `shell.exec(command, { raise: true })` for stages that must succeed; a nonzero exit then stops the workflow automatically. Return a structured summary of successful stages. This keeps reusable primitives such as `runValidation` while adding workflows named after user intent.
 
+### Managing saved functions
+
+Use `/functions` in the TUI to list branch-local saved functions, inspect syntax-highlighted source, and delete definitions. Command forms are also available:
+
+```text
+/functions list
+/functions show runValidation
+/functions delete runValidation
+```
+
+Deletion appends branch-local tombstones, survives reloads, and confirms before cascading to saved functions that depend on the deleted definition.
+
 ## Isolation model
 
 Every invocation gets a new Node process with:

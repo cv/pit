@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
@@ -8,7 +8,7 @@ import {
   truncateTail,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { applyPatch as applyUnifiedPatch, parsePatch, type StructuredPatch } from "diff";
 import { Type } from "typebox";
 import fg from "fast-glob";
@@ -43,10 +43,9 @@ export const CAPABILITY_METHODS = {
 
 type FunctionRegistry = Map<string, string>;
 const FUNCTION_ENTRY_TYPE = "pit-functions";
-interface FunctionEntry {
-  name: string;
-  source: string;
-}
+type FunctionEntry =
+  | { name: string; source: string; deleted?: never }
+  | { name: string; deleted: true; source?: never };
 interface FunctionActivity {
   action: "set" | "run";
   name: string;
@@ -353,6 +352,36 @@ async function applyWorkspacePatch(cwd: string, args: unknown[]) {
   });
 }
 
+class SavedFunctionViewer {
+  private readonly lines: string[];
+  private readonly omitted: number;
+
+  constructor(private readonly name: string, source: string, private readonly theme: Theme, private readonly close: () => void) {
+    const highlighted = highlightCode(source, "typescript");
+    this.lines = highlighted.slice(0, 500);
+    this.omitted = highlighted.length - this.lines.length;
+  }
+
+  render(width: number): string[] {
+    return [
+      truncateToWidth(this.theme.fg("toolTitle", this.theme.bold(this.name)), width),
+      "",
+      ...this.lines.map((line) => truncateToWidth(line, width)),
+      ...(this.omitted ? [this.theme.fg("muted", `… ${this.omitted} source lines omitted`)] : []),
+      "",
+      truncateToWidth(this.theme.fg("dim", "Enter/Esc/q to close"), width),
+    ];
+  }
+
+  invalidate(): void {}
+
+  handleInput(data: string): void {
+    if (matchesKey(data, "enter") || matchesKey(data, "escape") || matchesKey(data, "ctrl+c") || data === "q") {
+      this.close();
+    }
+  }
+}
+
 export function reconstructFunctions(
   registry: FunctionRegistry,
   entries: readonly unknown[],
@@ -364,9 +393,14 @@ export function reconstructFunctions(
     if (entry.type !== "custom" || entry.customType !== FUNCTION_ENTRY_TYPE) continue;
     if (!entry.data || typeof entry.data !== "object") continue;
     const definition = entry.data as Partial<FunctionEntry>;
-    if (typeof definition.name !== "string" || typeof definition.source !== "string") continue;
+    if (typeof definition.name !== "string") continue;
     try {
       validateSavedFunctionName(definition.name);
+      if (definition.deleted === true) {
+        registry.delete(definition.name);
+        continue;
+      }
+      if (typeof definition.source !== "string") continue;
       validateRegistryCapacity(registry, definition.name, definition.source);
       validateTypeScript(definition.source, registry);
       registry.set(definition.name, definition.source);
@@ -512,6 +546,103 @@ export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
   const shellCommandUses = new Map<string, number>();
   const suggestedShellCommands = new Set<string>();
+
+  const functionSummary = () => [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, source]) => ({
+    name,
+    source,
+    lines: source.split("\n").length,
+    bytes: Buffer.byteLength(source),
+  }));
+
+  const inspectSavedFunction = async (name: string, ctx: ExtensionContext): Promise<void> => {
+    const source = savedFunctions.get(name);
+    if (source === undefined) {
+      ctx.ui.notify(`Saved function "${name}" was not found`, "error");
+      return;
+    }
+    if (ctx.mode !== "tui") {
+      ctx.ui.notify("Saved source inspection requires TUI mode", "error");
+      return;
+    }
+    await ctx.ui.custom<void>((_tui, theme, _keybindings, done) =>
+      new SavedFunctionViewer(name, source, theme, () => done()),
+    );
+  };
+
+  const deleteSavedFunction = async (name: string, ctx: ExtensionContext): Promise<boolean> => {
+    if (!savedFunctions.has(name)) {
+      ctx.ui.notify(`Saved function "${name}" was not found`, "error");
+      return false;
+    }
+    const namesToDelete = new Set([name]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [candidate, source] of savedFunctions) {
+        if (namesToDelete.has(candidate)) continue;
+        const dependsOnDeleted = resolveSavedFunctionReferences(source, savedFunctions)
+          .some((reference) => namesToDelete.has(reference.name));
+        if (dependsOnDeleted) { namesToDelete.add(candidate); changed = true; }
+      }
+    }
+    const dependents = [...namesToDelete].filter((candidate) => candidate !== name).sort();
+    const dependencyWarning = dependents.length ? `\n\nAlso delete dependents: ${dependents.join(", ")}` : "";
+    const confirmed = await ctx.ui.confirm(
+      `Delete ${name}?`,
+      `Delete this saved function on the active branch?${dependencyWarning}`,
+    );
+    if (!confirmed) return false;
+    for (const deletedName of namesToDelete) {
+      savedFunctions.delete(deletedName);
+      pi.appendEntry(FUNCTION_ENTRY_TYPE, { name: deletedName, deleted: true } satisfies FunctionEntry);
+    }
+    ctx.ui.notify(`Deleted saved function${namesToDelete.size === 1 ? "" : "s"}: ${[...namesToDelete].join(", ")}`, "info");
+    return true;
+  };
+
+  const listSavedFunctions = (ctx: ExtensionContext): void => {
+    const entries = functionSummary();
+    const message = entries.length
+      ? entries.map((entry) => `${entry.name} — ${entry.lines} lines, ${formatSize(entry.bytes)}`).join("\n")
+      : "No saved functions on this branch";
+    ctx.ui.notify(message, "info");
+  };
+
+  const interactiveFunctionManager = async (ctx: ExtensionContext): Promise<void> => {
+    while (true) {
+      const entries = functionSummary();
+      if (entries.length === 0) {
+        ctx.ui.notify("No saved functions on this branch", "info");
+        return;
+      }
+      const labels = entries.map((entry) => `${entry.name} — ${entry.lines} lines, ${formatSize(entry.bytes)}`);
+      const selected = await ctx.ui.select("Saved functions", labels);
+      if (selected === undefined) return;
+      const index = labels.indexOf(selected);
+      const entry = entries[index];
+      if (!entry) return;
+      const action = await ctx.ui.select(entry.name, ["Inspect source", "Delete", "Close"]);
+      if (action === "Inspect source") await inspectSavedFunction(entry.name, ctx);
+      else if (action === "Delete") await deleteSavedFunction(entry.name, ctx);
+      else if (action === "Close" || action === undefined) return;
+    }
+  };
+
+  pi.registerCommand("functions", {
+    description: "List, inspect, or delete saved TypeScript functions",
+    handler: async (args, ctx) => {
+      const [action = "", name] = args.trim().split(/\s+/, 2);
+      if (!action) {
+        if (ctx.mode === "tui") await interactiveFunctionManager(ctx);
+        else listSavedFunctions(ctx);
+        return;
+      }
+      if (action === "list") return listSavedFunctions(ctx);
+      if (action === "show" && name) return inspectSavedFunction(name, ctx);
+      if (action === "delete" && name) { await deleteSavedFunction(name, ctx); return; }
+      ctx.ui.notify("Usage: /functions [list | show <name> | delete <name>]", "error");
+    },
+  });
 
   pi.registerTool({
     name: "typescript",
