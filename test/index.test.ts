@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CAPABILITY_REGISTRY,
+  generateCapabilityContract,
+  validateCapabilityCall,
+} from "../src/capability-registry.js";
+import {
   CAPABILITY_METHODS,
   display,
   reconstructFunctions,
@@ -112,16 +117,11 @@ describe("pit extension", () => {
   it("keeps capability declarations and model-facing metadata in sync", async () => {
     const contract = await readFile(join(process.cwd(), "src/capability-contract.d.ts"), "utf8");
     const readme = await readFile(join(process.cwd(), "README.md"), "utf8");
-    const interfaces: Record<keyof typeof CAPABILITY_METHODS, string> = {
-      workspace: "PitWorkspaceCapability",
-      shell: "PitShellCapability",
-      http: "PitHttpCapability",
-      ui: "PitUiCapability",
-      context: "PitContextCapability",
-    };
+    expect(contract).toBe(generateCapabilityContract());
 
     for (const [capability, methods] of Object.entries(CAPABILITY_METHODS)) {
-      const interfaceName = interfaces[capability as keyof typeof interfaces];
+      const interfaceName =
+        CAPABILITY_REGISTRY[capability as keyof typeof CAPABILITY_REGISTRY].interfaceName;
       const pattern = new RegExp(`interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`);
       const body = contract.match(pattern)?.[1] ?? "";
       const declared = [...body.matchAll(/^ {2}([A-Za-z_$][\w$]*)\(/gm)].map((match) => match[1]);
@@ -132,6 +132,17 @@ describe("pit extension", () => {
         expect(readme, `README for ${qualified}`).toContain(`\`${method}(`);
       }
     }
+  });
+
+  it("validates capability dispatch and arity from the registry", () => {
+    expect(() => validateCapabilityCall("context", "get", [])).not.toThrow();
+    expect(() => validateCapabilityCall("context", "get", [1])).toThrow(/expects 0 argument/);
+    expect(() => validateCapabilityCall("workspace", "readText", [])).toThrow(
+      /expects 1-2 argument/,
+    );
+    expect(() => validateCapabilityCall("unknown", "method", [])).toThrow(
+      "Unknown capability or method",
+    );
   });
 
   it("renders generated TypeScript source with collapsed and expanded views", () => {

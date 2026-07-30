@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { validateCapabilityCall } from "./capability-registry.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
@@ -35,16 +36,11 @@ import {
   PROMPT_GUIDELINES,
   PROMPT_SNIPPET,
 } from "./tool-metadata.js";
-import { handleWorkspace, resolveWorkspacePath, WORKSPACE_METHODS } from "./workspace.js";
+import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
+
+export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
-export const CAPABILITY_METHODS = {
-  workspace: WORKSPACE_METHODS,
-  shell: ["execFile", "exec"],
-  http: ["request"],
-  ui: ["confirm", "input", "select", "notify"],
-  context: ["get"],
-} as const;
 const COLLAPSED_CODE_LINES = 12;
 const COLLAPSED_RESULT_LINES = 12;
 const MAX_EXPANDED_SAVED_FUNCTION_LINES = 200;
@@ -157,6 +153,9 @@ function createCapabilities(
   onShellCommand: (command: string) => void,
 ): CapabilityHandler {
   return async (capability, method, args, signal) => {
+    if (capability !== "__pit") {
+      validateCapabilityCall(capability, method, args);
+    }
     if (capability === "workspace") {
       return handleWorkspace(ctx.cwd, method, args, signal);
     }
@@ -244,8 +243,9 @@ function createCapabilities(
             (args[1] as "info" | "warning" | "error" | undefined) ?? "info",
           );
           return null;
+        /* v8 ignore next -- registry validation rejects unknown UI methods before dispatch. */
         default:
-          throw new Error(`Unknown ui method: ${method}`);
+          throw new Error(`Capability registry and UI dispatcher disagree: ${method}`);
       }
     }
 
@@ -269,7 +269,8 @@ function createCapabilities(
       };
     }
 
-    throw new Error(`Unknown capability or method: ${capability}.${method}`);
+    /* v8 ignore next -- registry validation rejects unknown public calls before dispatch. */
+    throw new Error(`Capability registry and dispatcher disagree: ${capability}.${method}`);
   };
 }
 
@@ -442,17 +443,9 @@ export default function pit(pi: ExtensionAPI) {
         validateRegistryCapacity(savedFunctions, namedFunction, params.code);
         const candidateRegistry = new Map(savedFunctions);
         candidateRegistry.set(namedFunction, params.code);
+        // Validation compiles every candidate signature together, so replacements
+        // are rejected when they invalidate any dependent definition.
         validateTypeScript(params.code, candidateRegistry, params.params);
-        for (const [candidateName, candidateSource] of candidateRegistry) {
-          if (
-            candidateName !== namedFunction &&
-            resolveSavedFunctionReferences(candidateSource, candidateRegistry).some(
-              (reference) => reference.name === namedFunction,
-            )
-          ) {
-            validateTypeScript(candidateSource, candidateRegistry);
-          }
-        }
         executionRegistry = candidateRegistry;
         replacedNamedFunction = savedFunctions.has(namedFunction);
         functionActivity.push({

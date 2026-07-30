@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { applyPatch as applyUnifiedPatch, parsePatch, type StructuredPatch } from "diff";
 import fg from "fast-glob";
+import { CAPABILITY_METHODS } from "./capability-registry.js";
 import { InterruptibleRegexMatcher } from "./regex-worker.js";
 
 const MAX_PATCH_BYTES = 1_000_000;
@@ -19,17 +20,7 @@ const MAX_SEARCH_RESULTS = 500;
 const MAX_GLOB_RESULTS = 10_000;
 const AT_PATH_PREFIX = /^@/;
 const DIFF_PATH_PREFIX = /^(?:a|b)\//;
-export const WORKSPACE_METHODS = [
-  "readText",
-  "writeText",
-  "editText",
-  "applyPatch",
-  "batch",
-  "list",
-  "glob",
-  "search",
-  "stat",
-] as const;
+export const WORKSPACE_METHODS = CAPABILITY_METHODS.workspace;
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -625,7 +616,8 @@ export async function handleWorkspace(
         file: info.isFile(),
       };
     }
+    /* v8 ignore next -- registry validation rejects unknown workspace methods before dispatch. */
     default:
-      throw new Error(`Unknown workspace method: ${method}`);
+      throw new Error(`Capability registry and workspace dispatcher disagree: ${method}`);
   }
 }

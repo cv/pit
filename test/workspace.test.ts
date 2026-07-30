@@ -505,7 +505,7 @@ describe("workspace capability", () => {
     expect(errors.join("\n")).toMatch(/overlap/);
     expect(errors.join("\n")).toMatch(/path must be a string/);
     expect(errors.join("\n")).toMatch(/limit must be an integer between 1 and 10000/);
-    expect(errors.join("\n")).toMatch(/Unknown workspace method/);
+    expect(errors.join("\n")).toMatch(/Unknown capability or method: workspace.noSuchMethod/);
 
     await writeFile(join(cwd, "many.txt"), "x".repeat(12), "utf8");
     const manyMatches = await value(`async ({ workspace }) => {

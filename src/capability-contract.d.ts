@@ -134,8 +134,11 @@ interface PitHttpCapability {
 
 interface PitUiCapability {
   confirm(title: string, message: string): Promise<boolean>;
+
   input(title: string, placeholder?: string): Promise<string | undefined>;
+
   select(title: string, options: string[]): Promise<string | undefined>;
+
   notify(message: string, level?: "info" | "warning" | "error"): Promise<null>;
 }
 

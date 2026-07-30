@@ -65,7 +65,7 @@ async ({ workspace, shell }) => {
 }
 ```
 
-The expression is contextually type-checked before execution. No source annotations are required: destructured capabilities automatically receive the types declared in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
+The expression is contextually type-checked before execution. No source annotations are required: destructured capabilities automatically receive the types in generated [`src/capability-contract.d.ts`](src/capability-contract.d.ts). The authoritative method declarations, dispatch metadata, arity constraints, and model-facing summaries live in [`src/capability-registry.ts`](src/capability-registry.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
 
 Each destructured capability is a local proxy. Calling one of its methods performs a size- and concurrency-bounded RPC to the trusted extension process. Calls begin immediately, and pit waits for outstanding calls before accepting a successful result. Timeout and cancellation signals propagate to cooperative host operations. Use `Promise.all` when any failed operation should fail the invocation; use `Promise.allSettled` or a local catch for optional exploratory probes. Sequence dependent calls and conflicting mutations. Unknown capabilities and methods also fail closed at runtime.
 
@@ -172,10 +172,11 @@ This is stronger than `node:vm`, which is not a security boundary, and avoids a 
 npm run check
 npm test
 npm run coverage
+npm run capabilities:generate
 npm run biome:fix
 ```
 
-`npm run check` runs TypeScript plus Biome with the `all` lint preset, import organization, formatting, and warnings treated as errors. The configuration disables only rules that conflict with the Node sandbox, generated ambient contract, test fixtures, or intentional control-flow patterns.
+`npm run check` first verifies that the generated capability contract is current, then runs TypeScript plus Biome with the `all` lint preset, import organization, formatting, and warnings treated as errors. The configuration disables only rules that conflict with the Node sandbox, generated ambient contract, test fixtures, or intentional control-flow patterns.
 
 Pull requests and pushes to `main` run the same type-check and coverage gate in GitHub Actions. When branch protection is available, configure `main` to require the `test` check before merging.
 

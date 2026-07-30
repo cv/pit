@@ -1,4 +1,5 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
+import { capabilityDocumentation } from "./capability-registry.js";
 
 export const PROMPT_SNIPPET =
   "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions";
@@ -42,14 +43,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "CAPABILITIES",
     "",
-    "workspace: workspace.readText(path, options?) -> { text, truncated, offset, lines, totalLines } (not a raw string); workspace.writeText(path, contents); workspace.editText(path, edits); workspace.batch(operations); workspace.applyPatch(patch); workspace.search(query, options?); workspace.list(path?); workspace.glob(patterns?, { limit?, dot?, onlyFiles?, ignore? }) -> { entries, truncated }; workspace.stat(path).",
-    "",
-    "shell: shell.exec(command, options?) for shell syntax; shell.execFile(program, args, options?) for argument-safe execution. Both return { stdout, stderr, code, truncated }. Nonzero exits are data by default; { raise: true } throws.",
-    "",
-    "http: http.request(url, options?) -> { status, ok, headers, body, truncated }.",
-    "ui: ui.confirm, ui.input, ui.select, ui.notify (availability depends on mode).",
-    "context: context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions.",
-    "",
+    ...capabilityDocumentation().flatMap((line) => [line, ""]),
     "REUSABLE AND COMPOSED FUNCTIONS",
     "",
     "Named top-level functions execute and save automatically on the active branch:",

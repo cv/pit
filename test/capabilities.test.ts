@@ -287,7 +287,7 @@ describe("host capabilities", () => {
     expect(errors).toEqual([
       "title must be a string",
       "options must be an array",
-      "Unknown ui method: nope",
+      "Unknown capability or method: ui.nope",
     ]);
   });
 
