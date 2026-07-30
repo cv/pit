@@ -216,7 +216,7 @@ describe("runInSandbox", () => {
       handler,
     );
     expect(result).toEqual({ value: 42 });
-    expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"]);
+    expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"], expect.any(AbortSignal));
   });
 
   it("injects saved functions as capability-bound expressions", async () => {
@@ -232,7 +232,12 @@ describe("runInSandbox", () => {
     });
     const result = await runInSandbox("answer({ value: 42 })", handler, { savedFunctions });
     expect(result).toEqual({ answer: 42 });
-    expect(handler).toHaveBeenCalledWith("__pit", "savedFunctionRun", ["answer"]);
+    expect(handler).toHaveBeenCalledWith(
+      "__pit",
+      "savedFunctionRun",
+      ["answer"],
+      expect.any(AbortSignal),
+    );
     await expect(runInSandbox("unrelated()", handler, { savedFunctions })).rejects.toThrow(
       /number.*PitProgram/,
     );
@@ -317,6 +322,86 @@ describe("runInSandbox", () => {
       async () => null,
     );
     expect(result).toEqual({});
+  });
+
+  it("bounds protocol frames in both directions", async () => {
+    await expect(
+      runInSandbox(
+        `async () => { process.stdout.write("x".repeat(8_000_001)); return null; }`,
+        async () => null,
+      ),
+    ).rejects.toThrow(/RPC frame exceeds/);
+
+    await expect(
+      runInSandbox("async ({ context }) => context.get()", async () => "x".repeat(8_000_001)),
+    ).rejects.toThrow(/Capability response exceeds RPC limit/);
+
+    await expect(
+      runInSandbox(
+        `async ({ context }) => (context as any).get("x".repeat(8_000_001))`,
+        async () => null,
+      ),
+    ).rejects.toThrow(/RPC frame exceeds/);
+  });
+
+  it("bounds concurrent and total capability calls", async () => {
+    await expect(
+      runInSandbox(
+        `async ({ context }) => Promise.all(
+          Array.from({ length: 33 }, () => context.get())
+        )`,
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return null;
+        },
+      ),
+    ).rejects.toThrow(/Concurrent RPC call limit exceeded/);
+
+    await expect(
+      runInSandbox(
+        `async ({ context }) => {
+          for (let index = 0; index < 1025; index++) await context.get();
+          return null;
+        }`,
+        async () => null,
+      ),
+    ).rejects.toThrow(/RPC call limit exceeded/);
+  });
+
+  it("waits for floating capability calls before reporting success", async () => {
+    let completed = false;
+    const result = await runInSandbox(
+      "async ({ context }) => { context.get(); return 42; }",
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        completed = true;
+        return null;
+      },
+    );
+    expect(result).toBe(42);
+    expect(completed).toBe(true);
+  });
+
+  it("aborts cooperative capability handlers on timeout", async () => {
+    let aborted = false;
+    await expect(
+      runInSandbox(
+        "async ({ context }) => context.get()",
+        async (_capability, _method, _args, signal) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                aborted = true;
+                reject(signal.reason);
+              },
+              { once: true },
+            );
+          }),
+        { timeoutMs: 100 },
+      ),
+    ).rejects.toThrow("timed out");
+    expect(aborted).toBe(true);
   });
 
   it("reports a child that exits without a result", async () => {

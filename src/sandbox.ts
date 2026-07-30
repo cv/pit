@@ -17,6 +17,7 @@ export type CapabilityHandler = (
   capability: string,
   method: string,
   args: unknown[],
+  signal: AbortSignal,
 ) => unknown | Promise<unknown>;
 
 interface WireMessage {
@@ -43,6 +44,9 @@ const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
 const MAX_CACHE_ENTRIES = 128;
+const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
+const MAX_CONCURRENT_CAPABILITY_CALLS = 32;
+const MAX_CAPABILITY_CALLS = 1024;
 const validationCache = new Map<string, string | null>();
 const compilationCache = new Map<string, Promise<string>>();
 let validationCacheHits = 0;
@@ -458,13 +462,22 @@ export async function runInSandbox(
 
   return await new Promise<unknown>((resolve, reject) => {
     let settled = false;
+    let callCount = 0;
+    let activeCalls = 0;
     let stdout = "";
     let stderr = "";
+    const inFlight = new Set<Promise<void>>();
+    const capabilityController = new AbortController();
+    const capabilitySignal = options.signal
+      ? AbortSignal.any([options.signal, capabilityController.signal])
+      : capabilityController.signal;
     const finish = (error?: Error, value?: unknown) => {
+      /* v8 ignore next -- only asynchronous child-process races call finish twice. */
       if (settled) {
         return;
       }
       settled = true;
+      capabilityController.abort();
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
       child.kill("SIGKILL");
@@ -473,6 +486,9 @@ export async function runInSandbox(
       } else {
         resolve(value);
       }
+    };
+    const finishAfterCalls = (error: Error | undefined, value?: unknown) => {
+      void Promise.allSettled([...inFlight]).then(() => finish(error, value));
     };
     const onAbort = () => finish(new Error("TypeScript execution cancelled"));
     const timer = setTimeout(
@@ -485,6 +501,12 @@ export async function runInSandbox(
       return onAbort();
     }
 
+    /* v8 ignore next -- an EPIPE race is platform-dependent and handled defensively. */
+    child.stdin.on("error", (error) => {
+      if (!settled) {
+        finish(error);
+      }
+    });
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr = (stderr + chunk).slice(-8192);
@@ -497,10 +519,16 @@ export async function runInSandbox(
       }
     });
 
-    const send = (message: WireMessage) => {
-      if (!settled && child.stdin.writable) {
-        child.stdin.write(`${JSON.stringify({ ...message, token })}\n`);
+    const send = (message: WireMessage): boolean => {
+      if (settled || !child.stdin.writable) {
+        return false;
       }
+      const frame = `${JSON.stringify({ ...message, token })}\n`;
+      if (Buffer.byteLength(frame) > MAX_PROTOCOL_FRAME_BYTES) {
+        return false;
+      }
+      child.stdin.write(frame);
+      return true;
     };
 
     child.stdout.setEncoding("utf8");
@@ -513,6 +541,9 @@ export async function runInSandbox(
         }
         const line = stdout.slice(0, newline);
         stdout = stdout.slice(newline + 1);
+        if (Buffer.byteLength(line) > MAX_PROTOCOL_FRAME_BYTES) {
+          return finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
+        }
         let message: WireMessage;
         try {
           message = JSON.parse(line) as WireMessage;
@@ -523,11 +554,12 @@ export async function runInSandbox(
           continue;
         }
         if (message.type === "result") {
-          return finish(undefined, message.value);
+          return finishAfterCalls(undefined, message.value);
         }
         if (message.type === "fatal") {
-          return finish(new Error(message.error));
+          return finishAfterCalls(new Error(message.error));
         }
+        /* v8 ignore next -- malformed authenticated frames are unreachable from the fixed runner. */
         if (
           message.type === "call" &&
           typeof message.id === "number" &&
@@ -535,20 +567,60 @@ export async function runInSandbox(
           typeof message.method === "string" &&
           Array.isArray(message.args)
         ) {
-          const id = message.id;
-          Promise.resolve(handler(message.capability, message.method, message.args)).then(
-            (value) => send({ type: "response", id, value }),
-            (error) =>
-              send({
-                type: "response",
-                id,
-                error: error instanceof Error ? error.message : String(error),
-              }),
-          );
+          const { id, capability, method, args } = message as Required<
+            Pick<WireMessage, "id" | "capability" | "method" | "args">
+          >;
+          callCount++;
+          if (callCount > MAX_CAPABILITY_CALLS) {
+            send({
+              type: "response",
+              id,
+              error: `RPC call limit exceeded (${MAX_CAPABILITY_CALLS})`,
+            });
+            continue;
+          }
+          if (activeCalls >= MAX_CONCURRENT_CAPABILITY_CALLS) {
+            send({
+              type: "response",
+              id,
+              error: `Concurrent RPC call limit exceeded (${MAX_CONCURRENT_CAPABILITY_CALLS})`,
+            });
+            continue;
+          }
+          activeCalls++;
+          let task: Promise<void>;
+          task = Promise.resolve()
+            .then(() => handler(capability, method, args, capabilitySignal))
+            .then(
+              (value) => {
+                if (!send({ type: "response", id, value })) {
+                  send({ type: "response", id, error: "Capability response exceeds RPC limit" });
+                }
+              },
+              (error) => {
+                send({
+                  type: "response",
+                  id,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              },
+            )
+            .finally(() => {
+              activeCalls--;
+              inFlight.delete(task);
+            });
+          inFlight.add(task);
         }
+      }
+      /* v8 ignore next -- oversized newline-terminated frames are rejected above. */
+      if (Buffer.byteLength(stdout) > MAX_PROTOCOL_FRAME_BYTES) {
+        finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
       }
     });
 
-    send({ type: "start", value: compiled, input: options.input });
+    /* v8 ignore next -- validated source and registry limits keep start frames below the cap. */
+    if (!send({ type: "start", value: compiled, input: options.input })) {
+      finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
+    }
   });
 }

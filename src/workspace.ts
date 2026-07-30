@@ -44,11 +44,15 @@ function string(value: unknown, label: string): string {
   }
   return value;
 }
+
+function checkAbort(signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+}
 export function resolveWorkspacePath(cwd: string, value: unknown): string {
   return resolve(cwd, string(value, "path").replace(AT_PATH_PREFIX, ""));
 }
 
-async function readText(cwd: string, args: unknown[]) {
+async function readText(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   const options = args[1] === undefined ? {} : object(args[1], "options");
   const offset = Number(options.offset ?? 1);
@@ -76,7 +80,7 @@ async function readText(cwd: string, args: unknown[]) {
     selectionTruncated ||= value.length > remaining;
   };
 
-  const stream = createReadStream(path, { encoding: "utf8" });
+  const stream = createReadStream(path, { encoding: "utf8", signal });
   for await (const rawChunk of stream) {
     const chunk = String(rawChunk);
     let start = 0;
@@ -173,12 +177,14 @@ function applyTextEdits(current: string, rawEdits: unknown): { next: string; edi
   return { next, edits: replacements.length };
 }
 
-function editText(cwd: string, args: unknown[]) {
+function editText(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   return withFileMutationQueue(path, async () => {
+    checkAbort(signal);
     const current = await readFile(path, "utf8");
     const result = applyTextEdits(current, args[1]);
-    await writeFile(path, result.next, "utf8");
+    checkAbort(signal);
+    await writeFile(path, result.next, { encoding: "utf8", signal });
     return { path, edits: result.edits };
   });
 }
@@ -201,7 +207,7 @@ async function readSnapshot(path: string): Promise<{ existed: boolean; contents:
   }
 }
 
-function batchWorkspace(cwd: string, args: unknown[]) {
+function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const rawOperations = args[0];
   if (!Array.isArray(rawOperations) || rawOperations.length === 0) {
     throw new Error("operations must be a non-empty array");
@@ -241,8 +247,9 @@ function batchWorkspace(cwd: string, args: unknown[]) {
     const committed: typeof prepared = [];
     try {
       for (const operation of prepared) {
+        checkAbort(signal);
         await mkdir(dirname(operation.path), { recursive: true });
-        await writeFile(operation.path, operation.next, "utf8");
+        await writeFile(operation.path, operation.next, { encoding: "utf8", signal });
         committed.push(operation);
       }
     } catch (error) {
@@ -305,7 +312,7 @@ function patchTarget(cwd: string, patch: StructuredPatch, index: number) {
   return { patch, kind, path: resolveWorkspacePath(cwd, name), index };
 }
 
-function applyWorkspacePatch(cwd: string, args: unknown[]) {
+function applyWorkspacePatch(cwd: string, args: unknown[], signal?: AbortSignal) {
   const patchText = string(args[0], "patch");
   if (!patchText.trim()) {
     throw new Error("patch must not be empty");
@@ -355,11 +362,12 @@ function applyWorkspacePatch(cwd: string, args: unknown[]) {
     const committed: typeof prepared = [];
     try {
       for (const target of prepared) {
+        checkAbort(signal);
         if (target.kind === "delete") {
           await unlink(target.path);
         } else {
           await mkdir(dirname(target.path), { recursive: true });
-          await writeFile(target.path, target.next, "utf8");
+          await writeFile(target.path, target.next, { encoding: "utf8", signal });
         }
         committed.push(target);
       }
@@ -397,7 +405,7 @@ interface SearchMatch {
   after: string[];
 }
 
-async function searchWorkspace(cwd: string, args: unknown[]) {
+async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const query = string(args[0], "query");
   if (!query) {
     throw new Error("query must not be empty");
@@ -464,6 +472,7 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
   const regexMatcher = regex ? new InterruptibleRegexMatcher(query, caseSensitive) : undefined;
   try {
     for (const file of files) {
+      checkAbort(signal);
       let buffer: Buffer;
       try {
         const info = await stat(file);
@@ -471,7 +480,7 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
           filesSkipped++;
           continue;
         }
-        buffer = await readFile(file);
+        buffer = await readFile(file, { signal });
       } catch {
         filesSkipped++;
         continue;
@@ -539,13 +548,13 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
   return { matches, truncated, filesSearched, filesSkipped };
 }
 
-async function globWorkspace(cwd: string, args: unknown[]) {
+async function globWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const patterns =
     typeof args[0] === "string" || Array.isArray(args[0]) ? (args[0] as string | string[]) : "**/*";
   const options = args[1] === undefined ? {} : object(args[1], "options");
   const limit = Number(options.limit ?? MAX_GLOB_RESULTS);
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_GLOB_RESULTS) {
-    throw new Error("limit must be an integer between 1 and " + MAX_GLOB_RESULTS);
+    throw new Error(`limit must be an integer between 1 and ${MAX_GLOB_RESULTS}`);
   }
 
   const entries: string[] = [];
@@ -558,6 +567,7 @@ async function globWorkspace(cwd: string, args: unknown[]) {
     followSymbolicLinks: false,
   });
   for await (const entry of stream) {
+    checkAbort(signal);
     if (entries.length === limit) {
       truncated = true;
       break;
@@ -572,27 +582,30 @@ export async function handleWorkspace(
   cwd: string,
   method: string,
   args: unknown[],
+  signal?: AbortSignal,
 ): Promise<unknown> {
+  checkAbort(signal);
   switch (method) {
     case "readText":
-      return readText(cwd, args);
+      return readText(cwd, args, signal);
     case "writeText": {
       const path = resolveWorkspacePath(cwd, args[0]);
       const contents = string(args[1], "contents");
       return withFileMutationQueue(path, async () => {
+        checkAbort(signal);
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, contents, "utf8");
+        await writeFile(path, contents, { encoding: "utf8", signal });
         return { path, bytes: Buffer.byteLength(contents) };
       });
     }
     case "editText":
-      return editText(cwd, args);
+      return editText(cwd, args, signal);
     case "batch":
-      return batchWorkspace(cwd, args);
+      return batchWorkspace(cwd, args, signal);
     case "applyPatch":
-      return applyWorkspacePatch(cwd, args);
+      return applyWorkspacePatch(cwd, args, signal);
     case "search":
-      return searchWorkspace(cwd, args);
+      return searchWorkspace(cwd, args, signal);
     case "list": {
       const path = args[0] === undefined ? cwd : resolveWorkspacePath(cwd, args[0]);
       const entries = await readdir(path, { withFileTypes: true });
@@ -602,7 +615,7 @@ export async function handleWorkspace(
       }));
     }
     case "glob":
-      return globWorkspace(cwd, args);
+      return globWorkspace(cwd, args, signal);
     case "stat": {
       const info = await stat(resolveWorkspacePath(cwd, args[0]));
       return {

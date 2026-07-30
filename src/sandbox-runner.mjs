@@ -4,23 +4,74 @@ const write = process.stdout.write.bind(process.stdout);
 const parse = JSON.parse.bind(JSON);
 const stringify = JSON.stringify.bind(JSON);
 const pending = new Map();
+const idleWaiters = new Set();
+const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
+const MAX_CONCURRENT_CALLS = 64;
+const MAX_CALLS = 2048;
 let nextId = 1;
+let callCount = 0;
 let token;
 let buffer = "";
+let finishing = false;
 
 // Agent code can use console for diagnostics without corrupting stdout RPC.
 globalThis.console = new console.Console(process.stderr, process.stderr);
 
 function send(message) {
-  write(`${stringify({ ...message, token })}\n`);
+  const frame = `${stringify({ ...message, token })}\n`;
+  if (Buffer.byteLength(frame) > MAX_PROTOCOL_FRAME_BYTES) {
+    throw new RangeError(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`);
+  }
+  write(frame);
+}
+
+function rejectedCall(message) {
+  const promise = Promise.reject(new Error(message));
+  void promise.catch(() => undefined);
+  return promise;
+}
+
+function notifyIdle() {
+  if (pending.size > 0) {
+    return;
+  }
+  for (const resolve of idleWaiters) {
+    resolve();
+  }
+  idleWaiters.clear();
+}
+
+function waitForPendingCalls() {
+  if (pending.size === 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => idleWaiters.add(resolve));
 }
 
 function call(capability, method, args) {
-  return new Promise((resolve, reject) => {
-    const id = nextId++;
+  if (finishing) {
+    return rejectedCall("Program has already finished");
+  }
+  if (callCount >= MAX_CALLS) {
+    return rejectedCall(`RPC call limit exceeded (${MAX_CALLS})`);
+  }
+  if (pending.size >= MAX_CONCURRENT_CALLS) {
+    return rejectedCall(`Concurrent RPC call limit exceeded (${MAX_CONCURRENT_CALLS})`);
+  }
+  callCount++;
+  const id = nextId++;
+  const promise = new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    send({ type: "call", id, capability, method, args });
+    try {
+      send({ type: "call", id, capability, method, args });
+    } catch (error) {
+      pending.delete(id);
+      reject(error);
+      notifyIdle();
+    }
   });
+  void promise.catch(() => undefined);
+  return promise;
 }
 
 function capabilityProxy(capability) {
@@ -61,9 +112,31 @@ async function start(source, input) {
       throw new TypeError("TypeScript source must evaluate to a function");
     }
     const value = await main(capabilities, input);
+    finishing = true;
+    await waitForPendingCalls();
     send({ type: "result", value });
   } catch (error) {
-    send({ type: "fatal", error: error?.stack || String(error) });
+    finishing = true;
+    try {
+      await waitForPendingCalls();
+      send({ type: "fatal", error: error?.stack || String(error) });
+    } catch (fatalError) {
+      send({ type: "fatal", error: fatalError?.stack || String(fatalError) });
+    }
+  }
+}
+
+function failProtocol(message) {
+  finishing = true;
+  process.stdin.pause();
+  if (token) {
+    try {
+      send({ type: "fatal", error: message });
+    } catch {
+      process.exit(1);
+    }
+  } else {
+    process.exit(1);
   }
 }
 
@@ -73,10 +146,14 @@ process.stdin.on("data", (chunk) => {
   while (true) {
     const newline = buffer.indexOf("\n");
     if (newline < 0) {
-      return;
+      break;
     }
     const line = buffer.slice(0, newline);
     buffer = buffer.slice(newline + 1);
+    if (Buffer.byteLength(line) > MAX_PROTOCOL_FRAME_BYTES) {
+      failProtocol(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`);
+      return;
+    }
     let message;
     try {
       message = parse(line);
@@ -102,6 +179,10 @@ process.stdin.on("data", (chunk) => {
       } else {
         request.resolve(message.value);
       }
+      notifyIdle();
     }
+  }
+  if (Buffer.byteLength(buffer) > MAX_PROTOCOL_FRAME_BYTES) {
+    failProtocol(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`);
   }
 });

@@ -60,7 +60,7 @@ describe("host capabilities", () => {
       1,
       "/bin/sh",
       ["-lc", "first"],
-      expect.objectContaining({ cwd, signal: controller.signal, timeout: 120_000 }),
+      expect.objectContaining({ cwd, signal: expect.any(AbortSignal), timeout: 120_000 }),
     );
     expect(execMock).toHaveBeenNthCalledWith(
       2,
@@ -84,7 +84,7 @@ describe("host capabilities", () => {
     expect(execMock).toHaveBeenCalledWith(
       "git",
       ["commit", "-m", "$(touch unsafe)"],
-      expect.objectContaining({ cwd, timeout: 5000, signal: controller.signal }),
+      expect.objectContaining({ cwd, timeout: 5000, signal: expect.any(AbortSignal) }),
     );
 
     execMock.mockResolvedValueOnce({ stdout: "status", stderr: "", code: 0 });
@@ -188,7 +188,7 @@ describe("host capabilities", () => {
     expect(result.headers["x-test"]).toBe("yes");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://example.test",
-      expect.objectContaining({ method: "POST", body: "payload", signal: controller.signal }),
+      expect.objectContaining({ method: "POST", body: "payload", signal: expect.any(AbortSignal) }),
     );
   });
 

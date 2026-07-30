@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { handleWorkspace } from "../src/workspace.js";
 import { cleanupHarness, cwd, run, setupHarness, value } from "./extension-fixture.js";
 
 beforeEach(setupHarness);
@@ -448,6 +449,17 @@ describe("workspace capability", () => {
     expect(result.truncated).toBe(true);
     expect(result.text.length).toBeLessThan(100_000);
     expect(result.totalLines).toBe(1);
+  });
+
+  it("does not commit cooperative workspace mutations after cancellation", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      handleWorkspace(cwd, "writeText", ["cancelled.txt", "late"], controller.signal),
+    ).rejects.toThrow();
+    await expect(readFile(join(cwd, "cancelled.txt"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("supports @-prefixed workspace paths and default read options", async () => {

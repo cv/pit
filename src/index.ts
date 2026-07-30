@@ -155,11 +155,10 @@ function createCapabilities(
   registry: FunctionRegistry,
   activity: FunctionActivity[],
   onShellCommand: (command: string) => void,
-  signal?: AbortSignal,
 ): CapabilityHandler {
-  return async (capability, method, args) => {
+  return async (capability, method, args, signal) => {
     if (capability === "workspace") {
-      return handleWorkspace(ctx.cwd, method, args);
+      return handleWorkspace(ctx.cwd, method, args, signal);
     }
 
     if (capability === "shell" && method === "exec") {
@@ -443,12 +442,16 @@ export default function pit(pi: ExtensionAPI) {
         validateRegistryCapacity(savedFunctions, namedFunction, params.code);
         const candidateRegistry = new Map(savedFunctions);
         candidateRegistry.set(namedFunction, params.code);
+        validateTypeScript(params.code, candidateRegistry, params.params);
         for (const [candidateName, candidateSource] of candidateRegistry) {
-          validateTypeScript(
-            candidateSource,
-            candidateRegistry,
-            candidateName === namedFunction ? params.params : undefined,
-          );
+          if (
+            candidateName !== namedFunction &&
+            resolveSavedFunctionReferences(candidateSource, candidateRegistry).some(
+              (reference) => reference.name === namedFunction,
+            )
+          ) {
+            validateTypeScript(candidateSource, candidateRegistry);
+          }
         }
         executionRegistry = candidateRegistry;
         replacedNamedFunction = savedFunctions.has(namedFunction);
@@ -460,20 +463,13 @@ export default function pit(pi: ExtensionAPI) {
       }
       const value = await runInSandbox(
         params.code,
-        createCapabilities(
-          pi,
-          ctx,
-          executionRegistry,
-          functionActivity,
-          (command) => {
-            const count = (shellCommandUses.get(command) ?? 0) + 1;
-            shellCommandUses.set(command, count);
-            if (count >= 2 && !suggestedShellCommands.has(command)) {
-              repeatedShellCommands.add(command);
-            }
-          },
-          signal,
-        ),
+        createCapabilities(pi, ctx, executionRegistry, functionActivity, (command) => {
+          const count = (shellCommandUses.get(command) ?? 0) + 1;
+          shellCommandUses.set(command, count);
+          if (count >= 2 && !suggestedShellCommands.has(command)) {
+            repeatedShellCommands.add(command);
+          }
+        }),
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
