@@ -91,7 +91,7 @@ async ({ workspace, shell }) => {
   - `applyPatch(unifiedDiff)` — transactional multi-file unified patch
   - `search(query, options?)` — bounded structured text search with optional regex and context
   - `list(path?)`
-  - `glob(pattern | patterns, { dot?, onlyFiles?, ignore? })`
+  - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
   - `stat(path)`
 - `shell`
   - `exec(command, { cwd?, timeoutMs?, raise? })` — shell syntax; set `raise: true` to throw on nonzero exit

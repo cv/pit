@@ -42,7 +42,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "CAPABILITIES",
     "",
-    "workspace: workspace.readText(path, options?) -> { text, truncated, offset, lines, totalLines } (not a raw string); workspace.writeText(path, contents); workspace.editText(path, edits); workspace.batch(operations); workspace.applyPatch(patch); workspace.search(query, options?); workspace.list(path?); workspace.glob(patterns?, options?); workspace.stat(path).",
+    "workspace: workspace.readText(path, options?) -> { text, truncated, offset, lines, totalLines } (not a raw string); workspace.writeText(path, contents); workspace.editText(path, edits); workspace.batch(operations); workspace.applyPatch(patch); workspace.search(query, options?); workspace.list(path?); workspace.glob(patterns?, { limit?, dot?, onlyFiles?, ignore? }) -> { entries, truncated }; workspace.stat(path).",
     "",
     "shell: shell.exec(command, options?) for shell syntax; shell.execFile(program, args, options?) for argument-safe execution. Both return { stdout, stderr, code, truncated }. Nonzero exits are data by default; { raise: true } throws.",
     "",

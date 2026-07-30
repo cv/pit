@@ -51,8 +51,12 @@ interface PitWorkspaceCapability {
       dot?: boolean;
       onlyFiles?: boolean;
       ignore?: string[];
+      limit?: number;
     },
-  ): Promise<string[]>;
+  ): Promise<{
+    entries: string[];
+    truncated: boolean;
+  }>;
 
   search(
     query: string,

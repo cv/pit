@@ -14,6 +14,7 @@ const MAX_PATCH_BYTES = 1_000_000;
 const MAX_SEARCH_FILE_BYTES = 1_000_000;
 const MAX_SEARCH_FILES = 2000;
 const MAX_SEARCH_RESULTS = 500;
+const MAX_GLOB_RESULTS = 10_000;
 const AT_PATH_PREFIX = /^@/;
 const DIFF_PATH_PREFIX = /^(?:a|b)\//;
 export const WORKSPACE_METHODS = [
@@ -490,6 +491,35 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
   return { matches, truncated, filesSearched, filesSkipped };
 }
 
+async function globWorkspace(cwd: string, args: unknown[]) {
+  const patterns =
+    typeof args[0] === "string" || Array.isArray(args[0]) ? (args[0] as string | string[]) : "**/*";
+  const options = args[1] === undefined ? {} : object(args[1], "options");
+  const limit = Number(options.limit ?? MAX_GLOB_RESULTS);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_GLOB_RESULTS) {
+    throw new Error("limit must be an integer between 1 and " + MAX_GLOB_RESULTS);
+  }
+
+  const entries: string[] = [];
+  let truncated = false;
+  const stream = fg.stream(patterns, {
+    cwd,
+    dot: Boolean(options.dot),
+    onlyFiles: options.onlyFiles === undefined ? false : Boolean(options.onlyFiles),
+    ignore: Array.isArray(options.ignore) ? options.ignore.map(String) : [],
+    followSymbolicLinks: false,
+  });
+  for await (const entry of stream) {
+    if (entries.length === limit) {
+      truncated = true;
+      break;
+    }
+    entries.push(String(entry));
+  }
+  entries.sort((a, b) => a.localeCompare(b));
+  return { entries, truncated };
+}
+
 export async function handleWorkspace(
   cwd: string,
   method: string,
@@ -523,22 +553,8 @@ export async function handleWorkspace(
         type: entry.isDirectory() ? "directory" : entry.isSymbolicLink() ? "symlink" : "file",
       }));
     }
-    case "glob": {
-      const patterns =
-        typeof args[0] === "string" || Array.isArray(args[0])
-          ? (args[0] as string | string[])
-          : "**/*";
-      const options = args[1] === undefined ? {} : object(args[1], "options");
-      return (
-        await fg(patterns, {
-          cwd,
-          dot: Boolean(options.dot),
-          onlyFiles: options.onlyFiles === undefined ? false : Boolean(options.onlyFiles),
-          ignore: Array.isArray(options.ignore) ? options.ignore.map(String) : [],
-          followSymbolicLinks: false,
-        })
-      ).slice(0, 10_000);
-    }
+    case "glob":
+      return globWorkspace(cwd, args);
     case "stat": {
       const info = await stat(resolveWorkspacePath(cwd, args[0]));
       return {

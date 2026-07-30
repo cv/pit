@@ -42,8 +42,25 @@ describe("workspace capability", () => {
       ]),
     );
     expect(result.nestedList).toEqual([{ name: "new.txt", type: "file" }]);
-    expect(result.glob).toContain("nested/new.txt");
-    expect(result.defaultGlob).toContain("nested");
+    expect(result.glob.entries).toContain("nested/new.txt");
+    expect(result.defaultGlob.entries).toContain("nested");
+  });
+
+  it("returns deterministic bounded glob results with truncation metadata", async () => {
+    await Promise.all([
+      writeFile(join(cwd, "c.txt"), "c", "utf8"),
+      writeFile(join(cwd, "a.txt"), "a", "utf8"),
+      writeFile(join(cwd, "b.txt"), "b", "utf8"),
+    ]);
+    const result = await value(`async ({ workspace }) => workspace.glob("*.txt", {
+      onlyFiles: true, limit: 2,
+    })`);
+    expect(result).toEqual({ entries: ["a.txt", "b.txt"], truncated: true });
+
+    const complete = await value(
+      `async ({ workspace }) => workspace.glob("*.txt", { onlyFiles: true, limit: 3 })`,
+    );
+    expect(complete).toEqual({ entries: ["a.txt", "b.txt", "c.txt"], truncated: false });
   });
 
   it("searches workspace text with structured bounded results", async () => {
@@ -436,6 +453,8 @@ describe("workspace capability", () => {
         ])),
         capture(() => raw.editText("edit.txt", "bad")),
         capture(() => raw.stat(42)),
+        capture(() => workspace.glob("*", { limit: 0 })),
+        capture(() => workspace.glob("*", { limit: 10001 })),
         capture(() => raw.noSuchMethod()),
       ]);
     }`);
@@ -449,6 +468,7 @@ describe("workspace capability", () => {
     expect(errors[7]).toContain("matched 2 times at 1:1, 1:6");
     expect(errors.join("\n")).toMatch(/overlap/);
     expect(errors.join("\n")).toMatch(/path must be a string/);
+    expect(errors.join("\n")).toMatch(/limit must be an integer between 1 and 10000/);
     expect(errors.join("\n")).toMatch(/Unknown workspace method/);
 
     await writeFile(join(cwd, "many.txt"), "x".repeat(12), "utf8");
