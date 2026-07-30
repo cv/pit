@@ -24,6 +24,12 @@ interface FunctionMutation {
   action: "set" | "delete";
   name: string;
   source?: string;
+  replaced?: boolean;
+}
+interface FunctionActivity {
+  action: "set" | "run" | "delete";
+  name: string;
+  replaced?: boolean;
 }
 const COLLAPSED_CODE_LINES = 12;
 const COLLAPSED_RESULT_LINES = 12;
@@ -31,6 +37,7 @@ const COLLAPSED_RESULT_LINES = 12;
 interface TypeScriptDetails {
   value: unknown;
   truncated: boolean;
+  functions?: FunctionActivity[];
 }
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -122,7 +129,7 @@ export function handleFunctions(
       validateTypeScript(source);
       const replaced = functions.has(name);
       functions.set(name, source);
-      onMutation?.({ action: "set", name, source });
+      onMutation?.({ action: "set", name, source, replaced });
       return { name, replaced };
     }
     case "get": {
@@ -178,6 +185,7 @@ function createCapabilities(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   functions: FunctionRegistry,
+  activity: FunctionActivity[],
   signal?: AbortSignal,
 ): CapabilityHandler {
   return async (capability, method, args) => {
@@ -264,9 +272,18 @@ function createCapabilities(
     }
 
     if (capability === "functions") {
-      return handleFunctions(functions, method, args, (mutation) => {
+      const result = handleFunctions(functions, method, args, (mutation) => {
+        activity.push({
+          action: mutation.action,
+          name: mutation.name,
+          ...(mutation.replaced === undefined ? {} : { replaced: mutation.replaced }),
+        });
         pi.appendEntry(FUNCTION_ENTRY_TYPE, mutation);
       });
+      if (method === "get") {
+        activity.push({ action: "run", name: savedFunctionName(args[0]) });
+      }
+      return result;
     }
 
     if (capability === "context" && method === "get") {
@@ -437,7 +454,16 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       const state = details?.truncated
         ? "truncated"
         : `${lines.length} line${lines.length === 1 ? "" : "s"}`;
-      let text = theme.fg("toolTitle", theme.bold("result"));
+      let text = "";
+      if (details?.functions?.length) {
+        const operations = details.functions.map((operation) => {
+          if (operation.action === "set") return `${operation.replaced ? "replaced" : "saved"} ${operation.name}`;
+          if (operation.action === "run") return `ran ${operation.name}`;
+          return `deleted ${operation.name}`;
+        });
+        text += theme.fg("accent", `functions: ${operations.join(", ")}`) + "\n";
+      }
+      text += theme.fg("toolTitle", theme.bold("result"));
       text += theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`);
       if (shown.length > 0) {
         text += `\n${shown.join("\n")}`;
@@ -450,15 +476,24 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       return new Text(text, 0, 0);
     },
     async execute(_id, params, signal, _update, ctx) {
-      const value = await runInSandbox(params.code, createCapabilities(pi, ctx, savedFunctions, signal), {
-        ...(signal ? { signal } : {}),
-        timeoutMs: params.timeoutMs ?? 30_000,
-      });
+      const functionActivity: FunctionActivity[] = [];
+      const value = await runInSandbox(
+        params.code,
+        createCapabilities(pi, ctx, savedFunctions, functionActivity, signal),
+        {
+          ...(signal ? { signal } : {}),
+          timeoutMs: params.timeoutMs ?? 30_000,
+        },
+      );
       const rendered = display(value);
       const output = truncateHead(rendered, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
       return {
         content: [{ type: "text", text: output.content + (output.truncated ? "\n[Result truncated]" : "") }],
-        details: { value: output.truncated ? undefined : value, truncated: output.truncated },
+        details: {
+          value: output.truncated ? undefined : value,
+          truncated: output.truncated,
+          ...(functionActivity.length ? { functions: functionActivity } : {}),
+        },
       };
     },
   });

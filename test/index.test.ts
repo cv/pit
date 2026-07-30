@@ -175,10 +175,20 @@ describe("pit extension", () => {
     const value = Object.fromEntries(Array.from({ length: 15 }, (_, index) => [`key${index + 1}`, index + 1]));
     const result = {
       content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
-      details: { value, truncated: false },
+      details: {
+        value,
+        truncated: false,
+        functions: [
+          { action: "set", name: "test", replaced: false },
+          { action: "set", name: "test", replaced: true },
+          { action: "run", name: "test" },
+          { action: "delete", name: "test" },
+        ],
+      },
     };
 
     const collapsed = render(result, { expanded: false, isPartial: false });
+    expect(collapsed).toContain("functions: saved test, replaced test, ran test, deleted test");
     expect(collapsed).toContain("result (17 lines)");
     expect(collapsed).toContain('"key1"');
     expect(collapsed).not.toContain('"key15"');
