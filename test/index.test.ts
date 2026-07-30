@@ -720,6 +720,28 @@ describe("pit extension", () => {
     expect(execMock).toHaveBeenNthCalledWith(2, "/bin/sh", ["-lc", "second"], expect.objectContaining({ timeout: 50 }));
   });
 
+  it("raises on nonzero shell exits when requested", async () => {
+    execMock.mockResolvedValueOnce({ stdout: "partial output", stderr: "command failed", code: 7 });
+    await expect(run(`async ({ shell }) => shell.exec("failing", { raise: true })`))
+      .rejects.toThrow(/Command failed with exit code 7: failing[^]*command failed/);
+
+    execMock.mockResolvedValueOnce({ stdout: "ok", stderr: "", code: 0 });
+    expect(await value(`async ({ shell }) => shell.exec("passing", { raise: true })`))
+      .toMatchObject({ stdout: "ok", code: 0 });
+
+    execMock.mockResolvedValueOnce({ stdout: "stdout failure", stderr: "", code: 2 });
+    await expect(run(`async ({ shell }) => shell.exec("stdout-only", { raise: true })`))
+      .rejects.toThrow(/stdout-only[^]*stdout failure/);
+    execMock.mockResolvedValueOnce({ stdout: "", stderr: "", code: 3 });
+    await expect(run(`async ({ shell }) => shell.exec("silent", { raise: true })`))
+      .rejects.toThrow("Command failed with exit code 3: silent");
+
+    await expect(run(`async ({ shell }) => shell.exec("bad", { raise: "yes" })`))
+      .rejects.toThrow(/string.*boolean/);
+    await expect(run(`async ({ shell }) => (shell as any).exec("bad", { raise: "yes" })`))
+      .rejects.toThrow("options.raise must be a boolean");
+  });
+
   it("validates shell calls and rejects unknown capabilities", async () => {
     expect(await value(`async ({ shell }) => shell.exec("ok")`)).toMatchObject({ code: 0 });
     const errors = await value(`async (capabilities) => {

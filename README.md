@@ -59,7 +59,7 @@ Each destructured capability is a local proxy. Calling one of its methods perfor
   - `glob(pattern | patterns, { dot?, onlyFiles?, ignore? })`
   - `stat(path)`
 - `shell`
-  - `exec(command, { cwd?, timeoutMs? })`
+  - `exec(command, { cwd?, timeoutMs?, raise? })` — set `raise: true` to throw on nonzero exit
 - `http`
   - `request(url, { method?, headers?, body? })`
 - `ui`
@@ -78,7 +78,7 @@ Name a top-level function to execute it and save it automatically:
 
 ```ts
 async function runTests({ shell }, input: { coverage?: boolean } = {}) {
-  return shell.exec(input.coverage ? "npm run coverage" : "npm test");
+  return shell.exec(input.coverage ? "npm run coverage" : "npm test", { raise: true });
 }
 ```
 
@@ -102,7 +102,7 @@ Named functions are persisted as non-context session entries, survive reloads, a
 
 ### Composing workflows
 
-Saved functions can call one another. When a sequence such as validation, staging, committing, and pushing recurs, prefer a higher-level named function such as `publishChanges` over separate command wrappers. Give composed functions typed input, stop after failed stages, and return a structured summary of each stage. This keeps reusable primitives such as `runValidation` while adding workflows named after user intent.
+Saved functions can call one another. When a sequence such as validation, staging, committing, and pushing recurs, prefer a higher-level named function such as `publishChanges` over separate command wrappers. Give composed functions typed input and use `shell.exec(command, { raise: true })` for stages that must succeed; a nonzero exit then stops the workflow automatically. Return a structured summary of successful stages. This keeps reusable primitives such as `runValidation` while adding workflows named after user intent.
 
 ## Isolation model
 

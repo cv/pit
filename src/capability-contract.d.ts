@@ -67,7 +67,7 @@ interface PitWorkspaceCapability {
 interface PitShellCapability {
   exec(
     command: string,
-    options?: { cwd?: string; timeoutMs?: number },
+    options?: { cwd?: string; timeoutMs?: number; raise?: boolean },
   ): Promise<{
     stdout: string;
     stderr: string;

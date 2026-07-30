@@ -430,6 +430,9 @@ function createCapabilities(
     if (capability === "shell" && method === "exec") {
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
+      if (options.raise !== undefined && typeof options.raise !== "boolean") {
+        throw new TypeError("options.raise must be a boolean");
+      }
       const cwd = options.cwd === undefined ? ctx.cwd : workspacePath(ctx.cwd, options.cwd);
       onShellCommand(command);
       const result = await pi.exec("/bin/sh", ["-lc", command], {
@@ -439,6 +442,12 @@ function createCapabilities(
       });
       const stdout = truncateTail(result.stdout, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
       const stderr = truncateTail(result.stderr, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+      if (options.raise === true && result.code !== 0) {
+        const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4_000);
+        throw new Error(
+          `Command failed with exit code ${result.code}: ${command}` + (detail ? `\n${detail}` : ""),
+        );
+      }
       return { stdout: stdout.content, stderr: stderr.content, code: result.code, truncated: stdout.truncated || stderr.truncated };
     }
 
@@ -536,7 +545,7 @@ workspace
 - workspace.stat(path) returns { size, modified, directory, file }.
 
 shell
-- shell.exec(command, { cwd?, timeoutMs? }) returns { stdout, stderr, code, truncated }. Nonzero exit codes are returned as data, so inspect code when success matters.
+- shell.exec(command, { cwd?, timeoutMs?, raise? }) returns { stdout, stderr, code, truncated }. Nonzero exit codes are returned as data by default; set raise: true to throw and stop composed workflows immediately.
 
 http
 - http.request(url, { method?, headers?, body? }) returns { status, ok, headers, body, truncated }.
@@ -552,7 +561,7 @@ REUSABLE FUNCTIONS
 Give stable project workflows a top-level function name. Named functions are executed and saved automatically:
 
 async function runTests({ shell }, input: { coverage?: boolean } = {}) {
-  return shell.exec(input.coverage ? "npm run coverage" : "npm test");
+  return shell.exec(input.coverage ? "npm run coverage" : "npm test", { raise: true });
 }
 
 Provide optional top-level params when the named function needs input on its first execution. Pit validates params against an annotated input type and passes it as the function's second argument.
@@ -566,18 +575,15 @@ Anonymous function expressions are one-shot. A named top-level function is persi
 
 COMPOSING WORKFLOWS
 
-When a multi-step sequence recurs, compose existing saved functions and new operations into a higher-level named workflow instead of saving each command separately:
+When a multi-step sequence recurs, compose existing saved functions and new operations into a higher-level named workflow instead of saving each command separately. Build validation primitives with shell.exec(..., { raise: true }) so failures stop every composed caller:
 
 async function publishChanges({ shell }, input: { message: string }) {
   const validation = await runValidation();
-  if (validation.code !== 0) return { published: false, validation };
   const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
   const commands = ["git add -A", "git commit -m " + quote(input.message), "git push"];
   const results = [];
   for (const command of commands) {
-    const result = await shell.exec(command);
-    results.push({ command, result });
-    if (result.code !== 0) return { published: false, validation, results };
+    results.push({ command, result: await shell.exec(command, { raise: true }) });
   }
   return { published: true, validation, results };
 }
@@ -600,13 +606,13 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, compose existing saved functions into higher-level named workflows when a multi-step sequence recurs; name the user intent rather than saving each shell command separately.",
       "In typescript, annotate a saved function's input parameter so initial top-level params and later invocations retain input and return type checking.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
-      "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
+      "Remember that typescript shell.exec returns nonzero exit codes as data by default; use { raise: true } when a failed command should immediately stop a composed workflow.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
       "Use only destructured capabilities for external effects in typescript; direct imports, filesystem access, network access, and subprocess creation are unavailable.",
     ],
     parameters: Type.Object({
       code: Type.String({
-        description: `Contextually type-checked TypeScript. Use an anonymous function expression for one-shot work: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Use a named top-level function for a recurring workflow: async function runTests({ shell }) { return shell.exec("npm test"); }. Named functions save automatically and can be invoked later with runTests(). Start independent operations together, await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
+        description: `Contextually type-checked TypeScript. Use an anonymous function expression for one-shot work: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Use a named top-level function for a recurring workflow: async function runTests({ shell }) { return shell.exec("npm test", { raise: true }); }. Named functions save automatically and can be invoked later with runTests(). Start independent operations together, await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
       }),
       params: Type.Optional(Type.Unknown({
         description: "Optional JSON-serializable input passed as the function's second argument on this execution. For named definitions, annotate the input parameter so params are type-checked.",
