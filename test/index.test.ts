@@ -414,6 +414,19 @@ describe("pit extension", () => {
     expect(manyMatches).toContain("and 2 more");
   });
 
+  it("suggests naming repeatedly generated shell workflows once", async () => {
+    const source = `async ({ shell }) => shell.exec("npm test")`;
+    expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
+    const repeated = await run(source);
+    expect(repeated.content[0].text).toContain("Repeated shell command detected");
+    expect(repeated.content[0].text).toContain("naming this workflow as a top-level function");
+    expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
+
+    await run(`async function runChecks({ shell }) { return shell.exec("npm run check"); }`);
+    const namedRepeat = await run(`runChecks()`);
+    expect(namedRepeat.content[0].text).not.toContain("Repeated shell command");
+  });
+
   it("executes shell commands with default and explicit options", async () => {
     execMock
       .mockResolvedValueOnce({ stdout: "first", stderr: "warning", code: 2 })

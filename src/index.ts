@@ -184,6 +184,7 @@ function createCapabilities(
   ctx: ExtensionContext,
   registry: FunctionRegistry,
   activity: FunctionActivity[],
+  onShellCommand: (command: string) => void,
   signal?: AbortSignal,
 ): CapabilityHandler {
   return async (capability, method, args) => {
@@ -231,6 +232,7 @@ function createCapabilities(
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
       const cwd = options.cwd === undefined ? ctx.cwd : workspacePath(ctx.cwd, options.cwd);
+      onShellCommand(command);
       const result = await pi.exec("/bin/sh", ["-lc", command], {
         cwd,
         ...(signal ? { signal } : {}),
@@ -300,6 +302,8 @@ export function display(value: unknown): string {
 
 export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
+  const shellCommandUses = new Map<string, number>();
+  const suggestedShellCommands = new Set<string>();
 
   pi.registerTool({
     name: "typescript",
@@ -458,6 +462,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     },
     async execute(_id, params, signal, _update, ctx) {
       const functionActivity: FunctionActivity[] = [];
+      const repeatedShellCommands = new Set<string>();
       const namedFunction = getNamedFunctionName(params.code);
       if (namedFunction) {
         validateSavedFunctionName(namedFunction);
@@ -472,7 +477,11 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       }
       const value = await runInSandbox(
         params.code,
-        createCapabilities(pi, ctx, savedFunctions, functionActivity, signal),
+        createCapabilities(pi, ctx, savedFunctions, functionActivity, (command) => {
+          const count = (shellCommandUses.get(command) ?? 0) + 1;
+          shellCommandUses.set(command, count);
+          if (count >= 2 && !suggestedShellCommands.has(command)) repeatedShellCommands.add(command);
+        }, signal),
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
@@ -484,10 +493,17 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       const savedNotice = namedFunction
         ? `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
         : "";
+      const reusableCandidates = functionActivity.length === 0
+        ? [...repeatedShellCommands]
+        : [];
+      for (const command of reusableCandidates) suggestedShellCommands.add(command);
+      const reuseNotice = reusableCandidates.length
+        ? `\n[Repeated shell command detected: ${reusableCandidates.map((command) => JSON.stringify(command)).join(", ")}. Consider naming this workflow as a top-level function so it can be reused.]`
+        : "";
       return {
         content: [{
           type: "text",
-          text: output.content + (output.truncated ? "\n[Result truncated]" : "") + savedNotice,
+          text: output.content + (output.truncated ? "\n[Result truncated]" : "") + savedNotice + reuseNotice,
         }],
         details: {
           value: output.truncated ? undefined : value,
