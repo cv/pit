@@ -126,4 +126,4 @@ interface PitCapabilities {
 type PitProgram = (
   capabilities: PitCapabilities,
   input?: any,
-) => PitResult | Promise<PitResult>;
+) => PitResult | void | Promise<PitResult | void>;

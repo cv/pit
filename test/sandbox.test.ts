@@ -24,6 +24,14 @@ describe("validateTypeScript", () => {
     })).toBe("/other.ts:1:1 file error");
   });
 
+  it("allows evolving empty arrays, implicit helper parameters, and void results", () => {
+    expect(() => validateTypeScript(`async ({ workspace }) => {
+      const files = [];
+      const capture = async (fn) => fn();
+      files.push(await capture(() => workspace.readText("package.json")));
+    }`)).not.toThrow();
+  });
+
   it("contextually types capabilities without source annotations", () => {
     expect(() => validateTypeScript(`async ({ workspace }) => {
       const file = await workspace.readText("package.json");

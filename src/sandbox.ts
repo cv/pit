@@ -36,6 +36,7 @@ const CAPABILITY_CONTRACT = readFileSync(
 const CONTRACT_FILE = "/pit/capability-contract.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
 const PROGRAM_PREFIX = "const program: PitProgram = (\n";
+const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7031, 7034, 7044]);
 const SANDBOX_GLOBALS = `
 declare const console: {
   log(...values: unknown[]): void;
@@ -76,7 +77,7 @@ export function validateTypeScript(source: string): void {
     lib: ["lib.es2022.d.ts"],
     types: [],
     strict: true,
-    noImplicitAny: false,
+    noImplicitAny: true,
     useUnknownInCatchVariables: false,
     noEmit: true,
     skipLibCheck: true,
@@ -98,7 +99,8 @@ export function validateTypeScript(source: string): void {
     },
   };
   const program = ts.createProgram([CONTRACT_FILE, PROGRAM_FILE], options, host);
-  const diagnostics = ts.getPreEmitDiagnostics(program);
+  const diagnostics = ts.getPreEmitDiagnostics(program)
+    .filter((diagnostic) => !IGNORED_DIAGNOSTIC_CODES.has(diagnostic.code));
   if (diagnostics.length > 0) {
     const messages = diagnostics.map(formatDiagnostic);
     throw new Error(`TypeScript validation failed:\n- ${messages.join("\n- ")}`);
