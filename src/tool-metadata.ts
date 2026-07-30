@@ -6,7 +6,7 @@ export const PROMPT_SNIPPET =
 
 export const PROMPT_GUIDELINES = [
   "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
-  "Call typescript with an anonymous async function for one-shot work, a named async function to save recurring work, or a call such as runTests() to invoke a saved function.",
+  "Call typescript with an anonymous async function for one-shot work, passing large or quote-heavy data through top-level params; use a named async function for recurring work or a call such as runTests() to invoke a saved function.",
   "Code passed to typescript is contextually type-checked; use diagnostics to correct capability names, arguments, missing awaits, and result types.",
   "In typescript, use Promise.all for fail-fast independent work; use Promise.allSettled or local catches when exploratory probes are optional; sequence dependencies and conflicting mutations.",
   "In typescript, use workspace.batch for structured transactions or workspace.applyPatch for a transactional unified diff.",
@@ -21,7 +21,7 @@ export const CODE_DESCRIPTION =
   'A contextually type-checked TypeScript expression. Use an anonymous function for one-shot work, a named top-level function such as async function runTests({ shell }) { return shell.execFile("npm", ["test"], { raise: true }); } for recurring work, or runTests() to invoke a saved function. Start independent calls with Promise.all, await capability promises, do not import modules, and return compact JSON-serializable data.';
 
 export const PARAMS_DESCRIPTION =
-  "Optional JSON-serializable input passed as the function second argument. Annotate a named function input parameter to validate initial params and later calls.";
+  "Optional JSON-serializable input passed as the function second argument. Prefer params over embedding large patches, file contents, commit messages, or quote-heavy data in code. Annotate the input parameter for contextual validation.";
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
@@ -39,7 +39,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "  return { packageJson: JSON.parse(file.text), status };",
     "}",
     "",
-    "Capability calls are async. Use Promise.all for fail-fast independent work and Promise.allSettled or local catches for optional exploratory probes. Sequence dependencies and conflicting mutations, and return compact JSON-serializable data. Imports and direct filesystem, network, and subprocess access are unavailable.",
+    "Capability calls are async. Use Promise.all for fail-fast independent work and Promise.allSettled or local catches for optional exploratory probes. Pass large or quote-heavy payloads through top-level params and accept them as the function second argument. Sequence dependencies and conflicting mutations, and return compact JSON-serializable data. Imports and direct filesystem, network, and subprocess access are unavailable.",
     "",
     "CAPABILITIES",
     "",

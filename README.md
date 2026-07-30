@@ -67,6 +67,20 @@ async ({ workspace, shell }) => {
 
 The expression is contextually type-checked before execution. No source annotations are required: destructured capabilities automatically receive the types in generated [`src/capability-contract.d.ts`](src/capability-contract.d.ts). The authoritative method declarations, dispatch metadata, arity constraints, and model-facing summaries live in [`src/capability-registry.ts`](src/capability-registry.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
 
+Use top-level `params` as the data channel for large patches, generated file contents, commit messages, and other quote-heavy payloads instead of embedding them in the TypeScript source:
+
+```json
+{
+  "code": "async ({ workspace }, input: { path: string; contents: string }) => workspace.writeText(input.path, input.contents)",
+  "params": {
+    "path": "src/generated.ts",
+    "contents": "export const generated = true;\n"
+  }
+}
+```
+
+This works for anonymous one-shot functions as well as the initial execution of named functions.
+
 Each destructured capability is a local proxy. Calling one of its methods performs a size- and concurrency-bounded RPC to the trusted extension process. Calls begin immediately, and pit waits for outstanding calls before accepting a successful result. Timeout and cancellation signals propagate to cooperative host operations. Use `Promise.all` when any failed operation should fail the invocation; use `Promise.allSettled` or a local catch for optional exploratory probes. Sequence dependent calls and conflicting mutations. Unknown capabilities and methods also fail closed at runtime.
 
 For example, preserve successful inspection results when an optional file may not exist:
