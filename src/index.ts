@@ -299,6 +299,24 @@ functions
 context
 - context.get() returns cwd, mode, model, thinkingLevel, and sessionFile.
 
+REUSABLE FUNCTIONS
+
+Use the functions capability for self-contained workflows likely to be repeated across turns. Define one once:
+
+async ({ functions }) => {
+  return functions.set(
+    "test",
+    async ({ shell }, input) =>
+      shell.exec(input?.coverage ? "npm run coverage" : "npm test"),
+  );
+}
+
+Invoke it in a later tool call without regenerating its implementation:
+
+async ({ functions }) => functions.run("test", { coverage: true })
+
+A saved function automatically receives current host capabilities as its first argument and optional JSON input as its second argument. Do not pass capabilities through input. Saved functions must be self-contained: they cannot reference variables from the defining function. Put constants inside the saved function and pass changing values through input. functions.set replaces an existing definition with the same name. Use functions.has or functions.list when availability is uncertain. Definitions survive across turns but are cleared when the extension reloads or the Pi process exits.
+
 The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
     promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
     promptGuidelines: [
@@ -309,8 +327,10 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
       "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state.",
       "Batch related work into one typescript call instead of making several small tool calls.",
-      "In typescript, save repeated self-contained workflows with functions.set(name, program) and invoke them later with functions.run(name, input).",
-      "Saved functions in typescript receive fresh capabilities on every run, must not close over local variables, and should receive changing JSON data through their input parameter.",
+      "In typescript, use functions.set(name, program) for self-contained workflows likely to be repeated across turns; use functions.run(name, input) on later turns instead of regenerating the workflow.",
+      "Saved functions in typescript automatically receive current capabilities as their first argument and optional JSON input as their second argument.",
+      "Saved functions in typescript must not close over local variables; place constants inside the saved function and pass changing JSON data through input.",
+      "Before redefining a saved function in typescript, use functions.has(name) or functions.list() when its availability is uncertain.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
       "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",

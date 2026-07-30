@@ -97,8 +97,11 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.code.description).toContain("Promise.all");
     expect(tool.parameters.properties.code.description).toContain("functions.set");
     expect(tool.description).toContain("functions.run(name, input?)");
+    expect(tool.description).toContain("REUSABLE FUNCTIONS");
+    expect(tool.description).toContain("Definitions survive across turns");
+    expect(tool.description).toContain("Do not pass capabilities through input");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(13);
+    expect(tool.promptGuidelines).toHaveLength(15);
     expect(tool.promptGuidelines).toContain(
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
     );
