@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import pit, { display, handleFunctions } from "../src/index.js";
+import pit, { display, handleFunctions, reconstructFunctions } from "../src/index.js";
 
 type RegisteredTool = {
   label: string;
@@ -17,7 +17,9 @@ type RegisteredTool = {
 
 let cwd: string;
 let tool: RegisteredTool;
-let sessionStart: () => void;
+let sessionStart: (...args: any[]) => void;
+let sessionTree: (...args: any[]) => void;
+let branchEntries: any[];
 let execMock: ReturnType<typeof vi.fn>;
 let setActiveTools: ReturnType<typeof vi.fn>;
 
@@ -34,7 +36,10 @@ function context(overrides: Record<string, unknown> = {}) {
       select: vi.fn(async () => "b"),
       notify: vi.fn(),
     },
-    sessionManager: { getSessionFile: () => "/tmp/session.jsonl" },
+    sessionManager: {
+      getSessionFile: () => "/tmp/session.jsonl",
+      getBranch: () => branchEntries,
+    },
     ...overrides,
   };
 }
@@ -49,12 +54,17 @@ async function value(code: string, ctx = context()) {
 
 beforeEach(async () => {
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
+  branchEntries = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   const pi = {
     registerTool: vi.fn((registered: RegisteredTool) => { tool = registered; }),
-    on: vi.fn((event: string, callback: () => void) => {
+    on: vi.fn((event: string, callback: (...args: any[]) => void) => {
       if (event === "session_start") sessionStart = callback;
+      if (event === "session_tree") sessionTree = callback;
+    }),
+    appendEntry: vi.fn((customType: string, data: unknown) => {
+      branchEntries.push({ type: "custom", customType, data });
     }),
     setActiveTools,
     exec: execMock,
@@ -68,6 +78,23 @@ afterEach(async () => {
 });
 
 describe("function registry handler", () => {
+  it("reconstructs valid branch-local function mutations", () => {
+    const functions = new Map<string, string>();
+    const source = `() => "saved"`;
+    reconstructFunctions(functions, [
+      null,
+      { type: "custom", customType: "other", data: {} },
+      { type: "custom", customType: "pit-functions", data: null },
+      { type: "custom", customType: "pit-functions", data: { action: "set", name: "bad name", source } },
+      { type: "custom", customType: "pit-functions", data: { action: "set", name: "saved", source } },
+      { type: "custom", customType: "pit-functions", data: { action: "set", name: "missing-source", source: 42 } },
+      { type: "custom", customType: "pit-functions", data: { action: "unknown", name: "ignored" } },
+      { type: "custom", customType: "pit-functions", data: { action: "set", name: "stale", source: "42" } },
+      { type: "custom", customType: "pit-functions", data: { action: "delete", name: "saved" } },
+      { type: "custom", customType: "pit-functions", data: { action: "set", name: "active", source } },
+    ]);
+    expect([...functions.keys()]).toEqual(["active"]);
+  });
   it("rejects oversized sources and unknown methods", () => {
     expect(() => handleFunctions(new Map(), "set", ["large", "x".repeat(100_001)]))
       .toThrow("saved function source exceeds");
@@ -98,7 +125,7 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.code.description).toContain("functions.set");
     expect(tool.description).toContain("functions.run(name, input?)");
     expect(tool.description).toContain("REUSABLE FUNCTIONS");
-    expect(tool.description).toContain("Definitions survive across turns");
+    expect(tool.description).toContain("Definitions are persisted in session history");
     expect(tool.description).toContain("Do not pass capabilities through input");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.promptGuidelines).toHaveLength(15);
@@ -107,7 +134,7 @@ describe("pit extension", () => {
     );
     expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(true);
 
-    sessionStart();
+    sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
   });
 
@@ -234,6 +261,28 @@ describe("pit extension", () => {
     expect(await value(`async ({ functions }) => functions.delete("greet")`)).toBe(true);
     expect(await value(`async ({ functions }) => ({ deletedAgain: await functions.delete("greet"), has: await functions.has("greet"), names: await functions.list() })`))
       .toEqual({ deletedAgain: false, has: false, names: [] });
+  });
+
+  it("persists saved functions on the active session branch", async () => {
+    await value(`async ({ functions }) => functions.set("persistent", async () => ({ ok: true }))`);
+    expect(branchEntries).toContainEqual(expect.objectContaining({
+      type: "custom",
+      customType: "pit-functions",
+      data: expect.objectContaining({ action: "set", name: "persistent" }),
+    }));
+
+    sessionStart({}, context());
+    expect(await value(`async ({ functions }) => functions.run("persistent")`)).toEqual({ ok: true });
+
+    const previousBranch = [...branchEntries];
+    branchEntries = [];
+    sessionTree({}, context());
+    await expect(run(`async ({ functions }) => functions.run("persistent")`))
+      .rejects.toThrow("No functions are saved");
+
+    branchEntries = previousBranch;
+    sessionTree({}, context());
+    expect(await value(`async ({ functions }) => functions.run("persistent")`)).toEqual({ ok: true });
   });
 
   it("rejects saved closures, invalid names, and unknown functions", async () => {

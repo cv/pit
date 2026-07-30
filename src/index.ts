@@ -19,6 +19,12 @@ const MAX_HTTP_BYTES = 1_000_000;
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
 const SAVED_FUNCTION_NAME = /^[A-Za-z_$][A-Za-z0-9_$-]{0,63}$/;
 type FunctionRegistry = Map<string, string>;
+const FUNCTION_ENTRY_TYPE = "pit-functions";
+interface FunctionMutation {
+  action: "set" | "delete";
+  name: string;
+  source?: string;
+}
 const COLLAPSED_CODE_LINES = 12;
 const COLLAPSED_RESULT_LINES = 12;
 
@@ -104,6 +110,7 @@ export function handleFunctions(
   functions: FunctionRegistry,
   method: string,
   args: unknown[],
+  onMutation?: (mutation: FunctionMutation) => void,
 ): unknown {
   switch (method) {
     case "set": {
@@ -115,6 +122,7 @@ export function handleFunctions(
       validateTypeScript(source);
       const replaced = functions.has(name);
       functions.set(name, source);
+      onMutation?.({ action: "set", name, source });
       return { name, replaced };
     }
     case "get": {
@@ -131,8 +139,38 @@ export function handleFunctions(
     }
     case "has": return functions.has(savedFunctionName(args[0]));
     case "list": return [...functions.keys()].sort();
-    case "delete": return functions.delete(savedFunctionName(args[0]));
+    case "delete": {
+      const name = savedFunctionName(args[0]);
+      const deleted = functions.delete(name);
+      if (deleted) onMutation?.({ action: "delete", name });
+      return deleted;
+    }
     default: throw new Error(`Unknown functions method: ${method}`);
+  }
+}
+
+export function reconstructFunctions(
+  functions: FunctionRegistry,
+  entries: readonly unknown[],
+): void {
+  functions.clear();
+  for (const raw of entries) {
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as { type?: unknown; customType?: unknown; data?: unknown };
+    if (entry.type !== "custom" || entry.customType !== FUNCTION_ENTRY_TYPE) continue;
+    if (!entry.data || typeof entry.data !== "object") continue;
+    const mutation = entry.data as Partial<FunctionMutation>;
+    if (typeof mutation.name !== "string" || !SAVED_FUNCTION_NAME.test(mutation.name)) continue;
+    if (mutation.action === "delete") {
+      functions.delete(mutation.name);
+    } else if (mutation.action === "set" && typeof mutation.source === "string") {
+      try {
+        validateTypeScript(mutation.source);
+        functions.set(mutation.name, mutation.source);
+      } catch {
+        // Ignore stale or malformed persisted definitions.
+      }
+    }
   }
 }
 
@@ -226,7 +264,9 @@ function createCapabilities(
     }
 
     if (capability === "functions") {
-      return handleFunctions(functions, method, args);
+      return handleFunctions(functions, method, args, (mutation) => {
+        pi.appendEntry(FUNCTION_ENTRY_TYPE, mutation);
+      });
     }
 
     if (capability === "context" && method === "get") {
@@ -294,7 +334,7 @@ ui
 functions
 - functions.set(name, program) saves a self-contained, contextually typed PitProgram for reuse and returns { name, replaced }. Saved functions may not close over local variables; pass changing data through input.
 - functions.run(name, input?) executes a saved function with the current capabilities and optional JSON input.
-- functions.has(name), functions.list(), and functions.delete(name) inspect or mutate the process-local registry.
+- functions.has(name), functions.list(), and functions.delete(name) inspect or mutate the active session branch's registry.
 
 context
 - context.get() returns cwd, mode, model, thinkingLevel, and sessionFile.
@@ -315,7 +355,7 @@ Invoke it in a later tool call without regenerating its implementation:
 
 async ({ functions }) => functions.run("test", { coverage: true })
 
-A saved function automatically receives current host capabilities as its first argument and optional JSON input as its second argument. Do not pass capabilities through input. Saved functions must be self-contained: they cannot reference variables from the defining function. Put constants inside the saved function and pass changing values through input. functions.set replaces an existing definition with the same name. Use functions.has or functions.list when availability is uncertain. Definitions survive across turns but are cleared when the extension reloads or the Pi process exits.
+A saved function automatically receives current host capabilities as its first argument and optional JSON input as its second argument. Do not pass capabilities through input. Saved functions must be self-contained: they cannot reference variables from the defining function. Put constants inside the saved function and pass changing values through input. functions.set replaces an existing definition with the same name. Use functions.has or functions.list when availability is uncertain. Definitions are persisted in session history, survive reloads, and follow the active branch.
 
 The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
     promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
@@ -423,5 +463,11 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     },
   });
 
-  pi.on("session_start", () => pi.setActiveTools(["typescript"]));
+  pi.on("session_start", (_event, ctx) => {
+    reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
+    pi.setActiveTools(["typescript"]);
+  });
+  pi.on("session_tree", (_event, ctx) => {
+    reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
+  });
 }

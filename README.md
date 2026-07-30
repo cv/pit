@@ -98,7 +98,7 @@ Later calls can reuse the definition:
 async ({ functions }) => functions.run("test")
 ```
 
-Saved functions automatically receive current capabilities as their first argument and optional JSON input as their second argument. They are independently type-checked and must be self-contained: they cannot close over variables from the defining function, so changing values should be supplied through input. `functions.set` replaces an existing definition with the same name; use `functions.has` or `functions.list` when availability is uncertain. Definitions survive across turns but are cleared when the extension reloads or the Pi process exits. They live in the trusted extension process, while every top-level tool invocation still receives fresh capability proxies inside a fresh restricted child process.
+Saved functions automatically receive current capabilities as their first argument and optional JSON input as their second argument. They are independently type-checked and must be self-contained: they cannot close over variables from the defining function, so changing values should be supplied through input. `functions.set` replaces an existing definition with the same name; use `functions.has` or `functions.list` when availability is uncertain. Definitions are persisted as non-context session entries, survive reloads, and follow the active session branch. The active registry lives in the trusted extension process, while every top-level tool invocation still receives fresh capability proxies inside a fresh restricted child process.
 
 ## Isolation model
 
