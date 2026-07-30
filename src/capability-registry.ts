@@ -72,14 +72,14 @@ export const CAPABILITY_REGISTRY = {
   options?: { format?: PitReadFormat; offset?: number; limit?: number },
 ): Promise<PitReadResult>;`,
         documentation:
-          'workspace.read(file, { format?: "hashed" | "raw", offset?, limit? }) defaults to hashed line anchors',
+          'workspace.read(file, { format?: "hashed" | "raw", offset?, limit? }) defaults to hashed line:hash anchors and sparse metadata',
         minimumArguments: 1,
         maximumArguments: 2,
       },
       edit: {
         declaration: "edit(file: string, changes: PitEditChangeSpec): Promise<PitEditResult>;",
         documentation:
-          "workspace.edit(file, changes) applies revision-checked anchored or file-level changes",
+          "workspace.edit(file, { revision, changes }) supports anchored replace/delete/insert and replaceFile/deleteFile",
         minimumArguments: 2,
         maximumArguments: 2,
       },
@@ -97,7 +97,7 @@ export const CAPABILITY_REGISTRY = {
     }
 >;`,
         documentation:
-          "workspace.batch accepts all-read concurrent batches or all-edit transactional batches",
+          'workspace.batch accepts only { kind: "read", file, options? } operations or only { kind: "edit", file, changes } operations',
         minimumArguments: 1,
         maximumArguments: 2,
       },
