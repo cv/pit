@@ -5,6 +5,7 @@ import {
   formatDiagnostic,
   getNamedFunctionName,
   getSandboxCacheStats,
+  resolveSavedFunctionReferences,
   runInSandbox,
   validateTypeScript,
 } from "../src/sandbox.js";
@@ -81,6 +82,42 @@ describe("validateTypeScript", () => {
       .toThrow(/number.*string/);
     expect(() => validateTypeScript(`() => ({ pending: Promise.resolve(1) })`))
       .toThrow(/Promise<number>/);
+  });
+});
+
+describe("saved function references", () => {
+  it("resolves direct and transitive references in dependency order", () => {
+    const saved = new Map([
+      ["base", `async function base() { return 1; }`],
+      ["composed", `async function composed() { return base() + 1; }`],
+      ["unrelated", `async function unrelated() { return 0; }`],
+    ]);
+    expect(resolveSavedFunctionReferences(`composed()`, saved)).toEqual([
+      { name: "base", source: saved.get("base"), direct: false },
+      { name: "composed", source: saved.get("composed"), direct: true },
+    ]);
+    expect(resolveSavedFunctionReferences(`({ base: 1 }).base`, saved)).toEqual([]);
+    expect(resolveSavedFunctionReferences(`
+      const base = 1;
+      function local(base) { return 1; }
+      const object = { base: 1, base() { return 1; } };
+      type Named = base;
+      type Queried = typeof base;
+    `, saved)).toEqual([]);
+
+    expect(resolveSavedFunctionReferences(`composed() + base()`, saved)).toEqual([
+      { name: "base", source: saved.get("base"), direct: true },
+      { name: "composed", source: saved.get("composed"), direct: true },
+    ]);
+  });
+
+  it("handles cyclic saved references without duplication", () => {
+    const saved = new Map([
+      ["first", `async function first() { return second(); }`],
+      ["second", `async function second() { return first(); }`],
+    ]);
+    const references = resolveSavedFunctionReferences(`first()`, saved);
+    expect(references.map((reference) => reference.name).sort()).toEqual(["first", "second"]);
   });
 });
 

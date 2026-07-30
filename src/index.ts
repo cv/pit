@@ -16,6 +16,7 @@ import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promi
 import { dirname, resolve } from "node:path";
 import {
   getNamedFunctionName,
+  resolveSavedFunctionReferences,
   runInSandbox,
   validateTypeScript,
   type CapabilityHandler,
@@ -53,6 +54,8 @@ interface FunctionActivity {
 }
 const COLLAPSED_CODE_LINES = 12;
 const COLLAPSED_RESULT_LINES = 12;
+const MAX_EXPANDED_SAVED_FUNCTION_LINES = 200;
+const MAX_EXPANDED_SAVED_TOTAL_LINES = 500;
 
 interface TypeScriptDetails {
   value: unknown;
@@ -605,6 +608,32 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       }
       if (!context.expanded && lines.length > shown.length) {
         text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
+      }
+
+      const savedReferences = resolveSavedFunctionReferences(code, savedFunctions);
+      if (savedReferences.length > 0) {
+        text += `\n${theme.fg("accent", `uses saved: ${savedReferences.map((reference) => reference.name).join(", ")}`)}`;
+        if (context.expanded) {
+          let remaining = MAX_EXPANDED_SAVED_TOTAL_LINES;
+          for (const reference of savedReferences) {
+            if (remaining <= 0) break;
+            const highlighted = highlightCode(reference.source, "typescript");
+            const count = Math.min(highlighted.length, MAX_EXPANDED_SAVED_FUNCTION_LINES, remaining);
+            const displayed = highlighted.slice(0, count);
+            const role = reference.direct ? "saved function" : "saved dependency";
+            text += `\n\n${theme.fg("toolTitle", theme.bold(`${role}: ${reference.name}`))}`;
+            text += `\n${displayed.join("\n")}`;
+            if (highlighted.length > count) {
+              text += `\n${theme.fg("muted", `… ${highlighted.length - count} source lines omitted`)}`;
+            }
+            remaining -= count;
+          }
+          const displayedCount = savedReferences.reduce((total, reference) =>
+            total + Math.min(highlightCode(reference.source, "typescript").length, MAX_EXPANDED_SAVED_FUNCTION_LINES), 0);
+          if (displayedCount > MAX_EXPANDED_SAVED_TOTAL_LINES) {
+            text += `\n${theme.fg("muted", "… additional saved source omitted by the 500-line display limit")}`;
+          }
+        }
       }
       return new Text(text, 0, 0);
     },

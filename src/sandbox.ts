@@ -117,6 +117,66 @@ function submissionExpression(source: string): ts.Expression | undefined {
   return expression;
 }
 
+function referencedNames(source: string, candidates: ReadonlySet<string>): Set<string> {
+  const file = ts.createSourceFile(
+    "/pit/references.ts",
+    source,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const references = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && candidates.has(node.text)) {
+      const parent = node.parent;
+      const isDeclarationName =
+        (ts.isFunctionLike(parent) && parent.name === node) ||
+        (ts.isVariableDeclaration(parent) && parent.name === node) ||
+        (ts.isParameter(parent) && parent.name === node);
+      const isPropertyName =
+        (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+        ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent)) && parent.name === node);
+      const isTypePosition = ts.isTypeReferenceNode(parent) || ts.isTypeQueryNode(parent);
+      if (!isDeclarationName && !isPropertyName && !isTypePosition) references.add(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return references;
+}
+
+export interface SavedFunctionReference {
+  name: string;
+  source: string;
+  direct: boolean;
+}
+
+export function resolveSavedFunctionReferences(
+  source: string,
+  savedFunctions: ReadonlyMap<string, string>,
+): SavedFunctionReference[] {
+  const names = new Set(savedFunctions.keys());
+  const direct = referencedNames(source, names);
+  const resolved = new Map<string, SavedFunctionReference>();
+  const visiting = new Set<string>();
+  const visit = (name: string, isDirect: boolean): void => {
+    const savedSource = savedFunctions.get(name);
+    if (savedSource === undefined || visiting.has(name)) return;
+    const existing = resolved.get(name);
+    if (existing) {
+      if (isDirect) existing.direct = true;
+      return;
+    }
+    visiting.add(name);
+    const dependencies = [...referencedNames(savedSource, names)].filter((dependency) => dependency !== name).sort();
+    for (const dependency of dependencies) visit(dependency, false);
+    visiting.delete(name);
+    resolved.set(name, { name, source: savedSource, direct: isDirect });
+  };
+  for (const name of [...direct].sort()) visit(name, true);
+  return [...resolved.values()];
+}
+
 function isProgramExpression(source: string): boolean {
   const expression = submissionExpression(source);
   return Boolean(expression && (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)));
