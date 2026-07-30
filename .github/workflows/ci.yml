@@ -29,6 +29,8 @@ jobs:
         run: npm install --global npm@11.6.2
       - name: Install dependencies
         run: npm ci
+      - name: Verify Pi package layout
+        run: npm run package:check
       - name: Type-check
         run: npm run check
       - name: Test with coverage

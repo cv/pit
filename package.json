@@ -11,7 +11,8 @@
     "coverage": "vitest run --coverage",
     "biome:check": "biome check . --error-on-warnings --diagnostic-level=warn",
     "biome:fix": "biome check --write .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "package:check": "node scripts/verify-package.mjs"
   },
   "pi": {
     "extensions": [
@@ -19,11 +20,9 @@
     ]
   },
   "dependencies": {
-    "@earendil-works/pi-tui": "^0.83.0",
     "diff": "^9.0.0",
     "esbuild": "^0.25.0",
     "fast-glob": "^3.3.3",
-    "typebox": "^1.0.4",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
@@ -32,9 +31,32 @@
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^4.1.10",
     "tsx": "^4.20.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "@earendil-works/pi-tui": "^0.83.0",
+    "typebox": "^1.0.4"
   },
   "engines": {
     "node": ">=22"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "coding-agent",
+    "typescript",
+    "sandbox"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/cv/pit.git"
+  },
+  "homepage": "https://github.com/cv/pit#readme",
+  "bugs": {
+    "url": "https://github.com/cv/pit/issues"
+  },
+  "packageManager": "npm@11.6.2",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
   }
 }

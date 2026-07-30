@@ -21,14 +21,36 @@ The expression's resolved value becomes the tool result. This lets the model bat
 
 In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in, and successful result values are rendered as syntax-highlighted JSON. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result. Calls to saved functions also show the injected definitions and transitive saved dependencies in expanded mode, with per-function and total display limits.
 
-## Install and run
+## Install
+
+Pit is distributed as a Git-based Pi package. The repository is private, so installation requires repository access and working GitHub SSH credentials.
+
+Install the pinned release globally:
+
+```sh
+pi install git:git@github.com:cv/pit.git@v0.2.0
+```
+
+Install for the current project:
+
+```sh
+pi install -l git:git@github.com:cv/pit.git@v0.2.0
+```
+
+Try it for one run without changing settings:
+
+```sh
+pi -e git:git@github.com:cv/pit.git@v0.2.0
+```
+
+For local development:
 
 ```sh
 npm install
-pi --no-builtin-tools -e ./src/index.ts
+pi -e ./src/index.ts
 ```
 
-The extension also sets the active tool list to only `typescript` at session start, so `--no-builtin-tools` is defensive rather than required. To install it as a project-local Pi package, keep the repository under the project and add its path to Pi's package settings.
+The extension intentionally replaces the active coding tool set with only `typescript` at session start. Review the source before installation: Pi extensions execute with the host process's permissions.
 
 Requires Node 22 or newer because the sandbox uses Node's permission model.
 
