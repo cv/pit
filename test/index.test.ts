@@ -11,6 +11,7 @@ type RegisteredTool = {
   promptGuidelines?: string[];
   parameters: { properties: { code: { description?: string }; timeoutMs: { description?: string } } };
   renderCall?: (args: any, theme: any, context: any) => { render(width: number): string[] };
+  renderResult?: (result: any, options: any, theme: any, context: any) => { render(width: number): string[] };
   execute: (...args: any[]) => Promise<any>;
 };
 
@@ -124,6 +125,79 @@ describe("pit extension", () => {
     const partial = render({ code: undefined }, { expanded: false, argsComplete: false });
     expect(partial).toContain("generating…");
     expect(partial).toContain("waiting for source…");
+  });
+
+  it("renders result values as highlighted JSON", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    const render = (result: any, options: any, context: any = { isError: false }) =>
+      tool.renderResult?.(result, options, theme, context).render(200).join("\n") ?? "";
+    const value = Object.fromEntries(Array.from({ length: 15 }, (_, index) => [`key${index + 1}`, index + 1]));
+    const result = {
+      content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+      details: { value, truncated: false },
+    };
+
+    const collapsed = render(result, { expanded: false, isPartial: false });
+    expect(collapsed).toContain("result (17 lines)");
+    expect(collapsed).toContain('"key1"');
+    expect(collapsed).not.toContain('"key15"');
+    expect(collapsed).toContain("5 more lines (Ctrl+O to expand)");
+
+    const expanded = render(result, { expanded: true, isPartial: false });
+    expect(expanded).toContain('"key15"');
+    expect(expanded).not.toContain("more lines");
+
+    const stringResult = render(
+      { content: [{ type: "text", text: "hello" }], details: { value: "hello", truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(stringResult).toContain('"hello"');
+    expect(stringResult).toContain("1 line)");
+
+    const undefinedResult = render(
+      { content: [{ type: "text", text: "undefined" }], details: { value: undefined, truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(undefinedResult).toContain("undefined");
+
+    const truncated = render(
+      { content: [{ type: "text", text: "partial output" }], details: { value: undefined, truncated: true } },
+      { expanded: false, isPartial: false },
+    );
+    expect(truncated).toContain("result (truncated)");
+    expect(truncated).toContain("partial output");
+
+    const empty = render({ content: [], details: undefined }, { expanded: false, isPartial: false });
+    expect(empty).toContain("no result");
+
+    const partial = render({ content: [], details: undefined }, { expanded: false, isPartial: true });
+    expect(partial).toContain("Running TypeScript…");
+
+    const symbolResult = render(
+      { content: [], details: { value: Symbol("value"), truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(symbolResult).toContain("Symbol(value)");
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const circularResult = render(
+      { content: [], details: { value: circular, truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(circularResult).toContain("[object Object]");
+
+    const error = render(
+      { content: [{ type: "text", text: "bad code" }] },
+      { expanded: false, isPartial: false },
+      { isError: true },
+    );
+    expect(error).toContain("bad code");
+    expect(render(
+      { content: [] },
+      { expanded: false, isPartial: false },
+      { isError: true },
+    )).toContain("TypeScript execution failed");
   });
 
   it("reads, writes, edits, lists, globs, and stats workspace files", async () => {

@@ -17,6 +17,12 @@ import { runInSandbox, type CapabilityHandler } from "./sandbox.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
 const COLLAPSED_CODE_LINES = 12;
+const COLLAPSED_RESULT_LINES = 12;
+
+interface TypeScriptDetails {
+  value: unknown;
+  truncated: boolean;
+}
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -271,6 +277,49 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
         text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
       }
       if (!context.expanded && lines.length > shown.length) {
+        text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
+      }
+      return new Text(text, 0, 0);
+    },
+    renderResult(result, { expanded, isPartial }, theme, context) {
+      const content = result.content[0];
+      const fallback = content?.type === "text" ? content.text : "";
+      if (isPartial) {
+        return new Text(theme.fg("warning", "Running TypeScript…"), 0, 0);
+      }
+      if (context.isError) {
+        return new Text(theme.fg("error", fallback || "TypeScript execution failed"), 0, 0);
+      }
+
+      const details = result.details as TypeScriptDetails | undefined;
+      let source = fallback;
+      let language = "typescript";
+      if (details && !details.truncated) {
+        if (details.value === undefined) {
+          source = "undefined";
+        } else {
+          try {
+            source = JSON.stringify(details.value, null, 2) ?? String(details.value);
+            language = "json";
+          } catch {
+            source = String(details.value);
+          }
+        }
+      }
+
+      const lines = source ? highlightCode(source, language) : [];
+      const shown = expanded ? lines : lines.slice(0, COLLAPSED_RESULT_LINES);
+      const state = details?.truncated
+        ? "truncated"
+        : `${lines.length} line${lines.length === 1 ? "" : "s"}`;
+      let text = theme.fg("toolTitle", theme.bold("result"));
+      text += theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`);
+      if (shown.length > 0) {
+        text += `\n${shown.join("\n")}`;
+      } else {
+        text += `\n${theme.fg("dim", "(no result)")}`;
+      }
+      if (!expanded && lines.length > shown.length) {
         text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
       }
       return new Text(text, 0, 0);

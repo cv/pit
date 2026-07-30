@@ -19,7 +19,7 @@ async ({ workspace, shell }) => {
 
 The function's return value becomes the tool result. This lets the model batch several operations and perform ordinary computation without repeatedly crossing the model/tool boundary.
 
-In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in. The collapsed view shows the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source.
+In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in, and successful result values are rendered as syntax-highlighted JSON. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result.
 
 ## Install and run
 
