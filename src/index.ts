@@ -93,6 +93,26 @@ async function readText(cwd: string, args: unknown[]) {
   };
 }
 
+function sourceLocation(contents: string, index: number): string {
+  const before = contents.slice(0, index);
+  const line = before.split("\n").length;
+  const lastNewline = before.lastIndexOf("\n");
+  const column = index - lastNewline;
+  return `${line}:${column}`;
+}
+
+function occurrenceLocations(contents: string, search: string): number[] {
+  const locations: number[] = [];
+  let offset = 0;
+  while (offset <= contents.length - search.length) {
+    const found = contents.indexOf(search, offset);
+    if (found < 0) break;
+    locations.push(found);
+    offset = found + 1;
+  }
+  return locations;
+}
+
 async function editText(cwd: string, args: unknown[]) {
   const path = workspacePath(cwd, args[0]);
   const rawEdits = args[1];
@@ -104,9 +124,17 @@ async function editText(cwd: string, args: unknown[]) {
       const oldText = string(edit.oldText, `edits[${index}].oldText`);
       const newText = string(edit.newText, `edits[${index}].newText`);
       if (!oldText) throw new Error(`edits[${index}].oldText may not be empty`);
-      const start = current.indexOf(oldText);
-      if (start < 0) throw new Error(`edits[${index}].oldText was not found`);
-      if (current.indexOf(oldText, start + 1) >= 0) throw new Error(`edits[${index}].oldText is not unique`);
+      const occurrences = occurrenceLocations(current, oldText);
+      if (occurrences.length === 0) throw new Error(`edits[${index}].oldText was not found`);
+      if (occurrences.length > 1) {
+        const shown = occurrences.slice(0, 10).map((offset) => sourceLocation(current, offset));
+        const omitted = occurrences.length - shown.length;
+        throw new Error(
+          `edits[${index}].oldText is not unique; matched ${occurrences.length} times at ${shown.join(", ")}` +
+          (omitted ? ` (and ${omitted} more)` : ""),
+        );
+      }
+      const start = occurrences[0]!;
       return { start, end: start + oldText.length, newText, index };
     });
     const ordered = [...replacements].sort((a, b) => a.start - b.start);

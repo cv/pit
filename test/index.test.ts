@@ -423,9 +423,18 @@ describe("pit extension", () => {
     expect(errors.join("\n")).toMatch(/may not be empty/);
     expect(errors.join("\n")).toMatch(/was not found/);
     expect(errors.join("\n")).toMatch(/not unique/);
+    expect(errors[7]).toContain("matched 2 times at 1:1, 1:6");
     expect(errors.join("\n")).toMatch(/overlap/);
     expect(errors.join("\n")).toMatch(/path must be a string/);
     expect(errors.join("\n")).toMatch(/Unknown workspace method/);
+
+    await writeFile(join(cwd, "many.txt"), "x".repeat(12), "utf8");
+    const manyMatches = await value(`async ({ workspace }) => {
+      try { await workspace.editText("many.txt", [{ oldText: "x", newText: "y" }]); return "ok"; }
+      catch (error) { return error.message; }
+    }`);
+    expect(manyMatches).toContain("matched 12 times");
+    expect(manyMatches).toContain("and 2 more");
   });
 
   it("executes shell commands with default and explicit options", async () => {
