@@ -52,7 +52,7 @@ pi -e ./src/index.ts
 
 The extension intentionally replaces the active coding tool set with only `typescript` at session start. Review the source before installation: Pi extensions execute with the host process's permissions.
 
-Requires Node 22 or newer because the sandbox uses Node's permission model.
+Requires Node 22.19 or newer because the sandbox uses Node's permission model and Pi's current extension API.
 
 ## Function contract
 
