@@ -101,8 +101,9 @@ async ({ workspace, shell }) => {
   - `readText(path, { offset?, limit? })`
   - `writeText(path, contents)`
   - `editText(path, [{ oldText, newText }, ...])`
-  - `batch(operations, { failure?: "fail-fast" | "settled" })` — transactional all-mutation batches or concurrent all-read inspection batches; mixed batches are rejected
-  - `applyPatch(unifiedDiff)` — transactional multi-file unified patch
+  - `editRange(path, { startLine, endLine, expectedText, newText })` — 1-based inclusive line replacement with stale-content protection and preserved trailing line endings
+  - `batch(operations, { failure?: "fail-fast" | "settled" })` — transactional all-mutation batches (including `editRange`) or concurrent all-read inspection batches; mixed batches are rejected
+  - `applyPatch(unifiedDiff)` — transactional multi-file unified patch, optionally enclosed by `*** Begin Patch` / `*** End Patch`
   - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
   - `list(path?)`
   - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata

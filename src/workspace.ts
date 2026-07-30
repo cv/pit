@@ -20,6 +20,8 @@ const MAX_SEARCH_RESULTS = 500;
 const MAX_GLOB_RESULTS = 10_000;
 const AT_PATH_PREFIX = /^@/;
 const DIFF_PATH_PREFIX = /^(?:a|b)\//;
+const PATCH_WRAPPER_START = "*** Begin Patch";
+const PATCH_WRAPPER_END = "*** End Patch";
 export const WORKSPACE_METHODS = CAPABILITY_METHODS.workspace;
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -172,6 +174,78 @@ function applyTextEdits(current: string, rawEdits: unknown): { next: string; edi
   return { next, edits: replacements.length };
 }
 
+interface LineRangeEdit {
+  startLine: number;
+  endLine: number;
+  expectedText: string;
+  newText: string;
+}
+
+function parseLineRangeEdit(raw: unknown, label: string): LineRangeEdit {
+  const edit = object(raw, label);
+  const startLine = Number(edit.startLine);
+  const endLine = Number(edit.endLine);
+  if (!Number.isInteger(startLine) || startLine < 1) {
+    throw new Error(`${label}.startLine must be a positive integer`);
+  }
+  if (!Number.isInteger(endLine) || endLine < startLine) {
+    throw new Error(`${label}.endLine must be an integer at least startLine`);
+  }
+  return {
+    startLine,
+    endLine,
+    expectedText: string(edit.expectedText, `${label}.expectedText`),
+    newText: string(edit.newText, `${label}.newText`),
+  };
+}
+
+function applyLineRangeEdit(contents: string, raw: unknown, label: string) {
+  const edit = parseLineRangeEdit(raw, label);
+  const lineStarts = [0];
+  for (let index = 0; index < contents.length; index++) {
+    if (contents[index] === "\n") {
+      lineStarts.push(index + 1);
+    }
+  }
+  if (edit.endLine > lineStarts.length) {
+    throw new Error(
+      `${label} range ${edit.startLine}-${edit.endLine} exceeds ${lineStarts.length} lines`,
+    );
+  }
+  // biome-ignore lint/style/noNonNullAssertion: validated line bounds guarantee the start offset.
+  const start = lineStarts[edit.startLine - 1]!;
+  const nextLineStart = lineStarts[edit.endLine];
+  let end = nextLineStart === undefined ? contents.length : nextLineStart - 1;
+  if (end > start && contents[end - 1] === "\r") {
+    end--;
+  }
+  const selected = contents.slice(start, end);
+  if (selected !== edit.expectedText) {
+    throw new Error(`${label}.expectedText does not match lines ${edit.startLine}-${edit.endLine}`);
+  }
+  return {
+    next: contents.slice(0, start) + edit.newText + contents.slice(end),
+    startLine: edit.startLine,
+    endLine: edit.endLine,
+  };
+}
+
+function editRange(cwd: string, args: unknown[], signal?: AbortSignal) {
+  const path = resolveWorkspacePath(cwd, args[0]);
+  return withFileMutationQueue(path, async () => {
+    checkAbort(signal);
+    const current = await readFile(path, "utf8");
+    const result = applyLineRangeEdit(current, args[1], "edit");
+    checkAbort(signal);
+    await writeFile(path, result.next, { encoding: "utf8", signal });
+    return {
+      path: workspaceResultPath(cwd, path),
+      startLine: result.startLine,
+      endLine: result.endLine,
+    };
+  });
+}
+
 function editText(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   return withFileMutationQueue(path, async () => {
@@ -203,7 +277,7 @@ async function readSnapshot(path: string): Promise<{ existed: boolean; contents:
 }
 
 const READ_BATCH_KINDS = new Set(["readText", "stat", "list", "glob", "search"]);
-const MUTATION_BATCH_KINDS = new Set(["write", "edit"]);
+const MUTATION_BATCH_KINDS = new Set(["write", "edit", "editRange"]);
 
 function readBatchArguments(kind: string, operation: Record<string, unknown>): unknown[] {
   switch (kind) {
@@ -290,7 +364,7 @@ function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
     throw new Error("batch options are only supported for read-only operations");
   }
   const operations = parsed.map(({ kind, operation, index }) => ({
-    kind: kind as "write" | "edit",
+    kind: kind as "write" | "edit" | "editRange",
     path: resolveWorkspacePath(cwd, operation.path),
     operation,
     index,
@@ -309,13 +383,24 @@ function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
       const snapshot = snapshots.get(path)!;
       if (kind === "write") {
         const contents = string(operation.contents, `operations[${index}].contents`);
-        return { kind, path, snapshot, next: contents, edits: undefined };
+        return { kind, path, snapshot, next: contents, edits: undefined, range: undefined };
       }
       if (!snapshot.existed) {
         throw new Error(`operations[${index}] cannot edit a missing file`);
       }
-      const result = applyTextEdits(snapshot.contents, operation.edits);
-      return { kind, path, snapshot, next: result.next, edits: result.edits };
+      if (kind === "edit") {
+        const result = applyTextEdits(snapshot.contents, operation.edits);
+        return { kind, path, snapshot, next: result.next, edits: result.edits, range: undefined };
+      }
+      const result = applyLineRangeEdit(snapshot.contents, operation, `operations[${index}]`);
+      return {
+        kind,
+        path,
+        snapshot,
+        next: result.next,
+        edits: 1,
+        range: { startLine: result.startLine, endLine: result.endLine },
+      };
     });
 
     const committed: typeof prepared = [];
@@ -346,6 +431,7 @@ function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
         kind: operation.kind,
         bytes: Buffer.byteLength(operation.next),
         ...(operation.edits === undefined ? {} : { edits: operation.edits }),
+        ...(operation.range === undefined ? {} : { range: operation.range }),
       })),
     };
   });
@@ -386,14 +472,25 @@ function patchTarget(cwd: string, patch: StructuredPatch, index: number) {
   return { patch, kind, path: resolveWorkspacePath(cwd, name), index };
 }
 
+function unwrapPatchText(raw: string): string {
+  const lines = raw.trimEnd().split("\n");
+  const startsWrapped = lines[0]?.trim() === PATCH_WRAPPER_START;
+  const endsWrapped = lines.at(-1)?.trim() === PATCH_WRAPPER_END;
+  if (startsWrapped !== endsWrapped) {
+    throw new Error("patch wrapper must include both *** Begin Patch and *** End Patch");
+  }
+  return startsWrapped ? lines.slice(1, -1).join("\n") : raw;
+}
+
 function applyWorkspacePatch(cwd: string, args: unknown[], signal?: AbortSignal) {
-  const patchText = string(args[0], "patch");
-  if (!patchText.trim()) {
+  const rawPatchText = string(args[0], "patch");
+  if (!rawPatchText.trim()) {
     throw new Error("patch must not be empty");
   }
-  if (Buffer.byteLength(patchText) > MAX_PATCH_BYTES) {
+  if (Buffer.byteLength(rawPatchText) > MAX_PATCH_BYTES) {
     throw new Error(`patch exceeds ${formatSize(MAX_PATCH_BYTES)}`);
   }
+  const patchText = unwrapPatchText(rawPatchText);
   let parsed: StructuredPatch[];
   try {
     parsed = parsePatch(patchText);
@@ -674,6 +771,8 @@ export async function handleWorkspace(
     }
     case "editText":
       return editText(cwd, args, signal);
+    case "editRange":
+      return editRange(cwd, args, signal);
     case "batch":
       return batchWorkspace(cwd, args, signal);
     case "applyPatch":

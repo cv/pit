@@ -15,9 +15,17 @@ type PitWorkspaceEntry = {
   type: "file" | "directory" | "symlink";
 };
 
+type PitLineRangeEdit = {
+  startLine: number;
+  endLine: number;
+  expectedText: string;
+  newText: string;
+};
+
 type PitBatchMutationOperation =
   | { kind: "write"; path: string; contents: string }
-  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> };
+  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
+  | ({ kind: "editRange"; path: string } & PitLineRangeEdit);
 
 type PitBatchReadOperation =
   | { kind: "readText"; path: string; options?: { offset?: number; limit?: number } }
@@ -53,6 +61,11 @@ interface PitWorkspaceCapability {
     edits: Array<{ oldText: string; newText: string }>,
   ): Promise<{ path: string; edits: number }>;
 
+  editRange(
+    path: string,
+    edit: PitLineRangeEdit,
+  ): Promise<{ path: string; startLine: number; endLine: number }>;
+
   applyPatch(patch: string): Promise<{
     files: Array<{
       path: string;
@@ -69,9 +82,10 @@ interface PitWorkspaceCapability {
     | {
         files: Array<{
           path: string;
-          kind: "write" | "edit";
+          kind: "write" | "edit" | "editRange";
           bytes: number;
           edits?: number;
+          range?: { startLine: number; endLine: number };
         }>;
       }
     | {

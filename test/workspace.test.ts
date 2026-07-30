@@ -304,6 +304,78 @@ describe("workspace capability", () => {
     expect(errors[12]).toContain("options must be an object");
   });
 
+  it("applies stale-safe inclusive line range edits", async () => {
+    await writeFile(join(cwd, "range.txt"), "one\r\ntwo\r\nthree\r\n", "utf8");
+    const result = await value(`async ({ workspace }) => workspace.editRange("range.txt", {
+      startLine: 2, endLine: 2, expectedText: "two", newText: "second",
+    })`);
+    expect(result).toEqual({ path: "range.txt", startLine: 2, endLine: 2 });
+    expect(await readFile(join(cwd, "range.txt"), "utf8")).toBe("one\r\nsecond\r\nthree\r\n");
+
+    await expect(
+      run(`async ({ workspace }) => workspace.editRange("range.txt", {
+        startLine: 1, endLine: 2, expectedText: "stale", newText: "changed",
+      })`),
+    ).rejects.toThrow("expectedText does not match lines 1-2");
+    expect(await readFile(join(cwd, "range.txt"), "utf8")).toBe("one\r\nsecond\r\nthree\r\n");
+  });
+
+  it("includes line range edits in transactional mutation batches", async () => {
+    await writeFile(join(cwd, "range-a.txt"), "a1\na2\n", "utf8");
+    await writeFile(join(cwd, "range-b.txt"), "b1\nb2\n", "utf8");
+    const result = await value(`async ({ workspace }) => workspace.batch([
+      {
+        kind: "editRange", path: "range-a.txt", startLine: 2, endLine: 2,
+        expectedText: "a2", newText: "changed",
+      },
+      { kind: "write", path: "range-created.txt", contents: "created" },
+    ])`);
+    expect(result.files[0]).toMatchObject({
+      path: "range-a.txt",
+      kind: "editRange",
+      edits: 1,
+      range: { startLine: 2, endLine: 2 },
+    });
+    expect(await readFile(join(cwd, "range-a.txt"), "utf8")).toBe("a1\nchanged\n");
+
+    await expect(
+      run(`async ({ workspace }) => workspace.batch([
+        {
+          kind: "editRange", path: "range-a.txt", startLine: 1, endLine: 1,
+          expectedText: "a1", newText: "should roll back",
+        },
+        {
+          kind: "editRange", path: "range-b.txt", startLine: 2, endLine: 2,
+          expectedText: "stale", newText: "never",
+        },
+      ])`),
+    ).rejects.toThrow("expectedText does not match");
+    expect(await readFile(join(cwd, "range-a.txt"), "utf8")).toBe("a1\nchanged\n");
+    expect(await readFile(join(cwd, "range-b.txt"), "utf8")).toBe("b1\nb2\n");
+  });
+
+  it("validates line range edit arguments", async () => {
+    await writeFile(join(cwd, "range.txt"), "one\ntwo", "utf8");
+    const errors = await value(`async ({ workspace }) => {
+      const raw = workspace as any;
+      const capture = async (edit) => { try { await raw.editRange("range.txt", edit); return "ok"; } catch (error) { return error.message; } };
+      return [
+        await capture(null),
+        await capture({ startLine: 0, endLine: 1, expectedText: "one", newText: "x" }),
+        await capture({ startLine: 2, endLine: 1, expectedText: "one", newText: "x" }),
+        await capture({ startLine: 1, endLine: 3, expectedText: "one", newText: "x" }),
+        await capture({ startLine: 1, endLine: 1, expectedText: 1, newText: "x" }),
+        await capture({ startLine: 1, endLine: 1, expectedText: "one", newText: 1 }),
+      ];
+    }`);
+    expect(errors[0]).toContain("edit must be an object");
+    expect(errors[1]).toContain("startLine must be a positive integer");
+    expect(errors[2]).toContain("endLine must be an integer at least startLine");
+    expect(errors[3]).toContain("exceeds 2 lines");
+    expect(errors[4]).toContain("expectedText must be a string");
+    expect(errors[5]).toContain("newText must be a string");
+  });
+
   it("applies multi-file unified patches transactionally", async () => {
     await writeFile(join(cwd, "first.txt"), "old first\n", "utf8");
     await writeFile(join(cwd, "second.txt"), "old second\n", "utf8");
@@ -329,6 +401,25 @@ describe("workspace capability", () => {
       expect.objectContaining({ path: "first.txt", kind: "modify", hunks: 1 }),
       expect.objectContaining({ path: "second.txt", kind: "modify", hunks: 1 }),
     ]);
+  });
+
+  it("accepts common wrappers around unified patches", async () => {
+    await writeFile(join(cwd, "wrapped.txt"), "before\n", "utf8");
+    const wrapped = [
+      "*** Begin Patch",
+      "--- a/wrapped.txt",
+      "+++ b/wrapped.txt",
+      "@@ -1 +1 @@",
+      "-before",
+      "+after",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const result = await value(
+      `async ({ workspace }) => workspace.applyPatch(${JSON.stringify(wrapped)})`,
+    );
+    expect(result.files[0]).toMatchObject({ path: "wrapped.txt", kind: "modify" });
+    expect(await readFile(join(cwd, "wrapped.txt"), "utf8")).toBe("after\n");
   });
 
   it("creates and deletes files with unified patches", async () => {
@@ -384,12 +475,14 @@ describe("workspace capability", () => {
       return [
         await capture(""),
         await capture("not a patch"),
+        await capture("*** Begin Patch\\n--- a/file\\n+++ b/file\\n"),
         await capture("--- a/missing.txt\\n+++ b/missing.txt\\n@@ -1 +1 @@\\n-old\\n+new\\n"),
       ];
     }`);
     expect(errors[0]).toContain("must not be empty");
     expect(errors[1]).toContain("has no hunks");
-    expect(errors[2]).toContain("cannot modify a missing file");
+    expect(errors[2]).toContain("patch wrapper must include both");
+    expect(errors[3]).toContain("cannot modify a missing file");
   });
 
   it("rejects unsupported unified patch features", async () => {

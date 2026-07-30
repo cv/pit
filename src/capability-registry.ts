@@ -27,9 +27,17 @@ type PitWorkspaceEntry = {
   type: "file" | "directory" | "symlink";
 };
 
+type PitLineRangeEdit = {
+  startLine: number;
+  endLine: number;
+  expectedText: string;
+  newText: string;
+};
+
 type PitBatchMutationOperation =
   | { kind: "write"; path: string; contents: string }
-  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> };
+  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
+  | ({ kind: "editRange"; path: string } & PitLineRangeEdit);
 
 type PitBatchReadOperation =
   | { kind: "readText"; path: string; options?: { offset?: number; limit?: number } }
@@ -83,6 +91,16 @@ export const CAPABILITY_REGISTRY = {
         minimumArguments: 2,
         maximumArguments: 2,
       },
+      editRange: {
+        declaration: `editRange(
+  path: string,
+  edit: PitLineRangeEdit,
+): Promise<{ path: string; startLine: number; endLine: number }>;`,
+        documentation:
+          "workspace.editRange(path, { startLine, endLine, expectedText, newText }) with stale-content protection",
+        minimumArguments: 2,
+        maximumArguments: 2,
+      },
       applyPatch: {
         declaration: `applyPatch(patch: string): Promise<{
   files: Array<{
@@ -92,7 +110,8 @@ export const CAPABILITY_REGISTRY = {
     bytes: number;
   }>;
 }>;`,
-        documentation: "workspace.applyPatch(patch) with cwd-relative result paths",
+        documentation:
+          "workspace.applyPatch(patch) accepts unified diffs with optional *** Begin Patch wrappers",
         minimumArguments: 1,
         maximumArguments: 1,
       },
@@ -104,9 +123,10 @@ export const CAPABILITY_REGISTRY = {
   | {
       files: Array<{
         path: string;
-        kind: "write" | "edit";
+        kind: "write" | "edit" | "editRange";
         bytes: number;
         edits?: number;
+        range?: { startLine: number; endLine: number };
       }>;
     }
   | {
