@@ -28,19 +28,19 @@ Pit is distributed as a Git-based Pi package. The repository is private, so inst
 Install the pinned release globally:
 
 ```sh
-pi install git:git@github.com:cv/pit.git@v0.3.1
+pi install git:git@github.com:cv/pit.git@v0.3.2
 ```
 
 Install for the current project:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.3.1
+pi install -l git:git@github.com:cv/pit.git@v0.3.2
 ```
 
 Try it for one run without changing settings:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.3.1
+pi -e git:git@github.com:cv/pit.git@v0.3.2
 ```
 
 For local development:
@@ -146,7 +146,7 @@ await workspace.edit("src/example.ts", {
 
 Supported change kinds are `replace`, `delete`, `insertBefore`, `insertAfter`, `replaceFile`, and `deleteFile`. An end anchor extends a replacement or deletion range; otherwise it targets one line. Use `revision: null` with a sole `replaceFile` change to create a missing file. Existing-file rewrites and deletion require the current revision. Anchored content uses `\n`, which pit converts to the file's dominant line ending while preserving untouched bytes.
 
-Search matches and context lines include anchors, and each match includes its file revision, so search results can feed directly into edit. Read batches contain only `{ kind: "read", file, options? }` operations; edit batches contain only `{ kind: "edit", file, changes }` operations and validate every file before the first commit. Both return `{ results }` with ordered `{ kind, index, ok, value }` entries; settled read failures use `{ kind, index, ok: false, error }`.
+Search matches and context lines include anchors, and each match includes its file revision, so search results can feed directly into edit. Read batches contain only `{ kind: "read", file, options? }` operations; edit batches contain only `{ kind: "edit", file, changes }` operations and validate every file before the first commit. Both return `{ results }` with ordered `{ kind, index, ok, value? }` entries; successful entries include `value`, while settled read failures omit it and include `error`.
 
 ## Reusable functions
 

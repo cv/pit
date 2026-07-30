@@ -64,7 +64,7 @@ interface PitWorkspaceCapability {
   ): Promise<{
     results: Array<
       | { kind: "read"; index: number; ok: true; value: PitReadResult }
-      | { kind: "read"; index: number; ok: false; error: string }
+      | { kind: "read"; index: number; ok: false; value?: undefined; error: string }
       | { kind: "edit"; index: number; ok: true; value: PitEditResult }
     >;
   }>;

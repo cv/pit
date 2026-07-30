@@ -150,10 +150,14 @@ describe("workspace read and edit", () => {
 describe("workspace batch", () => {
   it("runs concurrent reads with settled and fail-fast modes", async () => {
     await writeFile(join(cwd, "present.txt"), "present", "utf8");
-    const settled = await value(`async ({ workspace }) => workspace.batch([
-      { kind: "read", file: "present.txt", options: { format: "raw" } },
-      { kind: "read", file: "missing.txt" },
-    ], { failure: "settled" })`);
+    const settled = await value(`async ({ workspace }) => {
+      const batch = await workspace.batch([
+        { kind: "read", file: "present.txt", options: { format: "raw" } },
+        { kind: "read", file: "missing.txt" },
+      ], { failure: "settled" });
+      batch.results.map((entry) => entry.value);
+      return batch;
+    }`);
     expect(settled.results[0]).toMatchObject({ kind: "read", index: 0, ok: true });
     expect(settled.results[0].value.content).toBe("present");
     expect(settled.results[1]).toMatchObject({ kind: "read", index: 1, ok: false });
