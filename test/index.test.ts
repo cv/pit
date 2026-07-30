@@ -10,6 +10,7 @@ type RegisteredTool = {
   promptSnippet?: string;
   promptGuidelines?: string[];
   parameters: { properties: { code: { description?: string }; timeoutMs: { description?: string } } };
+  renderCall?: (args: any, theme: any, context: any) => { render(width: number): string[] };
   execute: (...args: any[]) => Promise<any>;
 };
 
@@ -79,12 +80,13 @@ describe("pit extension", () => {
     expect(tool.promptSnippet).toContain("batched and parallel workspace");
     expect(tool.description).toContain("async ({ workspace, shell })");
     expect(tool.description).toContain("await Promise.all");
+    expect(tool.description).toContain("contextually type-checked");
     expect(tool.description).toContain("does not return a raw string");
     expect(tool.description).toContain("Nonzero exit codes are returned as data");
     expect(tool.parameters.properties.code.description).toContain("file.text");
     expect(tool.parameters.properties.code.description).toContain("Promise.all");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(10);
+    expect(tool.promptGuidelines).toHaveLength(11);
     expect(tool.promptGuidelines).toContain(
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
     );
@@ -92,6 +94,36 @@ describe("pit extension", () => {
 
     sessionStart();
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
+  });
+
+  it("renders generated TypeScript source with collapsed and expanded views", () => {
+    const code = Array.from({ length: 15 }, (_, index) => `// source line ${index + 1}`).join("\n");
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    const render = (args: any, context: any) =>
+      tool.renderCall?.(args, theme, context).render(200).join("\n") ?? "";
+
+    const collapsed = render(
+      { code, timeoutMs: 5000 },
+      { expanded: false, argsComplete: true },
+    );
+    expect(collapsed).toContain("typescript (15 lines) timeout=5000ms");
+    expect(collapsed).toContain("source line 1");
+    expect(collapsed).not.toContain("source line 15");
+    expect(collapsed).toContain("3 more lines (Ctrl+O to expand)");
+
+    const expanded = render({ code }, { expanded: true, argsComplete: true });
+    expect(expanded).toContain("source line 15");
+    expect(expanded).not.toContain("more lines");
+
+    const singleLine = render({ code: "return 1" }, { expanded: false, argsComplete: true });
+    expect(singleLine).toContain("1 line)");
+
+    const empty = render({ code: "" }, { expanded: false, argsComplete: true });
+    expect(empty).toContain("empty source");
+
+    const partial = render({ code: undefined }, { expanded: false, argsComplete: false });
+    expect(partial).toContain("generating…");
+    expect(partial).toContain("waiting for source…");
   });
 
   it("reads, writes, edits, lists, globs, and stats workspace files", async () => {
@@ -140,11 +172,12 @@ describe("pit extension", () => {
     await writeFile(join(cwd, "edit.txt"), "same same abcdef", "utf8");
     const errors = await value(`async ({ workspace }) => {
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
+      const raw = workspace as any;
       return Promise.all([
         capture(() => workspace.readText("edit.txt", { offset: 0 })),
         capture(() => workspace.readText("edit.txt", { limit: 1.5 })),
-        capture(() => workspace.readText("edit.txt", "bad")),
-        capture(() => workspace.writeText("x", 123)),
+        capture(() => raw.readText("edit.txt", "bad")),
+        capture(() => raw.writeText("x", 123)),
         capture(() => workspace.editText("edit.txt", [])),
         capture(() => workspace.editText("edit.txt", [{ oldText: "", newText: "x" }])),
         capture(() => workspace.editText("edit.txt", [{ oldText: "missing", newText: "x" }])),
@@ -152,9 +185,9 @@ describe("pit extension", () => {
         capture(() => workspace.editText("edit.txt", [
           { oldText: "abc", newText: "x" }, { oldText: "bcde", newText: "y" },
         ])),
-        capture(() => workspace.editText("edit.txt", "bad")),
-        capture(() => workspace.stat(42)),
-        capture(() => workspace.noSuchMethod()),
+        capture(() => raw.editText("edit.txt", "bad")),
+        capture(() => raw.stat(42)),
+        capture(() => raw.noSuchMethod()),
       ]);
     }`);
     expect(errors.join("\n")).toMatch(/positive integers/);
@@ -185,7 +218,8 @@ describe("pit extension", () => {
 
   it("validates shell calls and rejects unknown capabilities", async () => {
     expect(await value(`async ({ shell }) => shell.exec("ok")`)).toMatchObject({ code: 0 });
-    const errors = await value(`async ({ shell, mystery }) => {
+    const errors = await value(`async (capabilities) => {
+      const { shell, mystery } = capabilities as any;
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
       return [await capture(() => shell.exec(1)), await capture(() => shell.exec("x", "bad")), await capture(() => mystery.go())];
     }`);
@@ -214,7 +248,8 @@ describe("pit extension", () => {
     const result = await value(`async ({ http }) => {
       const ok = await http.request("https://example.test");
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
-      return [ok, await capture(() => http.request(1)), await capture(() => http.request("x", "bad")), await capture(() => http.nope("x"))];
+      const raw = http as any;
+      return [ok, await capture(() => raw.request(1)), await capture(() => raw.request("x", "bad")), await capture(() => raw.nope("x"))];
     }`);
     expect(result[0]).toMatchObject({ body: "small", truncated: false });
     expect(result.slice(1)).toEqual(["url must be a string", "options must be an object", "Unknown capability or method: http.nope"]);
@@ -243,10 +278,11 @@ describe("pit extension", () => {
 
     const errors = await value(`async ({ ui }) => {
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
+      const raw = ui as any;
       return [
-        await capture(() => ui.confirm(1, "x")),
-        await capture(() => ui.select("x", "bad")),
-        await capture(() => ui.nope()),
+        await capture(() => raw.confirm(1, "x")),
+        await capture(() => raw.select("x", "bad")),
+        await capture(() => raw.nope()),
       ];
     }`);
     expect(errors).toEqual(["title must be a string", "options must be an array", "Unknown ui method: nope"]);

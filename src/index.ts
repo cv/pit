@@ -3,10 +3,12 @@ import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   formatSize,
+  highlightCode,
   truncateHead,
   truncateTail,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import fg from "fast-glob";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
@@ -14,6 +16,7 @@ import { dirname, resolve } from "node:path";
 import { runInSandbox, type CapabilityHandler } from "./sandbox.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
+const COLLAPSED_CODE_LINES = 12;
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -203,7 +206,7 @@ async ({ workspace, shell }) => {
   return { packageJson: JSON.parse(packageFile.text), status };
 }
 
-Capability calls begin immediately and return promises. Start independent calls together and await them with Promise.all. Sequence only operations with data dependencies or conflicting side effects. The function cannot use imports and must return a compact JSON-serializable value.
+The function is contextually type-checked against the capability contract, so capability names, methods, arguments, awaited values, and return values are validated without requiring source annotations. Capability calls begin immediately and return promises. Start independent calls together and await them with Promise.all. Sequence only operations with data dependencies or conflicting side effects. The function cannot use imports and must return a compact JSON-serializable value.
 
 CAPABILITIES
 
@@ -232,6 +235,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     promptGuidelines: [
       "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
       "Call typescript with an async function expression that destructures the required capabilities, such as async ({ workspace, shell }) => { ... }.",
+      "Code passed to typescript is contextually type-checked against the capability contract; use validation diagnostics to correct capability names, arguments, missing awaits, and result types.",
       "Capability calls in typescript begin immediately and return promises; await every capability promise before returning the final result.",
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
       "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state.",
@@ -243,7 +247,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     ],
     parameters: Type.Object({
       code: Type.String({
-        description: `A TypeScript function expression receiving destructured capabilities. Example: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Start independent operations together with Promise.all. Sequence only dependent operations or conflicting mutations. Await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
+        description: `A contextually type-checked TypeScript function expression receiving destructured capabilities; source annotations are optional. Example: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Start independent operations together with Promise.all. Sequence only dependent operations or conflicting mutations. Await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
       }),
       timeoutMs: Type.Optional(Type.Integer({
         minimum: 1,
@@ -251,6 +255,26 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
         description: "Maximum wall-clock time for the entire invocation in milliseconds (default: 30000).",
       })),
     }),
+    renderCall(args, theme, context) {
+      const code = typeof args.code === "string" ? args.code : "";
+      const lines = code ? highlightCode(code, "typescript") : [];
+      const shown = context.expanded ? lines : lines.slice(0, COLLAPSED_CODE_LINES);
+      const state = context.argsComplete ? `${lines.length} line${lines.length === 1 ? "" : "s"}` : "generating…";
+      let text = theme.fg("toolTitle", theme.bold("typescript"));
+      text += theme.fg("dim", ` (${state})`);
+      if (args.timeoutMs !== undefined) {
+        text += theme.fg("dim", ` timeout=${args.timeoutMs}ms`);
+      }
+      if (shown.length > 0) {
+        text += `\n${shown.join("\n")}`;
+      } else {
+        text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
+      }
+      if (!context.expanded && lines.length > shown.length) {
+        text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
+      }
+      return new Text(text, 0, 0);
+    },
     async execute(_id, params, signal, _update, ctx) {
       const value = await runInSandbox(params.code, createCapabilities(pi, ctx, signal), {
         ...(signal ? { signal } : {}),

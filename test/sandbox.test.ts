@@ -1,5 +1,49 @@
+import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import { runInSandbox } from "../src/sandbox.js";
+import { formatDiagnostic, runInSandbox, validateTypeScript } from "../src/sandbox.js";
+
+describe("validateTypeScript", () => {
+  it("formats global and non-program diagnostics", () => {
+    expect(formatDiagnostic({
+      category: ts.DiagnosticCategory.Error,
+      code: 1,
+      messageText: "global error",
+      file: undefined,
+      start: undefined,
+      length: undefined,
+    })).toBe("global error");
+
+    const file = ts.createSourceFile("/other.ts", "bad", ts.ScriptTarget.ES2022);
+    expect(formatDiagnostic({
+      category: ts.DiagnosticCategory.Error,
+      code: 2,
+      messageText: "file error",
+      file,
+      start: 0,
+      length: 3,
+    })).toBe("/other.ts:1:1 file error");
+  });
+
+  it("contextually types capabilities without source annotations", () => {
+    expect(() => validateTypeScript(`async ({ workspace }) => {
+      const file = await workspace.readText("package.json");
+      return file.text;
+    }`)).not.toThrow();
+  });
+
+  it("reports capability, await, argument, and result errors with source locations", () => {
+    expect(() => validateTypeScript(`async ({ workpace }) => workpace.readText("x")`))
+      .toThrow(/1:.*Property 'workpace' does not exist/);
+    expect(() => validateTypeScript(`async ({ workspace }) => {
+      const file = workspace.readText("x");
+      return file.text;
+    }`)).toThrow(/3:.*Property 'text' does not exist on type 'Promise/);
+    expect(() => validateTypeScript(`async ({ workspace }) => workspace.readText(42)`))
+      .toThrow(/number.*string/);
+    expect(() => validateTypeScript(`() => ({ pending: Promise.resolve(1) })`))
+      .toThrow(/Promise<number>/);
+  });
+});
 
 describe("runInSandbox", () => {
   it("executes TypeScript and returns a copied value", async () => {
@@ -11,20 +55,20 @@ describe("runInSandbox", () => {
   });
 
   it("provides destructured capabilities through RPC", async () => {
-    const handler = vi.fn(async (_capability: string, _method: string, args: unknown[]) =>
-      Number(args[0]) + Number(args[1]),
-    );
+    const handler = vi.fn(async (): Promise<unknown> => ({
+      stdout: "", stderr: "", code: 42, truncated: false,
+    }));
     const result = await runInSandbox(
-      `async ({ maths }) => ({ value: await maths.add(20, 22) })`,
+      `async ({ shell }) => ({ value: (await shell.exec("sum")).code })`,
       handler,
     );
     expect(result).toEqual({ value: 42 });
-    expect(handler).toHaveBeenCalledWith("maths", "add", [20, 22]);
+    expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"]);
   });
 
   it("propagates capability errors", async () => {
     await expect(runInSandbox(
-      `async ({ nope }) => nope.fail()`,
+      `async ({ context }) => context.get()`,
       async () => { throw new Error("host refused"); },
     )).rejects.toThrow("host refused");
   });
@@ -60,12 +104,12 @@ describe("runInSandbox", () => {
   });
 
   it("handles non-Error capability failures", async () => {
-    await expect(runInSandbox(`async ({ broken }) => broken.call()`, async () => { throw "string failure"; }))
+    await expect(runInSandbox(`async ({ context }) => context.get()`, async () => { throw "string failure"; }))
       .rejects.toThrow("string failure");
   });
 
   it("does not reply after execution has timed out", async () => {
-    await expect(runInSandbox(`async ({ slow }) => slow.call()`, async () => {
+    await expect(runInSandbox(`async ({ context }) => context.get()`, async () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       return 1;
     }, { timeoutMs: 10 })).rejects.toThrow("timed out");
@@ -93,12 +137,12 @@ describe("runInSandbox", () => {
   });
 
   it("rejects non-functions and malformed source", async () => {
-    await expect(runInSandbox(`42`, async () => null)).rejects.toThrow("must evaluate to a function");
+    await expect(runInSandbox(`42`, async () => null)).rejects.toThrow("TypeScript validation failed");
     await expect(runInSandbox(`(() =>`, async () => null)).rejects.toThrow();
   });
 
   it("rejects values that cannot cross the JSON wire", async () => {
-    await expect(runInSandbox(`() => 1n`, async () => null)).rejects.toThrow(/BigInt/);
+    await expect(runInSandbox(`() => 1n`, async () => null)).rejects.toThrow(/bigint/i);
   });
 
   it("terminates runaway code", async () => {

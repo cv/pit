@@ -6,16 +6,20 @@ The model submits a TypeScript function. That function runs in a fresh, permissi
 
 ```ts
 async ({ workspace, shell }) => {
-  const manifests = await workspace.glob("**/package.json", {
-    ignore: ["**/node_modules/**"],
-  });
-  const status = await shell.exec("git status --short");
+  const [manifests, status] = await Promise.all([
+    workspace.glob("**/package.json", {
+      ignore: ["**/node_modules/**"],
+    }),
+    shell.exec("git status --short"),
+  ]);
 
   return { manifests, status };
 }
 ```
 
 The function's return value becomes the tool result. This lets the model batch several operations and perform ordinary computation without repeatedly crossing the model/tool boundary.
+
+In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in. The collapsed view shows the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source.
 
 ## Install and run
 
@@ -39,7 +43,9 @@ async ({ workspace, shell }) => {
 }
 ```
 
-Each destructured capability is a local proxy. Calling one of its methods performs an RPC to the trusted extension process. Unknown capabilities and methods fail closed.
+The function is contextually type-checked as a `PitProgram` before execution. No source annotations are required: destructured capabilities automatically receive the types declared in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
+
+Each destructured capability is a local proxy. Calling one of its methods performs an RPC to the trusted extension process. Calls begin immediately, so independent operations should be started together with `Promise.all`. Unknown capabilities and methods also fail closed at runtime.
 
 ### Capabilities
 

@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
+import * as ts from "typescript";
 
 export interface SandboxOptions {
   memoryLimitMb?: number;
@@ -27,6 +29,81 @@ interface WireMessage {
 }
 
 const RUNNER = fileURLToPath(new URL("./sandbox-runner.mjs", import.meta.url));
+const CAPABILITY_CONTRACT = readFileSync(
+  fileURLToPath(new URL("./capability-contract.d.ts", import.meta.url)),
+  "utf8",
+);
+const CONTRACT_FILE = "/pit/capability-contract.d.ts";
+const PROGRAM_FILE = "/pit/program.ts";
+const PROGRAM_PREFIX = "const program: PitProgram = (\n";
+const SANDBOX_GLOBALS = `
+declare const console: {
+  log(...values: unknown[]): void;
+  error(...values: unknown[]): void;
+  warn(...values: unknown[]): void;
+};
+declare function setTimeout(handler: Function, timeout?: number): unknown;
+declare const process: {
+  readonly env: Record<string, string | undefined>;
+  readonly stdout: { write(chunk: string): boolean };
+  readonly pid: number;
+  exit(code?: number): never;
+  kill(pid: number, signal?: string): boolean;
+  getBuiltinModule(name: string): any;
+};
+`;
+
+export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+  if (!diagnostic.file || diagnostic.start === undefined) return message;
+  const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+  if (diagnostic.file.fileName !== PROGRAM_FILE) {
+    return `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1} ${message}`;
+  }
+  // Submitted source starts on line two of the wrapper, so its one-based line
+  // number is equal to the wrapper's zero-based line number.
+  const line = Math.max(1, position.line);
+  return `${line}:${position.character + 1} ${message}`;
+}
+
+/** Semantically validate model code against the capability contract. */
+export function validateTypeScript(source: string): void {
+  const wrapped = `${PROGRAM_PREFIX}${source}\n);\nvoid program;\n`;
+  const options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    lib: ["lib.es2022.d.ts"],
+    types: [],
+    strict: true,
+    noImplicitAny: false,
+    useUnknownInCatchVariables: false,
+    noEmit: true,
+    skipLibCheck: true,
+  };
+  const baseHost = ts.createCompilerHost(options, true);
+  const sources = new Map([
+    [CONTRACT_FILE, CAPABILITY_CONTRACT + SANDBOX_GLOBALS],
+    [PROGRAM_FILE, wrapped],
+  ]);
+  const host: ts.CompilerHost = {
+    ...baseHost,
+    fileExists: (fileName) => sources.has(fileName) || baseHost.fileExists(fileName),
+    readFile: (fileName) => sources.get(fileName) ?? baseHost.readFile(fileName),
+    getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+      const contents = sources.get(fileName);
+      return contents === undefined
+        ? baseHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile)
+        : ts.createSourceFile(fileName, contents, languageVersion, true);
+    },
+  };
+  const program = ts.createProgram([CONTRACT_FILE, PROGRAM_FILE], options, host);
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  if (diagnostics.length > 0) {
+    const messages = diagnostics.map(formatDiagnostic);
+    throw new Error(`TypeScript validation failed:\n- ${messages.join("\n- ")}`);
+  }
+}
 
 /**
  * Run a TypeScript function expression in a fresh, permission-restricted Node
@@ -46,6 +123,8 @@ export async function runInSandbox(
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     throw new Error("timeoutMs must be positive");
   }
+
+  validateTypeScript(source);
 
   const compiled = await transform(`(${source})`, {
     loader: "ts",
