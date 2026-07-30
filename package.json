@@ -1,9 +1,10 @@
 {
   "name": "pit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A single, capability-injected TypeScript tool for Pi",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "check": "tsc --noEmit && biome check . --error-on-warnings --diagnostic-level=warn",
     "test": "vitest run",
