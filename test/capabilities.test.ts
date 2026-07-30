@@ -7,6 +7,7 @@ import {
   run,
   sessionTree,
   setupHarness,
+  tool,
   value,
 } from "./extension-fixture.js";
 
@@ -109,6 +110,36 @@ describe("host capabilities", () => {
       'options.truncate must be "head" or "tail"',
     ]);
     expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
+  });
+
+  it("streams bounded shell progress through tool updates", async () => {
+    const updates: any[] = [];
+    const script = String.raw`setTimeout(() => { process.stdout.write("\u001b[31mvisible\u0007\rnext"); process.stderr.write("warning"); }, 150);`;
+    const result = await tool.execute(
+      "stream-call",
+      {
+        code: `async ({ shell }) => shell.execFile(${JSON.stringify(process.execPath)}, [
+          "-e", ${JSON.stringify(script)},
+        ])`,
+      },
+      undefined,
+      (update: any) => updates.push(update),
+      context(),
+    );
+
+    expect(execMock).not.toHaveBeenCalled();
+    expect(result.details.value).toMatchObject({
+      stdout: "\u001b[31mvisible\u0007\rnext",
+      stderr: "warning",
+      code: 0,
+    });
+    expect(updates.length).toBeGreaterThanOrEqual(2);
+    const progress = updates.at(-1).details.progress[0];
+    expect(progress).toMatchObject({ status: "done", code: 0 });
+    expect(progress.output).toContain("[31mvisible\nnext");
+    expect(progress.output).toContain("warning");
+    expect(progress.output).not.toContain(String.fromCharCode(27));
+    expect(progress.output).not.toContain(String.fromCharCode(7));
   });
 
   it("executes argument arrays without shell interpolation", async () => {

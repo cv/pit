@@ -243,6 +243,26 @@ describe("pit extension", () => {
     );
     expect(partial).toContain("Running TypeScript…");
 
+    const streaming = render(
+      {
+        content: [{ type: "text", text: "Running TypeScript…" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          progress: [
+            { id: 1, command: "npm test", status: "running", output: "test output" },
+            { id: 2, command: "git status", status: "done", code: 0, output: "clean" },
+            { id: 3, command: "sleep 1", status: "running", output: "" },
+          ],
+        },
+      },
+      { expanded: false, isPartial: true },
+    );
+    expect(streaming).toContain("[running] npm test");
+    expect(streaming).toContain("test output");
+    expect(streaming).toContain("[done (0)] git status");
+    expect(streaming).toContain("[running] sleep 1");
+
     const symbolResult = render(
       { content: [], details: { value: Symbol("value"), truncated: false } },
       { expanded: false, isPartial: false },

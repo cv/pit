@@ -19,7 +19,7 @@ async ({ workspace, shell }) => {
 
 The expression's resolved value becomes the tool result. This lets the model batch several operations and perform ordinary computation without repeatedly crossing the model/tool boundary.
 
-In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in, and successful result values are rendered as syntax-highlighted JSON. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result. Calls to saved functions also show the injected definitions and transitive saved dependencies in expanded mode, with per-function and total display limits.
+In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in, and successful result values are rendered as syntax-highlighted JSON. Long-running shell calls stream a sanitized, bounded tail of stdout and stderr into partial tool updates without adding those updates to the final model context. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result. Calls to saved functions also show the injected definitions and transitive saved dependencies in expanded mode, with per-function and total display limits.
 
 ## Install
 

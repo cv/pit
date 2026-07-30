@@ -29,6 +29,7 @@ import {
 
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
+import { executeStreamingProcess } from "./host-process.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
@@ -46,10 +47,29 @@ const COLLAPSED_RESULT_LINES = 12;
 const MAX_EXPANDED_SAVED_FUNCTION_LINES = 200;
 const MAX_EXPANDED_SAVED_TOTAL_LINES = 500;
 
+interface ShellProgress {
+  id: number;
+  command: string;
+  status: "running" | "done";
+  output: string;
+  code?: number;
+}
+
+type HostShellProgressEvent =
+  | { phase: "start" }
+  | { phase: "output"; stream: "stdout" | "stderr"; chunk: string }
+  | { phase: "end"; code: number };
+
+type ShellProgressEvent = HostShellProgressEvent & {
+  id: number;
+  command: string;
+};
+
 interface TypeScriptDetails {
   value: unknown;
   truncated: boolean;
   functions?: FunctionActivity[];
+  progress?: ShellProgress[];
 }
 
 function boundedInteger(
@@ -125,6 +145,7 @@ async function executeHostProcess(
   options: Record<string, unknown>,
   defaultCwd: string,
   onShellCommand: (command: string) => void,
+  onProgress?: (event: HostShellProgressEvent) => void,
   signal?: AbortSignal,
 ) {
   if (options.raise !== undefined && typeof options.raise !== "boolean") {
@@ -149,12 +170,22 @@ async function executeHostProcess(
     throw new Error('options.truncate must be "head" or "tail"');
   }
   const truncateOutput = truncate === "head" ? truncateHead : truncateTail;
+  const timeout = Number(options.timeoutMs ?? 120_000);
   onShellCommand(displayCommand);
-  const result = await pi.exec(program, args, {
-    cwd,
-    ...(signal ? { signal } : {}),
-    timeout: Number(options.timeoutMs ?? 120_000),
-  });
+  onProgress?.({ phase: "start" });
+  const result = onProgress
+    ? await executeStreamingProcess(program, args, {
+        cwd,
+        timeout,
+        ...(signal ? { signal } : {}),
+        onChunk: (stream, chunk) => onProgress({ phase: "output", stream, chunk }),
+      })
+    : await pi.exec(program, args, {
+        cwd,
+        ...(signal ? { signal } : {}),
+        timeout,
+      });
+  onProgress?.({ phase: "end", code: result.code });
   const stdout = truncateOutput(result.stdout, { maxBytes, maxLines });
   const stderr = truncateOutput(result.stderr, { maxBytes, maxLines });
   if (options.raise === true && result.code !== 0) {
@@ -178,7 +209,9 @@ function createCapabilities(
   registry: FunctionRegistry,
   activity: FunctionActivity[],
   onShellCommand: (command: string) => void,
+  onShellProgress?: (event: ShellProgressEvent) => void,
 ): CapabilityHandler {
+  let nextShellProgressId = 1;
   return async (capability, method, args, signal) => {
     if (capability !== "__pit") {
       validateCapabilityCall(capability, method, args);
@@ -190,6 +223,10 @@ function createCapabilities(
     if (capability === "shell" && method === "exec") {
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
+      const progressId = nextShellProgressId++;
+      const progress = onShellProgress
+        ? (event: HostShellProgressEvent) => onShellProgress({ id: progressId, command, ...event })
+        : undefined;
       return executeHostProcess(
         pi,
         "/bin/sh",
@@ -198,6 +235,7 @@ function createCapabilities(
         options,
         ctx.cwd,
         onShellCommand,
+        progress,
         signal,
       );
     }
@@ -213,6 +251,11 @@ function createCapabilities(
         program,
         ...processArgs.map((argument) => JSON.stringify(argument)),
       ].join(" ");
+      const progressId = nextShellProgressId++;
+      const progress = onShellProgress
+        ? (event: HostShellProgressEvent) =>
+            onShellProgress({ id: progressId, command: commandDisplay, ...event })
+        : undefined;
       return executeHostProcess(
         pi,
         program,
@@ -221,6 +264,7 @@ function createCapabilities(
         options,
         ctx.cwd,
         onShellCommand,
+        progress,
         signal,
       );
     }
@@ -291,6 +335,7 @@ function createCapabilities(
       return null;
     }
 
+    /* v8 ignore next -- registry validation routes the only context method here. */
     if (capability === "context" && method === "get") {
       return {
         cwd: ctx.cwd,
@@ -305,6 +350,19 @@ function createCapabilities(
     /* v8 ignore next -- registry validation rejects unknown public calls before dispatch. */
     throw new Error(`Capability registry and dispatcher disagree: ${capability}.${method}`);
   };
+}
+
+function sanitizeProgressText(value: string): string {
+  let sanitized = "";
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (character === "\r") {
+      sanitized += "\n";
+    } else if (character === "\n" || character === "\t" || (code >= 32 && code !== 127)) {
+      sanitized += character;
+    }
+  }
+  return sanitized;
 }
 
 export function display(value: unknown): string {
@@ -414,14 +472,22 @@ export default function pit(pi: ExtensionAPI) {
     renderResult(result, { expanded, isPartial }, theme, context) {
       const content = result.content[0];
       const fallback = content?.type === "text" ? content.text : "";
+      const details = result.details as TypeScriptDetails | undefined;
       if (isPartial) {
-        return new Text(theme.fg("warning", "Running TypeScript…"), 0, 0);
+        let text = theme.fg("warning", "Running TypeScript…");
+        for (const progress of details?.progress?.slice(-4) ?? []) {
+          const state = progress.status === "done" ? `done (${progress.code})` : "running";
+          text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
+          if (progress.output) {
+            text += `\n${theme.fg("muted", progress.output)}`;
+          }
+        }
+        return new Text(text, 0, 0);
       }
       if (context.isError) {
         return new Text(theme.fg("error", fallback || "TypeScript execution failed"), 0, 0);
       }
 
-      const details = result.details as TypeScriptDetails | undefined;
       let source = fallback;
       let language = "typescript";
       if (details && !details.truncated) {
@@ -465,8 +531,44 @@ export default function pit(pi: ExtensionAPI) {
       }
       return new Text(text, 0, 0);
     },
-    async execute(_id, params, signal, _update, ctx) {
+    async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
+      const progressById = new Map<number, ShellProgress>();
+      let lastProgressUpdate = 0;
+      const onShellProgress = update
+        ? (event: ShellProgressEvent) => {
+            const current = progressById.get(event.id) ?? {
+              id: event.id,
+              command: sanitizeProgressText(event.command),
+              status: "running" as const,
+              output: "",
+            };
+            if (event.phase === "output") {
+              const chunk = sanitizeProgressText(event.chunk);
+              current.output = truncateTail(current.output + chunk, {
+                maxBytes: 4000,
+                maxLines: 8,
+              }).content;
+            }
+            if (event.phase === "end") {
+              current.status = "done";
+              current.code = event.code;
+            }
+            progressById.set(event.id, current);
+            const now = Date.now();
+            if (event.phase !== "output" || now - lastProgressUpdate >= 100) {
+              lastProgressUpdate = now;
+              update({
+                content: [{ type: "text", text: "Running TypeScript…" }],
+                details: {
+                  value: undefined,
+                  truncated: false,
+                  progress: [...progressById.values()],
+                },
+              });
+            }
+          }
+        : undefined;
       const repeatedShellCommands = new Set<string>();
       const namedFunction = getNamedFunctionName(params.code);
       let executionRegistry: FunctionRegistry = savedFunctions;
@@ -489,13 +591,20 @@ export default function pit(pi: ExtensionAPI) {
       }
       const value = await runInSandbox(
         params.code,
-        createCapabilities(pi, ctx, executionRegistry, functionActivity, (command) => {
-          const count = (shellCommandUses.get(command) ?? 0) + 1;
-          shellCommandUses.set(command, count);
-          if (count >= 2 && !suggestedShellCommands.has(command)) {
-            repeatedShellCommands.add(command);
-          }
-        }),
+        createCapabilities(
+          pi,
+          ctx,
+          executionRegistry,
+          functionActivity,
+          (command) => {
+            const count = (shellCommandUses.get(command) ?? 0) + 1;
+            shellCommandUses.set(command, count);
+            if (count >= 2 && !suggestedShellCommands.has(command)) {
+              repeatedShellCommands.add(command);
+            }
+          },
+          onShellProgress,
+        ),
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
