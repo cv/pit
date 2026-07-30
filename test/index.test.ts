@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import pit, { display, handleFunctions, reconstructFunctions } from "../src/index.js";
+import pit, {
+  CAPABILITY_METHODS,
+  display,
+  handleFunctions,
+  reconstructFunctions,
+} from "../src/index.js";
 
 type RegisteredTool = {
   label: string;
@@ -136,6 +141,32 @@ describe("pit extension", () => {
 
     sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
+  });
+
+  it("keeps capability declarations and model-facing metadata in sync", async () => {
+    const contract = await readFile(join(process.cwd(), "src/capability-contract.d.ts"), "utf8");
+    const readme = await readFile(join(process.cwd(), "README.md"), "utf8");
+    const interfaces: Record<keyof typeof CAPABILITY_METHODS, string> = {
+      workspace: "PitWorkspaceCapability",
+      shell: "PitShellCapability",
+      http: "PitHttpCapability",
+      ui: "PitUiCapability",
+      functions: "PitFunctionsCapability",
+      context: "PitContextCapability",
+    };
+
+    for (const [capability, methods] of Object.entries(CAPABILITY_METHODS)) {
+      const interfaceName = interfaces[capability as keyof typeof interfaces];
+      const pattern = new RegExp("interface " + interfaceName + " \\{([\\s\\S]*?)\\n\\}");
+      const body = contract.match(pattern)?.[1] ?? "";
+      const declared = [...body.matchAll(/^  ([A-Za-z_$][\w$]*)\(/gm)].map((match) => match[1]);
+      expect(declared, capability).toEqual([...methods]);
+      for (const method of methods) {
+        const qualified = capability + "." + method;
+        expect(tool.description, "metadata for " + qualified).toContain(qualified);
+        expect(readme, "README for " + qualified).toContain("`" + method + "(");
+      }
+    }
   });
 
   it("renders generated TypeScript source with collapsed and expanded views", () => {

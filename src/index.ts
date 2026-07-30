@@ -18,6 +18,15 @@ import { runInSandbox, validateTypeScript, type CapabilityHandler } from "./sand
 const MAX_HTTP_BYTES = 1_000_000;
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
 const SAVED_FUNCTION_NAME = /^[A-Za-z_$][A-Za-z0-9_$-]{0,63}$/;
+export const CAPABILITY_METHODS = {
+  workspace: ["readText", "writeText", "editText", "list", "glob", "stat"],
+  shell: ["exec"],
+  http: ["request"],
+  ui: ["confirm", "input", "select", "notify"],
+  functions: ["set", "run", "has", "list", "delete"],
+  context: ["get"],
+} as const;
+
 type FunctionRegistry = Map<string, string>;
 const FUNCTION_ENTRY_TYPE = "pit-functions";
 interface FunctionMutation {
