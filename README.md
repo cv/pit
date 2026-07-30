@@ -138,6 +138,9 @@ This is stronger than `node:vm`, which is not a security boundary, and avoids a 
 npm run check
 npm test
 npm run coverage
+npm run biome:fix
 ```
+
+`npm run check` runs TypeScript plus Biome with the `all` lint preset, import organization, formatting, and warnings treated as errors. The configuration disables only rules that conflict with the Node sandbox, generated ambient contract, test fixtures, or intentional control-flow patterns.
 
 Pull requests and pushes to `main` run the same type-check and coverage gate in GitHub Actions. When branch protection is available, configure `main` to require the `test` check before merging.

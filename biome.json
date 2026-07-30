@@ -1,0 +1,158 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["**", "!!coverage", "!!node_modules", "!!package-lock.json"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "all",
+      "correctness": {
+        "noNodejsModules": "off",
+        "noProcessGlobal": "off",
+        "noUnresolvedImports": "off",
+        "useImportExtensions": "off",
+        "useQwikValidLexicalScope": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off",
+        "noExcessiveLinesPerFunction": "off",
+        "useMaxParams": "off",
+        "noVoid": "off"
+      },
+      "performance": {
+        "noAwaitInLoops": "off"
+      },
+      "style": {
+        "noContinue": "off",
+        "noDefaultExport": "off",
+        "noExcessiveLinesPerFile": "off",
+        "noIncrementDecrement": "off",
+        "noMagicNumbers": "off",
+        "noParameterProperties": "off",
+        "noTernary": "off",
+        "useConsistentMethodSignatures": "off",
+        "useConsistentTypeDefinitions": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "asNeeded",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false
+    }
+  },
+  "json": {
+    "formatter": {
+      "enabled": true,
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "lineWidth": 100
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["test/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off",
+            "noShadow": "off",
+            "useArraySortCompare": "off",
+            "useAwait": "off"
+          },
+          "performance": {
+            "noNamespaceImport": "off",
+            "useTopLevelRegex": "off"
+          },
+          "style": {
+            "useThrowOnlyError": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/sandbox-runner.mjs"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off",
+            "noUnnecessaryConditions": "off"
+          },
+          "style": {
+            "noProcessEnv": "off"
+          },
+          "security": {
+            "noGlobalEval": "off"
+          },
+          "complexity": {
+            "noCommaOperator": "off",
+            "noVoid": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/capability-contract.d.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off",
+            "noConfusingVoidType": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/index.ts"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/sandbox.ts"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noNamespaceImport": "off"
+          },
+          "style": {
+            "noProcessEnv": "off",
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    }
+  ]
+}

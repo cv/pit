@@ -5,9 +5,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && biome check . --error-on-warnings --diagnostic-level=warn",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "biome:check": "biome check . --error-on-warnings --diagnostic-level=warn",
+    "biome:fix": "biome check --write .",
+    "format": "biome format --write ."
   },
   "pi": {
     "extensions": [
@@ -23,6 +26,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
     "@earendil-works/pi-coding-agent": "^0.83.0",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^4.1.10",
