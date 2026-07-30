@@ -281,8 +281,38 @@ describe("pit extension", () => {
     expect(replaced.details.functions).toEqual([{ action: "set", name: "greet", replaced: true }]);
     expect(await value("greet()")).toEqual({ greeting: "replaced" });
 
+    await expect(
+      run(`async function broken() { throw new Error("initial failure"); }`),
+    ).rejects.toThrow("initial failure");
+    await expect(
+      run(`async function greet() { throw new Error("replacement failure"); }`),
+    ).rejects.toThrow("replacement failure");
+    expect(await value("greet()")).toEqual({ greeting: "replaced" });
+
     const info = await value("async ({ context }) => context.get()");
     expect(info.savedFunctions).toEqual(["greet"]);
+    expect(branchEntries.some((entry) => entry.data?.name === "broken")).toBe(false);
+  });
+
+  it("rejects replacements that invalidate saved dependents", async () => {
+    await run(`async function dependency(_capabilities, input: { value: number } = { value: 1 }) {
+      return input.value;
+    }`);
+    await run(`async function dependent() {
+      return dependency({ value: 2 });
+    }`);
+    const entriesBefore = branchEntries.length;
+
+    await expect(
+      run(`async function dependency(
+        _capabilities,
+        input: { value: string } = { value: "replacement" },
+      ) { return input.value; }`),
+    ).rejects.toThrow(/number.*string/);
+
+    expect(await value("dependency({ value: 3 })")).toBe(3);
+    expect(await value("dependent()")).toBe(2);
+    expect(branchEntries).toHaveLength(entriesBefore);
   });
 
   it("passes and validates top-level params as initial function input", async () => {

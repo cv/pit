@@ -436,24 +436,34 @@ export default function pit(pi: ExtensionAPI) {
       const functionActivity: FunctionActivity[] = [];
       const repeatedShellCommands = new Set<string>();
       const namedFunction = getNamedFunctionName(params.code);
+      let executionRegistry: FunctionRegistry = savedFunctions;
+      let replacedNamedFunction = false;
       if (namedFunction) {
         validateSavedFunctionName(namedFunction);
         validateRegistryCapacity(savedFunctions, namedFunction, params.code);
-        validateTypeScript(params.code, savedFunctions, params.params);
-        const replaced = savedFunctions.has(namedFunction);
-        savedFunctions.set(namedFunction, params.code);
-        pi.appendEntry(FUNCTION_ENTRY_TYPE, {
+        const candidateRegistry = new Map(savedFunctions);
+        candidateRegistry.set(namedFunction, params.code);
+        for (const [candidateName, candidateSource] of candidateRegistry) {
+          validateTypeScript(
+            candidateSource,
+            candidateRegistry,
+            candidateName === namedFunction ? params.params : undefined,
+          );
+        }
+        executionRegistry = candidateRegistry;
+        replacedNamedFunction = savedFunctions.has(namedFunction);
+        functionActivity.push({
+          action: "set",
           name: namedFunction,
-          source: params.code,
-        } satisfies FunctionEntry);
-        functionActivity.push({ action: "set", name: namedFunction, replaced });
+          replaced: replacedNamedFunction,
+        });
       }
       const value = await runInSandbox(
         params.code,
         createCapabilities(
           pi,
           ctx,
-          savedFunctions,
+          executionRegistry,
           functionActivity,
           (command) => {
             const count = (shellCommandUses.get(command) ?? 0) + 1;
@@ -467,10 +477,17 @@ export default function pit(pi: ExtensionAPI) {
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
-          savedFunctions,
+          savedFunctions: executionRegistry,
           ...(params.params === undefined ? {} : { input: params.params }),
         },
       );
+      if (namedFunction) {
+        pi.appendEntry(FUNCTION_ENTRY_TYPE, {
+          name: namedFunction,
+          source: params.code,
+        } satisfies FunctionEntry);
+        savedFunctions.set(namedFunction, params.code);
+      }
       const rendered = display(value);
       const output = truncateHead(rendered, {
         maxBytes: DEFAULT_MAX_BYTES,
