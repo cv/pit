@@ -122,4 +122,4 @@ npm test
 npm run coverage
 ```
 
-Pull requests and pushes to `main` run the same type-check and coverage gate in GitHub Actions. The `main` branch requires the `test` check before merging.
+Pull requests and pushes to `main` run the same type-check and coverage gate in GitHub Actions. When branch protection is available, configure `main` to require the `test` check before merging.
