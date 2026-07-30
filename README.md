@@ -54,6 +54,7 @@ Each destructured capability is a local proxy. Calling one of its methods perfor
   - `writeText(path, contents)`
   - `editText(path, [{ oldText, newText }, ...])`
   - `batch([{ kind: "write" | "edit", path, ... }, ...])` — transactional multi-file mutation
+  - `applyPatch(unifiedDiff)` — transactional multi-file unified patch
   - `list(path?)`
   - `glob(pattern | patterns, { dot?, onlyFiles?, ignore? })`
   - `stat(path)`

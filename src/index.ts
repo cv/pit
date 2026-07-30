@@ -9,6 +9,7 @@ import {
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { applyPatch as applyUnifiedPatch, parsePatch, type StructuredPatch } from "diff";
 import { Type } from "typebox";
 import fg from "fast-glob";
 import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
@@ -21,6 +22,7 @@ import {
 } from "./sandbox.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
+const MAX_PATCH_BYTES = 1_000_000;
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
 const MAX_SAVED_FUNCTIONS = 64;
 const MAX_SAVED_FUNCTION_TOTAL_BYTES = 1_000_000;
@@ -31,7 +33,7 @@ const RESERVED_FUNCTION_NAMES = new Set([
   "console", "eval", "globalThis", "process", "undefined",
 ]);
 export const CAPABILITY_METHODS = {
-  workspace: ["readText", "writeText", "editText", "batch", "list", "glob", "stat"],
+  workspace: ["readText", "writeText", "editText", "applyPatch", "batch", "list", "glob", "stat"],
   shell: ["exec"],
   http: ["request"],
   ui: ["confirm", "input", "select", "notify"],
@@ -257,6 +259,97 @@ async function batchWorkspace(cwd: string, args: unknown[]) {
   });
 }
 
+function normalizedPatchPath(fileName: string | undefined): string | undefined {
+  if (!fileName || fileName === "/dev/null") return undefined;
+  return fileName.replace(/^(?:a|b)\//, "");
+}
+
+function patchTarget(cwd: string, patch: StructuredPatch, index: number) {
+  if (patch.isBinary) throw new Error(`patch[${index}] is binary and cannot be applied`);
+  if (patch.isRename || patch.isCopy) throw new Error(`patch[${index}] renames and copies are not supported`);
+  if (patch.hunks.length === 0) throw new Error(`patch[${index}] has no hunks`);
+  const oldName = normalizedPatchPath(patch.oldFileName);
+  const newName = normalizedPatchPath(patch.newFileName);
+  const kind = patch.isCreate || oldName === undefined
+    ? "create"
+    : patch.isDelete || newName === undefined
+      ? "delete"
+      : "modify";
+  if (kind === "modify" && oldName !== newName) {
+    throw new Error(`patch[${index}] changes paths; renames are not supported`);
+  }
+  const name = kind === "delete" ? oldName : newName;
+  if (!name) throw new Error(`patch[${index}] does not identify a target file`);
+  return { patch, kind, path: workspacePath(cwd, name), index };
+}
+
+async function applyWorkspacePatch(cwd: string, args: unknown[]) {
+  const patchText = string(args[0], "patch");
+  if (!patchText.trim()) throw new Error("patch must not be empty");
+  if (Buffer.byteLength(patchText) > MAX_PATCH_BYTES) {
+    throw new Error(`patch exceeds ${formatSize(MAX_PATCH_BYTES)}`);
+  }
+  let parsed: StructuredPatch[];
+  try {
+    parsed = parsePatch(patchText);
+  } catch (error) {
+    throw new Error(`Invalid unified patch: ${String(error)}`);
+  }
+  const targets = parsed.map((patch, index) => patchTarget(cwd, patch, index));
+  const paths = targets.map((target) => target.path);
+  if (new Set(paths).size !== paths.length) throw new Error("patch must contain at most one diff per file");
+
+  return withMutationQueues([...paths].sort(), async () => {
+    const snapshots = new Map(await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)));
+    const prepared = targets.map((target) => {
+      const snapshot = snapshots.get(target.path)!;
+      if (target.kind === "create" && snapshot.existed) {
+        throw new Error(`patch[${target.index}] cannot create an existing file: ${target.path}`);
+      }
+      if (target.kind !== "create" && !snapshot.existed) {
+        throw new Error(`patch[${target.index}] cannot ${target.kind} a missing file: ${target.path}`);
+      }
+      const next = applyUnifiedPatch(snapshot.contents, target.patch, { fuzzFactor: 0 });
+      if (next === false) {
+        const hunkLines = target.patch.hunks.map((hunk) => `-${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines}`).join(", ");
+        throw new Error(`patch[${target.index}] failed to apply to ${target.path}; rejected hunks: ${hunkLines}`);
+      }
+      return { ...target, snapshot, next };
+    });
+
+    const committed: typeof prepared = [];
+    try {
+      for (const target of prepared) {
+        if (target.kind === "delete") {
+          await unlink(target.path);
+        } else {
+          await mkdir(dirname(target.path), { recursive: true });
+          await writeFile(target.path, target.next, "utf8");
+        }
+        committed.push(target);
+      }
+    } catch (error) {
+      for (const target of committed.reverse()) {
+        try {
+          if (target.snapshot.existed) await writeFile(target.path, target.snapshot.contents, "utf8");
+          else await unlink(target.path);
+        } catch {
+          // Preserve the original write failure; rollback is best-effort.
+        }
+      }
+      throw error;
+    }
+    return {
+      files: prepared.map((target) => ({
+        path: target.path,
+        kind: target.kind,
+        hunks: target.patch.hunks.length,
+        bytes: target.kind === "delete" ? 0 : Buffer.byteLength(target.next),
+      })),
+    };
+  });
+}
+
 export function reconstructFunctions(
   registry: FunctionRegistry,
   entries: readonly unknown[],
@@ -303,6 +396,7 @@ function createCapabilities(
         }
         case "editText": return editText(ctx.cwd, args);
         case "batch": return batchWorkspace(ctx.cwd, args);
+        case "applyPatch": return applyWorkspacePatch(ctx.cwd, args);
         case "list": {
           const path = args[0] === undefined ? ctx.cwd : workspacePath(ctx.cwd, args[0]);
           const entries = await readdir(path, { withFileTypes: true });
@@ -433,6 +527,7 @@ workspace
 - workspace.writeText(path, contents) creates parent directories and replaces the complete file.
 - workspace.editText(path, edits) applies { oldText, newText } replacements; each oldText must be non-empty, unique in the original file, and non-overlapping.
 - workspace.batch(operations) validates and atomically commits multiple write/edit operations across unique files; validation failures make no changes and write failures trigger best-effort rollback.
+- workspace.applyPatch(patch) applies a standard unified diff transactionally across files, with exact hunk matching, clear rejected-hunk errors, and support for file creation and deletion.
 - workspace.list(path?) returns { name, type } entries.
 - workspace.glob(patterns?, { dot?, onlyFiles?, ignore? }) returns matching paths relative to the workspace.
 - workspace.stat(path) returns { size, modified, directory, file }.
@@ -472,7 +567,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "Code passed to typescript is contextually type-checked against the capability contract; use validation diagnostics to correct capability names, arguments, missing awaits, and result types.",
       "Capability calls in typescript begin immediately and return promises; await every capability promise before returning the final result.",
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
-      "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state; use workspace.batch for transactional multi-file writes and edits.",
+      "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state; use workspace.batch for structured transactional mutations or workspace.applyPatch for a transactional unified diff.",
       "Batch related work into one typescript call instead of making several small tool calls.",
       "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
       "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",

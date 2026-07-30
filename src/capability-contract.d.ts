@@ -34,6 +34,10 @@ interface PitWorkspaceCapability {
     edits: Array<{ oldText: string; newText: string }>,
   ): Promise<{ path: string; edits: number }>;
 
+  applyPatch(patch: string): Promise<{
+    files: Array<{ path: string; kind: "create" | "modify" | "delete"; hunks: number; bytes: number }>;
+  }>;
+
   batch(operations: Array<
     | { kind: "write"; path: string; contents: string }
     | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }

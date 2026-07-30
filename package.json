@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-tui": "^0.83.0",
+    "diff": "^9.0.0",
     "esbuild": "^0.25.0",
     "fast-glob": "^3.3.3",
     "typebox": "^1.0.4",
