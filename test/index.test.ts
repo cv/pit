@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -364,6 +364,72 @@ describe("pit extension", () => {
     expect(result.nestedList).toEqual([{ name: "new.txt", type: "file" }]);
     expect(result.glob).toContain("nested/new.txt");
     expect(result.defaultGlob).toContain("nested");
+  });
+
+  it("commits multi-file workspace batches transactionally", async () => {
+    await writeFile(join(cwd, "a.txt"), "before", "utf8");
+    const result = await value(`async ({ workspace }) => workspace.batch([
+      { kind: "edit", path: "a.txt", edits: [{ oldText: "before", newText: "after" }] },
+      { kind: "write", path: "nested/b.txt", contents: "created" },
+    ])`);
+    expect(await readFile(join(cwd, "a.txt"), "utf8")).toBe("after");
+    expect(await readFile(join(cwd, "nested/b.txt"), "utf8")).toBe("created");
+    expect(result.files).toHaveLength(2);
+    expect(result.files[0]).toMatchObject({ kind: "edit", edits: 1 });
+
+    await expect(run(`async ({ workspace }) => workspace.batch([
+      { kind: "write", path: "untouched.txt", contents: "must not exist" },
+      { kind: "edit", path: "a.txt", edits: [{ oldText: "missing", newText: "x" }] },
+    ])`)).rejects.toThrow("oldText was not found");
+    await expect(readFile(join(cwd, "untouched.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(cwd, "a.txt"), "utf8")).toBe("after");
+  });
+
+  it("rolls back committed batch writes after a later write failure", async () => {
+    await writeFile(join(cwd, "a-existing.txt"), "original", "utf8");
+    await writeFile(join(cwd, "z-parent"), "not a directory", "utf8");
+    await expect(run(`async ({ workspace }) => workspace.batch([
+      { kind: "write", path: "a-existing.txt", contents: "changed" },
+      { kind: "write", path: "z-parent/child.txt", contents: "fails" },
+    ])`)).rejects.toThrow();
+    expect(await readFile(join(cwd, "a-existing.txt"), "utf8")).toBe("original");
+
+    await expect(run(`async ({ workspace }) => workspace.batch([
+      { kind: "write", path: "a-new.txt", contents: "temporary" },
+      { kind: "write", path: "z-parent/child.txt", contents: "fails" },
+    ])`)).rejects.toThrow();
+    await expect(readFile(join(cwd, "a-new.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validates workspace batch operations", async () => {
+    await mkdir(join(cwd, "directory"));
+    const errors = await value(`async ({ workspace }) => {
+      const raw = workspace as any;
+      const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
+      return [
+        await capture(() => raw.batch([])),
+        await capture(() => raw.batch("bad")),
+        await capture(() => raw.batch([null])),
+        await capture(() => raw.batch([{ kind: 42, path: "a" }])),
+        await capture(() => raw.batch([{ kind: "write", path: "a", contents: 42 }])),
+        await capture(() => raw.batch([{ kind: "unknown", path: "a" }])),
+        await capture(() => raw.batch([
+          { kind: "write", path: "same", contents: "a" },
+          { kind: "write", path: "same", contents: "b" },
+        ])),
+        await capture(() => raw.batch([{ kind: "edit", path: "missing", edits: [] }])),
+        await capture(() => raw.batch([{ kind: "write", path: "directory", contents: "x" }])),
+      ];
+    }`);
+    expect(errors[0]).toContain("non-empty array");
+    expect(errors[1]).toContain("non-empty array");
+    expect(errors[2]).toContain("must be an object");
+    expect(errors[3]).toContain("kind must be a string");
+    expect(errors[4]).toContain("contents must be a string");
+    expect(errors[5]).toContain("Unknown batch operation");
+    expect(errors[6]).toContain("unique paths");
+    expect(errors[7]).toContain("cannot edit a missing file");
+    expect(errors[8]).not.toBe("ok");
   });
 
   it("supports @-prefixed workspace paths and default read options", async () => {

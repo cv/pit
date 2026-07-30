@@ -11,7 +11,7 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import fg from "fast-glob";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   getNamedFunctionName,
@@ -29,7 +29,7 @@ const RESERVED_FUNCTION_NAMES = new Set([
   "console", "eval", "globalThis", "process", "undefined",
 ]);
 export const CAPABILITY_METHODS = {
-  workspace: ["readText", "writeText", "editText", "list", "glob", "stat"],
+  workspace: ["readText", "writeText", "editText", "batch", "list", "glob", "stat"],
   shell: ["exec"],
   http: ["request"],
   ui: ["confirm", "input", "select", "notify"],
@@ -120,40 +120,119 @@ function occurrenceLocations(contents: string, search: string): number[] {
   return locations;
 }
 
+function applyTextEdits(current: string, rawEdits: unknown): { next: string; edits: number } {
+  if (!Array.isArray(rawEdits) || rawEdits.length === 0) throw new Error("edits must be a non-empty array");
+  const replacements = rawEdits.map((raw: unknown, index: number) => {
+    const edit = object(raw, `edits[${index}]`);
+    const oldText = string(edit.oldText, `edits[${index}].oldText`);
+    const newText = string(edit.newText, `edits[${index}].newText`);
+    if (!oldText) throw new Error(`edits[${index}].oldText may not be empty`);
+    const occurrences = occurrenceLocations(current, oldText);
+    if (occurrences.length === 0) throw new Error(`edits[${index}].oldText was not found`);
+    if (occurrences.length > 1) {
+      const shown = occurrences.slice(0, 10).map((offset) => sourceLocation(current, offset));
+      const omitted = occurrences.length - shown.length;
+      throw new Error(
+        `edits[${index}].oldText is not unique; matched ${occurrences.length} times at ${shown.join(", ")}` +
+        (omitted ? ` (and ${omitted} more)` : ""),
+      );
+    }
+    const start = occurrences[0]!;
+    return { start, end: start + oldText.length, newText };
+  });
+  const ordered = [...replacements].sort((a, b) => a.start - b.start);
+  for (let i = 1; i < ordered.length; i++) {
+    if (ordered[i]!.start < ordered[i - 1]!.end) throw new Error("edits overlap");
+  }
+  let next = current;
+  for (const replacement of ordered.reverse()) {
+    next = next.slice(0, replacement.start) + replacement.newText + next.slice(replacement.end);
+  }
+  return { next, edits: replacements.length };
+}
+
 async function editText(cwd: string, args: unknown[]) {
   const path = workspacePath(cwd, args[0]);
-  const rawEdits = args[1];
-  if (!Array.isArray(rawEdits) || rawEdits.length === 0) throw new Error("edits must be a non-empty array");
   return withFileMutationQueue(path, async () => {
     const current = await readFile(path, "utf8");
-    const replacements = rawEdits.map((raw: unknown, index: number) => {
-      const edit = object(raw, `edits[${index}]`);
-      const oldText = string(edit.oldText, `edits[${index}].oldText`);
-      const newText = string(edit.newText, `edits[${index}].newText`);
-      if (!oldText) throw new Error(`edits[${index}].oldText may not be empty`);
-      const occurrences = occurrenceLocations(current, oldText);
-      if (occurrences.length === 0) throw new Error(`edits[${index}].oldText was not found`);
-      if (occurrences.length > 1) {
-        const shown = occurrences.slice(0, 10).map((offset) => sourceLocation(current, offset));
-        const omitted = occurrences.length - shown.length;
-        throw new Error(
-          `edits[${index}].oldText is not unique; matched ${occurrences.length} times at ${shown.join(", ")}` +
-          (omitted ? ` (and ${omitted} more)` : ""),
-        );
+    const result = applyTextEdits(current, args[1]);
+    await writeFile(path, result.next, "utf8");
+    return { path, edits: result.edits };
+  });
+}
+
+async function withMutationQueues<T>(paths: string[], task: () => Promise<T>): Promise<T> {
+  const [path, ...rest] = paths;
+  return path === undefined
+    ? task()
+    : withFileMutationQueue(path, () => withMutationQueues(rest, task));
+}
+
+async function readSnapshot(path: string): Promise<{ existed: boolean; contents: string }> {
+  try {
+    return { existed: true, contents: await readFile(path, "utf8") };
+  } catch (error) {
+    if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) {
+      return { existed: false, contents: "" };
+    }
+    throw error;
+  }
+}
+
+async function batchWorkspace(cwd: string, args: unknown[]) {
+  const rawOperations = args[0];
+  if (!Array.isArray(rawOperations) || rawOperations.length === 0) {
+    throw new Error("operations must be a non-empty array");
+  }
+  const operations = rawOperations.map((raw, index) => {
+    const operation = object(raw, `operations[${index}]`);
+    const kind = string(operation.kind, `operations[${index}].kind`);
+    if (kind !== "write" && kind !== "edit") throw new Error(`Unknown batch operation: ${kind}`);
+    const path = workspacePath(cwd, operation.path);
+    return { kind, path, operation, index };
+  });
+  const paths = operations.map((operation) => operation.path);
+  if (new Set(paths).size !== paths.length) throw new Error("batch operations must target unique paths");
+
+  return withMutationQueues([...paths].sort(), async () => {
+    const snapshots = new Map(await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)));
+    const prepared = operations.map(({ kind, path, operation, index }) => {
+      const snapshot = snapshots.get(path)!;
+      if (kind === "write") {
+        const contents = string(operation.contents, `operations[${index}].contents`);
+        return { kind, path, snapshot, next: contents, edits: undefined };
       }
-      const start = occurrences[0]!;
-      return { start, end: start + oldText.length, newText, index };
+      if (!snapshot.existed) throw new Error(`operations[${index}] cannot edit a missing file`);
+      const result = applyTextEdits(snapshot.contents, operation.edits);
+      return { kind, path, snapshot, next: result.next, edits: result.edits };
     });
-    const ordered = [...replacements].sort((a, b) => a.start - b.start);
-    for (let i = 1; i < ordered.length; i++) {
-      if (ordered[i]!.start < ordered[i - 1]!.end) throw new Error("edits overlap");
+
+    const committed: typeof prepared = [];
+    try {
+      for (const operation of prepared) {
+        await mkdir(dirname(operation.path), { recursive: true });
+        await writeFile(operation.path, operation.next, "utf8");
+        committed.push(operation);
+      }
+    } catch (error) {
+      for (const operation of committed.reverse()) {
+        try {
+          if (operation.snapshot.existed) await writeFile(operation.path, operation.snapshot.contents, "utf8");
+          else await unlink(operation.path);
+        } catch {
+          // Preserve the original write failure; rollback is best-effort.
+        }
+      }
+      throw error;
     }
-    let next = current;
-    for (const replacement of ordered.reverse()) {
-      next = next.slice(0, replacement.start) + replacement.newText + next.slice(replacement.end);
-    }
-    await writeFile(path, next, "utf8");
-    return { path, edits: replacements.length };
+    return {
+      files: prepared.map((operation) => ({
+        path: operation.path,
+        kind: operation.kind,
+        bytes: Buffer.byteLength(operation.next),
+        ...(operation.edits === undefined ? {} : { edits: operation.edits }),
+      })),
+    };
   });
 }
 
@@ -201,6 +280,7 @@ function createCapabilities(
           });
         }
         case "editText": return editText(ctx.cwd, args);
+        case "batch": return batchWorkspace(ctx.cwd, args);
         case "list": {
           const path = args[0] === undefined ? ctx.cwd : workspacePath(ctx.cwd, args[0]);
           const entries = await readdir(path, { withFileTypes: true });
@@ -330,6 +410,7 @@ workspace
 - workspace.readText(path, { offset?, limit? }) returns { text, truncated, offset, lines, totalLines }; it does not return a raw string.
 - workspace.writeText(path, contents) creates parent directories and replaces the complete file.
 - workspace.editText(path, edits) applies { oldText, newText } replacements; each oldText must be non-empty, unique in the original file, and non-overlapping.
+- workspace.batch(operations) validates and atomically commits multiple write/edit operations across unique files; validation failures make no changes and write failures trigger best-effort rollback.
 - workspace.list(path?) returns { name, type } entries.
 - workspace.glob(patterns?, { dot?, onlyFiles?, ignore? }) returns matching paths relative to the workspace.
 - workspace.stat(path) returns { size, modified, directory, file }.
@@ -369,7 +450,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "Code passed to typescript is contextually type-checked against the capability contract; use validation diagnostics to correct capability names, arguments, missing awaits, and result types.",
       "Capability calls in typescript begin immediately and return promises; await every capability promise before returning the final result.",
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
-      "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state.",
+      "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state; use workspace.batch for transactional multi-file writes and edits.",
       "Batch related work into one typescript call instead of making several small tool calls.",
       "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
       "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",

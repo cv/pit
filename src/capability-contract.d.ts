@@ -34,6 +34,13 @@ interface PitWorkspaceCapability {
     edits: Array<{ oldText: string; newText: string }>,
   ): Promise<{ path: string; edits: number }>;
 
+  batch(operations: Array<
+    | { kind: "write"; path: string; contents: string }
+    | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
+  >): Promise<{
+    files: Array<{ path: string; kind: "write" | "edit"; bytes: number; edits?: number }>;
+  }>;
+
   list(path?: string): Promise<PitWorkspaceEntry[]>;
 
   glob(
