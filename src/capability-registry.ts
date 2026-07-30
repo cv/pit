@@ -25,7 +25,35 @@ type PitReadTextResult = {
 type PitWorkspaceEntry = {
   name: string;
   type: "file" | "directory" | "symlink";
-};`;
+};
+
+type PitBatchMutationOperation =
+  | { kind: "write"; path: string; contents: string }
+  | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> };
+
+type PitBatchReadOperation =
+  | { kind: "readText"; path: string; options?: { offset?: number; limit?: number } }
+  | { kind: "stat"; path: string }
+  | { kind: "list"; path?: string }
+  | {
+      kind: "glob";
+      patterns?: string | string[];
+      options?: { dot?: boolean; onlyFiles?: boolean; ignore?: string[]; limit?: number };
+    }
+  | {
+      kind: "search";
+      query: string;
+      options?: {
+        path?: string;
+        glob?: string | string[];
+        regex?: boolean;
+        caseSensitive?: boolean;
+        contextLines?: number;
+        limit?: number;
+        ignore?: string[];
+        dot?: boolean;
+      };
+    };`;
 
 export const CAPABILITY_REGISTRY = {
   workspace: {
@@ -70,16 +98,28 @@ export const CAPABILITY_REGISTRY = {
       },
       batch: {
         declaration: `batch(
-  operations: Array<
-    | { kind: "write"; path: string; contents: string }
-    | { kind: "edit"; path: string; edits: Array<{ oldText: string; newText: string }> }
-  >,
-): Promise<{
-  files: Array<{ path: string; kind: "write" | "edit"; bytes: number; edits?: number }>;
-}>;`,
-        documentation: "workspace.batch(operations) with cwd-relative result paths",
+  operations: Array<PitBatchMutationOperation | PitBatchReadOperation>,
+  options?: { failure?: "fail-fast" | "settled" },
+): Promise<
+  | {
+      files: Array<{
+        path: string;
+        kind: "write" | "edit";
+        bytes: number;
+        edits?: number;
+      }>;
+    }
+  | {
+      results: Array<
+        | { kind: PitBatchReadOperation["kind"]; index: number; ok: true; value: PitResult }
+        | { kind: PitBatchReadOperation["kind"]; index: number; ok: false; error: string }
+      >;
+    }
+>;`,
+        documentation:
+          "workspace.batch(operations, { failure? }) for transactional mutations or concurrent read-only inspection",
         minimumArguments: 1,
-        maximumArguments: 1,
+        maximumArguments: 2,
       },
       list: {
         declaration: "list(path?: string): Promise<PitWorkspaceEntry[]>;",

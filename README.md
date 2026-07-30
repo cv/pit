@@ -101,7 +101,7 @@ async ({ workspace, shell }) => {
   - `readText(path, { offset?, limit? })`
   - `writeText(path, contents)`
   - `editText(path, [{ oldText, newText }, ...])`
-  - `batch([{ kind: "write" | "edit", path, ... }, ...])` — transactional multi-file mutation
+  - `batch(operations, { failure?: "fail-fast" | "settled" })` — transactional all-mutation batches or concurrent all-read inspection batches; mixed batches are rejected
   - `applyPatch(unifiedDiff)` — transactional multi-file unified patch
   - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
   - `list(path?)`

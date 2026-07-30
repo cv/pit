@@ -202,20 +202,99 @@ async function readSnapshot(path: string): Promise<{ existed: boolean; contents:
   }
 }
 
+const READ_BATCH_KINDS = new Set(["readText", "stat", "list", "glob", "search"]);
+const MUTATION_BATCH_KINDS = new Set(["write", "edit"]);
+
+function readBatchArguments(kind: string, operation: Record<string, unknown>): unknown[] {
+  switch (kind) {
+    case "readText":
+      return operation.options === undefined
+        ? [operation.path]
+        : [operation.path, operation.options];
+    case "stat":
+      return [operation.path];
+    case "list":
+      return operation.path === undefined ? [] : [operation.path];
+    case "glob":
+      return operation.options === undefined
+        ? [operation.patterns]
+        : [operation.patterns, operation.options];
+    case "search":
+      return operation.options === undefined
+        ? [operation.query]
+        : [operation.query, operation.options];
+    /* v8 ignore next -- batch kind validation rejects unknown read operations before dispatch. */
+    default:
+      throw new Error(`Batch read dispatcher disagrees with validated kind: ${kind}`);
+  }
+}
+
+async function batchReadWorkspace(
+  cwd: string,
+  operations: Array<{ kind: string; operation: Record<string, unknown>; index: number }>,
+  rawOptions: unknown,
+  signal?: AbortSignal,
+) {
+  const options = rawOptions === undefined ? {} : object(rawOptions, "options");
+  const failure = options.failure ?? "fail-fast";
+  if (failure !== "fail-fast" && failure !== "settled") {
+    throw new Error('options.failure must be "fail-fast" or "settled"');
+  }
+  const execute = async ({ kind, operation, index }: (typeof operations)[number]) => ({
+    kind,
+    index,
+    ok: true as const,
+    value: await handleWorkspace(cwd, kind, readBatchArguments(kind, operation), signal),
+  });
+  const tasks = operations.map(execute);
+  if (failure === "fail-fast") {
+    return { results: await Promise.all(tasks) };
+  }
+  return {
+    results: await Promise.all(
+      tasks.map((task, index) =>
+        task.catch((error) => ({
+          // biome-ignore lint/style/noNonNullAssertion: every task has a matching operation index.
+          kind: operations[index]!.kind,
+          index,
+          ok: false as const,
+          error: (error instanceof Error ? error.message : String(error)).slice(0, 4000),
+        })),
+      ),
+    ),
+  };
+}
+
 function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const rawOperations = args[0];
   if (!Array.isArray(rawOperations) || rawOperations.length === 0) {
     throw new Error("operations must be a non-empty array");
   }
-  const operations = rawOperations.map((raw, index) => {
+  const parsed = rawOperations.map((raw, index) => {
     const operation = object(raw, `operations[${index}]`);
     const kind = string(operation.kind, `operations[${index}].kind`);
-    if (kind !== "write" && kind !== "edit") {
+    if (!(READ_BATCH_KINDS.has(kind) || MUTATION_BATCH_KINDS.has(kind))) {
       throw new Error(`Unknown batch operation: ${kind}`);
     }
-    const path = resolveWorkspacePath(cwd, operation.path);
-    return { kind, path, operation, index };
+    return { kind, operation, index };
   });
+  const readOnly = parsed.every(({ kind }) => READ_BATCH_KINDS.has(kind));
+  const mutationOnly = parsed.every(({ kind }) => MUTATION_BATCH_KINDS.has(kind));
+  if (!(readOnly || mutationOnly)) {
+    throw new Error("batch cannot mix read-only and mutation operations");
+  }
+  if (readOnly) {
+    return batchReadWorkspace(cwd, parsed, args[1], signal);
+  }
+  if (args[1] !== undefined) {
+    throw new Error("batch options are only supported for read-only operations");
+  }
+  const operations = parsed.map(({ kind, operation, index }) => ({
+    kind: kind as "write" | "edit",
+    path: resolveWorkspacePath(cwd, operation.path),
+    operation,
+    index,
+  }));
   const paths = operations.map((operation) => operation.path);
   if (new Set(paths).size !== paths.length) {
     throw new Error("batch operations must target unique paths");

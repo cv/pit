@@ -162,6 +162,60 @@ describe("workspace capability", () => {
     expect(errors[10]).toContain("search path must be a file or directory");
   });
 
+  it("batches concurrent read-only inspection with ordered results", async () => {
+    await writeFile(join(cwd, "inspect.txt"), "alpha\nneedle\n", "utf8");
+    const result = await value(`async ({ workspace }) => workspace.batch([
+      { kind: "readText", path: "inspect.txt", options: { limit: 1 } },
+      { kind: "stat", path: "inspect.txt" },
+      { kind: "list" },
+      { kind: "glob", patterns: "*.txt", options: { onlyFiles: true, limit: 10 } },
+      { kind: "search", query: "needle", options: { path: "inspect.txt" } },
+      { kind: "glob", patterns: "inspect.txt" },
+      { kind: "search", query: "alpha" },
+    ])`);
+
+    expect(result.results.map((entry: any) => entry.kind)).toEqual([
+      "readText",
+      "stat",
+      "list",
+      "glob",
+      "search",
+      "glob",
+      "search",
+    ]);
+    expect(result.results.every((entry: any) => entry.ok)).toBe(true);
+    expect(result.results[0].value).toMatchObject({ text: "alpha", truncated: false });
+    expect(result.results[1].value).toMatchObject({ file: true });
+    expect(result.results[2].value).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "inspect.txt" })]),
+    );
+    expect(result.results[3].value.entries).toContain("inspect.txt");
+    expect(result.results[4].value.matches[0]).toMatchObject({ line: 2, column: 1 });
+    expect(result.results[5].value.entries).toContain("inspect.txt");
+    expect(result.results[6].value.matches[0]).toMatchObject({ line: 1, column: 1 });
+  });
+
+  it("supports settled and fail-fast read-only batches", async () => {
+    await writeFile(join(cwd, "present.txt"), "present", "utf8");
+    const settled = await value(`async ({ workspace }) => workspace.batch([
+      { kind: "readText", path: "present.txt" },
+      { kind: "stat", path: "missing.txt" },
+      { kind: "list", path: "." },
+    ], { failure: "settled" })`);
+    expect(settled.results).toHaveLength(3);
+    expect(settled.results[0]).toMatchObject({ kind: "readText", index: 0, ok: true });
+    expect(settled.results[1]).toMatchObject({ kind: "stat", index: 1, ok: false });
+    expect(settled.results[1].error).toContain("ENOENT");
+    expect(settled.results[2]).toMatchObject({ kind: "list", index: 2, ok: true });
+
+    await expect(
+      run(`async ({ workspace }) => workspace.batch([
+        { kind: "readText", path: "present.txt" },
+        { kind: "stat", path: "missing.txt" },
+      ])`),
+    ).rejects.toThrow(/ENOENT/);
+  });
+
   it("commits multi-file workspace batches transactionally", async () => {
     await writeFile(join(cwd, "a.txt"), "before", "utf8");
     const result = await value(`async ({ workspace }) => workspace.batch([
@@ -226,6 +280,13 @@ describe("workspace capability", () => {
         ])),
         await capture(() => raw.batch([{ kind: "edit", path: "missing", edits: [] }])),
         await capture(() => raw.batch([{ kind: "write", path: "directory", contents: "x" }])),
+        await capture(() => raw.batch([
+          { kind: "readText", path: "a" },
+          { kind: "write", path: "b", contents: "x" },
+        ])),
+        await capture(() => raw.batch([{ kind: "readText", path: "a" }], { failure: "later" })),
+        await capture(() => raw.batch([{ kind: "write", path: "a", contents: "x" }], { failure: "settled" })),
+        await capture(() => raw.batch([{ kind: "readText", path: "a" }], "bad")),
       ];
     }`);
     expect(errors[0]).toContain("non-empty array");
@@ -237,6 +298,10 @@ describe("workspace capability", () => {
     expect(errors[6]).toContain("unique paths");
     expect(errors[7]).toContain("cannot edit a missing file");
     expect(errors[8]).not.toBe("ok");
+    expect(errors[9]).toContain("cannot mix read-only and mutation");
+    expect(errors[10]).toContain('options.failure must be "fail-fast" or "settled"');
+    expect(errors[11]).toContain("only supported for read-only");
+    expect(errors[12]).toContain("options must be an object");
   });
 
   it("applies multi-file unified patches transactionally", async () => {
