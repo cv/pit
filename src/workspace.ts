@@ -45,19 +45,6 @@ function workspaceResultPath(cwd: string, path: string): string {
   return relative(cwd, path).replaceAll("\\", "/");
 }
 
-function detectedLineEnding(lf: number, crlf: number): "lf" | "crlf" | "mixed" | "none" {
-  if (lf > 0 && crlf > 0) {
-    return "mixed";
-  }
-  if (crlf > 0) {
-    return "crlf";
-  }
-  if (lf > 0) {
-    return "lf";
-  }
-  return "none";
-}
-
 async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   const options = args[1] === undefined ? {} : object(args[1], "options");
@@ -81,8 +68,6 @@ async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
   let lineHasher = createHash("sha256");
   const revisionHasher = createHash("sha256");
   let pendingCarriageReturn = false;
-  const endings = { lf: 0, crlf: 0 };
-  let endsWithNewline = false;
   const selectedLine = () => currentLine >= offset && currentLine <= selectionEnd;
   const appendSelected = (value: string): void => {
     if (!value) {
@@ -111,14 +96,10 @@ async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
   };
   const finishLine = (hasNewline: boolean): void => {
     if (pendingCarriageReturn) {
-      if (hasNewline) {
-        endings.crlf++;
-      } else {
+      if (!hasNewline) {
         lineHasher.update("\r");
       }
       pendingCarriageReturn = false;
-    } else if (hasNewline) {
-      endings.lf++;
     }
     if (selectedLine()) {
       selectedHashes.push(lineHasher.digest("base64url").slice(0, 5));
@@ -141,9 +122,6 @@ async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
         if (selectedLine()) {
           appendSelected(segment);
         }
-        if (segment) {
-          endsWithNewline = false;
-        }
         break;
       }
       const segment = chunk.slice(start, newline);
@@ -157,7 +135,6 @@ async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
       finishLine(true);
       totalLines++;
       currentLine++;
-      endsWithNewline = true;
       start = newline + 1;
     }
   }
@@ -176,19 +153,23 @@ async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
       .join("\n");
   }
   const result = truncateHead(content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: limit });
-  const resultLineEnding = detectedLineEnding(endings.lf, endings.crlf);
+  let returnedLines =
+    result.content === "" ? (selectedHashes.length > 0 ? 1 : 0) : Math.max(1, result.outputLines);
+  if (format === "raw" && result.content.endsWith("\n")) {
+    returnedLines++;
+  }
+  const hasMore = selectionEnd < totalLines;
+  const truncated = result.truncated || selectionTruncated;
   return {
     file: workspaceResultPath(cwd, path),
     format,
     content: result.content,
     revision: revisionHasher.digest("base64url").slice(0, 12),
-    offset,
-    lines: result.outputLines,
-    totalLines,
-    hasMore: selectionEnd < totalLines,
-    truncated: result.truncated || selectionTruncated,
-    lineEnding: resultLineEnding,
-    endsWithNewline,
+    ...(offset === 1 ? {} : { offset }),
+    lines: returnedLines,
+    ...(totalLines === returnedLines ? {} : { totalLines }),
+    ...(hasMore ? { hasMore: true as const } : {}),
+    ...(truncated ? { truncated: true as const } : {}),
   };
 }
 

@@ -21,15 +21,17 @@ describe("workspace read and edit", () => {
       file: "hashed.txt",
       format: "hashed",
       revision: fileRevision("one\r\ntwo\r\n"),
-      totalLines: 3,
-      lineEnding: "crlf",
-      endsWithNewline: true,
-      hasMore: false,
+      lines: 3,
     });
+    expect(result.hashed).not.toHaveProperty("offset");
+    expect(result.hashed).not.toHaveProperty("totalLines");
+    expect(result.hashed).not.toHaveProperty("hasMore");
+    expect(result.hashed).not.toHaveProperty("truncated");
     expect(result.hashed.content).toBe(
       `${lineAnchor(1, "one")}|one\n${lineAnchor(2, "two")}|two\n${lineAnchor(3, "")}|`,
     );
-    expect(result.raw).toMatchObject({ format: "raw", content: "one\r\ntwo\r\n" });
+    expect(result.raw).toMatchObject({ format: "raw", content: "one\r\ntwo\r\n", lines: 3 });
+    expect(result.raw).not.toHaveProperty("totalLines");
     expect(result.partial).toMatchObject({
       content: `${lineAnchor(2, "two")}|two`,
       offset: 2,
@@ -41,24 +43,16 @@ describe("workspace read and edit", () => {
   it("bounds large reads and handles empty or out-of-range selections", async () => {
     await writeFile(join(cwd, "large.txt"), "x".repeat(5_000_000), "utf8");
     await writeFile(join(cwd, "empty.txt"), "", "utf8");
-    await writeFile(join(cwd, "lf.txt"), "one\ntwo", "utf8");
-    await writeFile(join(cwd, "mixed.txt"), "one\r\ntwo\n", "utf8");
-    await writeFile(join(cwd, "terminal-cr.txt"), "value\r", "utf8");
     const result = await value(`async ({ workspace }) => ({
       large: await workspace.read("large.txt"),
       empty: await workspace.read("empty.txt"),
       missingRange: await workspace.read("empty.txt", { offset: 2 }),
-      lf: await workspace.read("lf.txt"),
-      mixed: await workspace.read("mixed.txt"),
-      terminalCr: await workspace.read("terminal-cr.txt"),
     })`);
-    expect(result.large).toMatchObject({ truncated: true, totalLines: 1, lineEnding: "none" });
+    expect(result.large).toMatchObject({ truncated: true, lines: 1 });
+    expect(result.large).not.toHaveProperty("totalLines");
     expect(result.large.content.length).toBeLessThan(100_000);
     expect(result.empty.content).toBe(`${lineAnchor(1, "")}|`);
     expect(result.missingRange.content).toBe("");
-    expect(result.lf.lineEnding).toBe("lf");
-    expect(result.mixed.lineEnding).toBe("mixed");
-    expect(result.terminalCr).toMatchObject({ lineEnding: "none", endsWithNewline: false });
   });
 
   it("validates read arguments and supports @-prefixed paths", async () => {

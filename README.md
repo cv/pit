@@ -120,6 +120,7 @@ async ({ workspace, shell }) => {
 
 Paths are resolved relative to Pi's current working directory. Absolute paths remain possible, matching Pi's normal tools. Workspace mutation results report slash-normalized paths relative to that working directory; targets outside it are represented with `../` segments.
 
+Read metadata uses sparse defaults: an omitted offset means 1, omitted totalLines means it equals lines, and omitted hasMore or truncated means false. Line endings and final-newline details stay internal to the edit engine.
 ### Hashed reads and edits
 
 Hashed reads render each selected line as `line:hash|content` and return a revision for the complete UTF-8 file:

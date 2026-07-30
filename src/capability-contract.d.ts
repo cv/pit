@@ -22,13 +22,11 @@ type PitReadResult = {
   format: PitReadFormat;
   content: string;
   revision: string;
-  offset: number;
+  offset?: number;
   lines: number;
-  totalLines: number;
-  hasMore: boolean;
-  truncated: boolean;
-  lineEnding: "lf" | "crlf" | "mixed" | "none";
-  endsWithNewline: boolean;
+  totalLines?: number;
+  hasMore?: true;
+  truncated?: true;
 };
 
 type PitEditResult = {
