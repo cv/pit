@@ -144,6 +144,20 @@ describe("runInSandbox", () => {
     expect(handler).toHaveBeenCalledWith("__pit", "savedFunctionRun", ["answer"]);
   });
 
+  it("preserves saved function input and return types", () => {
+    const savedFunctions = new Map([[
+      "runTests",
+      `async function runTests(_capabilities, input: { coverage?: boolean } = {}) {
+        return { code: input.coverage ? 1 : 0, output: "done" };
+      }`,
+    ]]);
+    expect(() => validateTypeScript(`runTests({ coverage: true })`, savedFunctions)).not.toThrow();
+    expect(() => validateTypeScript(`runTests({ coverage: "yes" })`, savedFunctions))
+      .toThrow(/string.*boolean/);
+    expect(() => validateTypeScript(`async () => (await runTests()).missing`, savedFunctions))
+      .toThrow(/Property 'missing' does not exist/);
+  });
+
   it("annotates saved function failures and limits cross-function recursion", async () => {
     const handler = async () => null;
     const failed = new Map([["broken", `async function broken() { throw new Error("boom"); }`]]);

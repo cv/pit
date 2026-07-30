@@ -75,8 +75,8 @@ Paths are resolved relative to Pi's current working directory. Absolute paths re
 Name a top-level function to execute it and save it automatically:
 
 ```ts
-async function runTests({ shell }, input) {
-  return shell.exec(input?.coverage ? "npm run coverage" : "npm test");
+async function runTests({ shell }, input: { coverage?: boolean } = {}) {
+  return shell.exec(input.coverage ? "npm run coverage" : "npm test");
 }
 ```
 

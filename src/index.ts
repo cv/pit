@@ -350,8 +350,8 @@ REUSABLE FUNCTIONS
 
 Give stable project workflows a top-level function name. Named functions are executed and saved automatically:
 
-async function runTests({ shell }, input) {
-  return shell.exec(input?.coverage ? "npm run coverage" : "npm test");
+async function runTests({ shell }, input: { coverage?: boolean } = {}) {
+  return shell.exec(input.coverage ? "npm run coverage" : "npm test");
 }
 
 Invoke the saved function in a later tool call as ordinary TypeScript. Its current capabilities are bound automatically:
@@ -374,6 +374,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
       "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",
       "Saved functions invoked in typescript receive current capabilities automatically and are listed by context.get().savedFunctions.",
+      "In typescript, annotate a saved function's input parameter so later invocations retain input and return type checking.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
       "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",

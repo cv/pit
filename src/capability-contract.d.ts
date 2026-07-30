@@ -111,7 +111,8 @@ interface PitCapabilities {
   context: PitContextCapability;
 }
 
-type PitBoundFunction = (input?: any) => Promise<any>;
+type PitSavedInput<T extends (...args: any[]) => any> =
+  Parameters<T> extends [any, ...infer Rest] ? Rest[0] : undefined;
 
 type PitProgram = (
   capabilities: PitCapabilities,

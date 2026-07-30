@@ -36,9 +36,10 @@ const CAPABILITY_CONTRACT = readFileSync(
 );
 const CONTRACT_FILE = "/pit/capability-contract.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
+const SIGNATURES_FILE = "/pit/saved-signatures.ts";
 const PROGRAM_PREFIX = "const program: PitProgram = (\n";
 const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities) => await (\n";
-const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7031, 7034, 7044]);
+const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
 const MAX_CACHE_ENTRIES = 128;
 const validationCache = new Map<string, string | null>();
@@ -128,10 +129,21 @@ export function getNamedFunctionName(source: string): string | undefined {
     : undefined;
 }
 
+function savedEntries(savedFunctions: ReadonlyMap<string, string>) {
+  return [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
 function savedDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
-  return [...savedFunctions.keys()].sort().map((name) =>
-    `declare const ${name}: PitBoundFunction;`,
+  return savedEntries(savedFunctions).map(([name], index) =>
+    `declare const ${name}: (input?: PitSavedInput<typeof __pit_signature_${index}>) => Promise<Awaited<ReturnType<typeof __pit_signature_${index}>>>;`,
   ).join("\n");
+}
+
+function savedSignatures(savedFunctions: ReadonlyMap<string, string>): string {
+  const signatures = savedEntries(savedFunctions).map(([, source], index) =>
+    `const __pit_signature_${index} = (${source}) satisfies PitProgram;`,
+  );
+  return signatures.length ? signatures.join("\n") : "void 0;";
 }
 
 /** Semantically validate model code against the capability contract. */
@@ -140,8 +152,10 @@ export function validateTypeScript(
   savedFunctions: ReadonlyMap<string, string> = new Map(),
 ): void {
   const programExpression = isProgramExpression(source);
-  const names = [...savedFunctions.keys()].sort();
-  const cacheKey = `${programExpression ? "program" : "expression"}\0${names.join("\0")}\0${source}`;
+  const entries = savedEntries(savedFunctions);
+  const names = entries.map(([name]) => name);
+  const registryKey = entries.map(([name, savedSource]) => `${name}\0${savedSource}`).join("\0");
+  const cacheKey = `${programExpression ? "program" : "expression"}\0${registryKey}\0${source}`;
   if (validationCache.has(cacheKey)) {
     validationCacheHits++;
     const cachedError = validationCache.get(cacheKey);
@@ -167,6 +181,7 @@ export function validateTypeScript(
   const sources = new Map([
     [CONTRACT_FILE, CAPABILITY_CONTRACT + SANDBOX_GLOBALS + "\n" + savedDeclarations(savedFunctions)],
     [PROGRAM_FILE, wrapped],
+    [SIGNATURES_FILE, savedSignatures(savedFunctions)],
   ]);
   const host: ts.CompilerHost = {
     ...baseHost,
@@ -179,7 +194,7 @@ export function validateTypeScript(
         : ts.createSourceFile(fileName, contents, languageVersion, true);
     },
   };
-  const program = ts.createProgram([CONTRACT_FILE, PROGRAM_FILE], options, host);
+  const program = ts.createProgram([CONTRACT_FILE, SIGNATURES_FILE, PROGRAM_FILE], options, host);
   const syntactic = program.getSyntacticDiagnostics();
   const diagnostics = (syntactic.length > 0
     ? syntactic
@@ -214,7 +229,7 @@ function runtimeProgram(
   source: string,
   savedFunctions: ReadonlyMap<string, string>,
 ): string {
-  const entries = [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const entries = savedEntries(savedFunctions);
   const raw = entries.map(([, savedSource], index) =>
     `const __pit_saved_${index} = (${savedSource});`,
   );
