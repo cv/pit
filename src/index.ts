@@ -188,17 +188,68 @@ export function display(value: unknown): string {
 export default function pit(pi: ExtensionAPI) {
   pi.registerTool({
     name: "typescript",
-    label: "TypeScript",
-    description: `Execute a TypeScript function in an isolated process and return its JSON-serializable result. Pass a function expression receiving destructurable capabilities, for example: async ({ workspace }) => workspace.readText("package.json"). Available capabilities: workspace.readText(path, {offset?, limit?}), writeText(path, contents), editText(path, edits), list(path?), glob(patterns, options?), stat(path); shell.exec(command, {cwd?, timeoutMs?}); http.request(url, {method?, headers?, body?}); ui.confirm/input/select/notify; context.get(). The sandbox itself has no filesystem, network, subprocess, worker, addon, or inherited-environment access. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
-    promptSnippet: "Execute isolated TypeScript with explicitly injected capabilities",
+    label: "TypeScript Workspace",
+    description: `Run a TypeScript function in a fresh, permission-restricted process for batched coding operations.
+
+CALLING CONTRACT
+
+Pass a function expression that destructures only the host capabilities it needs:
+
+async ({ workspace, shell }) => {
+  const [packageFile, status] = await Promise.all([
+    workspace.readText("package.json"),
+    shell.exec("git status --short"),
+  ]);
+  return { packageJson: JSON.parse(packageFile.text), status };
+}
+
+Capability calls begin immediately and return promises. Start independent calls together and await them with Promise.all. Sequence only operations with data dependencies or conflicting side effects. The function cannot use imports and must return a compact JSON-serializable value.
+
+CAPABILITIES
+
+workspace
+- workspace.readText(path, { offset?, limit? }) returns { text, truncated, offset, lines, totalLines }; it does not return a raw string.
+- workspace.writeText(path, contents) creates parent directories and replaces the complete file.
+- workspace.editText(path, edits) applies { oldText, newText } replacements; each oldText must be non-empty, unique in the original file, and non-overlapping.
+- workspace.list(path?) returns { name, type } entries.
+- workspace.glob(patterns?, { dot?, onlyFiles?, ignore? }) returns matching paths relative to the workspace.
+- workspace.stat(path) returns { size, modified, directory, file }.
+
+shell
+- shell.exec(command, { cwd?, timeoutMs? }) returns { stdout, stderr, code, truncated }. Nonzero exit codes are returned as data, so inspect code when success matters.
+
+http
+- http.request(url, { method?, headers?, body? }) returns { status, ok, headers, body, truncated }.
+
+ui
+- ui.confirm(title, message), ui.input(title, placeholder?), ui.select(title, options), and ui.notify(message, level). UI may be unavailable outside interactive or RPC modes.
+
+context
+- context.get() returns cwd, mode, model, thinkingLevel, and sessionFile.
+
+The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
+    promptSnippet: "Run sandboxed TypeScript for batched and parallel workspace, shell, HTTP, UI, and context operations",
     promptGuidelines: [
-      "Use typescript for all tool work; combine related reads, searches, commands, and edits into one function when practical.",
-      "In typescript, destructure the host capabilities you need: ({ workspace, shell, http, ui, context }) => { ... }.",
-      "The typescript source must be a function expression, must return the useful result, and cannot use imports.",
+      "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
+      "Call typescript with an async function expression that destructures the required capabilities, such as async ({ workspace, shell }) => { ... }.",
+      "Capability calls in typescript begin immediately and return promises; await every capability promise before returning the final result.",
+      "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
+      "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state.",
+      "Batch related work into one typescript call instead of making several small tool calls.",
+      "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
+      "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
+      "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
+      "Use only destructured capabilities for external effects in typescript; direct imports, filesystem access, network access, and subprocess creation are unavailable.",
     ],
     parameters: Type.Object({
-      code: Type.String({ description: "A TypeScript function expression: async ({ workspace, shell }) => { ...; return value }" }),
-      timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 300_000, description: "Overall execution timeout (default 30000)" })),
+      code: Type.String({
+        description: `A TypeScript function expression receiving destructured capabilities. Example: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Start independent operations together with Promise.all. Sequence only dependent operations or conflicting mutations. Await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
+      }),
+      timeoutMs: Type.Optional(Type.Integer({
+        minimum: 1,
+        maximum: 300_000,
+        description: "Maximum wall-clock time for the entire invocation in milliseconds (default: 30000).",
+      })),
     }),
     async execute(_id, params, signal, _update, ctx) {
       const value = await runInSandbox(params.code, createCapabilities(pi, ctx, signal), {

@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import pit, { display } from "../src/index.js";
 
-type RegisteredTool = { execute: (...args: any[]) => Promise<any> };
+type RegisteredTool = {
+  label: string;
+  description: string;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
+  parameters: { properties: { code: { description?: string }; timeoutMs: { description?: string } } };
+  execute: (...args: any[]) => Promise<any>;
+};
 
 let cwd: string;
 let tool: RegisteredTool;
@@ -67,8 +74,22 @@ describe("display", () => {
 });
 
 describe("pit extension", () => {
-  it("registers and activates only the TypeScript tool", () => {
-    expect(tool).toBeDefined();
+  it("registers clear model-facing usage metadata and activates the tool", () => {
+    expect(tool.label).toBe("TypeScript Workspace");
+    expect(tool.promptSnippet).toContain("batched and parallel workspace");
+    expect(tool.description).toContain("async ({ workspace, shell })");
+    expect(tool.description).toContain("await Promise.all");
+    expect(tool.description).toContain("does not return a raw string");
+    expect(tool.description).toContain("Nonzero exit codes are returned as data");
+    expect(tool.parameters.properties.code.description).toContain("file.text");
+    expect(tool.parameters.properties.code.description).toContain("Promise.all");
+    expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
+    expect(tool.promptGuidelines).toHaveLength(10);
+    expect(tool.promptGuidelines).toContain(
+      "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
+    );
+    expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(true);
+
     sessionStart();
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
   });
