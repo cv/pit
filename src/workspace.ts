@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import {
@@ -54,18 +55,57 @@ async function readText(cwd: string, args: unknown[]) {
   if (!Number.isInteger(offset) || offset < 1 || !Number.isInteger(limit) || limit < 1) {
     throw new Error("offset and limit must be positive integers");
   }
-  const contents = await readFile(path, "utf8");
-  const selected = contents
-    .split("\n")
-    .slice(offset - 1, offset - 1 + limit)
-    .join("\n");
+
+  const selectionEnd = offset + limit - 1;
+  const maxCaptureCharacters = DEFAULT_MAX_BYTES + 1;
+  let selected = "";
+  let selectionTruncated = false;
+  let currentLine = 1;
+  let totalLines = 1;
+  const appendSelected = (value: string): void => {
+    if (!value) {
+      return;
+    }
+    const remaining = maxCaptureCharacters - selected.length;
+    if (remaining <= 0) {
+      selectionTruncated = true;
+      return;
+    }
+    selected += value.slice(0, remaining);
+    selectionTruncated ||= value.length > remaining;
+  };
+
+  const stream = createReadStream(path, { encoding: "utf8" });
+  for await (const rawChunk of stream) {
+    const chunk = String(rawChunk);
+    let start = 0;
+    for (;;) {
+      const newline = chunk.indexOf("\n", start);
+      if (newline < 0) {
+        if (currentLine >= offset && currentLine <= selectionEnd) {
+          appendSelected(chunk.slice(start));
+        }
+        break;
+      }
+      if (currentLine >= offset && currentLine <= selectionEnd) {
+        appendSelected(chunk.slice(start, newline));
+        if (currentLine < selectionEnd) {
+          appendSelected("\n");
+        }
+      }
+      totalLines++;
+      currentLine++;
+      start = newline + 1;
+    }
+  }
+
   const result = truncateHead(selected, { maxBytes: DEFAULT_MAX_BYTES, maxLines: limit });
   return {
     text: result.content,
-    truncated: result.truncated,
+    truncated: result.truncated || selectionTruncated,
     offset,
     lines: result.outputLines,
-    totalLines: contents.split("\n").length,
+    totalLines,
   };
 }
 

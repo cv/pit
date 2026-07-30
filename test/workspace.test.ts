@@ -428,6 +428,14 @@ describe("workspace capability", () => {
     });
   });
 
+  it("streams large reads with bounded captured output", async () => {
+    await writeFile(join(cwd, "large.txt"), "x".repeat(5_000_000), "utf8");
+    const result = await value(`async ({ workspace }) => workspace.readText("large.txt")`);
+    expect(result.truncated).toBe(true);
+    expect(result.text.length).toBeLessThan(100_000);
+    expect(result.totalLines).toBe(1);
+  });
+
   it("supports @-prefixed workspace paths and default read options", async () => {
     await writeFile(join(cwd, "at.txt"), "contents", "utf8");
     const result = await value(`async ({ workspace }) => workspace.readText("@at.txt")`);
