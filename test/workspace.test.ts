@@ -113,6 +113,20 @@ describe("workspace capability", () => {
     expect(defaults.matches).toEqual([
       expect.objectContaining({ path: "search/a.txt", line: 1, column: 1 }),
     ]);
+
+    const unconfigured = await value(`async ({ workspace }) => workspace.search("Alpha")`);
+    expect(unconfigured.matches).toEqual([
+      expect.objectContaining({ path: "search/a.txt", line: 1, column: 1 }),
+    ]);
+  });
+
+  it("interrupts pathological regular expressions outside the host event loop", async () => {
+    await writeFile(join(cwd, "regex.txt"), `${"a".repeat(30_000)}!`, "utf8");
+    await expect(
+      run(`async ({ workspace }) => workspace.search("^(a+)+$", {
+        path: "regex.txt", regex: true,
+      })`),
+    ).rejects.toThrow(/Regex search exceeded 250ms/);
   });
 
   it("validates workspace search options", async () => {
@@ -449,6 +463,8 @@ describe("workspace capability", () => {
       const raw = workspace as any;
       return Promise.all([
         capture(() => workspace.readText("edit.txt", { offset: 0 })),
+        capture(() => workspace.readText("edit.txt", { offset: 1.5 })),
+        capture(() => workspace.readText("edit.txt", { limit: 0 })),
         capture(() => workspace.readText("edit.txt", { limit: 1.5 })),
         capture(() => raw.readText("edit.txt", "bad")),
         capture(() => raw.writeText("x", 123)),
@@ -473,7 +489,7 @@ describe("workspace capability", () => {
     expect(errors.join("\n")).toMatch(/may not be empty/);
     expect(errors.join("\n")).toMatch(/was not found/);
     expect(errors.join("\n")).toMatch(/not unique/);
-    expect(errors[7]).toContain("matched 2 times at 1:1, 1:6");
+    expect(errors[9]).toContain("matched 2 times at 1:1, 1:6");
     expect(errors.join("\n")).toMatch(/overlap/);
     expect(errors.join("\n")).toMatch(/path must be a string/);
     expect(errors.join("\n")).toMatch(/limit must be an integer between 1 and 10000/);

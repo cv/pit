@@ -89,7 +89,7 @@ async ({ workspace, shell }) => {
   - `editText(path, [{ oldText, newText }, ...])`
   - `batch([{ kind: "write" | "edit", path, ... }, ...])` — transactional multi-file mutation
   - `applyPatch(unifiedDiff)` — transactional multi-file unified patch
-  - `search(query, options?)` — bounded structured text search with optional regex and context
+  - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
   - `list(path?)`
   - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
   - `stat(path)`

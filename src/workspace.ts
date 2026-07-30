@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { applyPatch as applyUnifiedPatch, parsePatch, type StructuredPatch } from "diff";
 import fg from "fast-glob";
+import { InterruptibleRegexMatcher } from "./regex-worker.js";
 
 const MAX_PATCH_BYTES = 1_000_000;
 const MAX_SEARCH_FILE_BYTES = 1_000_000;
@@ -414,10 +415,9 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
     throw new Error(`limit must be an integer between 1 and ${MAX_SEARCH_RESULTS}`);
   }
 
-  let expression: RegExp | undefined;
   if (regex) {
     try {
-      expression = new RegExp(query, caseSensitive ? "g" : "gi");
+      RegExp(query, caseSensitive ? "g" : "gi");
     } catch (error) {
       throw new Error(`Invalid search regex: ${String(error)}`);
     }
@@ -437,18 +437,22 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
       "**/node_modules/**",
       ...(Array.isArray(options.ignore) ? options.ignore.map(String) : []),
     ];
-    files = (
-      await fg(patterns, {
-        cwd: searchPath,
-        dot: Boolean(options.dot),
-        onlyFiles: true,
-        ignore,
-        followSymbolicLinks: false,
-        absolute: true,
-      })
-    )
-      .sort()
-      .slice(0, MAX_SEARCH_FILES);
+    const discovered: string[] = [];
+    const stream = fg.stream(patterns, {
+      cwd: searchPath,
+      dot: Boolean(options.dot),
+      onlyFiles: true,
+      ignore,
+      followSymbolicLinks: false,
+      absolute: true,
+    });
+    for await (const entry of stream) {
+      discovered.push(String(entry));
+      if (discovered.length === MAX_SEARCH_FILES) {
+        break;
+      }
+    }
+    files = discovered.sort((a, b) => a.localeCompare(b));
   } else {
     throw new Error("search path must be a file or directory");
   }
@@ -457,66 +461,71 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
   let filesSearched = 0;
   let filesSkipped = 0;
   let truncated = false;
-  for (const file of files) {
-    let buffer: Buffer;
-    try {
-      const info = await stat(file);
-      if (info.size > MAX_SEARCH_FILE_BYTES) {
+  const regexMatcher = regex ? new InterruptibleRegexMatcher(query, caseSensitive) : undefined;
+  try {
+    for (const file of files) {
+      let buffer: Buffer;
+      try {
+        const info = await stat(file);
+        if (info.size > MAX_SEARCH_FILE_BYTES) {
+          filesSkipped++;
+          continue;
+        }
+        buffer = await readFile(file);
+      } catch {
         filesSkipped++;
         continue;
       }
-      buffer = await readFile(file);
-    } catch {
-      filesSkipped++;
-      continue;
-    }
-    if (buffer.includes(0)) {
-      filesSkipped++;
-      continue;
-    }
-    filesSearched++;
-    const lines = buffer.toString("utf8").split("\n");
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      // biome-ignore lint/style/noNonNullAssertion: lineIndex is bounded by lines.length.
-      const text = lines[lineIndex]!;
-      const columns: number[] = [];
-      if (expression) {
-        expression.lastIndex = 0;
-        for (;;) {
-          const match = expression.exec(text);
-          // biome-ignore lint/suspicious/noUnnecessaryConditions: RegExp.exec returns null when no match remains.
-          if (!match) {
-            break;
-          }
-          columns.push(match.index);
-          if (match[0].length === 0) {
-            expression.lastIndex++;
-          }
-        }
-      } else {
-        const haystack = caseSensitive ? text : text.toLowerCase();
-        const needle = caseSensitive ? query : query.toLowerCase();
-        let offset = 0;
-        while (offset <= haystack.length - needle.length) {
-          const found = haystack.indexOf(needle, offset);
-          if (found < 0) {
-            break;
-          }
-          columns.push(found);
-          offset = found + Math.max(1, needle.length);
-        }
+      if (buffer.includes(0)) {
+        filesSkipped++;
+        continue;
       }
-      for (const column of columns) {
-        matches.push({
-          path: relative(cwd, file).replaceAll("\\", "/"),
-          line: lineIndex + 1,
-          column: column + 1,
-          text,
-          before: lines.slice(Math.max(0, lineIndex - contextLines), lineIndex),
-          after: lines.slice(lineIndex + 1, lineIndex + 1 + contextLines),
-        });
-        if (matches.length >= limit) {
-          truncated = true;
+      filesSearched++;
+      const lines = buffer.toString("utf8").split("\n");
+      const regexMatches = regexMatcher
+        ? await regexMatcher.match(lines, limit - matches.length)
+        : [];
+      const regexColumns = new Map<number, number[]>();
+      for (const match of regexMatches) {
+        const columns = regexColumns.get(match.lineIndex) ?? [];
+        columns.push(match.column);
+        regexColumns.set(match.lineIndex, columns);
+      }
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        // biome-ignore lint/style/noNonNullAssertion: lineIndex is bounded by lines.length.
+        const text = lines[lineIndex]!;
+        const columns: number[] = regexColumns.get(lineIndex) ?? [];
+        if (!regexMatcher) {
+          const haystack = caseSensitive ? text : text.toLowerCase();
+          const needle = caseSensitive ? query : query.toLowerCase();
+          let offset = 0;
+          while (
+            offset <= haystack.length - needle.length &&
+            columns.length < limit - matches.length
+          ) {
+            const found = haystack.indexOf(needle, offset);
+            if (found < 0) {
+              break;
+            }
+            columns.push(found);
+            offset = found + Math.max(1, needle.length);
+          }
+        }
+        for (const column of columns) {
+          matches.push({
+            path: relative(cwd, file).replaceAll("\\", "/"),
+            line: lineIndex + 1,
+            column: column + 1,
+            text,
+            before: lines.slice(Math.max(0, lineIndex - contextLines), lineIndex),
+            after: lines.slice(lineIndex + 1, lineIndex + 1 + contextLines),
+          });
+          if (matches.length >= limit) {
+            truncated = true;
+            break;
+          }
+        }
+        if (truncated) {
           break;
         }
       }
@@ -524,9 +533,8 @@ async function searchWorkspace(cwd: string, args: unknown[]) {
         break;
       }
     }
-    if (truncated) {
-      break;
-    }
+  } finally {
+    await regexMatcher?.close();
   }
   return { matches, truncated, filesSearched, filesSkipped };
 }
