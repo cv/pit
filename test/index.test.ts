@@ -6,6 +6,7 @@ import pit, {
   CAPABILITY_METHODS,
   display,
   reconstructFunctions,
+  validateRegistryCapacity,
 } from "../src/index.js";
 
 type RegisteredTool = {
@@ -82,6 +83,20 @@ afterEach(async () => {
 });
 
 describe("function registry handler", () => {
+  it("bounds saved function count and aggregate source size", () => {
+    expect(() => validateRegistryCapacity(new Map(), "large", "x".repeat(100_001)))
+      .toThrow("saved function source exceeds");
+
+    const full = new Map(Array.from({ length: 64 }, (_, index) => [`fn${index}`, "x"]));
+    expect(() => validateRegistryCapacity(full, "extra", "x"))
+      .toThrow("limited to 64 functions");
+    expect(() => validateRegistryCapacity(full, "fn0", "replacement")).not.toThrow();
+
+    const aggregate = new Map(Array.from({ length: 10 }, (_, index) => [`fn${index}`, "x".repeat(100_000)]));
+    expect(() => validateRegistryCapacity(aggregate, "fn0", "x".repeat(100_000))).not.toThrow();
+    expect(() => validateRegistryCapacity(aggregate, "extra", "x"))
+      .toThrow("exceeds 976.6KB total source");
+  });
   it("reconstructs valid branch-local function mutations", () => {
     const functions = new Map<string, string>();
     const source = `() => "saved"`;

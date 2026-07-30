@@ -22,6 +22,8 @@ import {
 
 const MAX_HTTP_BYTES = 1_000_000;
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
+const MAX_SAVED_FUNCTIONS = 64;
+const MAX_SAVED_FUNCTION_TOTAL_BYTES = 1_000_000;
 const SAVED_FUNCTION_NAME = /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/;
 const RESERVED_FUNCTION_NAMES = new Set([
   "Array", "Boolean", "Date", "Error", "Infinity", "JSON", "Map", "Math",
@@ -66,6 +68,25 @@ function object(value: unknown, label: string): Record<string, unknown> {
 function string(value: unknown, label: string): string {
   if (typeof value !== "string") throw new TypeError(`${label} must be a string`);
   return value;
+}
+
+export function validateRegistryCapacity(
+  registry: ReadonlyMap<string, string>,
+  name: string,
+  source: string,
+): void {
+  const sourceBytes = Buffer.byteLength(source);
+  if (sourceBytes > MAX_SAVED_FUNCTION_BYTES) {
+    throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
+  }
+  if (!registry.has(name) && registry.size >= MAX_SAVED_FUNCTIONS) {
+    throw new Error(`saved function registry is limited to ${MAX_SAVED_FUNCTIONS} functions`);
+  }
+  const previousBytes = Buffer.byteLength(registry.get(name) ?? "");
+  const currentBytes = [...registry.values()].reduce((total, value) => total + Buffer.byteLength(value), 0);
+  if (currentBytes - previousBytes + sourceBytes > MAX_SAVED_FUNCTION_TOTAL_BYTES) {
+    throw new Error(`saved function registry exceeds ${formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`);
+  }
 }
 
 function validateSavedFunctionName(name: string): void {
@@ -250,6 +271,7 @@ export function reconstructFunctions(
     if (typeof definition.name !== "string" || typeof definition.source !== "string") continue;
     try {
       validateSavedFunctionName(definition.name);
+      validateRegistryCapacity(registry, definition.name, definition.source);
       validateTypeScript(definition.source, registry);
       registry.set(definition.name, definition.source);
     } catch {
@@ -440,7 +462,7 @@ Invoke the saved function in a later tool call as ordinary TypeScript. Its curre
 runTests()
 runTests({ coverage: true })
 
-Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. Saved functions are injected into new isolates as typed lexical bindings and may call one another. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
+Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. A branch may contain up to 64 saved functions, 100 KB per function, and 1 MB of combined saved source. Saved functions are injected into new isolates as typed lexical bindings and may call one another. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
 
 The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
     promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
@@ -548,9 +570,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       const namedFunction = getNamedFunctionName(params.code);
       if (namedFunction) {
         validateSavedFunctionName(namedFunction);
-        if (Buffer.byteLength(params.code) > MAX_SAVED_FUNCTION_BYTES) {
-          throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
-        }
+        validateRegistryCapacity(savedFunctions, namedFunction, params.code);
         validateTypeScript(params.code, savedFunctions);
         const replaced = savedFunctions.has(namedFunction);
         savedFunctions.set(namedFunction, params.code);
