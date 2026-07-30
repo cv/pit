@@ -122,6 +122,9 @@ describe("saved function references", () => {
       const base = 1;
       function local(base) { return 1; }
       const object = { base: 1, base() { return 1; } };
+      const { base: renamed } = object;
+      try { throw new Error(); } catch (base) { void base; }
+      class base { value = renamed; }
       type Named = base;
       type Queried = typeof base;
     `,

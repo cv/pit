@@ -129,33 +129,74 @@ function submissionExpression(source: string): ts.Expression | undefined {
 }
 
 function referencedNames(source: string, candidates: ReadonlySet<string>): Set<string> {
-  const file = ts.createSourceFile(
-    "/pit/references.ts",
-    source,
-    ts.ScriptTarget.ES2022,
-    true,
-    ts.ScriptKind.TS,
-  );
+  if (candidates.size === 0) {
+    return new Set();
+  }
+  const contractFile = "/pit/reference-contract.d.ts";
+  const sourceFile = "/pit/references.ts";
+  const declarations = [...candidates]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => `declare const ${name}: (...args: unknown[]) => unknown;`)
+    .join("\n");
+  const wrapped = `function __pit_reference_scope() {\n${source}\n}`;
+  const options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    noLib: true,
+    noResolve: true,
+    skipLibCheck: true,
+  };
+  const baseHost = ts.createCompilerHost(options, true);
+  const sources = new Map([
+    [contractFile, declarations],
+    [sourceFile, wrapped],
+  ]);
+  const host: ts.CompilerHost = {
+    ...baseHost,
+    fileExists: (fileName) => sources.has(fileName),
+    getSourceFile: (fileName, languageVersion) =>
+      // biome-ignore lint/style/noNonNullAssertion: the program requests only generated root files.
+      ts.createSourceFile(fileName, sources.get(fileName)!, languageVersion, true),
+  };
+  const program = ts.createProgram([contractFile, sourceFile], options, host);
+  const checker = program.getTypeChecker();
+  // biome-ignore lint/style/noNonNullAssertion: both generated files are program roots.
+  const contract = program.getSourceFile(contractFile)!;
+  // biome-ignore lint/style/noNonNullAssertion: both generated files are program roots.
+  const submitted = program.getSourceFile(sourceFile)!;
+
+  const namesBySymbol = new Map<ts.Symbol, string>();
+  for (const statement of contract.statements) {
+    const declaration = (statement as ts.VariableStatement).declarationList.declarations[0];
+    // biome-ignore lint/style/noNonNullAssertion: every generated statement has one identifier declaration.
+    const identifier = declaration!.name as ts.Identifier;
+    // biome-ignore lint/style/noNonNullAssertion: generated ambient declarations always bind a symbol.
+    namesBySymbol.set(checker.getSymbolAtLocation(identifier)!, identifier.text);
+  }
+
   const references = new Set<string>();
   const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && candidates.has(node.text)) {
-      const parent = node.parent;
-      const isDeclarationName =
-        (ts.isFunctionLike(parent) && parent.name === node) ||
-        (ts.isVariableDeclaration(parent) && parent.name === node) ||
-        (ts.isParameter(parent) && parent.name === node);
-      const isPropertyName =
-        (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
-        ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent)) &&
-          parent.name === node);
-      const isTypePosition = ts.isTypeReferenceNode(parent) || ts.isTypeQueryNode(parent);
-      if (!(isDeclarationName || isPropertyName || isTypePosition)) {
-        references.add(node.text);
+    if (ts.isIdentifier(node)) {
+      let ancestor: ts.Node | undefined = node;
+      let typeOnly = false;
+      while (ancestor && ancestor !== submitted) {
+        if (ts.isTypeNode(ancestor)) {
+          typeOnly = true;
+          break;
+        }
+        ancestor = ancestor.parent;
+      }
+      if (!typeOnly) {
+        const symbol = checker.getSymbolAtLocation(node);
+        const name = symbol ? namesBySymbol.get(symbol) : undefined;
+        if (name) {
+          references.add(name);
+        }
       }
     }
     ts.forEachChild(node, visit);
   };
-  visit(file);
+  visit(submitted);
   return references;
 }
 
