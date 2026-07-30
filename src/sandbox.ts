@@ -10,6 +10,7 @@ export interface SandboxOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   savedFunctions?: ReadonlyMap<string, string>;
+  input?: unknown;
 }
 
 export type CapabilityHandler = (
@@ -27,6 +28,7 @@ interface WireMessage {
   args?: unknown[];
   value?: unknown;
   error?: string;
+  input?: unknown;
 }
 
 const RUNNER = fileURLToPath(new URL("./sandbox-runner.mjs", import.meta.url));
@@ -37,7 +39,6 @@ const CAPABILITY_CONTRACT = readFileSync(
 const CONTRACT_FILE = "/pit/capability-contract.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
 const SIGNATURES_FILE = "/pit/saved-signatures.ts";
-const PROGRAM_PREFIX = "const program: PitProgram = (\n";
 const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities) => await (\n";
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
@@ -210,12 +211,17 @@ function savedSignatures(savedFunctions: ReadonlyMap<string, string>): string {
 export function validateTypeScript(
   source: string,
   savedFunctions: ReadonlyMap<string, string> = new Map(),
+  input?: unknown,
 ): void {
   const programExpression = isProgramExpression(source);
   const entries = savedEntries(savedFunctions);
   const names = entries.map(([name]) => name);
   const registryKey = entries.map(([name, savedSource]) => `${name}\0${savedSource}`).join("\0");
-  const cacheKey = `${programExpression ? "program" : "expression"}\0${registryKey}\0${source}`;
+  const inputSource = input === undefined ? "" : JSON.stringify(input);
+  if (input !== undefined && !programExpression) {
+    throw new Error("Top-level params can only be passed to a function expression");
+  }
+  const cacheKey = `${programExpression ? "program" : "expression"}\0${registryKey}\0${inputSource}\0${source}`;
   if (validationCache.has(cacheKey)) {
     validationCacheHits++;
     const cachedError = validationCache.get(cacheKey);
@@ -223,8 +229,12 @@ export function validateTypeScript(
     return;
   }
 
-  const prefix = programExpression ? PROGRAM_PREFIX : EXPRESSION_PREFIX;
-  const wrapped = `${prefix}${source}\n);\nvoid program;\n`;
+  const invocation = input === undefined || !programExpression
+    ? ""
+    : `program({} as PitCapabilities, ${inputSource});\n`;
+  const wrapped = programExpression
+    ? `const program = (\n${source}\n) satisfies PitProgram;\nvoid program;\n${invocation}`
+    : `${EXPRESSION_PREFIX}${source}\n);\nvoid program;\n`;
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
@@ -297,9 +307,9 @@ function runtimeProgram(
     `const ${name} = async (__pit_input) => { if (__pit_saved_depth >= 32) throw new Error("Saved function call depth exceeded 32"); await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); __pit_saved_depth++; try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } finally { __pit_saved_depth--; } };`,
   );
   const invocation = isProgramExpression(source)
-    ? `const __pit_submission = (${source}); return await __pit_submission(__pit_capabilities);`
+    ? `const __pit_submission = (${source}); return await __pit_submission(__pit_capabilities, __pit_input);`
     : `return await (${source});`;
-  return `async (__pit_capabilities) => { let __pit_saved_depth = 0; ${raw.join("\n")} ${bound.join("\n")} ${invocation} }`;
+  return `async (__pit_capabilities, __pit_input) => { let __pit_saved_depth = 0; ${raw.join("\n")} ${bound.join("\n")} ${invocation} }`;
 }
 
 async function compileTypeScript(source: string): Promise<string> {
@@ -342,7 +352,7 @@ export async function runInSandbox(
   }
 
   const savedFunctions = options.savedFunctions ?? new Map<string, string>();
-  validateTypeScript(source, savedFunctions);
+  validateTypeScript(source, savedFunctions, options.input);
 
   const compiled = await compileTypeScript(runtimeProgram(source, savedFunctions));
   const token = randomBytes(24).toString("base64url");
@@ -438,6 +448,6 @@ export async function runInSandbox(
       }
     });
 
-    send({ type: "start", value: compiled });
+    send({ type: "start", value: compiled, input: options.input });
   });
 }

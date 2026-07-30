@@ -14,7 +14,7 @@ type RegisteredTool = {
   description: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
-  parameters: { properties: { code: { description?: string }; timeoutMs: { description?: string } } };
+  parameters: { properties: { code: { description?: string }; params: { description?: string }; timeoutMs: { description?: string } } };
   renderCall?: (args: any, theme: any, context: any) => { render(width: number): string[] };
   renderResult?: (result: any, options: any, theme: any, context: any) => { render(width: number): string[] };
   execute: (...args: any[]) => Promise<any>;
@@ -51,6 +51,10 @@ function context(overrides: Record<string, unknown> = {}) {
 
 async function run(code: string, ctx = context(), signal?: AbortSignal) {
   return tool.execute("call-id", { code }, signal, undefined, ctx);
+}
+
+async function runWithParams(code: string, params: unknown, ctx = context()) {
+  return tool.execute("call-id", { code, params }, undefined, undefined, ctx);
 }
 
 async function value(code: string, ctx = context()) {
@@ -138,6 +142,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain("REUSABLE FUNCTIONS");
     expect(tool.description).toContain("Named functions are executed and saved automatically");
     expect(tool.description).toContain("savedFunctions lists the names");
+    expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.promptGuidelines).toHaveLength(15);
     expect(tool.promptGuidelines).toContain(
@@ -309,6 +314,26 @@ describe("pit extension", () => {
 
     const info = await value(`async ({ context }) => context.get()`);
     expect(info.savedFunctions).toEqual(["greet"]);
+  });
+
+  it("passes and validates top-level params as initial function input", async () => {
+    const source = `async function inspect(_capabilities, input: { path: string }) { return { path: input.path }; }`;
+    const result = await runWithParams(source, { path: "README.md" });
+    expect(result.details.value).toEqual({ path: "README.md" });
+    expect(await value(`inspect({ path: "package.json" })`)).toEqual({ path: "package.json" });
+
+    await expect(runWithParams(source.replace("inspect", "invalidInspect"), { path: 42 }))
+      .rejects.toThrow(/number.*string/);
+    expect(branchEntries.some((entry) => entry.data?.name === "invalidInspect")).toBe(false);
+
+    const anonymous = await runWithParams(
+      `async (_capabilities, input: { value: number }) => ({ doubled: input.value * 2 })`,
+      { value: 21 },
+    );
+    expect(anonymous.details.value).toEqual({ doubled: 42 });
+    await expect(runWithParams(`inspect()`, {})).rejects.toThrow(
+      "Top-level params can only be passed to a function expression",
+    );
   });
 
   it("renders injected saved functions and dependencies in expanded calls", async () => {

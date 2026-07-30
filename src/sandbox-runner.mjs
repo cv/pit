@@ -42,7 +42,7 @@ const capabilities = new Proxy(Object.create(null), {
   },
 });
 
-async function start(source) {
+async function start(source, input) {
   try {
     // Indirect eval prevents evaluated code from seeing this module's lexical
     // token and RPC state. The OS permission layer contains its globals.
@@ -50,7 +50,7 @@ async function start(source) {
     if (typeof main !== "function") {
       throw new TypeError("TypeScript source must evaluate to a function");
     }
-    const value = await main(capabilities);
+    const value = await main(capabilities, input);
     send({ type: "result", value });
   } catch (error) {
     send({ type: "fatal", error: error?.stack || String(error) });
@@ -73,7 +73,7 @@ process.stdin.on("data", (chunk) => {
     }
     if (!token && message.type === "start" && typeof message.token === "string") {
       token = message.token;
-      void start(message.value);
+      void start(message.value, message.input);
       continue;
     }
     if (message.token !== token) continue;

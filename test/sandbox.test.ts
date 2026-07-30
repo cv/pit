@@ -156,6 +156,16 @@ describe("runInSandbox", () => {
     expect(result).toEqual({ answer: 42 });
   });
 
+  it("passes initial input as the function's second argument", async () => {
+    const source = `async (_capabilities, input: { value: number }) => ({ value: input.value * 2 })`;
+    await expect(runInSandbox(source, async () => null, { input: { value: 21 } }))
+      .resolves.toEqual({ value: 42 });
+    expect(() => validateTypeScript(source, new Map(), { value: "wrong" }))
+      .toThrow(/string.*number/);
+    await expect(runInSandbox(`42`, async () => null, { input: {} }))
+      .rejects.toThrow("Top-level params can only be passed to a function expression");
+  });
+
   it("provides destructured capabilities through RPC", async () => {
     const handler = vi.fn(async (): Promise<unknown> => ({
       stdout: "", stderr: "", code: 42, truncated: false,

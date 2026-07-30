@@ -555,6 +555,8 @@ async function runTests({ shell }, input: { coverage?: boolean } = {}) {
   return shell.exec(input.coverage ? "npm run coverage" : "npm test");
 }
 
+Provide optional top-level params when the named function needs input on its first execution. Pit validates params against an annotated input type and passes it as the function's second argument.
+
 Invoke the saved function in a later tool call as ordinary TypeScript. Its current capabilities are bound automatically:
 
 runTests()
@@ -575,7 +577,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
       "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",
       "Saved functions invoked in typescript receive current capabilities automatically and are listed by context.get().savedFunctions.",
-      "In typescript, annotate a saved function's input parameter so later invocations retain input and return type checking.",
+      "In typescript, annotate a saved function's input parameter so initial top-level params and later invocations retain input and return type checking.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
       "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
@@ -585,6 +587,9 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       code: Type.String({
         description: `Contextually type-checked TypeScript. Use an anonymous function expression for one-shot work: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Use a named top-level function for a recurring workflow: async function runTests({ shell }) { return shell.exec("npm test"); }. Named functions save automatically and can be invoked later with runTests(). Start independent operations together, await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
       }),
+      params: Type.Optional(Type.Unknown({
+        description: "Optional JSON-serializable input passed as the function's second argument on this execution. For named definitions, annotate the input parameter so params are type-checked.",
+      })),
       timeoutMs: Type.Optional(Type.Integer({
         minimum: 1,
         maximum: 300_000,
@@ -695,7 +700,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       if (namedFunction) {
         validateSavedFunctionName(namedFunction);
         validateRegistryCapacity(savedFunctions, namedFunction, params.code);
-        validateTypeScript(params.code, savedFunctions);
+        validateTypeScript(params.code, savedFunctions, params.params);
         const replaced = savedFunctions.has(namedFunction);
         savedFunctions.set(namedFunction, params.code);
         pi.appendEntry(FUNCTION_ENTRY_TYPE, { name: namedFunction, source: params.code } satisfies FunctionEntry);
@@ -712,6 +717,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
           savedFunctions,
+          ...(params.params === undefined ? {} : { input: params.params }),
         },
       );
       const rendered = display(value);

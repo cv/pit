@@ -82,6 +82,15 @@ async function runTests({ shell }, input: { coverage?: boolean } = {}) {
 }
 ```
 
+If the named function needs input on its first execution, provide optional top-level `params`. Pit validates the value against an annotated second parameter and passes it through:
+
+```json
+{
+  "code": "async function inspect({ workspace }, input: { path: string }) { return workspace.readText(input.path); }",
+  "params": { "path": "README.md" }
+}
+```
+
 Later calls invoke it as ordinary TypeScript with capabilities already bound:
 
 ```ts
