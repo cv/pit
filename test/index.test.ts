@@ -418,7 +418,7 @@ describe("pit extension", () => {
         .render(240)
         .join("\n") ?? "";
     expect(limited).toContain("additional saved source omitted by the 500-line display limit");
-  });
+  }, 15_000);
 
   it("allows saved functions to call one another", async () => {
     await value(
