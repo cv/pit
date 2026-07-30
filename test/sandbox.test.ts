@@ -21,7 +21,28 @@ describe("validateTypeScript", () => {
       file,
       start: 0,
       length: 3,
-    })).toBe("/other.ts:1:1 file error");
+    })).toBe("/other.ts:1:1 file error\n  bad\n  ^");
+  });
+
+  it("reports concise syntax-first diagnostics with source excerpts", () => {
+    let message = "";
+    try {
+      validateTypeScript(`async ({ missing }) => {
+        const broken = ;
+        return missing.call();
+      }`);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("TypeScript validation failed");
+    expect(message).toContain("const broken = ;");
+    expect(message).toContain("^");
+    expect(message).not.toContain("Property 'missing'");
+    expect(message.split("\n- ").length - 1).toBeLessThanOrEqual(8);
+
+    const manyErrors = Array.from({ length: 10 }, (_, index) => `const broken${index} = ;`).join("\n");
+    expect(() => validateTypeScript(`async () => {\n${manyErrors}\n}`))
+      .toThrow(/more diagnostics? omitted/);
   });
 
   it("allows evolving empty arrays, implicit helper parameters, and void results", () => {

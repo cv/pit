@@ -37,6 +37,7 @@ const CONTRACT_FILE = "/pit/capability-contract.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
 const PROGRAM_PREFIX = "const program: PitProgram = (\n";
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7031, 7034, 7044]);
+const MAX_DIAGNOSTICS = 8;
 const SANDBOX_GLOBALS = `
 declare const console: {
   log(...values: unknown[]): void;
@@ -58,13 +59,15 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
   if (!diagnostic.file || diagnostic.start === undefined) return message;
   const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-  if (diagnostic.file.fileName !== PROGRAM_FILE) {
-    return `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1} ${message}`;
-  }
-  // Submitted source starts on line two of the wrapper, so its one-based line
-  // number is equal to the wrapper's zero-based line number.
-  const line = Math.max(1, position.line);
-  return `${line}:${position.character + 1} ${message}`;
+  const location = diagnostic.file.fileName !== PROGRAM_FILE
+    ? `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1}`
+    // Submitted source starts on line two of the wrapper, so its one-based
+    // line number is equal to the wrapper's zero-based line number.
+    : `${Math.max(1, position.line)}:${position.character + 1}`;
+  const sourceLine = diagnostic.file.text.split("\n")[position.line];
+  if (sourceLine === undefined) return `${location} ${message}`;
+  const caret = " ".repeat(position.character) + "^";
+  return `${location} ${message}\n  ${sourceLine}\n  ${caret}`;
 }
 
 /** Semantically validate model code against the capability contract. */
@@ -99,11 +102,27 @@ export function validateTypeScript(source: string): void {
     },
   };
   const program = ts.createProgram([CONTRACT_FILE, PROGRAM_FILE], options, host);
-  const diagnostics = ts.getPreEmitDiagnostics(program)
+  const syntactic = program.getSyntacticDiagnostics();
+  const diagnostics = (syntactic.length > 0
+    ? syntactic
+    : [
+        ...program.getOptionsDiagnostics(),
+        ...program.getGlobalDiagnostics(),
+        ...program.getSemanticDiagnostics(),
+      ])
     .filter((diagnostic) => !IGNORED_DIAGNOSTIC_CODES.has(diagnostic.code));
   if (diagnostics.length > 0) {
-    const messages = diagnostics.map(formatDiagnostic);
-    throw new Error(`TypeScript validation failed:\n- ${messages.join("\n- ")}`);
+    const unique = [...new Map(diagnostics.map((diagnostic) => [
+      `${diagnostic.code}:${diagnostic.file?.fileName}:${diagnostic.start}:${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
+      diagnostic,
+    ])).values()];
+    const displayed = unique.slice(0, MAX_DIAGNOSTICS);
+    const messages = displayed.map(formatDiagnostic);
+    const omitted = unique.length - displayed.length;
+    throw new Error(
+      `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
+      (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : ""),
+    );
   }
 }
 
