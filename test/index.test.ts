@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import pit, {
   CAPABILITY_METHODS,
   display,
-  handleFunctions,
   reconstructFunctions,
 } from "../src/index.js";
 
@@ -90,21 +89,12 @@ describe("function registry handler", () => {
       null,
       { type: "custom", customType: "other", data: {} },
       { type: "custom", customType: "pit-functions", data: null },
-      { type: "custom", customType: "pit-functions", data: { action: "set", name: "bad name", source } },
-      { type: "custom", customType: "pit-functions", data: { action: "set", name: "saved", source } },
-      { type: "custom", customType: "pit-functions", data: { action: "set", name: "missing-source", source: 42 } },
-      { type: "custom", customType: "pit-functions", data: { action: "unknown", name: "ignored" } },
-      { type: "custom", customType: "pit-functions", data: { action: "set", name: "stale", source: "42" } },
-      { type: "custom", customType: "pit-functions", data: { action: "delete", name: "saved" } },
-      { type: "custom", customType: "pit-functions", data: { action: "set", name: "active", source } },
+      { type: "custom", customType: "pit-functions", data: { name: "bad name", source } },
+      { type: "custom", customType: "pit-functions", data: { name: "missing-source", source: 42 } },
+      { type: "custom", customType: "pit-functions", data: { name: "stale", source: "() => 1n" } },
+      { type: "custom", customType: "pit-functions", data: { name: "active", source } },
     ]);
     expect([...functions.keys()]).toEqual(["active"]);
-  });
-  it("rejects oversized sources and unknown methods", () => {
-    expect(() => handleFunctions(new Map(), "set", ["large", "x".repeat(100_001)]))
-      .toThrow("saved function source exceeds");
-    expect(() => handleFunctions(new Map(), "unknown", []))
-      .toThrow("Unknown functions method: unknown");
   });
 });
 
@@ -127,13 +117,13 @@ describe("pit extension", () => {
     expect(tool.description).toContain("Nonzero exit codes are returned as data");
     expect(tool.parameters.properties.code.description).toContain("file.text");
     expect(tool.parameters.properties.code.description).toContain("Promise.all");
-    expect(tool.parameters.properties.code.description).toContain("functions.set");
-    expect(tool.description).toContain("functions.run(name, input?)");
+    expect(tool.parameters.properties.code.description).toContain("async function runTests");
+    expect(tool.description).toContain("runTests({ coverage: true })");
     expect(tool.description).toContain("REUSABLE FUNCTIONS");
-    expect(tool.description).toContain("Definitions are persisted in session history");
-    expect(tool.description).toContain("Do not pass capabilities through input");
+    expect(tool.description).toContain("Named functions are executed and saved automatically");
+    expect(tool.description).toContain("savedFunctions lists the names");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(15);
+    expect(tool.promptGuidelines).toHaveLength(14);
     expect(tool.promptGuidelines).toContain(
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
     );
@@ -151,7 +141,6 @@ describe("pit extension", () => {
       shell: "PitShellCapability",
       http: "PitHttpCapability",
       ui: "PitUiCapability",
-      functions: "PitFunctionsCapability",
       context: "PitContextCapability",
     };
 
@@ -213,13 +202,12 @@ describe("pit extension", () => {
           { action: "set", name: "test", replaced: false },
           { action: "set", name: "test", replaced: true },
           { action: "run", name: "test" },
-          { action: "delete", name: "test" },
         ],
       },
     };
 
     const collapsed = render(result, { expanded: false, isPartial: false });
-    expect(collapsed).toContain("functions: saved test, replaced test, ran test, deleted test");
+    expect(collapsed).toContain("functions: saved test, replaced test, ran test");
     expect(collapsed).toContain("result (17 lines)");
     expect(collapsed).toContain('"key1"');
     expect(collapsed).not.toContain('"key15"');
@@ -282,74 +270,63 @@ describe("pit extension", () => {
     )).toContain("TypeScript execution failed");
   });
 
-  it("saves and reuses self-contained functions across tool calls", async () => {
-    const defined = await value(`async ({ functions }) => {
-      const saved = await functions.set("greet", async (_capabilities, input) => ({ greeting: "Hello, " + input.name + "!" }));
-      return { saved, has: await functions.has("greet"), names: await functions.list(), result: await functions.run("greet", { name: "Ada" }) };
+  it("automatically saves and invokes named functions", async () => {
+    const defined = await run(`async function greet(_capabilities, input) {
+      return { greeting: "Hello, " + (input?.name ?? "world") + "!" };
     }`);
-    expect(defined).toEqual({
-      saved: { name: "greet", replaced: false },
-      has: true,
-      names: ["greet"],
-      result: { greeting: "Hello, Ada!" },
-    });
-
-    expect(await value(`async ({ functions }) => functions.run("greet", { name: "Pi" })`))
-      .toEqual({ greeting: "Hello, Pi!" });
-    const replaced = await value(`async ({ functions }) => functions.set("greet", async () => ({ greeting: "replaced" }))`);
-    expect(replaced).toEqual({ name: "greet", replaced: true });
-    expect(await value(`async ({ functions }) => functions.run("greet")`)).toEqual({ greeting: "replaced" });
-    expect(await value(`async ({ functions }) => functions.delete("greet")`)).toBe(true);
-    expect(await value(`async ({ functions }) => ({ deletedAgain: await functions.delete("greet"), has: await functions.has("greet"), names: await functions.list() })`))
-      .toEqual({ deletedAgain: false, has: false, names: [] });
-  });
-
-  it("persists saved functions on the active session branch", async () => {
-    await value(`async ({ functions }) => functions.set("persistent", async () => ({ ok: true }))`);
+    expect(defined.details.value).toEqual({ greeting: "Hello, world!" });
+    expect(defined.details.functions).toEqual([{ action: "set", name: "greet", replaced: false }]);
+    expect(defined.content[0].text).toContain("Invoke later with: greet()");
     expect(branchEntries).toContainEqual(expect.objectContaining({
       type: "custom",
       customType: "pit-functions",
-      data: expect.objectContaining({ action: "set", name: "persistent" }),
+      data: expect.objectContaining({ name: "greet", source: expect.stringContaining("function greet") }),
     }));
 
+    const invoked = await run(`greet({ name: "Pi" })`);
+    expect(invoked.details.value).toEqual({ greeting: "Hello, Pi!" });
+    expect(invoked.details.functions).toEqual([{ action: "run", name: "greet" }]);
+
+    const replaced = await run(`async function greet() { return { greeting: "replaced" }; }`);
+    expect(replaced.details.functions).toEqual([{ action: "set", name: "greet", replaced: true }]);
+    expect(await value(`greet()`)).toEqual({ greeting: "replaced" });
+
+    const info = await value(`async ({ context }) => context.get()`);
+    expect(info.savedFunctions).toEqual(["greet"]);
+  });
+
+  it("allows saved functions to call one another", async () => {
+    await value(`async function base(_capabilities, input) { return { value: (input?.value ?? 0) * 2 }; }`);
+    await value(`async function composed(_capabilities, input) {
+      const result = await base(input);
+      return { value: result.value + 1 };
+    }`);
+    expect(await value(`composed({ value: 20 })`)).toEqual({ value: 41 });
+  });
+
+  it("persists named functions on the active session branch", async () => {
+    await value(`async function persistent() { return { ok: true }; }`);
     sessionStart({}, context());
-    expect(await value(`async ({ functions }) => functions.run("persistent")`)).toEqual({ ok: true });
+    expect(await value(`persistent()`)).toEqual({ ok: true });
 
     const previousBranch = [...branchEntries];
     branchEntries = [];
     sessionTree({}, context());
-    await expect(run(`async ({ functions }) => functions.run("persistent")`))
-      .rejects.toThrow("No functions are saved");
+    await expect(run(`persistent()`)).rejects.toThrow("Cannot find name 'persistent'");
 
     branchEntries = previousBranch;
     sessionTree({}, context());
-    expect(await value(`async ({ functions }) => functions.run("persistent")`)).toEqual({ ok: true });
+    expect(await value(`persistent()`)).toEqual({ ok: true });
   });
 
-  it("rejects saved closures, invalid names, and unknown functions", async () => {
-    const closureError = await value(`async ({ functions }) => {
-      const suffix = "!";
-      try { await functions.set("closed", async () => ({ greeting: suffix })); return "ok"; }
-      catch (error) { return error.message; }
-    }`);
-    expect(closureError).toMatch(/suffix/);
-
-    const errors = await value(`async ({ functions }) => {
-      const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
-      await functions.set("available", async () => "yes");
-      return [
-        await capture(() => (functions as any).set("bad name", async () => null)),
-        await capture(() => functions.run("missing")),
-        await capture(() => (functions as any).nope()),
-      ];
-    }`);
-    expect(errors[0]).toMatch(/function name must start/);
-    expect(errors[1]).toContain("Saved function \"missing\" was not found. Available functions: available");
-    expect(errors[2]).toBe("Unknown functions method: nope");
-  });
-
-  it("reports an empty registry when a function is missing", async () => {
-    await expect(run(`async ({ functions }) => functions.run("missing")`)).rejects.toThrow("No functions are saved");
+  it("rejects reserved, oversized, and unknown saved functions", async () => {
+    await expect(run(`async function Promise() { return null; }`))
+      .rejects.toThrow("non-reserved TypeScript identifier");
+    const oversized = `async function enormous() { /*${"x".repeat(100_001)}*/ return null; }`;
+    await expect(run(oversized)).rejects.toThrow("saved function source exceeds");
+    await expect(run(`missingFunction()`)).rejects.toThrow("Cannot find name 'missingFunction'");
+    await expect(run(`async (capabilities) => (capabilities as any).__pit.savedFunctionRun("missing")`))
+      .rejects.toThrow('Saved function "missing" is unavailable');
   });
 
   it("reads, writes, edits, lists, globs, and stats workspace files", async () => {
@@ -502,7 +479,9 @@ describe("pit extension", () => {
       context: await context.get(),
     })`, ctx);
     expect(result).toMatchObject({ confirmed: true, input: "typed", selected: "b", notified: null });
-    expect(result.context).toMatchObject({ cwd, mode: "interactive", model: "test/model", thinkingLevel: "medium" });
+    expect(result.context).toMatchObject({
+      cwd, mode: "interactive", model: "test/model", thinkingLevel: "medium", savedFunctions: [],
+    });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Done", "warning");
     expect(ctx.ui.notify).toHaveBeenCalledWith("Again", "info");
   });

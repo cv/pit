@@ -9,6 +9,7 @@ export interface SandboxOptions {
   memoryLimitMb?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  savedFunctions?: ReadonlyMap<string, string>;
 }
 
 export type CapabilityHandler = (
@@ -36,6 +37,7 @@ const CAPABILITY_CONTRACT = readFileSync(
 const CONTRACT_FILE = "/pit/capability-contract.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
 const PROGRAM_PREFIX = "const program: PitProgram = (\n";
+const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities) => await (\n";
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
 const MAX_CACHE_ENTRIES = 128;
@@ -99,16 +101,56 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
   return `${location} ${message}\n  ${sourceLine}\n  ${caret}`;
 }
 
+function submissionExpression(source: string): ts.Expression | undefined {
+  const file = ts.createSourceFile(
+    "/pit/submission.ts",
+    `const __pit_submission = (${source});`,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const statement = file.statements[0];
+  if (!statement || !ts.isVariableStatement(statement)) return undefined;
+  let expression = statement.declarationList.declarations[0]?.initializer;
+  while (expression && ts.isParenthesizedExpression(expression)) expression = expression.expression;
+  return expression;
+}
+
+function isProgramExpression(source: string): boolean {
+  const expression = submissionExpression(source);
+  return Boolean(expression && (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)));
+}
+
+export function getNamedFunctionName(source: string): string | undefined {
+  const expression = submissionExpression(source);
+  return expression && ts.isFunctionExpression(expression) && expression.name
+    ? expression.name.text
+    : undefined;
+}
+
+function savedDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
+  return [...savedFunctions.keys()].sort().map((name) =>
+    `declare const ${name}: PitBoundFunction;`,
+  ).join("\n");
+}
+
 /** Semantically validate model code against the capability contract. */
-export function validateTypeScript(source: string): void {
-  if (validationCache.has(source)) {
+export function validateTypeScript(
+  source: string,
+  savedFunctions: ReadonlyMap<string, string> = new Map(),
+): void {
+  const programExpression = isProgramExpression(source);
+  const names = [...savedFunctions.keys()].sort();
+  const cacheKey = `${programExpression ? "program" : "expression"}\0${names.join("\0")}\0${source}`;
+  if (validationCache.has(cacheKey)) {
     validationCacheHits++;
-    const cachedError = validationCache.get(source);
+    const cachedError = validationCache.get(cacheKey);
     if (cachedError) throw new Error(cachedError);
     return;
   }
 
-  const wrapped = `${PROGRAM_PREFIX}${source}\n);\nvoid program;\n`;
+  const prefix = programExpression ? PROGRAM_PREFIX : EXPRESSION_PREFIX;
+  const wrapped = `${prefix}${source}\n);\nvoid program;\n`;
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
@@ -123,7 +165,7 @@ export function validateTypeScript(source: string): void {
   };
   const baseHost = ts.createCompilerHost(options, true);
   const sources = new Map([
-    [CONTRACT_FILE, CAPABILITY_CONTRACT + SANDBOX_GLOBALS],
+    [CONTRACT_FILE, CAPABILITY_CONTRACT + SANDBOX_GLOBALS + "\n" + savedDeclarations(savedFunctions)],
     [PROGRAM_FILE, wrapped],
   ]);
   const host: ts.CompilerHost = {
@@ -155,13 +197,34 @@ export function validateTypeScript(source: string): void {
     const displayed = unique.slice(0, MAX_DIAGNOSTICS);
     const messages = displayed.map(formatDiagnostic);
     const omitted = unique.length - displayed.length;
+    const savedHint = diagnostics.some((diagnostic) => diagnostic.code === 2304) && names.length
+      ? `\nAvailable saved functions: ${names.join(", ")}`
+      : "";
     const error =
       `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
-      (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "");
-    cacheSet(validationCache, source, error);
+      (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
+      savedHint;
+    cacheSet(validationCache, cacheKey, error);
     throw new Error(error);
   }
-  cacheSet(validationCache, source, null);
+  cacheSet(validationCache, cacheKey, null);
+}
+
+function runtimeProgram(
+  source: string,
+  savedFunctions: ReadonlyMap<string, string>,
+): string {
+  const entries = [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const raw = entries.map(([, savedSource], index) =>
+    `const __pit_saved_${index} = (${savedSource});`,
+  );
+  const bound = entries.map(([name], index) =>
+    `const ${name} = async (__pit_input) => { if (__pit_saved_depth >= 32) throw new Error("Saved function call depth exceeded 32"); await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); __pit_saved_depth++; try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } finally { __pit_saved_depth--; } };`,
+  );
+  const invocation = isProgramExpression(source)
+    ? `const __pit_submission = (${source}); return await __pit_submission(__pit_capabilities);`
+    : `return await (${source});`;
+  return `async (__pit_capabilities) => { let __pit_saved_depth = 0; ${raw.join("\n")} ${bound.join("\n")} ${invocation} }`;
 }
 
 async function compileTypeScript(source: string): Promise<string> {
@@ -185,7 +248,7 @@ async function compileTypeScript(source: string): Promise<string> {
 }
 
 /**
- * Run a TypeScript function expression in a fresh, permission-restricted Node
+ * Run a TypeScript expression in a fresh, permission-restricted Node
  * process. The child has no filesystem, network, subprocess, worker, addon, or
  * inherited-environment access. All useful effects go through the provided capabilities.
  */
@@ -203,9 +266,10 @@ export async function runInSandbox(
     throw new Error("timeoutMs must be positive");
   }
 
-  validateTypeScript(source);
+  const savedFunctions = options.savedFunctions ?? new Map<string, string>();
+  validateTypeScript(source, savedFunctions);
 
-  const compiled = await compileTypeScript(source);
+  const compiled = await compileTypeScript(runtimeProgram(source, savedFunctions));
   const token = randomBytes(24).toString("base64url");
   const child = spawn(
     process.execPath,

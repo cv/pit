@@ -2,7 +2,7 @@
 
 A Pi extension that replaces the normal coding tools with one tool: `typescript`.
 
-The model submits a TypeScript function. That function runs in a fresh, permission-restricted process and receives the useful host capabilities it explicitly destructures:
+The model submits a TypeScript expression that runs in a fresh, permission-restricted process. One-shot functions explicitly destructure the host capabilities they need:
 
 ```ts
 async ({ workspace, shell }) => {
@@ -17,7 +17,7 @@ async ({ workspace, shell }) => {
 }
 ```
 
-The function's return value becomes the tool result. This lets the model batch several operations and perform ordinary computation without repeatedly crossing the model/tool boundary.
+The expression's resolved value becomes the tool result. This lets the model batch several operations and perform ordinary computation without repeatedly crossing the model/tool boundary.
 
 In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in, and successful result values are rendered as syntax-highlighted JSON. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result.
 
@@ -34,7 +34,7 @@ Requires Node 22 or newer because the sandbox uses Node's permission model.
 
 ## Function contract
 
-The `code` argument must evaluate to a function expression and cannot contain imports:
+The `code` argument must be a TypeScript expression and cannot contain imports. Use an anonymous function for one-shot work:
 
 ```ts
 async ({ workspace, shell }) => {
@@ -43,7 +43,7 @@ async ({ workspace, shell }) => {
 }
 ```
 
-The function is contextually type-checked as a `PitProgram` before execution. No source annotations are required: destructured capabilities automatically receive the types declared in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
+The expression is contextually type-checked before execution. No source annotations are required: destructured capabilities automatically receive the types declared in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Validation catches unknown capabilities and methods, invalid arguments, missing awaits, and non-JSON-compatible results with source locations.
 
 Each destructured capability is a local proxy. Calling one of its methods performs an RPC to the trusted extension process. Calls begin immediately, so independent operations should be started together with `Promise.all`. Unknown capabilities and methods also fail closed at runtime.
 
@@ -65,40 +65,29 @@ Each destructured capability is a local proxy. Calling one of its methods perfor
   - `input(title, placeholder?)`
   - `select(title, options)`
   - `notify(message, "info" | "warning" | "error")`
-- `functions`
-  - `set(name, program)` — validate and save a self-contained function
-  - `run(name, input?)` — run a saved function with fresh capabilities
-  - `has(name)`
-  - `list()`
-  - `delete(name)`
 - `context`
-  - `get()` — cwd, mode, model, thinking level, and session file
+  - `get()` — cwd, mode, model, thinking level, session file, and saved function names
 
 Paths are resolved relative to Pi's current working directory. Absolute paths remain possible, matching Pi's normal tools.
 
 ## Reusable functions
 
-Repeated workflows can be saved without changing the tool's single `code` parameter shape:
+Name a top-level function to execute it and save it automatically:
 
 ```ts
-async ({ functions }) => {
-  await functions.set(
-    "test",
-    async ({ shell }, input) =>
-      shell.exec(input?.coverage ? "npm run coverage" : "npm test"),
-  );
-
-  return functions.run("test", { coverage: false });
+async function runTests({ shell }, input) {
+  return shell.exec(input?.coverage ? "npm run coverage" : "npm test");
 }
 ```
 
-Later calls can reuse the definition:
+Later calls invoke it as ordinary TypeScript with capabilities already bound:
 
 ```ts
-async ({ functions }) => functions.run("test")
+runTests()
+runTests({ coverage: true })
 ```
 
-Saved functions automatically receive current capabilities as their first argument and optional JSON input as their second argument. They are independently type-checked and must be self-contained: they cannot close over variables from the defining function, so changing values should be supplied through input. `functions.set` replaces an existing definition with the same name; use `functions.has` or `functions.list` when availability is uncertain. Definitions are persisted as non-context session entries, survive reloads, and follow the active session branch. The active registry lives in the trusted extension process, while every top-level tool invocation still receives fresh capability proxies inside a fresh restricted child process.
+Named functions are persisted as non-context session entries, survive reloads, and follow the active session branch. Redefining the same name replaces its source. Active saved names are available from `context.get().savedFunctions`. Saved definitions are injected as typed lexical bindings into each fresh restricted child process, so saved functions can call one another without retaining process state.
 
 ## Isolation model
 

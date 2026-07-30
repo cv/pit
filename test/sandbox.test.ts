@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   clearSandboxCaches,
   formatDiagnostic,
+  getNamedFunctionName,
   getSandboxCacheStats,
   runInSandbox,
   validateTypeScript,
@@ -130,62 +131,46 @@ describe("runInSandbox", () => {
     expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"]);
   });
 
-  it("serializes, stores, and runs functions through the registry capability", async () => {
-    const saved = new Map<string, string>();
-    const handler = vi.fn(async (_capability: string, method: string, args: unknown[]) => {
-      const name = String(args[0]);
-      if (method === "set") {
-        saved.set(name, String(args[1]));
-        return { name, replaced: false };
-      }
-      if (method === "get") return saved.get(name);
-      if (method === "has") return saved.has(name);
-      if (method === "list") return [...saved.keys()];
-      if (method === "delete") return saved.delete(name);
-      throw new Error("unexpected method");
+  it("injects saved functions as capability-bound expressions", async () => {
+    const savedFunctions = new Map([
+      ["answer", `async function answer(_capabilities, input) { return { answer: input.value }; }`],
+    ]);
+    const handler = vi.fn(async (capability: string, method: string) => {
+      if (capability === "__pit" && method === "savedFunctionRun") return null;
+      throw new Error("unexpected capability call");
     });
-
-    const result = await runInSandbox(`async ({ functions }) => {
-      const saved = await functions.set("answer", async (_capabilities, input) => ({ answer: input.value }));
-      const beforeDelete = {
-        has: await functions.has("answer"),
-        names: await functions.list(),
-        value: await functions.run("answer", { value: 42 }),
-      };
-      const deleted = await functions.delete("answer");
-      return { saved, beforeDelete, deleted, hasAfterDelete: await functions.has("answer") };
-    }`, handler);
-
-    expect(result).toEqual({
-      saved: { name: "answer", replaced: false },
-      beforeDelete: { has: true, names: ["answer"], value: { answer: 42 } },
-      deleted: true,
-      hasAfterDelete: false,
-    });
-    expect(saved.get("answer")).toBeUndefined();
-    expect(handler).toHaveBeenCalledWith("functions", "set", ["answer", expect.stringContaining("async")]);
+    const result = await runInSandbox(`answer({ value: 42 })`, handler, { savedFunctions });
+    expect(result).toEqual({ answer: 42 });
+    expect(handler).toHaveBeenCalledWith("__pit", "savedFunctionRun", ["answer"]);
   });
 
-  it("validates special function registry operations in the runner", async () => {
-    await expect(runInSandbox(`async ({ functions }) => (functions as any).set("bad", 42)`, async () => null))
-      .rejects.toThrow("expects a function");
-    await expect(runInSandbox(`async ({ functions }) => (functions as any).unknown()`, async () => null))
-      .rejects.toThrow("Unknown functions method");
-    await expect(runInSandbox(`async ({ functions }) => functions.run("bad")`, async () => "42"))
-      .rejects.toThrow("is not callable");
+  it("annotates saved function failures and limits cross-function recursion", async () => {
+    const handler = async () => null;
+    const failed = new Map([["broken", `async function broken() { throw new Error("boom"); }`]]);
+    await expect(runInSandbox(`broken()`, handler, { savedFunctions: failed }))
+      .rejects.toThrow('Saved function "broken" failed: boom');
+
+    const recursive = new Map([
+      ["first", `async function first() { return second(); }`],
+      ["second", `async function second() { return first(); }`],
+    ]);
+    await expect(runInSandbox(`first()`, handler, { savedFunctions: recursive }))
+      .rejects.toThrow("Saved function call depth exceeded 32");
   });
 
-  it("limits recursive saved function calls", async () => {
-    let source = "";
-    const handler = async (_capability: string, method: string, args: unknown[]) => {
-      if (method === "set") { source = String(args[1]); return { name: "loop", replaced: false }; }
-      if (method === "get") return source;
-      return null;
-    };
-    await expect(runInSandbox(`async ({ functions }) => {
-      await functions.set("loop", async ({ functions }) => functions.run("loop"));
-      return functions.run("loop");
-    }`, handler)).rejects.toThrow("call depth exceeded 32");
+  it("detects named top-level function expressions", () => {
+    expect(getNamedFunctionName(`async function runTests() { return null; }`)).toBe("runTests");
+    expect(getNamedFunctionName(`((async function wrapped() { return null; }))`)).toBe("wrapped");
+    expect(getNamedFunctionName(`async function () { return null; }`)).toBeUndefined();
+    expect(getNamedFunctionName(`async () => null`)).toBeUndefined();
+    expect(getNamedFunctionName(`missing()`)).toBeUndefined();
+  });
+
+  it("contextually types expressions using active saved functions", () => {
+    const savedFunctions = new Map([["answer", `async function answer() { return 42; }`]]);
+    expect(() => validateTypeScript(`answer()`, savedFunctions)).not.toThrow();
+    expect(() => validateTypeScript(`missing()`, savedFunctions))
+      .toThrow(/Cannot find name 'missing'[^]*Available saved functions: answer/);
   });
 
   it("propagates capability errors", async () => {
@@ -258,8 +243,8 @@ describe("runInSandbox", () => {
     }
   });
 
-  it("rejects non-functions and malformed source", async () => {
-    await expect(runInSandbox(`42`, async () => null)).rejects.toThrow("TypeScript validation failed");
+  it("executes value expressions and rejects malformed source", async () => {
+    await expect(runInSandbox(`42`, async () => null)).resolves.toBe(42);
     await expect(runInSandbox(`(() =>`, async () => null)).rejects.toThrow();
   });
 

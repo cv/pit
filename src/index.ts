@@ -13,30 +13,37 @@ import { Type } from "typebox";
 import fg from "fast-glob";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { runInSandbox, validateTypeScript, type CapabilityHandler } from "./sandbox.js";
+import {
+  getNamedFunctionName,
+  runInSandbox,
+  validateTypeScript,
+  type CapabilityHandler,
+} from "./sandbox.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
-const SAVED_FUNCTION_NAME = /^[A-Za-z_$][A-Za-z0-9_$-]{0,63}$/;
+const SAVED_FUNCTION_NAME = /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/;
+const RESERVED_FUNCTION_NAMES = new Set([
+  "Array", "Boolean", "Date", "Error", "Infinity", "JSON", "Map", "Math",
+  "NaN", "Number", "Object", "Promise", "RegExp", "Set", "String",
+  "console", "eval", "globalThis", "process", "undefined",
+]);
 export const CAPABILITY_METHODS = {
   workspace: ["readText", "writeText", "editText", "list", "glob", "stat"],
   shell: ["exec"],
   http: ["request"],
   ui: ["confirm", "input", "select", "notify"],
-  functions: ["set", "run", "has", "list", "delete"],
   context: ["get"],
 } as const;
 
 type FunctionRegistry = Map<string, string>;
 const FUNCTION_ENTRY_TYPE = "pit-functions";
-interface FunctionMutation {
-  action: "set" | "delete";
+interface FunctionEntry {
   name: string;
-  source?: string;
-  replaced?: boolean;
+  source: string;
 }
 interface FunctionActivity {
-  action: "set" | "run" | "delete";
+  action: "set" | "run";
   name: string;
   replaced?: boolean;
 }
@@ -61,12 +68,12 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
-function savedFunctionName(value: unknown): string {
-  const name = string(value, "function name");
-  if (!SAVED_FUNCTION_NAME.test(name)) {
-    throw new Error("function name must start with a letter, _, or $, contain only letters, numbers, _, $, or -, and be at most 64 characters");
+function validateSavedFunctionName(name: string): void {
+  if (!SAVED_FUNCTION_NAME.test(name) || name.startsWith("__pit") || RESERVED_FUNCTION_NAMES.has(name)) {
+    throw new Error(
+      "saved function name must be a non-reserved TypeScript identifier of at most 64 characters",
+    );
   }
-  return name;
 }
 
 function workspacePath(cwd: string, value: unknown): string {
@@ -150,70 +157,24 @@ async function editText(cwd: string, args: unknown[]) {
   });
 }
 
-export function handleFunctions(
-  functions: FunctionRegistry,
-  method: string,
-  args: unknown[],
-  onMutation?: (mutation: FunctionMutation) => void,
-): unknown {
-  switch (method) {
-    case "set": {
-      const name = savedFunctionName(args[0]);
-      const source = string(args[1], "function source");
-      if (Buffer.byteLength(source) > MAX_SAVED_FUNCTION_BYTES) {
-        throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
-      }
-      validateTypeScript(source);
-      const replaced = functions.has(name);
-      functions.set(name, source);
-      onMutation?.({ action: "set", name, source, replaced });
-      return { name, replaced };
-    }
-    case "get": {
-      const name = savedFunctionName(args[0]);
-      const source = functions.get(name);
-      if (source === undefined) {
-        const available = [...functions.keys()].sort();
-        throw new Error(
-          `Saved function "${name}" was not found.` +
-          (available.length ? ` Available functions: ${available.join(", ")}` : " No functions are saved."),
-        );
-      }
-      return source;
-    }
-    case "has": return functions.has(savedFunctionName(args[0]));
-    case "list": return [...functions.keys()].sort();
-    case "delete": {
-      const name = savedFunctionName(args[0]);
-      const deleted = functions.delete(name);
-      if (deleted) onMutation?.({ action: "delete", name });
-      return deleted;
-    }
-    default: throw new Error(`Unknown functions method: ${method}`);
-  }
-}
-
 export function reconstructFunctions(
-  functions: FunctionRegistry,
+  registry: FunctionRegistry,
   entries: readonly unknown[],
 ): void {
-  functions.clear();
+  registry.clear();
   for (const raw of entries) {
     if (!raw || typeof raw !== "object") continue;
     const entry = raw as { type?: unknown; customType?: unknown; data?: unknown };
     if (entry.type !== "custom" || entry.customType !== FUNCTION_ENTRY_TYPE) continue;
     if (!entry.data || typeof entry.data !== "object") continue;
-    const mutation = entry.data as Partial<FunctionMutation>;
-    if (typeof mutation.name !== "string" || !SAVED_FUNCTION_NAME.test(mutation.name)) continue;
-    if (mutation.action === "delete") {
-      functions.delete(mutation.name);
-    } else if (mutation.action === "set" && typeof mutation.source === "string") {
-      try {
-        validateTypeScript(mutation.source);
-        functions.set(mutation.name, mutation.source);
-      } catch {
-        // Ignore stale or malformed persisted definitions.
-      }
+    const definition = entry.data as Partial<FunctionEntry>;
+    if (typeof definition.name !== "string" || typeof definition.source !== "string") continue;
+    try {
+      validateSavedFunctionName(definition.name);
+      validateTypeScript(definition.source, registry);
+      registry.set(definition.name, definition.source);
+    } catch {
+      // Ignore stale or malformed persisted definitions.
     }
   }
 }
@@ -221,7 +182,7 @@ export function reconstructFunctions(
 function createCapabilities(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
-  functions: FunctionRegistry,
+  registry: FunctionRegistry,
   activity: FunctionActivity[],
   signal?: AbortSignal,
 ): CapabilityHandler {
@@ -308,19 +269,11 @@ function createCapabilities(
       }
     }
 
-    if (capability === "functions") {
-      const result = handleFunctions(functions, method, args, (mutation) => {
-        activity.push({
-          action: mutation.action,
-          name: mutation.name,
-          ...(mutation.replaced === undefined ? {} : { replaced: mutation.replaced }),
-        });
-        pi.appendEntry(FUNCTION_ENTRY_TYPE, mutation);
-      });
-      if (method === "get") {
-        activity.push({ action: "run", name: savedFunctionName(args[0]) });
-      }
-      return result;
+    if (capability === "__pit" && method === "savedFunctionRun") {
+      const name = string(args[0], "saved function name");
+      if (!registry.has(name)) throw new Error(`Saved function "${name}" is unavailable`);
+      activity.push({ action: "run", name });
+      return null;
     }
 
     if (capability === "context" && method === "get") {
@@ -330,6 +283,7 @@ function createCapabilities(
         model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
         thinkingLevel: ctx.thinkingLevel,
         sessionFile: ctx.sessionManager.getSessionFile(),
+        savedFunctions: [...registry.keys()].sort(),
       };
     }
 
@@ -350,11 +304,11 @@ export default function pit(pi: ExtensionAPI) {
   pi.registerTool({
     name: "typescript",
     label: "TypeScript Workspace",
-    description: `Run a TypeScript function in a fresh, permission-restricted process for batched coding operations.
+    description: `Run a TypeScript expression in a fresh, permission-restricted process for batched coding operations.
 
 CALLING CONTRACT
 
-Pass a function expression that destructures only the host capabilities it needs:
+Pass an anonymous function expression for one-shot work. It should destructure only the host capabilities it needs:
 
 async ({ workspace, shell }) => {
   const [packageFile, status] = await Promise.all([
@@ -364,7 +318,7 @@ async ({ workspace, shell }) => {
   return { packageJson: JSON.parse(packageFile.text), status };
 }
 
-The function is contextually type-checked against the capability contract, so capability names, methods, arguments, awaited values, and return values are validated without requiring source annotations. Capability calls begin immediately and return promises. Start independent calls together and await them with Promise.all. Sequence only operations with data dependencies or conflicting side effects. The function cannot use imports and must return a compact JSON-serializable value.
+Code is contextually type-checked against the capability contract, so capability names, methods, arguments, awaited values, and return values are validated without requiring source annotations. Capability calls begin immediately and return promises. Start independent calls together and await them with Promise.all. Sequence only operations with data dependencies or conflicting side effects. The function cannot use imports and must return a compact JSON-serializable value.
 
 CAPABILITIES
 
@@ -385,46 +339,37 @@ http
 ui
 - ui.confirm(title, message), ui.input(title, placeholder?), ui.select(title, options), and ui.notify(message, level). UI may be unavailable outside interactive or RPC modes.
 
-functions
-- functions.set(name, program) saves a self-contained, contextually typed PitProgram for reuse and returns { name, replaced }. Saved functions may not close over local variables; pass changing data through input.
-- functions.run(name, input?) executes a saved function with the current capabilities and optional JSON input.
-- functions.has(name), functions.list(), and functions.delete(name) inspect or mutate the active session branch's registry.
-
 context
-- context.get() returns cwd, mode, model, thinkingLevel, and sessionFile.
+- context.get() returns cwd, mode, model, thinkingLevel, sessionFile, and savedFunctions.
 
 REUSABLE FUNCTIONS
 
-Use the functions capability for self-contained workflows likely to be repeated across turns. Define one once:
+Give stable project workflows a top-level function name. Named functions are executed and saved automatically:
 
-async ({ functions }) => {
-  return functions.set(
-    "test",
-    async ({ shell }, input) =>
-      shell.exec(input?.coverage ? "npm run coverage" : "npm test"),
-  );
+async function runTests({ shell }, input) {
+  return shell.exec(input?.coverage ? "npm run coverage" : "npm test");
 }
 
-Invoke it in a later tool call without regenerating its implementation:
+Invoke the saved function in a later tool call as ordinary TypeScript. Its current capabilities are bound automatically:
 
-async ({ functions }) => functions.run("test", { coverage: true })
+runTests()
+runTests({ coverage: true })
 
-A saved function automatically receives current host capabilities as its first argument and optional JSON input as its second argument. Do not pass capabilities through input. Saved functions must be self-contained: they cannot reference variables from the defining function. Put constants inside the saved function and pass changing values through input. functions.set replaces an existing definition with the same name. Use functions.has or functions.list when availability is uncertain. Definitions are persisted in session history, survive reloads, and follow the active branch.
+Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. Saved functions are injected into new isolates as typed lexical bindings and may call one another. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
 
 The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
     promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
     promptGuidelines: [
       "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
-      "Call typescript with an async function expression that destructures the required capabilities, such as async ({ workspace, shell }) => { ... }.",
+      "Call typescript with an anonymous async function for one-shot work, a named async function to save a recurring workflow, or an ordinary call expression such as runTests() to invoke a saved function.",
       "Code passed to typescript is contextually type-checked against the capability contract; use validation diagnostics to correct capability names, arguments, missing awaits, and result types.",
       "Capability calls in typescript begin immediately and return promises; await every capability promise before returning the final result.",
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
       "In typescript, sequence operations only when they have data dependencies or conflicting side effects, especially mutations to the same file or shared shell state.",
       "Batch related work into one typescript call instead of making several small tool calls.",
-      "In typescript, use functions.set(name, program) for self-contained workflows likely to be repeated across turns; use functions.run(name, input) on later turns instead of regenerating the workflow.",
-      "Saved functions in typescript automatically receive current capabilities as their first argument and optional JSON input as their second argument.",
-      "Saved functions in typescript must not close over local variables; place constants inside the saved function and pass changing JSON data through input.",
-      "Before redefining a saved function in typescript, use functions.has(name) or functions.list() when its availability is uncertain.",
+      "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
+      "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",
+      "Saved functions invoked in typescript receive current capabilities automatically and are listed by context.get().savedFunctions.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
       "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
       "Return a compact JSON-serializable summary from typescript and avoid returning large intermediate data.",
@@ -432,7 +377,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     ],
     parameters: Type.Object({
       code: Type.String({
-        description: `A contextually type-checked TypeScript function expression receiving destructured capabilities; source annotations are optional. Example: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Start independent operations together with Promise.all. Sequence only dependent operations or conflicting mutations. Repeated workflows can be saved with functions.set and reused with functions.run. Await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
+        description: `Contextually type-checked TypeScript. Use an anonymous function expression for one-shot work: async ({ workspace, shell }) => { const [file, status] = await Promise.all([workspace.readText("package.json"), shell.exec("git status --short")]); return { packageJson: JSON.parse(file.text), status }; }. Use a named top-level function for a recurring workflow: async function runTests({ shell }) { return shell.exec("npm test"); }. Named functions save automatically and can be invoked later with runTests(). Start independent operations together, await all capability promises, do not use imports, and return a compact JSON-serializable value.`,
       }),
       timeoutMs: Type.Optional(Type.Integer({
         minimum: 1,
@@ -495,8 +440,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       if (details?.functions?.length) {
         const operations = details.functions.map((operation) => {
           if (operation.action === "set") return `${operation.replaced ? "replaced" : "saved"} ${operation.name}`;
-          if (operation.action === "run") return `ran ${operation.name}`;
-          return `deleted ${operation.name}`;
+          return `ran ${operation.name}`;
         });
         text += theme.fg("accent", `functions: ${operations.join(", ")}`) + "\n";
       }
@@ -514,18 +458,37 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
     },
     async execute(_id, params, signal, _update, ctx) {
       const functionActivity: FunctionActivity[] = [];
+      const namedFunction = getNamedFunctionName(params.code);
+      if (namedFunction) {
+        validateSavedFunctionName(namedFunction);
+        if (Buffer.byteLength(params.code) > MAX_SAVED_FUNCTION_BYTES) {
+          throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
+        }
+        validateTypeScript(params.code, savedFunctions);
+        const replaced = savedFunctions.has(namedFunction);
+        savedFunctions.set(namedFunction, params.code);
+        pi.appendEntry(FUNCTION_ENTRY_TYPE, { name: namedFunction, source: params.code } satisfies FunctionEntry);
+        functionActivity.push({ action: "set", name: namedFunction, replaced });
+      }
       const value = await runInSandbox(
         params.code,
         createCapabilities(pi, ctx, savedFunctions, functionActivity, signal),
         {
           ...(signal ? { signal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
+          savedFunctions,
         },
       );
       const rendered = display(value);
       const output = truncateHead(rendered, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+      const savedNotice = namedFunction
+        ? `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
+        : "";
       return {
-        content: [{ type: "text", text: output.content + (output.truncated ? "\n[Result truncated]" : "") }],
+        content: [{
+          type: "text",
+          text: output.content + (output.truncated ? "\n[Result truncated]" : "") + savedNotice,
+        }],
         details: {
           value: output.truncated ? undefined : value,
           truncated: output.truncated,
