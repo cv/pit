@@ -564,6 +564,26 @@ runTests({ coverage: true })
 
 Anonymous function expressions are one-shot. A named top-level function is persisted after successful validation, replaces an existing definition with the same name, survives reloads, and follows the active session branch. A branch may contain up to 64 saved functions, 100 KB per function, and 1 MB of combined saved source. Saved functions are injected into new isolates as typed lexical bindings and may call one another. Use descriptive names such as runTests, typecheck, lint, build, or gitStatus. context.get().savedFunctions lists the names available on the current branch.
 
+COMPOSING WORKFLOWS
+
+When a multi-step sequence recurs, compose existing saved functions and new operations into a higher-level named workflow instead of saving each command separately:
+
+async function publishChanges({ shell }, input: { message: string }) {
+  const validation = await runValidation();
+  if (validation.code !== 0) return { published: false, validation };
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+  const commands = ["git add -A", "git commit -m " + quote(input.message), "git push"];
+  const results = [];
+  for (const command of commands) {
+    const result = await shell.exec(command);
+    results.push({ command, result });
+    if (result.code !== 0) return { published: false, validation, results };
+  }
+  return { published: true, validation, results };
+}
+
+Prefer layered names that reflect user intent: runValidation is a reusable primitive, publishChanges composes validation and Git operations, and a future release workflow can compose publishChanges with tagging.
+
 The sandbox has no direct filesystem, network, subprocess, worker, addon, or inherited-environment access. Use capabilities for all external effects. Paths are relative to Pi's current working directory unless absolute. Batch related operations into one call. Parallelize independent reads, searches, status checks, and HTTP requests. Sequence operations when one consumes another's result, when mutating the same file, or when shell commands share mutable state. Return only information useful for the next reasoning step. Output is limited to ${formatSize(DEFAULT_MAX_BYTES)}.`,
     promptSnippet: "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions",
     promptGuidelines: [
@@ -577,6 +597,7 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
       "In typescript, use anonymous functions for one-shot work and named top-level functions for stable workflows likely to recur, such as runTests, typecheck, lint, or build.",
       "Named top-level functions in typescript are saved automatically on the active session branch; invoke them later as ordinary expressions such as runTests() or runTests({ coverage: true }).",
       "Saved functions invoked in typescript receive current capabilities automatically and are listed by context.get().savedFunctions.",
+      "In typescript, compose existing saved functions into higher-level named workflows when a multi-step sequence recurs; name the user intent rather than saving each shell command separately.",
       "In typescript, annotate a saved function's input parameter so initial top-level params and later invocations retain input and return type checking.",
       "Remember that typescript workspace.readText returns an object with a text property rather than a raw string.",
       "Remember that typescript shell.exec returns nonzero exit codes as data; inspect code, stdout, and stderr when command success matters.",
@@ -729,8 +750,10 @@ The sandbox has no direct filesystem, network, subprocess, worker, addon, or inh
         ? [...repeatedShellCommands]
         : [];
       for (const command of reusableCandidates) suggestedShellCommands.add(command);
+      const available = [...savedFunctions.keys()].sort();
+      const savedContext = available.length ? ` Existing saved functions: ${available.join(", ")}.` : "";
       const reuseNotice = reusableCandidates.length
-        ? `\n[Repeated shell command detected: ${reusableCandidates.map((command) => JSON.stringify(command)).join(", ")}. Consider naming this workflow as a top-level function so it can be reused.]`
+        ? `\n[Repeated shell command detected: ${reusableCandidates.map((command) => JSON.stringify(command)).join(", ")}. Before saving this command alone, consider whether it belongs to a recurring multi-step workflow. Compose existing saved functions into a higher-level named workflow.${savedContext}]`
         : "";
       return {
         content: [{

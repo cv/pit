@@ -100,6 +100,10 @@ runTests({ coverage: true })
 
 Named functions are persisted as non-context session entries, survive reloads, and follow the active session branch. Redefining the same name replaces its source. Each branch is limited to 64 functions, 100 KB per function, and 1 MB of combined saved source. Active saved names are available from `context.get().savedFunctions`. Saved definitions are injected as typed lexical bindings into each fresh restricted child process, so saved functions can call one another without retaining process state.
 
+### Composing workflows
+
+Saved functions can call one another. When a sequence such as validation, staging, committing, and pushing recurs, prefer a higher-level named function such as `publishChanges` over separate command wrappers. Give composed functions typed input, stop after failed stages, and return a structured summary of each stage. This keeps reusable primitives such as `runValidation` while adding workflows named after user intent.
+
 ## Isolation model
 
 Every invocation gets a new Node process with:

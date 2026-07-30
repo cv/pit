@@ -144,7 +144,9 @@ describe("pit extension", () => {
     expect(tool.description).toContain("savedFunctions lists the names");
     expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(15);
+    expect(tool.promptGuidelines).toHaveLength(16);
+    expect(tool.description).toContain("COMPOSING WORKFLOWS");
+    expect(tool.description).toContain("async function publishChanges");
     expect(tool.promptGuidelines).toContain(
       "In typescript, start independent capability calls together with Promise.all; do not await independent operations one at a time.",
     );
@@ -689,12 +691,19 @@ describe("pit extension", () => {
     expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
     const repeated = await run(source);
     expect(repeated.content[0].text).toContain("Repeated shell command detected");
-    expect(repeated.content[0].text).toContain("naming this workflow as a top-level function");
+    expect(repeated.content[0].text).toContain("recurring multi-step workflow");
+    expect(repeated.content[0].text).toContain("higher-level named workflow");
     expect((await run(source)).content[0].text).not.toContain("Repeated shell command");
 
     await run(`async function runChecks({ shell }) { return shell.exec("npm run check"); }`);
     const namedRepeat = await run(`runChecks()`);
     expect(namedRepeat.content[0].text).not.toContain("Repeated shell command");
+
+    const pushSource = `async ({ shell }) => shell.exec("git push")`;
+    await run(pushSource);
+    const repeatedPush = await run(pushSource);
+    expect(repeatedPush.content[0].text).toContain("Existing saved functions: runChecks");
+    expect(repeatedPush.content[0].text).toContain("Compose existing saved functions");
   });
 
   it("executes shell commands with default and explicit options", async () => {
