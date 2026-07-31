@@ -90,6 +90,12 @@ describe("pit extension", () => {
     expect(tool.description).toContain("shell.execFile(program, args");
     expect(tool.description).toContain("runTests({ coverage: true })");
     expect(tool.description).toContain("REUSABLE AND COMPOSED FUNCTIONS");
+    expect(tool.description).toContain(
+      "Use an anonymous function only for genuinely one-shot work",
+    );
+    expect(tool.description.indexOf("REUSABLE AND COMPOSED FUNCTIONS")).toBeLessThan(
+      tool.description.indexOf("CALLING CONTRACT"),
+    );
     expect(tool.description).toContain("publishChanges");
     expect(tool.description).toContain("HASHED EDIT WORKFLOW");
     expect(tool.description).toContain('kind: "replace"');
