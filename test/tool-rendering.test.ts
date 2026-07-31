@@ -70,7 +70,7 @@ describe("tool rendering", () => {
     };
 
     const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
-    expect(collapsed).toContain("functions: saved test, replaced test, ran test");
+    expect(collapsed).not.toContain("functions:");
     expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines)");
     const resultLines = collapsed.split("\n");
     expect(resultLines[0]?.trim()).toBe("");

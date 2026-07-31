@@ -532,7 +532,6 @@ export default function pit(pi: ExtensionAPI) {
 
       const savedReferences = resolveSavedFunctionReferences(code, savedFunctions);
       if (savedReferences.length > 0) {
-        text += `\n${theme.fg("accent", `uses saved: ${savedReferences.map((reference) => reference.name).join(", ")}`)}`;
         if (context.expanded) {
           let remaining = MAX_EXPANDED_SAVED_TOTAL_LINES;
           for (const reference of savedReferences) {
@@ -642,16 +641,6 @@ export default function pit(pi: ExtensionAPI) {
         theme.fg("toolTitle", resultLabel) +
           theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
       )}`;
-      const functionActivity = details?.functions;
-      if (functionActivity && functionActivity.length > 0) {
-        const operations = functionActivity.map((operation) => {
-          if (operation.action === "set") {
-            return `${operation.replaced ? "replaced" : "saved"} ${operation.name}`;
-          }
-          return `ran ${operation.name}`;
-        });
-        text += `\n${theme.fg("accent", `functions: ${operations.join(", ")}`)}`;
-      }
       const resultContentStart = text.split("\n").length;
       if (shown.length > 0) {
         text += `\n${shown.join("\n")}`;

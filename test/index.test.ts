@@ -340,7 +340,7 @@ describe("pit extension", () => {
         .join("\n") ?? "";
 
     const collapsed = render(false);
-    expect(collapsed).toContain("uses saved: baseTask, composedTask");
+    expect(collapsed).not.toContain("uses saved:");
     expect(collapsed).not.toContain("saved function: composedTask");
 
     const expanded = render(true);
