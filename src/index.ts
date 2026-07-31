@@ -14,6 +14,7 @@ import { renderResultValue } from "./result-renderers.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
+  getSavedFunctionCallSignature,
   resolveSavedFunctionReferences,
   runInSandbox,
   validateTypeScript,
@@ -377,6 +378,23 @@ export function display(value: unknown): string {
   }
 }
 
+const MAX_SAVED_FUNCTION_CATALOG_BYTES = 1200;
+
+function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): string {
+  const signatures = [...registry.values()]
+    .map(getSavedFunctionCallSignature)
+    .filter((signature): signature is string => signature !== undefined)
+    .sort((a, b) => a.localeCompare(b));
+  if (signatures.length === 0) {
+    return "";
+  }
+  const catalog = truncateHead(signatures.join(", "), {
+    maxBytes: MAX_SAVED_FUNCTION_CATALOG_BYTES,
+    maxLines: 1,
+  }).content;
+  return `\n[Saved functions: ${catalog}]`;
+}
+
 export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
 
@@ -643,7 +661,11 @@ export default function pit(pi: ExtensionAPI) {
         content: [
           {
             type: "text",
-            text: output.content + (output.truncated ? "\n[Result truncated]" : "") + savedNotice,
+            text:
+              output.content +
+              (output.truncated ? "\n[Result truncated]" : "") +
+              savedNotice +
+              savedFunctionCatalogNotice(savedFunctions),
           },
         ],
         details: {

@@ -183,7 +183,7 @@ runTests()
 runTests({ coverage: true })
 ```
 
-Named functions normally stage validation and initial execution, then persist as non-context session entries only after execution succeeds. With `saveOnly: true`, a named function is statically validated and persisted without execution; redefining in save-only mode likewise replaces it after static validation. Functions survive reloads and follow the active session branch. Replacements are rejected when they invalidate dependents. Each branch is limited to 64 functions, 100 KB per function, and 1 MB of combined saved source. Active saved names are available from `context.get().savedFunctions`. Only referenced definitions and their transitive dependencies are injected as typed lexical bindings into each fresh restricted child process.
+Named functions normally stage validation and initial execution, then persist as non-context session entries only after execution succeeds. With `saveOnly: true`, a named function is statically validated and persisted without execution; redefining in save-only mode likewise replaces it after static validation. Functions survive reloads and follow the active session branch. Replacements are rejected when they invalidate dependents. Each branch is limited to 64 functions, 100 KB per function, and 1 MB of combined saved source. Successful tool results include a compact catalog of active invocation signatures; names are also available from `context.get().savedFunctions`. Only referenced definitions and their transitive dependencies are injected as typed lexical bindings into each fresh restricted child process.
 
 ### Composing workflows
 

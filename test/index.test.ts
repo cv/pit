@@ -98,6 +98,7 @@ describe("pit extension", () => {
       tool.description.indexOf("CALLING CONTRACT"),
     );
     expect(tool.description).toContain("publishChanges");
+    expect(tool.description).toContain("active saved-function signatures");
     expect(tool.description).toContain("HASHED EDIT WORKFLOW");
     expect(tool.description).toContain('kind: "replace"');
     expect(tool.description).toContain("replaceFile");
@@ -314,6 +315,7 @@ describe("pit extension", () => {
     expect(defined.details.value).toEqual({ greeting: "Hello, world!" });
     expect(defined.details.functions).toEqual([{ action: "set", name: "greet", replaced: false }]);
     expect(defined.content[0].text).toContain("Invoke later with: greet()");
+    expect(defined.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         type: "custom",
@@ -328,6 +330,7 @@ describe("pit extension", () => {
     const invoked = await run(`greet({ name: "Pi" })`);
     expect(invoked.details.value).toEqual({ greeting: "Hello, Pi!" });
     expect(invoked.details.functions).toEqual([{ action: "run", name: "greet" }]);
+    expect(invoked.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
 
     const replaced = await run(`async function greet() { return { greeting: "replaced" }; }`);
     expect(replaced.details.functions).toEqual([{ action: "set", name: "greet", replaced: true }]);
@@ -361,6 +364,7 @@ describe("pit extension", () => {
     expect(execMock).not.toHaveBeenCalled();
     expect(saved.details.value).toEqual({ savedFunction: "deferred", executed: false });
     expect(saved.content[0].text).toContain('Saved function "deferred" without executing it');
+    expect(saved.content[0].text).toContain("[Saved functions: deferred()]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         customType: "pit-functions",

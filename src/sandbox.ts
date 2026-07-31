@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
 import * as ts from "typescript";
 
+const SIGNATURE_WHITESPACE = /\s+/g;
+
 export interface SandboxOptions {
   memoryLimitMb?: number;
   timeoutMs?: number;
@@ -258,6 +260,20 @@ export function getNamedFunctionName(source: string): string | undefined {
   return expression && ts.isFunctionExpression(expression) && expression.name
     ? expression.name.text
     : undefined;
+}
+
+export function getSavedFunctionCallSignature(source: string): string | undefined {
+  const expression = submissionExpression(source);
+  if (!(expression && ts.isFunctionExpression(expression) && expression.name)) {
+    return undefined;
+  }
+  const input = expression.parameters[1];
+  if (!input) {
+    return `${expression.name.text}()`;
+  }
+  const optional = input.questionToken || input.initializer ? "?" : "";
+  const type = (input.type?.getText() ?? "unknown").replace(SIGNATURE_WHITESPACE, " ");
+  return `${expression.name.text}(input${optional}: ${type})`;
 }
 
 function savedEntries(savedFunctions: ReadonlyMap<string, string>) {
