@@ -75,6 +75,36 @@ describe("tool rendering", () => {
     }
   });
 
+  it("updates execution time every 200ms and freezes on the final result", () => {
+    vi.useFakeTimers();
+    try {
+      const state = {};
+      const invalidate = vi.fn();
+      const context = { state, invalidate, args: { label: "Run command", code: "" } };
+      const partialResult = { content: [], details: undefined };
+
+      expect(
+        renderToolResult(partialResult, { expanded: false, isPartial: true }, context),
+      ).toContain("Run command (0.0s)");
+      vi.advanceTimersByTime(400);
+      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(
+        renderToolResult(partialResult, { expanded: false, isPartial: true }, context),
+      ).toContain("Run command (0.4s)");
+
+      const completed = renderToolResult(
+        partialResult,
+        { expanded: false, isPartial: false },
+        context,
+      );
+      expect(completed).toContain("No returned value (0 lines, 0.4s)");
+      vi.advanceTimersByTime(400);
+      expect(invalidate).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renders result values as highlighted JSON", () => {
     const value = Object.fromEntries(
       Array.from({ length: 15 }, (_, index) => [`key${index + 1}`, index + 1]),
@@ -94,7 +124,7 @@ describe("tool rendering", () => {
 
     const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
     expect(collapsed).not.toContain("functions:");
-    expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines)");
+    expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines, 0.0s)");
     const resultLines = collapsed.split("\n");
     expect(resultLines[0]?.trim()).toBe("");
     expect(resultLines[1]).toContain("\u001b[1m");
@@ -110,7 +140,7 @@ describe("tool rendering", () => {
       { content: [{ type: "text", text: "hello" }], details: { value: "hello", truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(stringResult).toContain("Returned string (1 line)");
+    expect(stringResult).toContain("Returned string (1 line, 0.0s)");
     expect(stringResult).not.toContain('"hello"');
 
     const undefinedResult = renderToolResult(
@@ -120,7 +150,7 @@ describe("tool rendering", () => {
       },
       { expanded: false, isPartial: false },
     );
-    expect(undefinedResult).toContain("Returned text (1 line)");
+    expect(undefinedResult).toContain("Returned text (1 line, 0.0s)");
     expect(undefinedResult).not.toContain("undefined");
 
     const truncated = renderToolResult(
@@ -130,7 +160,7 @@ describe("tool rendering", () => {
       },
       { expanded: false, isPartial: false },
     );
-    expect(truncated).toContain("Truncated output (truncated)");
+    expect(truncated).toContain("Truncated output (truncated, 0.0s)");
     expect(truncated).not.toContain("partial output");
     const expandedTruncated = renderToolResult(
       {
@@ -145,13 +175,13 @@ describe("tool rendering", () => {
       { content: [], details: undefined },
       { expanded: false, isPartial: false },
     );
-    expect(empty).toContain("No returned value (0 lines)");
+    expect(empty).toContain("No returned value (0 lines, 0.0s)");
 
     const partial = renderToolResult(
       { content: [], details: undefined },
       { expanded: false, isPartial: true },
     );
-    expect(partial).toContain("… Run workspace task");
+    expect(partial).toContain("… Run workspace task (0.0s)");
 
     const streaming = renderToolResult(
       {
@@ -177,7 +207,7 @@ describe("tool rendering", () => {
       { content: [], details: { value: Symbol("value"), truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(symbolResult).toContain("Returned symbol (1 line)");
+    expect(symbolResult).toContain("Returned symbol (1 line, 0.0s)");
     expect(symbolResult).not.toContain("Symbol(value)");
     const expandedSymbol = renderToolResult(
       { content: [], details: { value: Symbol("value"), truncated: false } },
@@ -191,7 +221,7 @@ describe("tool rendering", () => {
       { content: [], details: { value: circular, truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(circularResult).toContain("Returned 1 field: self (1 line)");
+    expect(circularResult).toContain("Returned 1 field: self (1 line, 0.0s)");
     expect(circularResult).not.toContain("[object Object]");
     const expandedCircular = renderToolResult(
       { content: [], details: { value: circular, truncated: false } },
@@ -205,7 +235,7 @@ describe("tool rendering", () => {
       { isError: true, args: { label: "Compile renderer", code: "" } },
     );
     expect(error).toContain("bad code");
-    expect(error).toContain("✗ Compile renderer");
+    expect(error).toContain("✗ Compile renderer (0.0s)");
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");

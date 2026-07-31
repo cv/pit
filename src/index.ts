@@ -62,6 +62,9 @@ interface TypeScriptRendererState {
   generationStartedAt?: number;
   generationCompletedAt?: number;
   generationTimer: ReturnType<typeof setInterval> | undefined;
+  executionStartedAt?: number;
+  executionCompletedAt?: number;
+  executionTimer: ReturnType<typeof setInterval> | undefined;
 }
 
 type HostShellProgressEvent =
@@ -423,6 +426,9 @@ function generationTiming(context: {
   const complete =
     context.argsComplete || context.executionStarted === true || context.isPartial === false;
   state.generationStartedAt ??= now;
+  if (context.executionStarted === true) {
+    state.executionStartedAt ??= now;
+  }
   if (complete) {
     state.generationCompletedAt ??= now;
     if (state.generationTimer) {
@@ -438,6 +444,30 @@ function generationTiming(context: {
     duration: `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`,
     complete,
   };
+}
+
+function executionTiming(
+  context: { state?: unknown; invalidate?: () => void },
+  complete: boolean,
+): string {
+  const state =
+    context.state && typeof context.state === "object"
+      ? (context.state as TypeScriptRendererState)
+      : ({} as TypeScriptRendererState);
+  const now = Date.now();
+  state.executionStartedAt ??= now;
+  if (complete) {
+    state.executionCompletedAt ??= now;
+    if (state.executionTimer) {
+      clearInterval(state.executionTimer);
+      state.executionTimer = undefined;
+    }
+  } else if (!state.executionTimer && context.invalidate) {
+    state.executionTimer = setInterval(context.invalidate, GENERATION_TIMER_INTERVAL_MS);
+    (state.executionTimer as { unref?: () => void }).unref?.();
+  }
+  const elapsed = (state.executionCompletedAt ?? now) - state.executionStartedAt;
+  return `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`;
 }
 
 function describeCall(
@@ -580,8 +610,13 @@ export default function pit(pi: ExtensionAPI) {
         callArgs.saveOnly === true,
         savedFunctions,
       );
+      const executionDuration = executionTiming(context, !isPartial || context.isError);
       if (isPartial) {
-        let text = theme.bold(theme.fg("warning", "… ") + theme.fg("toolTitle", callLabel));
+        let text = theme.bold(
+          theme.fg("warning", "… ") +
+            theme.fg("toolTitle", callLabel) +
+            theme.fg("dim", ` (${executionDuration})`),
+        );
         if (expanded) {
           for (const progress of details?.progress?.slice(-4) ?? []) {
             const state = progress.status === "done" ? `done (${progress.code})` : "running";
@@ -596,7 +631,9 @@ export default function pit(pi: ExtensionAPI) {
       if (context.isError) {
         const message = fallback || "TypeScript execution failed";
         return new Text(
-          `\n${theme.bold(theme.fg("error", `✗ ${callLabel}`))}\n${theme.fg("error", message)}`,
+          `\n${theme.bold(
+            theme.fg("error", `✗ ${callLabel}`) + theme.fg("dim", ` (${executionDuration})`),
+          )}\n${theme.fg("error", message)}`,
           0,
           0,
         );
@@ -630,8 +667,8 @@ export default function pit(pi: ExtensionAPI) {
       }
       const shown = expanded ? lines : [];
       const state = details?.truncated
-        ? "truncated"
-        : `${lines.length} line${lines.length === 1 ? "" : "s"}`;
+        ? `truncated, ${executionDuration}`
+        : `${lines.length} line${lines.length === 1 ? "" : "s"}, ${executionDuration}`;
       const resultLabel = describeResult(
         details?.value,
         structuredResult,
