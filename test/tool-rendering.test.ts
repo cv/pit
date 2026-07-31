@@ -23,9 +23,8 @@ describe("tool rendering", () => {
     expect(collapsedLines[0]).toContain("\u001b[1m");
     expect(collapsedLines[0]).toContain("› ");
     expect(collapsedLines[1]?.trim()).toBe("");
-    expect(collapsed).toContain("source line 1");
-    expect(collapsed).not.toContain("source line 15");
-    expect(collapsed).toContain("3 more lines (Ctrl+O to expand)");
+    expect(collapsed).not.toContain("source line 1");
+    expect(collapsed).not.toContain("more lines");
 
     const expanded = renderToolCall({ code }, { expanded: true, argsComplete: true });
     expect(expanded).toContain("Run workspace task (15 lines)");
@@ -46,11 +45,13 @@ describe("tool rendering", () => {
     expect(saveOnly).toContain("save-only");
 
     const empty = renderToolCall({ code: "" }, { expanded: false, argsComplete: true });
-    expect(empty).toContain("empty source");
+    expect(empty).not.toContain("empty source");
+    const expandedEmpty = renderToolCall({ code: "" }, { expanded: true, argsComplete: true });
+    expect(expandedEmpty).toContain("empty source");
 
     const partial = renderToolCall({ code: undefined }, { expanded: false, argsComplete: false });
     expect(partial).toContain("generating…");
-    expect(partial).toContain("waiting for source…");
+    expect(partial).not.toContain("waiting for source…");
   });
 
   it("renders result values as highlighted JSON", () => {
@@ -77,9 +78,8 @@ describe("tool rendering", () => {
     expect(resultLines[0]?.trim()).toBe("");
     expect(resultLines[1]).toContain("\u001b[1m");
     expect(resultLines[1]).toContain("✓ ");
-    expect(collapsed).toContain('"key1"');
-    expect(collapsed).not.toContain('"key15"');
-    expect(collapsed).toContain("5 more lines (Ctrl+O to expand)");
+    expect(collapsed).not.toContain('"key1"');
+    expect(collapsed).not.toContain("more lines");
 
     const expanded = renderToolResult(result, { expanded: true, isPartial: false });
     expect(expanded).toContain('"key15"');
@@ -89,8 +89,8 @@ describe("tool rendering", () => {
       { content: [{ type: "text", text: "hello" }], details: { value: "hello", truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(stringResult).toContain('"hello"');
-    expect(stringResult).toContain("1 line)");
+    expect(stringResult).toContain("Returned string (1 line)");
+    expect(stringResult).not.toContain('"hello"');
 
     const undefinedResult = renderToolResult(
       {
@@ -99,7 +99,8 @@ describe("tool rendering", () => {
       },
       { expanded: false, isPartial: false },
     );
-    expect(undefinedResult).toContain("undefined");
+    expect(undefinedResult).toContain("Returned text (1 line)");
+    expect(undefinedResult).not.toContain("undefined");
 
     const truncated = renderToolResult(
       {
@@ -109,13 +110,21 @@ describe("tool rendering", () => {
       { expanded: false, isPartial: false },
     );
     expect(truncated).toContain("Truncated output (truncated)");
-    expect(truncated).toContain("partial output");
+    expect(truncated).not.toContain("partial output");
+    const expandedTruncated = renderToolResult(
+      {
+        content: [{ type: "text", text: "partial output" }],
+        details: { value: undefined, truncated: true },
+      },
+      { expanded: true, isPartial: false },
+    );
+    expect(expandedTruncated).toContain("partial output");
 
     const empty = renderToolResult(
       { content: [], details: undefined },
       { expanded: false, isPartial: false },
     );
-    expect(empty).toContain("no result");
+    expect(empty).toContain("No returned value (0 lines)");
 
     const partial = renderToolResult(
       { content: [], details: undefined },
@@ -136,7 +145,7 @@ describe("tool rendering", () => {
           ],
         },
       },
-      { expanded: false, isPartial: true },
+      { expanded: true, isPartial: true },
     );
     expect(streaming).toContain("[running] npm test");
     expect(streaming).toContain("test output");
@@ -147,7 +156,13 @@ describe("tool rendering", () => {
       { content: [], details: { value: Symbol("value"), truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(symbolResult).toContain("Symbol(value)");
+    expect(symbolResult).toContain("Returned symbol (1 line)");
+    expect(symbolResult).not.toContain("Symbol(value)");
+    const expandedSymbol = renderToolResult(
+      { content: [], details: { value: Symbol("value"), truncated: false } },
+      { expanded: true, isPartial: false },
+    );
+    expect(expandedSymbol).toContain("Symbol(value)");
 
     const circular: Record<string, unknown> = {};
     circular.self = circular;
@@ -155,7 +170,13 @@ describe("tool rendering", () => {
       { content: [], details: { value: circular, truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(circularResult).toContain("[object Object]");
+    expect(circularResult).toContain("Returned 1 field: self (1 line)");
+    expect(circularResult).not.toContain("[object Object]");
+    const expandedCircular = renderToolResult(
+      { content: [], details: { value: circular, truncated: false } },
+      { expanded: true, isPartial: false },
+    );
+    expect(expandedCircular).toContain("[object Object]");
 
     const error = renderToolResult(
       { content: [{ type: "text", text: "bad code" }] },

@@ -47,8 +47,6 @@ import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
 export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
-const COLLAPSED_CODE_LINES = 12;
-const COLLAPSED_RESULT_LINES = 12;
 const MAX_EXPANDED_SAVED_FUNCTION_LINES = 200;
 const MAX_EXPANDED_SAVED_TOTAL_LINES = 500;
 const CAPABILITY_CALL_PATTERN = /\b(workspace|shell|http|ui|context)\.(\w+)\s*\(/;
@@ -510,7 +508,7 @@ export default function pit(pi: ExtensionAPI) {
       const code = typeof args.code === "string" ? args.code : "";
       const callLabel = describeCall(args.label, code, args.saveOnly === true, savedFunctions);
       const lines = code ? highlightCode(code, "typescript") : [];
-      const shown = context.expanded ? lines : lines.slice(0, COLLAPSED_CODE_LINES);
+      const shown = context.expanded ? lines : [];
       const state = context.argsComplete
         ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
         : "generating…";
@@ -525,13 +523,12 @@ export default function pit(pi: ExtensionAPI) {
       if (args.saveOnly === true) {
         text += theme.fg("accent", " save-only");
       }
-      if (shown.length > 0) {
+      if (!context.expanded) {
+        text += "\n";
+      } else if (shown.length > 0) {
         text += `\n\n${shown.join("\n")}`;
       } else {
         text += `\n\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
-      }
-      if (!context.expanded && lines.length > shown.length) {
-        text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
       }
 
       const savedReferences = resolveSavedFunctionReferences(code, savedFunctions);
@@ -587,11 +584,13 @@ export default function pit(pi: ExtensionAPI) {
       );
       if (isPartial) {
         let text = theme.bold(theme.fg("warning", "… ") + theme.fg("toolTitle", callLabel));
-        for (const progress of details?.progress?.slice(-4) ?? []) {
-          const state = progress.status === "done" ? `done (${progress.code})` : "running";
-          text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
-          if (progress.output) {
-            text += `\n${theme.fg("muted", progress.output)}`;
+        if (expanded) {
+          for (const progress of details?.progress?.slice(-4) ?? []) {
+            const state = progress.status === "done" ? `done (${progress.code})` : "running";
+            text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
+            if (progress.output) {
+              text += `\n${theme.fg("muted", progress.output)}`;
+            }
           }
         }
         return new Text(text, 0, 0);
@@ -631,7 +630,7 @@ export default function pit(pi: ExtensionAPI) {
       } else {
         lines = fallback ? highlightCode(fallback, "typescript") : [];
       }
-      const shown = expanded ? lines : lines.slice(0, COLLAPSED_RESULT_LINES);
+      const shown = expanded ? lines : [];
       const state = details?.truncated
         ? "truncated"
         : `${lines.length} line${lines.length === 1 ? "" : "s"}`;
@@ -650,13 +649,10 @@ export default function pit(pi: ExtensionAPI) {
           theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
       )}`;
       const resultContentStart = text.split("\n").length;
-      if (shown.length > 0) {
+      if (expanded && shown.length > 0) {
         text += `\n${shown.join("\n")}`;
-      } else {
+      } else if (expanded) {
         text += `\n${theme.fg("dim", "(no result)")}`;
-      }
-      if (!expanded && lines.length > shown.length) {
-        text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
       }
       const displayedHangingIndents = Object.fromEntries(
         Object.entries(hangingIndents)
