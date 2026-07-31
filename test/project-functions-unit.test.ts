@@ -433,6 +433,57 @@ describe("project function storage", () => {
     ]);
   });
 
+  it("extracts documented metadata and advertises effective override signatures", () => {
+    const source = `/**
+ * Greets someone using the project convention.
+ *
+ * @pit project
+ * @param input.name - Name to greet.
+ */
+async function projectGreeting(_capabilities, input: { name?: string } = {}) {
+  return { greeting: "Hello, " + (input.name ?? "project") };
+}`;
+    const parsed = getProjectFunctionMetadata(source);
+    expect(parsed).toEqual({
+      name: "projectGreeting",
+      signature: "projectGreeting(input?: { name?: string })",
+      summary: "Greets someone using the project convention.",
+      parameters: [{ name: "input.name", description: "Name to greet." }],
+    });
+    const docs = new Map([["projectGreeting", parsed as NonNullable<typeof parsed>]]);
+
+    const catalog = projectFunctionCatalog(docs);
+    expect(catalog).toContain(
+      "projectGreeting(input?: { name?: string }) — Greets someone using the project convention.",
+    );
+    expect(catalog).toContain("input.name: Name to greet.");
+
+    const differentlyShaped = projectFunctionCatalog(
+      docs,
+      new Map([["projectGreeting", 'async function projectGreeting() { return "session"; }']]),
+    );
+    expect(differentlyShaped).toContain(
+      "projectGreeting() — Session override of project function.",
+    );
+    expect(differentlyShaped).not.toContain("Greets someone using the project convention.");
+    expect(differentlyShaped).not.toContain("input.name: Name to greet.");
+
+    const sameShaped = projectFunctionCatalog(
+      docs,
+      new Map([
+        [
+          "projectGreeting",
+          "async function projectGreeting(_capabilities, input: { name?: string } = {}) { return input.name; }",
+        ],
+      ]),
+    );
+    expect(sameShaped).toContain(
+      "projectGreeting(input?: { name?: string }) — Session override of project function.",
+    );
+    expect(sameShaped).not.toContain("Greets someone using the project convention.");
+    expect(sameShaped).not.toContain("input.name: Name to greet.");
+  });
+
   it("formats empty, documented, and bounded catalogs", () => {
     expect(projectFunctionCatalog(new Map())).toBe("");
     const docs = new Map([
