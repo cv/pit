@@ -9,6 +9,8 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { validateCapabilityCall } from "./capability-registry.js";
+import { HangingIndentText } from "./hanging-indent-text.js";
+import { renderResultValue } from "./result-renderers.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
@@ -477,22 +479,31 @@ export default function pit(pi: ExtensionAPI) {
         return new Text(theme.fg("error", fallback || "TypeScript execution failed"), 0, 0);
       }
 
-      let source = fallback;
-      let language = "typescript";
+      let lines: string[];
+      let hangingIndents: Record<number, number> = {};
       if (details && !details.truncated) {
         if (details.value === undefined) {
-          source = "undefined";
+          lines = highlightCode("undefined", "typescript");
         } else {
-          try {
-            source = JSON.stringify(details.value, null, 2) ?? String(details.value);
-            language = "json";
-          } catch {
-            source = String(details.value);
+          const structured = renderResultValue(details.value, theme);
+          if (structured) {
+            lines = structured.lines;
+            hangingIndents = structured.hangingIndents ?? {};
+          } else {
+            let source: string;
+            let language = "json";
+            try {
+              source = JSON.stringify(details.value, null, 2) ?? String(details.value);
+            } catch {
+              source = String(details.value);
+              language = "typescript";
+            }
+            lines = highlightCode(source, language);
           }
         }
+      } else {
+        lines = fallback ? highlightCode(fallback, "typescript") : [];
       }
-
-      const lines = source ? highlightCode(source, language) : [];
       const shown = expanded ? lines : lines.slice(0, COLLAPSED_RESULT_LINES);
       const state = details?.truncated
         ? "truncated"
@@ -510,6 +521,7 @@ export default function pit(pi: ExtensionAPI) {
       }
       text += theme.fg("toolTitle", theme.bold("result"));
       text += theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`);
+      const resultContentStart = text.split("\n").length;
       if (shown.length > 0) {
         text += `\n${shown.join("\n")}`;
       } else {
@@ -518,7 +530,14 @@ export default function pit(pi: ExtensionAPI) {
       if (!expanded && lines.length > shown.length) {
         text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
       }
-      return new Text(text, 0, 0);
+      const displayedHangingIndents = Object.fromEntries(
+        Object.entries(hangingIndents)
+          .filter(([index]) => Number(index) < shown.length)
+          .map(([index, width]) => [resultContentStart + Number(index), width]),
+      );
+      return Object.keys(displayedHangingIndents).length > 0
+        ? new HangingIndentText(text, displayedHangingIndents)
+        : new Text(text, 0, 0);
     },
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];

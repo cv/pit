@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import pit from "../src/index.js";
 
+interface RenderedComponent {
+  render(width: number): string[];
+  invalidate(): void;
+}
+
 export interface RegisteredTool {
   label: string;
   description: string;
@@ -16,13 +21,8 @@ export interface RegisteredTool {
       timeoutMs: { description?: string };
     };
   };
-  renderCall?: (args: any, theme: any, context: any) => { render: (width: number) => string[] };
-  renderResult?: (
-    result: any,
-    options: any,
-    theme: any,
-    context: any,
-  ) => { render: (width: number) => string[] };
+  renderCall?: (args: any, theme: any, context: any) => RenderedComponent;
+  renderResult?: (result: any, options: any, theme: any, context: any) => RenderedComponent;
   execute: (...args: any[]) => Promise<any>;
 }
 

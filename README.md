@@ -19,7 +19,7 @@ async ({ workspace, shell }) => {
 
 The expression's resolved value becomes the tool result. This lets the model batch several operations and perform ordinary computation without repeatedly crossing the model/tool boundary.
 
-In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in, and successful result values are rendered as syntax-highlighted JSON. Long-running shell calls stream a sanitized, bounded tail of stdout and stderr into partial tool updates without adding those updates to the final model context. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result. Calls to saved functions also show the injected definitions and transitive saved dependencies in expanded mode, with per-function and total display limits.
+In the Pi TUI, each tool call shows the generated TypeScript as its arguments stream in. Common capability results—shell commands, workspace reads/searches/edits/lists/globs, HTTP responses, stats, and batches—use compact structured renderers. Recognized values nested in compound objects render as sections whose single-line headers combine the returned field name, result type, and summary, such as `sources (glob, 11 entries)`. Unknown values and fields retain syntax-highlighted JSON as the fallback. This display formatting is TUI-only and does not change the serialized tool result sent to the model. Long-running shell calls stream a sanitized, bounded tail of stdout and stderr into partial tool updates without adding those updates to the final model context. Collapsed views show the first 12 lines; press `Ctrl+O` to expand the row and inspect the complete source and result. Calls to saved functions also show the injected definitions and transitive saved dependencies in expanded mode, with per-function and total display limits.
 
 ## Install
 
@@ -124,7 +124,7 @@ Read metadata uses sparse defaults: an omitted offset means 1, omitted totalLine
 
 ### Hashed reads and edits
 
-Hashed reads render each selected line as `line:hash|content` and return a revision for the complete UTF-8 file:
+Hashed reads render each selected line as `line:hash|content` and return a revision for the complete UTF-8 file. In structured TUI results, the `line:hash|` prefix is dimmed and wrapped content uses a hanging indent aligned with the original content column:
 
 ```text
 41:k3F9q|function example() {
