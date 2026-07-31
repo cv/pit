@@ -6,14 +6,21 @@ Pit lets the model combine workspace operations, shell commands, HTTP requests, 
 
 Each call runs in a fresh, permission-restricted process. Successful workflows can become typed, branch-local functions that the model can reuse and compose.
 
+## Terminology
+
+- **Operator:** The person who installs Pit, runs Pi, and reviews operations.
+- **Model:** The language model that generates `typescript` tool calls.
+- **Submitted code:** The TypeScript that runs in the restricted process.
+- **Contributor:** A person who changes or tests Pit.
+
 ## Key features
 
-- **Batch work:** Combine multiple operations in one tool call.
-- **Check code before execution:** Validate TypeScript against the active capability contract.
-- **Edit with revisions:** Reject stale anchors and conflicting changes.
-- **Reuse workflows:** Save typed functions on the active session branch.
-- **Restrict direct access:** Run each call in a fresh Node process with limited permissions.
-- **Keep results compact:** Render structured results in the TUI and return bounded data to the model.
+- **Batch work:** The model combines multiple operations in one tool call.
+- **Check code before execution:** Pit validates TypeScript against the active capability contract.
+- **Edit with revisions:** Pit rejects stale revisions, stale anchors, and conflicting changes.
+- **Reuse workflows:** Pit saves typed functions that the model can reuse on the active session branch.
+- **Restrict direct access:** Pit runs each call in a fresh Node process with limited permissions.
+- **Keep results compact:** Pit renders structured results in the TUI and returns bounded data to the model.
 
 ## Example
 
@@ -38,34 +45,34 @@ The resolved value becomes the tool result. The model can batch operations and p
 
 Pit requires Node 22.19 or newer. The sandbox uses the Node permission model and the current Pi extension API.
 
-Pit is a private Git-based Pi package. Make sure that you have repository access. Configure GitHub SSH credentials before you install Pit.
+Pit is a private Git-based Pi package. The operator must have access to the repository. The operator must configure GitHub SSH credentials before installation.
 
-Install the pinned release globally:
-
-```sh
-pi install git:git@github.com:cv/pit.git@v0.5.2
-```
-
-Install the pinned release for the current project:
+The operator runs this command to install the pinned release globally:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.5.2
+pi install git:git@github.com:cv/pit.git@v0.5.3
 ```
 
-Run the pinned release one time without a settings change:
+The operator runs this command to install the pinned release for the current project:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.5.2
+pi install -l git:git@github.com:cv/pit.git@v0.5.3
 ```
 
-Use the local source during development:
+The operator runs this command to use the pinned release one time without a settings change:
+
+```sh
+pi -e git:git@github.com:cv/pit.git@v0.5.3
+```
+
+A contributor runs these commands to use the local source:
 
 ```sh
 npm install
 pi -e ./src/index.ts
 ```
 
-Pit replaces the active coding tool set with `typescript` when the session starts. Review the source before installation. Pi extensions run with the permissions of the host process.
+Pit replaces the active coding tool set with `typescript` when the session starts. The operator must review the source before installation. Pi extensions run with the permissions of the host process.
 
 ## How Pit works
 
@@ -84,7 +91,7 @@ The child process cannot directly read workspace files, access the network, or s
 
 The Pi TUI shows a compact description while the model generates a call. It also shows live generation and execution durations.
 
-Collapsed rows hide source and result bodies. Press `Ctrl+O` to expand a row. The expanded row shows the submitted source and the retained result. Pit does not show injected saved-function source in tool output.
+Collapsed rows hide source and result bodies. The operator presses `Ctrl+O` to expand a row. The expanded row shows the submitted source and the retained result. Pit does not show injected saved-function source in tool output.
 
 Common capability results use compact structured renderers. These results include shell commands, workspace reads, searches, edits, lists, globs, HTTP responses, stats, and batches. Recognized values inside compound objects appear as named sections. Unknown values use syntax-highlighted JSON.
 
@@ -94,9 +101,9 @@ Display formatting affects only the TUI. It does not change the serialized tool 
 
 ## Function contract
 
-The `code` argument must be a TypeScript expression. Do not use imports.
+Submitted code must be a TypeScript expression. Submitted code cannot contain imports.
 
-Use an anonymous function for one-time work:
+For one-time work, the model submits an anonymous function:
 
 ```ts
 async ({ workspace, shell }) => {
@@ -104,11 +111,11 @@ async ({ workspace, shell }) => {
 }
 ```
 
-Pit contextually types destructured capabilities. You do not have to add source annotations for them. The generated contract is in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). The method declarations, dispatch metadata, arity limits, and model-facing summaries are in [`src/capability-registry.ts`](src/capability-registry.ts).
+Pit contextually types destructured capabilities. Capability annotations are not required. The generated contract is in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). The method declarations, dispatch metadata, arity limits, and model-facing summaries are in [`src/capability-registry.ts`](src/capability-registry.ts).
 
 Validation detects unknown capabilities, unknown methods, invalid arguments, missing awaits, and incompatible result values. Diagnostics include source locations.
 
-Use top-level `params` for large patches, generated file contents, commit messages, and other quote-heavy data. Annotate the second function parameter:
+For large patches, generated file contents, commit messages, and other quote-heavy data, the model supplies data in top-level `params`. The second function parameter must have a type annotation:
 
 ```json
 {
@@ -120,13 +127,13 @@ Use top-level `params` for large patches, generated file contents, commit messag
 }
 ```
 
-You can use `params` with a one-shot function. You can also use `params` for the first execution of a named function.
+Top-level `params` are valid with a one-shot function. They are also valid for the first execution of a named function.
 
 Capability calls are asynchronous. A call starts when the function invokes the capability method. Pit waits for outstanding calls before it accepts a successful result.
 
-Use `Promise.all` when all operations must succeed. Use `Promise.allSettled` or a local `catch` for an optional operation. Sequence dependent operations. Do not run conflicting mutations in parallel.
+Submitted code uses `Promise.all` when all operations must succeed. It uses `Promise.allSettled` or a local `catch` for an optional operation. It sequences dependent operations. It does not run conflicting mutations in parallel.
 
-For example, preserve the successful result when an optional file does not exist:
+This example preserves the successful result when an optional file does not exist:
 
 ```ts
 async ({ workspace, shell }) => {
@@ -157,7 +164,7 @@ Unknown capabilities and methods fail closed at run time.
 - `exec(command, options?)` runs a command through the shell.
 - `execFile(program, args, options?)` runs a program with an argument array.
 
-Both methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. Set `raise: true` to make a nonzero exit stop the function.
+Both methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. A value of `true` for `raise` makes a nonzero exit stop the function.
 
 ### `http`
 
@@ -190,7 +197,7 @@ Hashed reads show each selected line as `line:hash|content`. They also return a 
 43:p91Xs|}
 ```
 
-Read the file before you edit it. Use the returned revision and anchors in the edit:
+An edit requires the current file revision and current line anchors. `workspace.read` and `workspace.search` return this data:
 
 ```ts
 await workspace.edit("src/example.ts", {
@@ -202,21 +209,21 @@ await workspace.edit("src/example.ts", {
 });
 ```
 
-Use `replace` or `delete` for an anchored line range. Omit the end anchor to change one line. Use `insertBefore` or `insertAfter` to add content at an anchor. Use `replaceFile` to rewrite a file. Use `deleteFile` to delete a file.
+`replace` and `delete` apply to anchored line ranges. An absent end anchor selects one line. `insertBefore` and `insertAfter` add content at an anchor. `replaceFile` rewrites a file. `deleteFile` deletes a file.
 
-To create a file, set `revision` to `null`. Supply one `replaceFile` change. To rewrite or delete an existing file, supply its current revision.
+File creation requires `revision: null` and one `replaceFile` change. A rewrite or deletion of an existing file requires its current revision.
 
 Pit validates all anchors against the supplied revision. It rejects overlapping changes. It applies compatible changes from the bottom of the file to the top. It converts inserted `\n` characters to the dominant line ending of the file. It preserves untouched bytes.
 
-Discard the old revision and anchors after a successful edit. Read the file again before a later edit.
+A successful edit invalidates all earlier revisions and anchors for that file. A later edit requires a new read or search.
 
-Search matches include anchors and file revisions. You can use them directly in an edit.
+Search matches include anchors and file revisions. An edit can use this data directly.
 
 A read batch can use `fail-fast` or `settled` failure handling. An edit batch must target unique files. Pit validates every edit before the first write. If a later write fails, Pit makes a best-effort attempt to restore files that it already changed. A multi-file edit batch is not an atomic filesystem transaction.
 
 ## Saved functions
 
-Use a named top-level function for work that can recur:
+For work that can recur, the model submits a named top-level function:
 
 ```ts
 async function runTests({ shell }, input: { coverage?: boolean } = {}) {
@@ -227,7 +234,7 @@ async function runTests({ shell }, input: { coverage?: boolean } = {}) {
 
 Pit validates and runs the function. Pit saves it only after execution succeeds.
 
-Set `saveOnly: true` to validate and save a function without execution. Do not supply top-level `params` with `saveOnly`:
+A value of `true` for `saveOnly` validates and saves a function without execution. A save-only definition cannot contain top-level `params`:
 
 ```json
 {
@@ -236,7 +243,7 @@ Set `saveOnly: true` to validate and save a function without execution. Do not s
 }
 ```
 
-Supply top-level `params` when the first execution needs input:
+When the first execution needs input, the model supplies top-level `params`:
 
 ```json
 {
@@ -245,7 +252,7 @@ Supply top-level `params` when the first execution needs input:
 }
 ```
 
-Invoke a saved function as an ordinary TypeScript expression:
+A later tool call invokes a saved function as an ordinary TypeScript expression:
 
 ```ts
 runTests()
@@ -256,7 +263,7 @@ Saved functions can call other saved functions. Pit injects only referenced func
 
 Saved functions survive session reloads and follow the active session branch. A replacement must preserve the validity of dependent functions. Each branch can contain 64 functions. One function can contain 100 KB of source. The combined source limit is 1 MB.
 
-Use `/functions` to open the interactive function manager in the TUI. Use these commands for a direct operation:
+The operator runs `/functions` to open the interactive function manager in the TUI. The operator can also run these direct commands:
 
 ```text
 /functions list
@@ -282,9 +289,9 @@ Filesystem, command, HTTP, and UI effects are available only through RPC capabil
 
 The sandbox restricts direct access. It does not make host capabilities harmless. The `shell` capability runs commands with the permissions of the Pi process. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach.
 
-Capability destructuring makes intent visible. It is not a user approval boundary. Review generated calls before you allow them to run when the operation can affect sensitive data or systems.
+Capability destructuring makes intent visible. It is not an operator approval boundary. The operator must review generated calls before execution when an operation can affect sensitive data or systems.
 
-This isolation is stronger than `node:vm`, which is not a security boundary. It does not replace a container, virtual machine, or operating-system sandbox. Use an additional operating-system boundary for hostile models or multi-tenant workloads.
+This isolation is stronger than `node:vm`, which is not a security boundary. It does not replace a container, virtual machine, or operating-system sandbox. Operators of hostile models or multi-tenant workloads must use an additional operating-system boundary.
 
 ## Limitations
 
@@ -302,29 +309,31 @@ This isolation is stronger than `node:vm`, which is not a security boundary. It 
 
 ### Pi reports an unsupported Node version
 
-Run `node --version`. Install Node 22.19 or newer. Start Pi again with the new Node version.
+The operator runs `node --version`. The operator installs Node 22.19 or newer. The operator starts Pi again with the new Node version.
 
 ### Git cannot install the package
 
-Run `ssh -T git@github.com`. Confirm that GitHub accepts your SSH key. Confirm that your account can access `cv/pit`.
+The operator runs `ssh -T git@github.com`. The operator confirms that GitHub accepts the SSH key. The operator confirms that the account can access `cv/pit`.
 
 ### An edit reports a revision or anchor mismatch
 
-Read the file again. Use only the new revision and anchors. Do not reuse anchors from an earlier read.
+The model submits a new read or search call. The next edit uses only the new revision and anchors. It does not reuse anchors from an earlier read.
 
 ### A result is truncated
 
-Reduce the requested line count or result limit. Narrow the file path, glob, or search query. Return a summary instead of a complete data set.
+The model reduces the requested line count or result limit. It narrows the file path, glob, or search query. It returns a summary instead of a complete data set.
 
 ### A UI method fails
 
-Run the call in a Pi mode that provides a UI. Do not use a UI capability in a non-UI mode.
+The operator runs Pi in a mode that provides a UI. Submitted code does not use a UI capability in a non-UI mode.
 
 ### A saved function is unavailable
 
-Run `/functions list`. Confirm that the function exists on the active session branch. Use `context.get()` when the model must inspect the active function names.
+The operator runs `/functions list` and confirms that the function exists on the active session branch. The model calls `context.get()` when it must inspect the active function names.
 
 ## Development
+
+This section is for contributors.
 
 Install dependencies:
 
@@ -370,7 +379,7 @@ npm run package:check
 
 `npm run check` verifies the generated capability contract. It then runs TypeScript and Biome. Biome uses the `all` lint preset and treats warnings as errors.
 
-Pull requests and pushes to `main` run package verification, static checks, tests, and the coverage gate in GitHub Actions. Configure branch protection to require the `test` check before merge.
+Pull requests and pushes to `main` run package verification, static checks, tests, and the coverage gate in GitHub Actions. A repository maintainer must configure branch protection to require the `test` check before merge.
 
 ## License
 
