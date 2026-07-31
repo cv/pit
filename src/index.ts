@@ -514,7 +514,11 @@ export default function pit(pi: ExtensionAPI) {
       const state = context.argsComplete
         ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
         : "generating…";
-      let text = theme.bold(theme.fg("toolTitle", callLabel) + theme.fg("dim", ` (${state})`));
+      let text = theme.bold(
+        theme.fg("accent", "› ") +
+          theme.fg("toolTitle", callLabel) +
+          theme.fg("dim", ` (${state})`),
+      );
       if (args.timeoutMs !== undefined) {
         text += theme.fg("dim", ` timeout=${args.timeoutMs}ms`);
       }
@@ -582,7 +586,7 @@ export default function pit(pi: ExtensionAPI) {
         savedFunctions,
       );
       if (isPartial) {
-        let text = theme.fg("warning", `${callLabel}…`);
+        let text = theme.bold(theme.fg("warning", "… ") + theme.fg("toolTitle", callLabel));
         for (const progress of details?.progress?.slice(-4) ?? []) {
           const state = progress.status === "done" ? `done (${progress.code})` : "running";
           text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
@@ -595,7 +599,7 @@ export default function pit(pi: ExtensionAPI) {
       if (context.isError) {
         const message = fallback || "TypeScript execution failed";
         return new Text(
-          `${theme.fg("error", theme.bold(`Failed: ${callLabel}`))}\n${theme.fg("error", message)}`,
+          `\n${theme.bold(theme.fg("error", `✗ ${callLabel}`))}\n${theme.fg("error", message)}`,
           0,
           0,
         );
@@ -637,8 +641,12 @@ export default function pit(pi: ExtensionAPI) {
         details?.truncated === true,
         fallback,
       );
+      const resultMarker = details?.truncated
+        ? theme.fg("warning", "… ")
+        : theme.fg("success", "✓ ");
       let text = `\n${theme.bold(
-        theme.fg("toolTitle", resultLabel) +
+        resultMarker +
+          theme.fg("toolTitle", resultLabel) +
           theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
       )}`;
       const resultContentStart = text.split("\n").length;

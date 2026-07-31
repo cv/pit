@@ -21,6 +21,7 @@ describe("tool rendering", () => {
     expect(collapsedLines[0]).toContain("Render generated TypeScript (15 lines)");
     expect(collapsedLines[0]).toContain("timeout=5000ms");
     expect(collapsedLines[0]).toContain("\u001b[1m");
+    expect(collapsedLines[0]).toContain("› ");
     expect(collapsedLines[1]?.trim()).toBe("");
     expect(collapsed).toContain("source line 1");
     expect(collapsed).not.toContain("source line 15");
@@ -75,6 +76,7 @@ describe("tool rendering", () => {
     const resultLines = collapsed.split("\n");
     expect(resultLines[0]?.trim()).toBe("");
     expect(resultLines[1]).toContain("\u001b[1m");
+    expect(resultLines[1]).toContain("✓ ");
     expect(collapsed).toContain('"key1"');
     expect(collapsed).not.toContain('"key15"');
     expect(collapsed).toContain("5 more lines (Ctrl+O to expand)");
@@ -119,7 +121,7 @@ describe("tool rendering", () => {
       { content: [], details: undefined },
       { expanded: false, isPartial: true },
     );
-    expect(partial).toContain("Run workspace task…");
+    expect(partial).toContain("… Run workspace task");
 
     const streaming = renderToolResult(
       {
@@ -161,7 +163,7 @@ describe("tool rendering", () => {
       { isError: true, args: { label: "Compile renderer", code: "" } },
     );
     expect(error).toContain("bad code");
-    expect(error).toContain("Failed: Compile renderer");
+    expect(error).toContain("✗ Compile renderer");
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");
