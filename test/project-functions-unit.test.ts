@@ -6,6 +6,7 @@ import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
   projectFunctionCatalog,
+  reconcileProjectFunctionsForSession,
   removeProjectFunction,
   saveProjectFunction,
 } from "../src/project-functions.js";
@@ -15,6 +16,18 @@ let cwd: string;
 const registry = () => new Map<string, string>();
 const metadata = () => new Map();
 const ctx = (trusted = true) => ({ cwd, isProjectTrusted: () => trusted }) as any;
+
+function sizedProjectFunction(name: string, bytes: number): string {
+  const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;
+  const suffix = "*/ return true; }";
+  return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
+}
+
+function sizedInvalidProjectFunction(name: string, bytes: number): string {
+  const prefix = `/** ${name} invalid helper. @pit project */ async function ${name}() { /*`;
+  const suffix = "*/ return 1n; }";
+  return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
+}
 
 beforeEach(async () => {
   cwd = await mkdtemp(join(tmpdir(), "pit-project-functions-"));
@@ -67,6 +80,26 @@ describe("project function storage", () => {
     expect(await removeProjectFunction(cwd, "saved")).toBe(false);
   });
 
+  it("does not impose an aggregate quota on project storage alone", async () => {
+    const functions = new Map(
+      Array.from({ length: 10 }, (_, index) => {
+        const name = `storedProject${index}`;
+        return [name, sizedProjectFunction(name, 99_990)] as const;
+      }),
+    );
+    const source = sizedProjectFunction("storedProjectExtra", 2_000);
+
+    await expect(saveProjectFunction(cwd, "storedProjectExtra", source, functions)).resolves.toBe(
+      false,
+    );
+    expect(
+      [...functions.values()].reduce((total, value) => total + Buffer.byteLength(value), 0),
+    ).toBe(1_001_900);
+    await expect(
+      readFile(join(cwd, ".pi/pit/functions/storedProjectExtra.ts"), "utf8"),
+    ).resolves.toBe(source + "\n");
+  });
+
   it("loads valid files and reports malformed files", async () => {
     const directory = join(cwd, ".pi/pit/functions");
     await mkdir(join(directory, "ignored-directory.ts"), { recursive: true });
@@ -106,6 +139,39 @@ describe("project function storage", () => {
     expect(await loadProjectFunctions(ctx(false), functions, docs)).toEqual([]);
     expect(functions.size).toBe(0);
   });
+
+  it("does not let invalid load candidates consume final function capacity", async () => {
+    const directory = join(cwd, ".pi/pit/functions");
+    await mkdir(directory, { recursive: true });
+    const invalidSources = Array.from({ length: 10 }, (_, index) => {
+      const name = `invalidCandidate${String(index).padStart(2, "0")}`;
+      return [name, sizedInvalidProjectFunction(name, 99_000)] as const;
+    });
+    const validSource = sizedProjectFunction("zzValidCandidate", 20_000);
+    expect(
+      invalidSources.reduce((total, [, source]) => total + Buffer.byteLength(source), 0) +
+        Buffer.byteLength(validSource),
+    ).toBe(1_010_000);
+    await Promise.all([
+      ...invalidSources.map(([name, source]) => writeFile(join(directory, `${name}.ts`), source)),
+      writeFile(join(directory, "zzValidCandidate.ts"), validSource),
+    ]);
+
+    const functions = registry();
+    const docs = metadata();
+    const errors = await loadProjectFunctions(ctx(), functions, docs);
+    expect([...functions.keys()]).toEqual(["zzValidCandidate"]);
+    expect([...docs.keys()]).toEqual(["zzValidCandidate"]);
+    expect(errors).toHaveLength(10);
+    expect(errors.every((error) => error.includes("TypeScript validation failed"))).toBe(true);
+
+    const active = registry();
+    const activeDocs = metadata();
+    expect(
+      reconcileProjectFunctionsForSession(functions, docs, new Map(), active, activeDocs),
+    ).toEqual([]);
+    expect([...active.keys()]).toEqual(["zzValidCandidate"]);
+  }, 10_000);
 
   it("surfaces storage errors and cleans failed temporary writes", async () => {
     await mkdir(join(cwd, ".pi/pit/functions/blocked.ts"), { recursive: true });

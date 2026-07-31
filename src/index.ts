@@ -40,6 +40,7 @@ import {
   loadProjectFunctions,
   type ProjectFunctionMetadataRegistry,
   projectFunctionCatalog,
+  reconcileProjectFunctionsForSession,
   removeProjectFunction,
   saveProjectFunction,
 } from "./project-functions.js";
@@ -105,9 +106,13 @@ interface TypeScriptDetails {
 interface FunctionState {
   projectEnabled: boolean;
   project: FunctionRegistry;
+
+  projectCandidates: FunctionRegistry;
   session: FunctionRegistry;
   effective: FunctionRegistry;
   metadata: ProjectFunctionMetadataRegistry;
+
+  candidateMetadata: ProjectFunctionMetadataRegistry;
 }
 
 type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promise<T>;
@@ -132,6 +137,18 @@ function refreshEffectiveFunctions(state: FunctionState): void {
   for (const [name, source] of state.session) {
     state.effective.set(name, source);
   }
+}
+
+function reconcileFunctionState(state: FunctionState): string[] {
+  const errors = reconcileProjectFunctionsForSession(
+    state.projectCandidates,
+    state.candidateMetadata,
+    state.session,
+    state.project,
+    state.metadata,
+  );
+  refreshEffectiveFunctions(state);
+  return errors;
 }
 
 export function effectiveRegistry(
@@ -525,8 +542,12 @@ function createCapabilities(
           }
           const removed = await removeProjectFunction(ctx.cwd, functionName);
           functionState.project.delete(functionName);
+
+          functionState.projectCandidates.delete(functionName);
           functionState.metadata.delete(functionName);
-          refreshEffectiveFunctions(functionState);
+
+          functionState.candidateMetadata.delete(functionName);
+          reconcileFunctionState(functionState);
           if (removed) {
             activity.push({ action: "remove", name: functionName, scope: "project" });
           }
@@ -736,16 +757,20 @@ export default function pit(pi: ExtensionAPI) {
   const functionState: FunctionState = {
     projectEnabled: false,
     project: new Map(),
+
+    projectCandidates: new Map(),
     session: new Map(),
     effective: new Map(),
     metadata: new Map(),
+
+    candidateMetadata: new Map(),
   };
 
   const commitFunctionState = createFunctionStateCommitQueue();
 
-  registerFunctionManager(pi, functionState.session, () =>
-    refreshEffectiveFunctions(functionState),
-  );
+  registerFunctionManager(pi, functionState.session, () => {
+    reconcileFunctionState(functionState);
+  });
 
   pi.registerTool({
     name: "typescript",
@@ -1005,8 +1030,15 @@ export default function pit(pi: ExtensionAPI) {
           );
 
           const replaced = functionState.project.has(namedFunction);
-          await saveProjectFunction(ctx.cwd, namedFunction, params.code, functionState.project);
+          await saveProjectFunction(
+            ctx.cwd,
+            namedFunction,
+            params.code,
+            functionState.projectCandidates,
+          );
+          functionState.project.set(namedFunction, params.code);
           functionState.metadata.set(namedFunction, projectMetadata);
+          functionState.candidateMetadata.set(namedFunction, projectMetadata);
           if (functionState.session.has(namedFunction)) {
             pi.appendEntry(FUNCTION_ENTRY_TYPE, {
               name: namedFunction,
@@ -1014,7 +1046,7 @@ export default function pit(pi: ExtensionAPI) {
             } satisfies FunctionEntry);
           }
           functionState.session.delete(namedFunction);
-          refreshEffectiveFunctions(functionState);
+          reconcileFunctionState(functionState);
           functionActivity.push({
             action: "set",
             name: namedFunction,
@@ -1039,7 +1071,7 @@ export default function pit(pi: ExtensionAPI) {
             source: params.code,
           } satisfies FunctionEntry);
           functionState.session.set(namedFunction, params.code);
-          refreshEffectiveFunctions(functionState);
+          reconcileFunctionState(functionState);
           functionActivity.push({ action: "set", name: namedFunction, replaced });
         });
       }
@@ -1077,18 +1109,23 @@ export default function pit(pi: ExtensionAPI) {
     const config = await loadProjectFunctionConfig(ctx);
     functionState.projectEnabled = config.enabled;
     const errors = config.enabled
-      ? await loadProjectFunctions(ctx, functionState.project, functionState.metadata)
+      ? await loadProjectFunctions(
+          ctx,
+          functionState.projectCandidates,
+          functionState.candidateMetadata,
+        )
       : [];
     if (!config.enabled) {
-      functionState.project.clear();
-      functionState.metadata.clear();
+      functionState.projectCandidates.clear();
+      functionState.candidateMetadata.clear();
     }
     reconstructFunctions(
       functionState.session,
       ctx.sessionManager.getBranch(),
-      functionState.project,
+      functionState.projectCandidates,
+      new Map(),
     );
-    refreshEffectiveFunctions(functionState);
+    errors.push(...reconcileFunctionState(functionState));
     if (config.error && ctx.hasUI) {
       ctx.ui.notify(config.error, "warning");
     }
@@ -1103,9 +1140,10 @@ export default function pit(pi: ExtensionAPI) {
     reconstructFunctions(
       functionState.session,
       ctx.sessionManager.getBranch(),
-      functionState.project,
+      functionState.projectCandidates,
+      new Map(),
     );
-    refreshEffectiveFunctions(functionState);
+    reconcileFunctionState(functionState);
   });
   pi.on("before_agent_start", (event) => {
     const catalog = projectFunctionCatalog(functionState.metadata);

@@ -14,8 +14,9 @@ import {
 } from "./sandbox.js";
 import {
   type FunctionRegistry,
-  validateRegistryCapacity,
+  validateEffectiveRegistryCapacity,
   validateSavedFunctionName,
+  validateSavedFunctionSource,
 } from "./saved-functions.js";
 
 const MAX_PROJECT_CATALOG_BYTES = 12_000;
@@ -101,7 +102,7 @@ export async function saveProjectFunction(
   source: string,
   registry: FunctionRegistry,
 ): Promise<boolean> {
-  validateRegistryCapacity(registry, name, source);
+  validateSavedFunctionSource(source);
   const candidates = new Map(registry);
   candidates.set(name, source);
   validateTypeScript(source, candidates);
@@ -178,10 +179,7 @@ export async function loadProjectFunctions(
       if (entry.name !== `${parsed.name}.ts`) {
         throw new Error(`filename must be ${parsed.name}.ts`);
       }
-      const sources = new Map(
-        [...candidates].map(([candidate, value]) => [candidate, value.source]),
-      );
-      validateRegistryCapacity(sources, parsed.name, source);
+      validateSavedFunctionSource(source);
       candidates.set(parsed.name, { source, metadata: parsed });
     } catch (error) {
       errors.push(`${entry.name}: ${(error as Error).message}`);
@@ -201,6 +199,131 @@ export async function loadProjectFunctions(
       validateTypeScript(value.source, dependencies);
       registry.set(name, value.source);
       metadata.set(name, value.metadata);
+    } catch (error) {
+      errors.push(`${name}.ts: ${(error as Error).message}`);
+    }
+  }
+  let removedInvalidDependency = true;
+  while (removedInvalidDependency) {
+    removedInvalidDependency = false;
+    for (const [name, source] of [...registry]) {
+      try {
+        validateTypeScript(source, registry);
+      } catch (error) {
+        registry.delete(name);
+        metadata.delete(name);
+        errors.push(`${name}.ts: ${(error as Error).message}`);
+        removedInvalidDependency = true;
+      }
+    }
+  }
+
+  return errors;
+}
+
+export function reconcileProjectFunctionsForSession(
+  candidates: ReadonlyMap<string, string>,
+  candidateMetadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  session: FunctionRegistry,
+  registry: FunctionRegistry,
+  metadata: ProjectFunctionMetadataRegistry,
+): string[] {
+  const sessionCandidates = new Map(session);
+  session.clear();
+  registry.clear();
+  metadata.clear();
+  const errors: string[] = [];
+
+  const projectClosure = (
+    roots: readonly string[],
+    sessionFunctions: ReadonlyMap<string, string>,
+    forceRoots = false,
+  ): string[] => {
+    const ordered: string[] = [];
+    const selected = new Set<string>();
+    const visiting = new Set<string>();
+    const visit = (name: string, force: boolean): void => {
+      if ((!force && sessionFunctions.has(name)) || registry.has(name) || selected.has(name)) {
+        return;
+      }
+      const source = candidates.get(name);
+      if (source === undefined) {
+        throw new Error(`required project function "${name}" is unavailable`);
+      }
+      if (visiting.has(name)) {
+        return;
+      }
+      visiting.add(name);
+      const references = resolveSavedFunctionReferences(source, candidates)
+        .filter((reference) => reference.direct)
+        .map((reference) => reference.name)
+        .sort((a, b) => a.localeCompare(b));
+      for (const dependency of references) {
+        visit(dependency, false);
+      }
+      visiting.delete(name);
+      selected.add(name);
+      ordered.push(name);
+    };
+    for (const root of [...roots].sort((a, b) => a.localeCompare(b))) {
+      visit(root, forceRoots);
+    }
+    return ordered;
+  };
+
+  const proposedEffective = (
+    additions: readonly string[],
+    sessionFunctions: ReadonlyMap<string, string>,
+  ): FunctionRegistry => {
+    const project = new Map(registry);
+    for (const name of additions) {
+      project.set(name, candidates.get(name) as string);
+    }
+    return new Map([...project, ...sessionFunctions]);
+  };
+
+  const commitProjects = (names: readonly string[]): void => {
+    for (const name of names) {
+      registry.set(name, candidates.get(name) as string);
+      const parsed = candidateMetadata.get(name);
+      if (parsed) {
+        metadata.set(name, parsed);
+      }
+    }
+  };
+
+  for (const [name, source] of sessionCandidates) {
+    try {
+      const proposedSession = new Map(session);
+      proposedSession.set(name, source);
+      const availableCandidates = new Map([...candidates, ...sessionCandidates]);
+      const roots = resolveSavedFunctionReferences(source, availableCandidates)
+        .filter(
+          (reference) =>
+            reference.direct &&
+            !proposedSession.has(reference.name) &&
+            candidates.has(reference.name),
+        )
+        .map((reference) => reference.name);
+      const additions = projectClosure(roots, proposedSession);
+      const effective = proposedEffective(additions, proposedSession);
+      validateEffectiveRegistryCapacity(effective);
+      validateTypeScript(source, effective);
+      commitProjects(additions);
+      session.set(name, source);
+    } catch (error) {
+      errors.push(`session function ${name}: ${(error as Error).message}`);
+    }
+  }
+
+  for (const name of candidates.keys()) {
+    if (registry.has(name)) {
+      continue;
+    }
+    try {
+      const additions = projectClosure([name], session, true);
+      validateEffectiveRegistryCapacity(proposedEffective(additions, session));
+      commitProjects(additions);
     } catch (error) {
       errors.push(`${name}.ts: ${(error as Error).message}`);
     }
