@@ -23,6 +23,12 @@ function sizedProjectFunction(name: string, bytes: number): string {
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
 
+function sizedProjectDependent(name: string, dependency: string, bytes: number): string {
+  const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;
+  const suffix = `*/ return ${dependency}(); }`;
+  return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
+}
+
 function sizedInvalidProjectFunction(name: string, bytes: number): string {
   const prefix = `/** ${name} invalid helper. @pit project */ async function ${name}() { /*`;
   const suffix = "*/ return 1n; }";
@@ -87,7 +93,7 @@ describe("project function storage", () => {
         return [name, sizedProjectFunction(name, 99_990)] as const;
       }),
     );
-    const source = sizedProjectFunction("storedProjectExtra", 2_000);
+    const source = sizedProjectFunction("storedProjectExtra", 2000);
 
     await expect(saveProjectFunction(cwd, "storedProjectExtra", source, functions)).resolves.toBe(
       false,
@@ -173,6 +179,211 @@ describe("project function storage", () => {
     expect([...active.keys()]).toEqual(["zzValidCandidate"]);
   }, 10_000);
 
+  it("reconciles byte capacity when a same-name session override is removed", () => {
+    const candidates = new Map(
+      Array.from({ length: 11 }, (_, index) => {
+        const name = `quotaProject${String(index).padStart(2, "0")}`;
+        return [name, sizedProjectFunction(name, index === 10 ? 20_000 : 99_000)] as const;
+      }),
+    );
+    const overrideSource = `async function quotaProject00() { return "session override"; }`;
+    const session = new Map([["quotaProject00", overrideSource]]);
+    const active = registry();
+    const activeDocs = metadata();
+
+    expect(
+      reconcileProjectFunctionsForSession(candidates, new Map(), session, active, activeDocs),
+    ).toEqual([]);
+    expect(active).toHaveLength(11);
+    expect(session).toEqual(new Map([["quotaProject00", overrideSource]]));
+
+    session.clear();
+    const errors = reconcileProjectFunctionsForSession(
+      candidates,
+      new Map(),
+      session,
+      active,
+      activeDocs,
+    );
+    expect([...active.keys()]).toEqual(
+      Array.from({ length: 10 }, (_, index) => `quotaProject${String(index).padStart(2, "0")}`),
+    );
+    expect(
+      [...active.values()].reduce((total, source) => total + Buffer.byteLength(source), 0),
+    ).toBe(990_000);
+    expect(errors).toEqual([expect.stringMatching(/quotaProject10.*total source/)]);
+  });
+
+  it("admits a dependency but not its project dependent when the closure exceeds quota", () => {
+    const candidates = new Map([
+      ...Array.from({ length: 9 }, (_, index) => {
+        const name = `aQuotaFill${String(index).padStart(2, "0")}`;
+        return [name, sizedProjectFunction(name, 99_000)] as const;
+      }),
+      [
+        "bQuotaDependent",
+        sizedProjectDependent("bQuotaDependent", "zQuotaDependency", 60_000),
+      ] as const,
+      ["zQuotaDependency", sizedProjectFunction("zQuotaDependency", 60_000)] as const,
+    ]);
+    const active = registry();
+
+    const errors = reconcileProjectFunctionsForSession(
+      candidates,
+      new Map(),
+      new Map(),
+      active,
+      metadata(),
+    );
+    expect(active.has("zQuotaDependency")).toBe(true);
+    expect(active.has("bQuotaDependent")).toBe(false);
+    expect(errors).toEqual([expect.stringMatching(/bQuotaDependent.*total source/)]);
+  });
+
+  it("rejects a session dependent when its required project closure cannot fit", () => {
+    const dependencyName = (index: number) => `sessionDependency${String(index).padStart(2, "0")}`;
+    const dependencyNames = Array.from({ length: 10 }, (_, index) => dependencyName(index));
+    const dependencyChain = dependencyNames.map(
+      (name, index) =>
+        [
+          name,
+          index === 0
+            ? sizedProjectFunction(name, 99_000)
+            : sizedProjectDependent(name, dependencyName(index - 1), 99_000),
+        ] as const,
+    );
+    const candidates = new Map([
+      ...dependencyChain,
+      [
+        "zSessionDependency",
+        sizedProjectDependent("zSessionDependency", dependencyName(9), 20_000),
+      ] as const,
+    ]);
+    const session = new Map([
+      [
+        "sessionQuotaDependent",
+        "async function sessionQuotaDependent() { return zSessionDependency(); }",
+      ],
+    ]);
+    expect(
+      [...candidates.values(), ...session.values()].every(
+        (source) => Buffer.byteLength(source) <= 100_000,
+      ),
+    ).toBe(true);
+    const active = registry();
+
+    const errors = reconcileProjectFunctionsForSession(
+      candidates,
+      new Map(),
+      session,
+      active,
+      metadata(),
+    );
+    expect(session).toHaveLength(0);
+    expect([...active.keys()]).toEqual(dependencyNames);
+    expect(active.has("zSessionDependency")).toBe(false);
+    expect(errors).toEqual([
+      expect.stringMatching(/session function sessionQuotaDependent.*total source/),
+      expect.stringMatching(/zSessionDependency.*total source/),
+    ]);
+  });
+
+  it("enforces the effective function-count boundary without compiling each candidate", () => {
+    const candidates = new Map(
+      Array.from({ length: 65 }, (_, index) => {
+        const name = `countBoundary${String(index).padStart(2, "0")}`;
+        return [name, `async function ${name}() { return true; }`] as const;
+      }),
+    );
+    const active = registry();
+
+    const errors = reconcileProjectFunctionsForSession(
+      candidates,
+      new Map(),
+      new Map(),
+      active,
+      metadata(),
+    );
+    expect(active).toHaveLength(64);
+    expect(errors).toEqual([expect.stringMatching(/countBoundary64.*limited to 64 functions/)]);
+  });
+
+  it("admits cyclic project dependencies as one closure", () => {
+    const candidates = new Map([
+      ["cycleA", "async function cycleA() { return cycleB() + cycleLeaf(); }"],
+      ["cycleB", "async function cycleB() { return cycleA(); }"],
+      ["cycleLeaf", "async function cycleLeaf() { return 1; }"],
+    ]);
+    const active = registry();
+
+    expect(
+      reconcileProjectFunctionsForSession(candidates, new Map(), new Map(), active, metadata()),
+    ).toEqual([]);
+    expect(new Set(active.keys())).toEqual(new Set(["cycleA", "cycleB", "cycleLeaf"]));
+  });
+
+  it("uses a session override while sorting multiple required project roots", () => {
+    const candidates = new Map([
+      ["zShared", "async function zShared() { return 1; }"],
+      ["aWrapper", "async function aWrapper() { return zShared(); }"],
+      ["betaRoot", "async function betaRoot() { return 2; }"],
+    ]);
+    const override = "async function zShared() { return 10; }";
+    const consumer =
+      "async function sessionConsumer() { return (await aWrapper()) + (await betaRoot()) + (await zShared()); }";
+    const session = new Map([
+      ["zShared", override],
+      ["sessionConsumer", consumer],
+    ]);
+    const active = registry();
+
+    expect(
+      reconcileProjectFunctionsForSession(candidates, new Map(), session, active, metadata()),
+    ).toEqual([]);
+    expect(session).toEqual(
+      new Map([
+        ["zShared", override],
+        ["sessionConsumer", consumer],
+      ]),
+    );
+    expect(new Set(active.keys())).toEqual(new Set(["aWrapper", "betaRoot", "zShared"]));
+  });
+
+  it("rejects a closure whose dependency becomes unavailable", () => {
+    class ExpiringDependencyMap extends Map<string, string> {
+      private dependencyReads = 0;
+
+      override get(name: string): string | undefined {
+        if (name === "missingDependency" && ++this.dependencyReads > 1) {
+          return undefined;
+        }
+        return super.get(name);
+      }
+    }
+    const candidates = new ExpiringDependencyMap([
+      ["dependent", "async function dependent() { return missingDependency(); }"],
+      ["missingDependency", "async function missingDependency() { return true; }"],
+    ]);
+    const active = registry();
+
+    const errors = reconcileProjectFunctionsForSession(
+      candidates,
+      new Map(),
+      new Map(),
+      active,
+      metadata(),
+    );
+    expect(active).toHaveLength(0);
+    expect(errors).toEqual([
+      expect.stringMatching(
+        /dependent.*required project function "missingDependency" is unavailable/,
+      ),
+      expect.stringMatching(
+        /missingDependency.*required project function "missingDependency" is unavailable/,
+      ),
+    ]);
+  });
+
   it("surfaces storage errors and cleans failed temporary writes", async () => {
     await mkdir(join(cwd, ".pi/pit/functions/blocked.ts"), { recursive: true });
     const source = "/** Blocked. @pit project */ async function blocked() { return null; }";
@@ -224,5 +435,11 @@ describe("project function storage", () => {
     expect(unparsableOverride).not.toContain("alpha(");
     expect(unparsableOverride).not.toContain("Alpha helper");
     expect(unparsableOverride).not.toContain("input: value to use");
+
+    const missingOverrideSource = new Map([["alpha", "placeholder"]]);
+    missingOverrideSource.get = () => undefined;
+    const missingOverrideCatalog = projectFunctionCatalog(docs, missingOverrideSource);
+    expect(missingOverrideCatalog).toContain("- alpha — Session override of project function.");
+    expect(missingOverrideCatalog).not.toContain("alpha(");
   });
 });

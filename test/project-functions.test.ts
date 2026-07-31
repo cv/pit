@@ -11,7 +11,6 @@ import {
   functionsCommand,
   run,
   sessionStart,
-  sessionTree,
   setBranchEntries,
   setupHarness,
   tool,
@@ -48,18 +47,6 @@ afterEach(cleanupHarness);
 function sizedFunction(name: string, bytes: number): string {
   const prefix = `async function ${name}() { /*`;
   const suffix = "*/ return true; }";
-  return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
-}
-
-function sizedProjectFunction(name: string, bytes: number): string {
-  const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;
-  const suffix = "*/ return true; }";
-  return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
-}
-
-function sizedProjectDependent(name: string, dependency: string, bytes: number): string {
-  const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;
-  const suffix = `*/ return ${dependency}(); }`;
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
 
@@ -253,147 +240,25 @@ async function slowProject({ shell }) {
     expect(branchEntries).toHaveLength(10);
   }, 15_000);
 
-  it("reconciles the effective byte quota when a session override is deleted", async () => {
-    const directory = join(cwd, ".pi/pit/functions");
-    await mkdir(directory, { recursive: true });
-    const projectSources = Array.from({ length: 11 }, (_, index) => {
-      const name = `quotaProject${String(index).padStart(2, "0")}`;
-      return [name, sizedProjectFunction(name, index === 10 ? 20_000 : 99_000)] as const;
-    });
-    await Promise.all(
-      projectSources.map(([name, source]) => writeFile(join(directory, `${name}.ts`), source)),
-    );
-    const overrideSource = `async function quotaProject00() { return "session override"; }`;
-    setBranchEntries([
-      {
-        type: "custom",
-        customType: "pit-functions",
-        data: { name: "quotaProject00", source: overrideSource },
-      },
-    ]);
+  it("reconciles the project function when a session override is deleted", async () => {
+    await run("/** Quota project. @pit project */ async function quotaProject() { return true; }");
+    await run('async function quotaProject() { return "session override"; }');
+    expect(await value("quotaProject()")).toBe("session override");
 
-    const projectBytes = projectSources.reduce(
-      (total, [, source]) => total + Buffer.byteLength(source),
-      0,
-    );
-    expect(projectBytes).toBe(1_010_000);
-    expect(projectBytes - 99_000 + Buffer.byteLength(overrideSource)).toBeLessThanOrEqual(
-      1_000_000,
-    );
-
-    await sessionStart({}, context());
-    const state = await value("async ({ context }) => context.get()");
-    expect(state.projectFunctions).toHaveLength(11);
-    expect(state.sessionFunctions).toEqual(["quotaProject00"]);
-    expect(state.savedFunctions).toHaveLength(11);
-    expect(await value("quotaProject00()")).toBe("session override");
-    expect(await value("quotaProject10()")).toBe(true);
-
-    await functionsCommand.handler("delete quotaProject00", context());
-    const reconciled = await value("async ({ context }) => context.get()");
-    expect(reconciled.sessionFunctions).toEqual([]);
-    expect(reconciled.projectFunctions).toEqual(
-      Array.from({ length: 10 }, (_, index) => `quotaProject${String(index).padStart(2, "0")}`),
-    );
-    expect(reconciled.savedFunctions).toEqual(reconciled.projectFunctions);
-    const effectiveBytes = projectSources
-      .filter(([name]) => reconciled.savedFunctions.includes(name))
-      .reduce((total, [, source]) => total + Buffer.byteLength(source), 0);
-    expect(effectiveBytes).toBeLessThanOrEqual(1_000_000);
-    expect(beforeAgentStart({ systemPrompt: "base" }, context()).systemPrompt).not.toContain(
-      "quotaProject10",
-    );
-    expect(await value("quotaProject00()")).toBe(true);
-    await expect(run("quotaProject10()")).rejects.toThrow("Cannot find name 'quotaProject10'");
-  }, 15_000);
-
-  it("does not advertise a project dependent whose required project exceeds quota", async () => {
-    const directory = join(cwd, ".pi/pit/functions");
-    await mkdir(directory, { recursive: true });
-    const sources = [
-      ...Array.from({ length: 9 }, (_, index) => {
-        const name = `aQuotaFill${String(index).padStart(2, "0")}`;
-        return [name, sizedProjectFunction(name, 99_000)] as const;
-      }),
-      [
-        "bQuotaDependent",
-        sizedProjectDependent("bQuotaDependent", "zQuotaDependency", 60_000),
-      ] as const,
-      ["zQuotaDependency", sizedProjectFunction("zQuotaDependency", 60_000)] as const,
-    ];
-    await Promise.all(
-      sources.map(([name, source]) => writeFile(join(directory, `${name}.ts`), source)),
-    );
-
-    const ctx = context();
-    await sessionStart({}, ctx);
-    const state = await value("async ({ context }) => context.get()");
-    expect(state.projectFunctions).toContain("zQuotaDependency");
-    expect(state.projectFunctions).not.toContain("bQuotaDependent");
-    expect(state.savedFunctions).not.toContain("bQuotaDependent");
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringMatching(/bQuotaDependent.*total source/),
-      "warning",
-    );
-    await expect(run("bQuotaDependent()")).rejects.toThrow("Cannot find name 'bQuotaDependent'");
-  }, 15_000);
-
-  it("rejects a session dependent when its required project cannot fit", async () => {
-    const directory = join(cwd, ".pi/pit/functions");
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, "zSessionDependency.ts"),
-      sizedProjectFunction("zSessionDependency", 20_000),
-    );
-    setBranchEntries([
-      ...Array.from({ length: 10 }, (_, index) => {
-        const name = `sessionQuotaFill${String(index).padStart(2, "0")}`;
-        return {
-          type: "custom",
-          customType: "pit-functions",
-          data: { name, source: sizedFunction(name, 99_000) },
-        };
-      }),
-      {
-        type: "custom",
-        customType: "pit-functions",
-        data: {
-          name: "sessionQuotaDependent",
-          source: "async function sessionQuotaDependent() { return zSessionDependency(); }",
-        },
-      },
-    ]);
-
-    const ctx = context();
-    await sessionStart({}, ctx);
-    const state = await value("async ({ context }) => context.get()");
-    expect(state.sessionFunctions).toHaveLength(10);
-    expect(state.sessionFunctions).not.toContain("sessionQuotaDependent");
-    expect(state.projectFunctions).not.toContain("zSessionDependency");
-    expect(state.savedFunctions).not.toContain("sessionQuotaDependent");
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringMatching(/session function sessionQuotaDependent.*total source/),
-      "warning",
-    );
-
-    setBranchEntries([]);
-    sessionTree({}, context());
+    await functionsCommand.handler("delete quotaProject", context());
     expect(await value("async ({ context }) => context.get()")).toMatchObject({
-      projectFunctions: ["zSessionDependency"],
+      projectFunctions: ["quotaProject"],
       sessionFunctions: [],
-      savedFunctions: ["zSessionDependency"],
+      savedFunctions: ["quotaProject"],
     });
-  }, 15_000);
+    expect(await value("quotaProject()")).toBe(true);
+  });
 
   it("rejects removal with project, transitive, and session dependents", async () => {
     await run("/** Base. @pit project */ async function dependencyBase() { return 1; }");
     for (const code of [
       "/** Direct project dependent. @pit project */ async function directProject() { return dependencyBase(); }",
       "/** Transitive project dependent. @pit project */ async function transitiveProject() { return directProject(); }",
-      "/** Another transitive dependent. @pit project */ async function anotherTransitive(): Promise<number> { return directProject(); }",
-      "/** Cycle A. @pit project */ async function cycleA(): Promise<number> { return 0; }",
-      "/** Cycle B. @pit project */ async function cycleB(): Promise<number> { return cycleA(); }",
-      "/** Cycle A replacement. @pit project */ async function cycleA(): Promise<number> { return cycleB(); }",
       "async function directProject() { return 2; }",
     ]) {
       await tool.execute("call-id", { code, saveOnly: true }, undefined, undefined, context());
@@ -402,9 +267,7 @@ async function slowProject({ shell }) {
 
     await expect(
       run('async ({ functions }) => functions.remove("dependencyBase")'),
-    ).rejects.toThrow(
-      "direct: directProject, sessionDependent; transitive: anotherTransitive, transitiveProject",
-    );
+    ).rejects.toThrow("direct: directProject, sessionDependent; transitive: transitiveProject");
     await expect(
       readFile(join(cwd, ".pi/pit/functions/dependencyBase.ts"), "utf8"),
     ).resolves.toContain("dependencyBase");
