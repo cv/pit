@@ -13,4 +13,18 @@ describe("HangingIndentText", () => {
     expect(rendered).toContain("\u001b[34mconst\u001b[39m");
     expect(rendered).toContain("\u001b[33m42\u001b[39m");
   });
+
+  it("handles empty, unstyled, wrapped, cached, and invalidated content", () => {
+    expect(new HangingIndentText("", {}).render(20)).toEqual([]);
+
+    const component = new HangingIndentText("abalpha beta gamma\nplain", { 0: 2 });
+    const first = component.render(8);
+    expect(first[0]).toContain("abalpha");
+    expect(first[1]?.startsWith("  ")).toBe(true);
+    expect(component.render(8)).toBe(first);
+
+    component.invalidate();
+    expect(component.render(8)).toEqual(first);
+    expect(component.render(2).join("").replace(/\s/g, "")).toContain("plain");
+  });
 });

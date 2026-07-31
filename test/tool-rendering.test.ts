@@ -52,6 +52,23 @@ describe("tool rendering", () => {
     const partial = renderToolCall({ code: undefined }, { expanded: false, argsComplete: false });
     expect(partial).toContain("generating... 0.0s");
     expect(partial).not.toContain("waiting for source…");
+    const inferred = renderToolCall(
+      {
+        label: "  \n ",
+        code: 'async ({ workspace }) => workspace.read("README.md")',
+      },
+      { expanded: false, argsComplete: true },
+    );
+    expect(inferred).toContain("Read workspace files");
+
+    const named = renderToolCall(
+      { code: "async function buildProject() { return true; }" },
+      { expanded: false, argsComplete: true },
+    );
+    expect(named).toContain("Define and run buildProject");
+
+    const waiting = renderToolCall({ code: undefined }, { expanded: true, argsComplete: false });
+    expect(waiting).toContain("waiting for source…");
   });
 
   it("updates generation time every 200ms and freezes when a final result arrives", () => {
@@ -70,6 +87,11 @@ describe("tool rendering", () => {
       expect(completed).toContain("1 line, 0.4s");
       vi.advanceTimersByTime(400);
       expect(invalidate).toHaveBeenCalledTimes(2);
+      const executionStarted = renderToolCall(
+        { code: "return 1" },
+        { expanded: false, argsComplete: false, executionStarted: true, state: {} },
+      );
+      expect(executionStarted).toContain("1 line, 0.0s");
     } finally {
       vi.useRealTimers();
     }
@@ -142,6 +164,17 @@ describe("tool rendering", () => {
     );
     expect(stringResult).toContain("Returned string (1 line, 0.0s)");
     expect(stringResult).not.toContain('"hello"');
+    const arrayResult = renderToolResult(
+      { content: [], details: { value: [1, 2], truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(arrayResult).toContain("Returned 2 items (4 lines, 0.0s)");
+
+    const emptyObjectResult = renderToolResult(
+      { content: [], details: { value: {}, truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(emptyObjectResult).toContain("Returned 0 fields (1 line, 0.0s)");
 
     const undefinedResult = renderToolResult(
       {
@@ -176,10 +209,15 @@ describe("tool rendering", () => {
       { expanded: false, isPartial: false },
     );
     expect(empty).toContain("No returned value (0 lines, 0.0s)");
+    const expandedEmptyResult = renderToolResult(
+      { content: [], details: undefined },
+      { expanded: true, isPartial: false },
+    );
+    expect(expandedEmptyResult).toContain("(no result)");
 
     const partial = renderToolResult(
       { content: [], details: undefined },
-      { expanded: false, isPartial: true },
+      { expanded: true, isPartial: true },
     );
     expect(partial).toContain("… Run workspace task (0.0s)");
 

@@ -7,58 +7,14 @@ import {
 
 const PREFIX_STYLE_RESET = "\u001b[22m\u001b[39m";
 
-const SGR_START = "\u001b[";
-
-function readSgrCode(value: string, start: number): string | undefined {
-  if (!value.startsWith(SGR_START, start)) {
-    return undefined;
-  }
-  let end = start + SGR_START.length;
-  while (end < value.length) {
-    const character = value.charAt(end);
-    if (character === "m") {
-      return value.slice(start, end + 1);
-    }
-    if (character !== ";" && (character < "0" || character > "9")) {
-      return undefined;
-    }
-    end += 1;
-  }
-  return undefined;
-}
-
-function sgrCodes(value: string): string[] {
-  const codes: string[] = [];
-  for (let index = 0; index < value.length; ) {
-    const start = value.indexOf(SGR_START, index);
-    if (start < 0) {
-      break;
-    }
-    const code = readSgrCode(value, start);
-    if (code) {
-      codes.push(code);
-      index = start + code.length;
-    } else {
-      index = start + SGR_START.length;
-    }
-  }
-  return codes;
-}
-
-function leadingSgr(value: string): string {
-  let end = 0;
-  for (;;) {
-    const code = readSgrCode(value, end);
-    if (!code) {
-      return value.slice(0, end);
-    }
-    end += code.length;
-  }
-}
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI SGR sequences start with ESC.
+const SGR_CODE_PATTERN = /\u001b\[[0-9;]*m/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI SGR sequences start with ESC.
+const LEADING_SGR_PATTERN = /^(?:\u001b\[[0-9;]*m)*/;
 
 function removeInheritedPrefixStyles(value: string, prefix: string): string {
-  const prefixStyles = sgrCodes(prefix);
-  const leading = leadingSgr(value);
+  const prefixStyles = prefix.match(SGR_CODE_PATTERN) ?? [];
+  const leading = value.match(LEADING_SGR_PATTERN)?.[0] ?? "";
   let sanitized = leading;
   for (const style of prefixStyles) {
     const index = sanitized.lastIndexOf(style);
