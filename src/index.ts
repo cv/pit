@@ -131,20 +131,61 @@ function savedFunctionDependents(
   state: FunctionState,
   name: string,
 ): { direct: string[]; transitive: string[] } {
+  type ScopedFunction = { name: string; scope: "project" | "session"; source: string };
+  const key = (scope: ScopedFunction["scope"], functionName: string) => `${scope}:${functionName}`;
+  const target = key("project", name);
+  const functions = new Map<string, ScopedFunction>();
+  for (const [functionName, source] of state.project) {
+    functions.set(key("project", functionName), { name: functionName, scope: "project", source });
+  }
+  for (const [functionName, source] of state.session) {
+    functions.set(key("session", functionName), { name: functionName, scope: "session", source });
+  }
+
+  const dependencies = new Map<string, Set<string>>();
+  for (const [functionKey, candidate] of functions) {
+    const registry = candidate.scope === "project" ? state.project : state.effective;
+    const references = resolveSavedFunctionReferences(candidate.source, registry).filter(
+      (reference) => reference.direct,
+    );
+    dependencies.set(
+      functionKey,
+      new Set(
+        references.map((reference) =>
+          candidate.scope === "session" && state.session.has(reference.name)
+            ? key("session", reference.name)
+            : key("project", reference.name),
+        ),
+      ),
+    );
+  }
+
+  const reachesTarget = (functionKey: string, visiting = new Set<string>()): boolean => {
+    if (visiting.has(functionKey)) {
+      return false;
+    }
+    visiting.add(functionKey);
+    for (const dependency of dependencies.get(functionKey) ?? []) {
+      if (dependency === target || reachesTarget(dependency, visiting)) {
+        visiting.delete(functionKey);
+        return true;
+      }
+    }
+    visiting.delete(functionKey);
+    return false;
+  };
+
   const direct = new Set<string>();
   const transitive = new Set<string>();
-  for (const [candidate, source] of [...state.project, ...state.session]) {
-    if (candidate === name) {
+  for (const [functionKey, candidate] of functions) {
+    if (functionKey === target) {
       continue;
     }
-    const reference = resolveSavedFunctionReferences(source, state.effective).find(
-      (dependency) => dependency.name === name,
-    );
-    if (reference?.direct) {
-      direct.add(candidate);
-      transitive.delete(candidate);
-    } else if (reference && !direct.has(candidate)) {
-      transitive.add(candidate);
+    if (dependencies.get(functionKey)?.has(target)) {
+      direct.add(candidate.name);
+      transitive.delete(candidate.name);
+    } else if (!direct.has(candidate.name) && reachesTarget(functionKey)) {
+      transitive.add(candidate.name);
     }
   }
   return {

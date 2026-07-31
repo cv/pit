@@ -122,6 +122,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       "/** Transitive project dependent. @pit project */ async function transitiveProject() { return directProject(); }",
     );
     await run("async function sessionDependent() { return dependencyBase(); }");
+    await run("async function directProject() { return 2; }");
 
     await expect(
       run('async ({ functions }) => functions.remove("dependencyBase")'),
@@ -129,6 +130,17 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     await expect(
       readFile(join(cwd, ".pi/pit/functions/dependencyBase.ts"), "utf8"),
     ).resolves.toContain("dependencyBase");
+  });
+
+  it("allows project removal when session overrides satisfy session dependents", async () => {
+    await run("/** Project base. @pit project */ async function overriddenBase() { return 1; }");
+    await run("async function overriddenBase() { return 2; }");
+    await run("async function overrideConsumer() { return overriddenBase(); }");
+
+    await expect(
+      value('async ({ functions }) => functions.remove("overriddenBase")'),
+    ).resolves.toEqual({ name: "overriddenBase", removed: true });
+    await expect(value("overrideConsumer()")).resolves.toBe(2);
   });
 
   it("applies function-count quotas to the effective project and session registry", async () => {
