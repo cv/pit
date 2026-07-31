@@ -1,6 +1,11 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { describeCapabilityCall, inferCapabilityCall } from "./capability-presentation.js";
+import {
+  type CapabilityCall,
+  describeCapabilityCall,
+  inferCapabilityCall,
+} from "./capability-presentation.js";
+import type { CapabilityTrace } from "./capability-trace.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import type { RenderedResultValue } from "./result-renderer-types.js";
 import { renderResultValue } from "./result-renderers.js";
@@ -23,6 +28,27 @@ interface TypeScriptDetails {
   value: unknown;
   truncated: boolean;
   progress?: ShellProgress[];
+  traces?: CapabilityTrace[];
+  tracesTruncated?: true;
+}
+
+function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | undefined {
+  if (!details.traces) {
+    return;
+  }
+  const publicTraces = details.traces.filter((entry) => entry.capability !== "__pit");
+  if (publicTraces.length !== 1) {
+    return;
+  }
+  const [trace] = publicTraces;
+  if (!trace) {
+    return;
+  }
+  return {
+    capability: trace.capability,
+    method: trace.method,
+    qualifiedName: `${trace.capability}.${trace.method}`,
+  };
 }
 
 interface ActiveTimingState {
@@ -285,7 +311,8 @@ export function renderTypeScriptToolResult(
       lines = highlightCode("undefined", "typescript");
     } else {
       const source = typeof context.args?.code === "string" ? context.args.code : "";
-      structuredResult = renderResultValue(details.value, theme, inferCapabilityCall(source));
+      const capabilityCall = runtimeCapabilityCall(details) ?? inferCapabilityCall(source);
+      structuredResult = renderResultValue(details.value, theme, capabilityCall);
       if (structuredResult) {
         lines = structuredResult.lines;
         hangingIndents = structuredResult.hangingIndents ?? {};

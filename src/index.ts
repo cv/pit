@@ -7,6 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { validateCapabilityCall } from "./capability-registry.js";
+import { CapabilityTraceCollector } from "./capability-trace.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
@@ -417,6 +418,14 @@ export default function pit(pi: ExtensionAPI) {
     },
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
+      const capabilityTraces = new CapabilityTraceCollector();
+      const capabilityTraceDetails = () => {
+        const snapshot = capabilityTraces.snapshot();
+        return {
+          ...(snapshot.traces.length > 0 ? { traces: snapshot.traces } : {}),
+          ...(snapshot.truncated ? { tracesTruncated: true as const } : {}),
+        };
+      };
       const progressById = new Map<number, ShellProgress>();
       let lastProgressUpdate = 0;
       const onShellProgress = update
@@ -448,6 +457,7 @@ export default function pit(pi: ExtensionAPI) {
                   value: undefined,
                   truncated: false,
                   progress: [...progressById.values()],
+                  ...capabilityTraceDetails(),
                 },
               });
             }
@@ -490,6 +500,7 @@ export default function pit(pi: ExtensionAPI) {
             timeoutMs: params.timeoutMs ?? 30_000,
             savedFunctions: executionRegistry,
             ...(params.params === undefined ? {} : { input: params.params }),
+            onCapabilityTrace: (trace) => capabilityTraces.record(trace),
           },
         );
       }
@@ -525,6 +536,7 @@ export default function pit(pi: ExtensionAPI) {
           value: output.truncated ? undefined : value,
           truncated: output.truncated,
           ...(functionActivity.length > 0 ? { functions: functionActivity } : {}),
+          ...capabilityTraceDetails(),
         },
       };
     },

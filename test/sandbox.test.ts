@@ -1,5 +1,6 @@
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import type { CapabilityTrace } from "../src/capability-trace.js";
 import {
   clearSandboxCaches,
   formatDiagnostic,
@@ -220,6 +221,62 @@ describe("runInSandbox", () => {
     expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"], expect.any(AbortSignal));
   });
 
+  it("emits bounded runtime traces for concurrent success and failure", async () => {
+    const updates: CapabilityTrace[] = [];
+    const result = await runInSandbox(
+      `async ({ shell, context }) => Promise.all([
+        shell.exec("secret command"),
+        context.get(),
+      ])`,
+      async (capability) => {
+        if (capability === "shell") {
+          return { stdout: "ok", stderr: "", code: 0, truncated: false };
+        }
+        return { cwd: "/tmp" };
+      },
+      { onCapabilityTrace: (trace) => updates.push(trace) },
+    );
+
+    expect(result).toHaveLength(2);
+    const completed = updates.filter((trace) => trace.status !== "running");
+    expect(completed).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        capability: "shell",
+        method: "exec",
+        status: "succeeded",
+      }),
+      expect.objectContaining({
+        sequence: 2,
+        capability: "context",
+        method: "get",
+        status: "succeeded",
+      }),
+    ]);
+    expect(completed[0]?.arguments).toEqual([{ type: "string", size: 14 }]);
+    expect(JSON.stringify(updates)).not.toContain("secret command");
+
+    const failed: CapabilityTrace[] = [];
+    await expect(
+      runInSandbox(
+        "async ({ context }) => context.get()",
+        async () => {
+          throw new Error("host refused");
+        },
+        { onCapabilityTrace: (trace) => failed.push(trace) },
+      ),
+    ).rejects.toThrow("host refused");
+    expect(failed.at(-1)).toMatchObject({ status: "failed", durationMs: expect.any(Number) });
+
+    await expect(
+      runInSandbox("async ({ context }) => context.get()", async () => ({ ok: true }), {
+        onCapabilityTrace: () => {
+          throw new Error("observer failed");
+        },
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+
   it("injects saved functions as capability-bound expressions", async () => {
     const savedFunctions = new Map([
       ["answer", "async function answer(_capabilities, input) { return { answer: input.value }; }"],
@@ -361,6 +418,7 @@ describe("runInSandbox", () => {
   });
 
   it("bounds concurrent and total capability calls", async () => {
+    const rejected: CapabilityTrace[] = [];
     await expect(
       runInSandbox(
         `async ({ context }) => Promise.all(
@@ -370,8 +428,10 @@ describe("runInSandbox", () => {
           await new Promise((resolve) => setTimeout(resolve, 25));
           return null;
         },
+        { onCapabilityTrace: (trace) => rejected.push(trace) },
       ),
     ).rejects.toThrow(/Concurrent RPC call limit exceeded/);
+    expect(rejected.some((trace) => trace.status === "rejected")).toBe(true);
 
     await expect(
       runInSandbox(

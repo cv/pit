@@ -4,6 +4,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
 import * as ts from "typescript";
+import {
+  type CapabilityTrace,
+  finishCapabilityTrace,
+  startCapabilityTrace,
+} from "./capability-trace.js";
 
 const SIGNATURE_WHITESPACE = /\s+/g;
 
@@ -13,6 +18,7 @@ export interface SandboxOptions {
   signal?: AbortSignal;
   savedFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
+  onCapabilityTrace?: (trace: CapabilityTrace) => void;
 }
 
 export type CapabilityHandler = (
@@ -487,6 +493,13 @@ export async function runInSandbox(
     const capabilitySignal = options.signal
       ? AbortSignal.any([options.signal, capabilityController.signal])
       : capabilityController.signal;
+    const reportCapabilityTrace = (trace: CapabilityTrace) => {
+      try {
+        options.onCapabilityTrace?.(trace);
+      } catch {
+        // Tracing is observational and must not affect capability execution.
+      }
+    };
     const finish = (error?: Error, value?: unknown) => {
       /* v8 ignore next -- only asynchronous child-process races call finish twice. */
       if (settled) {
@@ -587,12 +600,18 @@ export async function runInSandbox(
             Pick<WireMessage, "id" | "capability" | "method" | "args">
           >;
           callCount++;
+          const trace = startCapabilityTrace(id, callCount, capability, method, args);
+          reportCapabilityTrace(trace);
+          const finishTrace = (status: "succeeded" | "failed" | "rejected") => {
+            reportCapabilityTrace(finishCapabilityTrace(trace, status));
+          };
           if (callCount > MAX_CAPABILITY_CALLS) {
             send({
               type: "response",
               id,
               error: `RPC call limit exceeded (${MAX_CAPABILITY_CALLS})`,
             });
+            finishTrace("rejected");
             continue;
           }
           if (activeCalls >= MAX_CONCURRENT_CAPABILITY_CALLS) {
@@ -601,6 +620,7 @@ export async function runInSandbox(
               id,
               error: `Concurrent RPC call limit exceeded (${MAX_CONCURRENT_CAPABILITY_CALLS})`,
             });
+            finishTrace("rejected");
             continue;
           }
           activeCalls++;
@@ -611,6 +631,9 @@ export async function runInSandbox(
               (value) => {
                 if (!send({ type: "response", id, value })) {
                   send({ type: "response", id, error: "Capability response exceeds RPC limit" });
+                  finishTrace("failed");
+                } else {
+                  finishTrace("succeeded");
                 }
               },
               (error) => {
@@ -619,6 +642,7 @@ export async function runInSandbox(
                   id,
                   error: error instanceof Error ? error.message : String(error),
                 });
+                finishTrace("failed");
               },
             )
             .finally(() => {

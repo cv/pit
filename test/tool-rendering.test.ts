@@ -331,4 +331,46 @@ describe("tool rendering", () => {
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");
   });
+
+  it("uses runtime traces for saved-function results and falls back when attribution is ambiguous", () => {
+    const value = { stdout: "## main\n", stderr: "", code: 0, truncated: false };
+    const trace = (sequence: number, capability: string, method: string) => ({
+      id: sequence,
+      sequence,
+      capability,
+      method,
+      arguments: [],
+      startedAt: 1,
+      durationMs: 2,
+      status: "succeeded",
+    });
+
+    const attributed = renderToolResult(
+      {
+        content: [],
+        details: {
+          value,
+          truncated: false,
+          traces: [trace(1, "__pit", "savedFunctionRun"), trace(2, "git", "status")],
+        },
+      },
+      { expanded: false, isPartial: false },
+      { args: { code: "runStatus()" } },
+    );
+    expect(attributed).toContain("Git status, main, clean");
+
+    const ambiguous = renderToolResult(
+      {
+        content: [],
+        details: {
+          value,
+          truncated: false,
+          traces: [trace(1, "git", "status"), trace(2, "git", "diff")],
+        },
+      },
+      { expanded: false, isPartial: false },
+      { args: { code: "runMany()" } },
+    );
+    expect(ambiguous).toContain("Command exit 0");
+  });
 });

@@ -207,6 +207,35 @@ describe("host capabilities", () => {
     expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
   });
 
+  it("persists bounded capability traces without argument values", async () => {
+    execMock.mockResolvedValueOnce({ stdout: "## main\n", stderr: "", code: 0 });
+    const result = await run(`async ({ git }) => git.status(["--short", "secret-path"])`);
+
+    expect(result.details.traces).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        capability: "git",
+        method: "status",
+        status: "succeeded",
+        durationMs: expect.any(Number),
+        arguments: [{ type: "array", size: 2 }],
+      }),
+    ]);
+    expect(JSON.stringify(result.details.traces)).not.toContain("secret-path");
+    expect(result.details.tracesTruncated).toBeUndefined();
+  });
+
+  it("truncates persisted traces after the retention limit", async () => {
+    const result = await run(`async ({ context }) => {
+      for (let index = 0; index < 129; index++) await context.get();
+      return null;
+    }`);
+
+    expect(result.details.traces).toHaveLength(128);
+    expect(result.details.traces.at(-1)).toMatchObject({ sequence: 128, status: "succeeded" });
+    expect(result.details.tracesTruncated).toBe(true);
+  });
+
   it("validates shell.execFile arguments", async () => {
     const errors = await value(`async ({ shell }) => {
       const raw = shell as any;
