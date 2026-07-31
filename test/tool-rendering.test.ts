@@ -64,6 +64,12 @@ describe("tool rendering", () => {
     );
     expect(inferred).toContain("Read workspace files");
 
+    const git = renderToolCall(
+      { code: 'async ({ git }) => git.status(["--short"])' },
+      { expanded: false, argsComplete: true },
+    );
+    expect(git).toContain("Inspect Git status");
+
     const named = renderToolCall(
       { code: "async function buildProject() { return true; }" },
       { expanded: false, argsComplete: true },

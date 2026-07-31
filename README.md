@@ -2,7 +2,7 @@
 
 A Pi extension that replaces the normal coding tools with one tool: `typescript`.
 
-Pit lets the model combine workspace operations, shell commands, HTTP requests, UI prompts, and ordinary computation in one contextually type-checked call. This reduces tool round trips and keeps intermediate data out of the model context.
+Pit lets the model combine workspace operations, common Git operations, shell commands, HTTP requests, UI prompts, and ordinary computation in one contextually type-checked call. This reduces tool round trips and keeps intermediate data out of the model context.
 
 Each call runs in a fresh, permission-restricted process. Successful workflows can become typed, branch-local functions that the model can reuse and compose.
 
@@ -27,12 +27,12 @@ Each call runs in a fresh, permission-restricted process. Successful workflows c
 The model submits a TypeScript expression. A one-shot function destructures the host capabilities that it uses:
 
 ```ts
-async ({ workspace, shell }) => {
+async ({ workspace, git }) => {
   const [manifests, status] = await Promise.all([
     workspace.glob("**/package.json", {
       ignore: ["**/node_modules/**"],
     }),
-    shell.execFile("git", ["status", "--short"]),
+    git.status(["--short"]),
   ]);
 
   return { manifests, status };
@@ -93,7 +93,7 @@ The Pi TUI shows a compact description while the model generates a call. An anim
 
 Collapsed rows hide source and result bodies. The operator presses `Ctrl+O` to expand a row. The expanded row shows the submitted source and the retained result. Pit does not show injected saved-function source in tool output.
 
-Common capability results use compact structured renderers. These results include shell commands, workspace reads, searches, edits, lists, globs, HTTP responses, stats, and batches. Recognized values inside compound objects appear as named sections. Unknown values use syntax-highlighted JSON.
+Common capability results use compact structured renderers. These results include Git and shell commands, workspace reads, searches, edits, lists, globs, HTTP responses, stats, and batches. Recognized values inside compound objects appear as named sections. Unknown values use syntax-highlighted JSON.
 
 Long-running shell calls show a sanitized and bounded tail of standard output and standard error in partial tool updates. These updates do not become part of the final model context.
 
@@ -136,10 +136,10 @@ Submitted code uses `Promise.all` when all operations must succeed. It uses `Pro
 This example preserves the successful result when an optional file does not exist:
 
 ```ts
-async ({ workspace, shell }) => {
+async ({ workspace, git }) => {
   const [config, status] = await Promise.allSettled([
     workspace.read("optional.config.json", { format: "raw" }),
-    shell.execFile("git", ["status", "--short"]),
+    git.status(["--short"]),
   ]);
   return { config, status };
 }
@@ -159,12 +159,24 @@ Unknown capabilities and methods fail closed at run time.
 - `glob(patterns?, options?)` returns deterministic bounded matches and truncation metadata.
 - `stat(path)` returns file metadata.
 
+### `git`
+
+- `status(args?, options?)` runs `git status`.
+- `diff(args?, options?)` runs `git diff`.
+- `log(args?, options?)` runs `git log`.
+- `add(args?, options?)` runs `git add`.
+- `commit(args?, options?)` runs `git commit`.
+- `show(args?, options?)` runs `git show`.
+- `push(args?, options?)` runs `git push`.
+- `tag(args?, options?)` runs `git tag`.
+Arguments are passed directly after the fixed subcommand without shell interpolation. Use `shell.execFile("git", ...)` for less common Git subcommands.
+
 ### `shell`
 
 - `exec(command, options?)` runs a command through the shell.
 - `execFile(program, args, options?)` runs a program with an argument array.
 
-Both methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. A value of `true` for `raise` makes a nonzero exit stop the function.
+Git and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. A value of `true` for `raise` makes a nonzero exit stop the function.
 
 ### `http`
 
@@ -287,7 +299,7 @@ The submitted TypeScript runs in a new Node process with these restrictions:
 
 Filesystem, command, HTTP, and UI effects are available only through RPC capabilities. Calls and protocol frames have size and concurrency limits. Timeout and cancellation signals propagate to cooperative host operations.
 
-The sandbox restricts direct access. It does not make host capabilities harmless. The `shell` capability runs commands with the permissions of the Pi process. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach.
+The sandbox restricts direct access. It does not make host capabilities harmless. The `git` and `shell` capabilities run commands with the permissions of the Pi process. Git hooks and Git network operations can have external effects. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach.
 
 Capability destructuring makes intent visible. It is not an operator approval boundary. The operator must review generated calls before execution when an operation can affect sensitive data or systems.
 
@@ -299,6 +311,7 @@ This isolation is stronger than `node:vm`, which is not a security boundary. It 
 - Saved functions belong to one session branch. Pit does not provide a shared project function library.
 - Workspace paths are not restricted to the current project.
 - Shell commands are not restricted by an allowlist.
+- The `git` capability allowlists subcommands, but it does not restrict their arguments, hooks, remotes, or network destinations.
 - HTTP requests are not restricted by a host allowlist.
 - Multi-file edit rollback is best effort and is not atomic.
 - Returned content, shell output, HTTP bodies, glob results, and search results have limits.

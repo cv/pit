@@ -5,7 +5,8 @@ export const PROMPT_SNIPPET =
   "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions";
 
 export const PROMPT_GUIDELINES = [
-  "Use typescript for all workspace, shell, HTTP, UI, and context operations.",
+  "Use typescript for all workspace, Git, shell, HTTP, UI, and context operations.",
+  "In typescript, prefer git.status/diff/log/add/commit/show/push/tag for those Git subcommands; use shell.execFile only for other Git subcommands.",
   "In typescript, code is type-checked. Before fanning out an unfamiliar capability, validate one minimal call. After two failures of the same class, stop varying syntax: inspect contract/state, reduce to a minimal probe, and choose a simpler API if available.",
   "In typescript, prefer one tool invocation per step: batch independent calls with Promise.all instead of issuing multiple parallel typescript calls; sequence dependencies and conflicting mutations.",
   "In typescript, request only the fields and record limits needed to answer the current question; expand the query only when the first result requires it.",
@@ -35,10 +36,10 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "Use an anonymous function only for genuinely one-shot work. Prefer named saved functions whenever work may recur or compose:",
     "",
-    "async ({ workspace, shell }) => {",
+    "async ({ workspace, git }) => {",
     "  const [file, status] = await Promise.all([",
     '    workspace.read("package.json", { format: "raw" }),',
-    '    shell.execFile("git", ["status", "--short"]),',
+    '    git.status(["--short"]),',
     "  ]);",
     "  return { packageJson: JSON.parse(file.content), status };",
     "}",
@@ -57,7 +58,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "Results include active saved-function signatures. Invoke runTests() or runTests({ coverage: true }); only referenced definitions and dependencies are injected.",
     "To define now and invoke later, submit the named function with saveOnly: true and omit top-level params.",
     "",
-    "Add input modes or compose existing saved functions before creating another helper. For example, publishChanges can await runValidation(), then use shell.execFile for git add, commit, and push with { raise: true }.",
+    "Add input modes or compose existing saved functions before creating another helper. For example, publishChanges can await runValidation(), then use git.add, git.commit, and git.push with { raise: true }.",
     "",
     "HASHED EDIT WORKFLOW",
     "",

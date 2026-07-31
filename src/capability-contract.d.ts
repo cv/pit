@@ -2,6 +2,22 @@ type PitJsonPrimitive = null | boolean | number | string;
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
 type PitResult = PitJsonValue | undefined;
 
+type PitProcessOptions = {
+  cwd?: string;
+  timeoutMs?: number;
+  raise?: boolean;
+  maxBytes?: number;
+  maxLines?: number;
+  truncate?: "head" | "tail";
+};
+
+type PitProcessResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+  truncated: boolean;
+};
+
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = `${number}:${string}`;
 
@@ -120,41 +136,28 @@ interface PitWorkspaceCapability {
   }>;
 }
 
-interface PitShellCapability {
-  execFile(
-    program: string,
-    args: string[],
-    options?: {
-      cwd?: string;
-      timeoutMs?: number;
-      raise?: boolean;
-      maxBytes?: number;
-      maxLines?: number;
-      truncate?: "head" | "tail";
-    },
-  ): Promise<{
-    stdout: string;
-    stderr: string;
-    code: number;
-    truncated: boolean;
-  }>;
+interface PitGitCapability {
+  status(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 
-  exec(
-    command: string,
-    options?: {
-      cwd?: string;
-      timeoutMs?: number;
-      raise?: boolean;
-      maxBytes?: number;
-      maxLines?: number;
-      truncate?: "head" | "tail";
-    },
-  ): Promise<{
-    stdout: string;
-    stderr: string;
-    code: number;
-    truncated: boolean;
-  }>;
+  diff(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  log(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  add(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  commit(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  show(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  push(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  tag(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+}
+
+interface PitShellCapability {
+  execFile(program: string, args: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  exec(command: string, options?: PitProcessOptions): Promise<PitProcessResult>;
 }
 
 interface PitHttpCapability {
@@ -198,6 +201,7 @@ interface PitContextCapability {
 
 interface PitCapabilities {
   workspace: PitWorkspaceCapability;
+  git: PitGitCapability;
   shell: PitShellCapability;
   http: PitHttpCapability;
   ui: PitUiCapability;

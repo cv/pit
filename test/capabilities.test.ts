@@ -157,6 +157,56 @@ describe("host capabilities", () => {
     ).rejects.toThrow(/Command failed with exit code 9: git "push"[\s\S]*failed/);
   });
 
+  it("executes allowlisted Git subcommands without shell interpolation", async () => {
+    const results = await value(`async ({ git }) => [
+      await git.status(["--short"], { cwd: ".", timeoutMs: 5000, raise: true }),
+      await git.diff(["--stat"]),
+      await git.log(["-3", "--oneline"]),
+      await git.add(["src/index.ts"]),
+      await git.commit(["-m", "$(touch unsafe)"]),
+      await git.show(["HEAD"]),
+      await git.push(),
+      await git.tag(["--list"]),
+    ]`);
+
+    expect(results).toHaveLength(8);
+    expect(results.every((result: any) => result.code === 0)).toBe(true);
+    expect(execMock.mock.calls.map(([program, args]) => [program, args])).toEqual([
+      ["git", ["status", "--short"]],
+      ["git", ["diff", "--stat"]],
+      ["git", ["log", "-3", "--oneline"]],
+      ["git", ["add", "src/index.ts"]],
+      ["git", ["commit", "-m", "$(touch unsafe)"]],
+      ["git", ["show", "HEAD"]],
+      ["git", ["push"]],
+      ["git", ["tag", "--list"]],
+    ]);
+    expect(execMock.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ cwd, timeout: 5000, signal: expect.any(AbortSignal) }),
+    );
+
+    const callsBeforeInvalid = execMock.mock.calls.length;
+    const errors = await value(`async ({ git }) => {
+      const raw = git as any;
+      const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
+      return [
+        await capture(() => raw.status("--short")),
+        await capture(() => raw.diff([42])),
+        await capture(() => raw.log([], "bad")),
+        await capture(() => raw.show([], { raise: "yes" })),
+        await capture(() => raw.nope()),
+      ];
+    }`);
+    expect(errors).toEqual([
+      "args must be an array of strings",
+      "args must be an array of strings",
+      "options must be an object",
+      "options.raise must be a boolean",
+      "Unknown capability or method: git.nope",
+    ]);
+    expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
+  });
+
   it("validates shell.execFile arguments", async () => {
     const errors = await value(`async ({ shell }) => {
       const raw = shell as any;

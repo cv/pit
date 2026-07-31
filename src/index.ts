@@ -47,7 +47,7 @@ import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
 export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
-const CAPABILITY_CALL_PATTERN = /\b(workspace|shell|http|ui|context)\.(\w+)\s*\(/;
+const CAPABILITY_CALL_PATTERN = /\b(workspace|git|shell|http|ui|context)\.(\w+)\s*\(/;
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const SPINNER_INTERVAL_MS = 80;
 
@@ -157,6 +157,17 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
+function stringArray(value: unknown, label: string): string[] {
+  if (!(Array.isArray(value) && value.every((entry) => typeof entry === "string"))) {
+    throw new TypeError(`${label} must be an array of strings`);
+  }
+  return value;
+}
+
+function formatProcessCommand(program: string, args: string[]): string {
+  return [program, ...args.map((argument) => JSON.stringify(argument))].join(" ");
+}
+
 async function executeHostProcess(
   pi: ExtensionAPI,
   program: string,
@@ -229,6 +240,32 @@ function createCapabilities(
   onShellProgress?: (event: ShellProgressEvent) => void,
 ): CapabilityHandler {
   let nextShellProgressId = 1;
+  const progressFor = (command: string) => {
+    const id = nextShellProgressId++;
+    return onShellProgress
+      ? (event: HostShellProgressEvent) => onShellProgress({ id, command, ...event })
+      : undefined;
+  };
+
+  const runArgumentSafeProcess = (
+    program: string,
+    args: string[],
+    options: Record<string, unknown>,
+    signal: AbortSignal,
+  ) => {
+    const command = formatProcessCommand(program, args);
+    return executeHostProcess(
+      pi,
+      program,
+      args,
+      command,
+      options,
+      ctx.cwd,
+      progressFor(command),
+      signal,
+    );
+  };
+
   return async (capability, method, args, signal) => {
     if (capability !== "__pit") {
       validateCapabilityCall(capability, method, args);
@@ -240,10 +277,7 @@ function createCapabilities(
     if (capability === "shell" && method === "exec") {
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
-      const progressId = nextShellProgressId++;
-      const progress = onShellProgress
-        ? (event: HostShellProgressEvent) => onShellProgress({ id: progressId, command, ...event })
-        : undefined;
+      const progress = progressFor(command);
       return executeHostProcess(
         pi,
         "/bin/sh",
@@ -258,30 +292,15 @@ function createCapabilities(
 
     if (capability === "shell" && method === "execFile") {
       const program = string(args[0], "program");
-      if (!(Array.isArray(args[1]) && args[1].every((value) => typeof value === "string"))) {
-        throw new TypeError("args must be an array of strings");
-      }
-      const processArgs = args[1] as string[];
+      const processArgs = stringArray(args[1], "args");
       const options = args[2] === undefined ? {} : object(args[2], "options");
-      const commandDisplay = [
-        program,
-        ...processArgs.map((argument) => JSON.stringify(argument)),
-      ].join(" ");
-      const progressId = nextShellProgressId++;
-      const progress = onShellProgress
-        ? (event: HostShellProgressEvent) =>
-            onShellProgress({ id: progressId, command: commandDisplay, ...event })
-        : undefined;
-      return executeHostProcess(
-        pi,
-        program,
-        processArgs,
-        commandDisplay,
-        options,
-        ctx.cwd,
-        progress,
-        signal,
-      );
+      return runArgumentSafeProcess(program, processArgs, options, signal);
+    }
+
+    if (capability === "git") {
+      const gitArgs = args[0] === undefined ? [] : stringArray(args[0], "args");
+      const options = args[1] === undefined ? {} : object(args[1], "options");
+      return runArgumentSafeProcess("git", [method, ...gitArgs], options, signal);
     }
 
     if (capability === "http" && method === "request") {
@@ -512,6 +531,14 @@ function describeCall(
     "workspace.glob": "List matching files",
     "workspace.list": "List workspace entries",
     "workspace.stat": "Inspect file metadata",
+    "git.status": "Inspect Git status",
+    "git.diff": "Inspect Git changes",
+    "git.log": "Inspect Git history",
+    "git.add": "Stage Git changes",
+    "git.commit": "Commit Git changes",
+    "git.show": "Inspect a Git object",
+    "git.push": "Push Git changes",
+    "git.tag": "Manage Git tags",
     "shell.execFile": "Run command",
     "shell.exec": "Run shell command",
     "http.request": "Request remote data",

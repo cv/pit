@@ -81,7 +81,7 @@ describe("pit extension", () => {
   it("registers clear model-facing usage metadata and activates the tool", () => {
     expect(tool.label).toBe("TypeScript Workspace");
     expect(tool.promptSnippet).toContain("reusable functions");
-    expect(tool.description).toContain("async ({ workspace, shell })");
+    expect(tool.description).toContain("async ({ workspace, git })");
     expect(tool.description).toContain("Promise.all");
     expect(tool.description).toContain("Promise.allSettled");
     expect(tool.description).toContain("contextually type-checked");
@@ -124,7 +124,8 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
-    expect(tool.promptGuidelines).toHaveLength(8);
+    expect(tool.promptGuidelines).toHaveLength(9);
+    expect(tool.promptGuidelines?.join("\n")).toContain("prefer git.status/diff/log");
     expect(tool.promptGuidelines?.join("\n")).toContain("validate one minimal call");
     expect(tool.promptGuidelines?.join("\n")).toContain("After two failures of the same class");
     expect(tool.promptGuidelines?.join("\n")).toContain("stop varying syntax");
@@ -158,7 +159,7 @@ describe("pit extension", () => {
       (tool.promptGuidelines?.join("\n").length ?? 0) +
       (tool.parameters.properties.code.description?.length ?? 0) +
       (tool.parameters.properties.params.description?.length ?? 0);
-    expect(metadataChars).toBeLessThan(6500);
+    expect(metadataChars).toBeLessThan(7000);
 
     sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
@@ -186,6 +187,10 @@ describe("pit extension", () => {
 
   it("validates capability dispatch and arity from the registry", () => {
     expect(() => validateCapabilityCall("context", "get", [])).not.toThrow();
+    expect(() => validateCapabilityCall("git", "status", [])).not.toThrow();
+    expect(() => validateCapabilityCall("git", "status", [[], {}, 1])).toThrow(
+      /expects 0-2 argument/,
+    );
     expect(() => validateCapabilityCall("context", "get", [1])).toThrow(/expects 0 argument/);
     expect(() => validateCapabilityCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
     expect(() => validateCapabilityCall("unknown", "method", [])).toThrow(

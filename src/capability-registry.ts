@@ -7,12 +7,29 @@ export interface CapabilityMethodDefinition {
 
 interface CapabilityDefinition {
   interfaceName: string;
+  documentation?: string;
   methods: Record<string, CapabilityMethodDefinition>;
 }
 
 export const CAPABILITY_CONTRACT_PREAMBLE = `type PitJsonPrimitive = null | boolean | number | string;
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
 type PitResult = PitJsonValue | undefined;
+
+type PitProcessOptions = {
+  cwd?: string;
+  timeoutMs?: number;
+  raise?: boolean;
+  maxBytes?: number;
+  maxLines?: number;
+  truncate?: "head" | "tail";
+};
+
+type PitProcessResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+  truncated: boolean;
+};
 
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = \`\${number}:\${string}\`;
@@ -61,6 +78,15 @@ type PitBatchOperation =
       options?: { format?: PitReadFormat; offset?: number; limit?: number };
     }
   | { kind: "edit"; file: string; changes: PitEditChangeSpec };`;
+
+function gitMethodDefinition(method: string): CapabilityMethodDefinition {
+  return {
+    declaration: `${method}(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;`,
+    documentation: `git.${method}(args?, options?)`,
+    minimumArguments: 0,
+    maximumArguments: 2,
+  };
+}
 
 export const CAPABILITY_REGISTRY = {
   workspace: {
@@ -169,49 +195,35 @@ export const CAPABILITY_REGISTRY = {
       },
     },
   },
+  git: {
+    interfaceName: "PitGitCapability",
+    documentation:
+      "git.status, git.diff, git.log, git.add, git.commit, git.show, git.push, and git.tag accept optional argument arrays and shell.execFile options; results are bounded",
+    methods: {
+      status: gitMethodDefinition("status"),
+      diff: gitMethodDefinition("diff"),
+      log: gitMethodDefinition("log"),
+      add: gitMethodDefinition("add"),
+      commit: gitMethodDefinition("commit"),
+      show: gitMethodDefinition("show"),
+      push: gitMethodDefinition("push"),
+      tag: gitMethodDefinition("tag"),
+    },
+  },
   shell: {
     interfaceName: "PitShellCapability",
     methods: {
       execFile: {
-        declaration: `execFile(
-  program: string,
-  args: string[],
-  options?: {
-    cwd?: string;
-    timeoutMs?: number;
-    raise?: boolean;
-    maxBytes?: number;
-    maxLines?: number;
-    truncate?: "head" | "tail";
-  },
-): Promise<{
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}>;`,
+        declaration:
+          "execFile(program: string, args: string[], options?: PitProcessOptions): Promise<PitProcessResult>;",
         documentation:
           'shell.execFile(program, args, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate?: "head" | "tail" }) for bounded argument-safe execution',
         minimumArguments: 2,
         maximumArguments: 3,
       },
       exec: {
-        declaration: `exec(
-  command: string,
-  options?: {
-    cwd?: string;
-    timeoutMs?: number;
-    raise?: boolean;
-    maxBytes?: number;
-    maxLines?: number;
-    truncate?: "head" | "tail";
-  },
-): Promise<{
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}>;`,
+        declaration:
+          "exec(command: string, options?: PitProcessOptions): Promise<PitProcessResult>;",
         documentation:
           'shell.exec(command, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate?: "head" | "tail" }) for shell syntax; methods return { stdout, stderr, code, truncated }; Nonzero exits are data by default, and { raise: true } throws',
         minimumArguments: 1,
@@ -332,10 +344,13 @@ export function validateCapabilityCall(capability: string, method: string, args:
 
 export function capabilityDocumentation(): string[] {
   return Object.entries(CAPABILITY_REGISTRY).map(([name, definition]) => {
-    const methods = Object.values(definition.methods)
-      .map((method) => method.documentation)
-      .join("; ");
-    return `${name}: ${methods}.`;
+    const documentation =
+      "documentation" in definition
+        ? definition.documentation
+        : Object.values(definition.methods)
+            .map((method) => method.documentation)
+            .join("; ");
+    return `${name}: ${documentation}.`;
   });
 }
 
