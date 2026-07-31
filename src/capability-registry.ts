@@ -60,7 +60,13 @@ type PitBatchOperation =
       file: string;
       options?: { format?: PitReadFormat; offset?: number; limit?: number };
     }
-  | { kind: "edit"; file: string; changes: PitEditChangeSpec };`;
+  | { kind: "edit"; file: string; changes: PitEditChangeSpec };
+
+type PitProjectFunctionMetadata = {
+  name: string;
+  summary: string;
+  parameters: Array<{ name: string; description?: string }>;
+};`;
 
 export const CAPABILITY_REGISTRY = {
   workspace: {
@@ -286,11 +292,37 @@ export const CAPABILITY_REGISTRY = {
   thinkingLevel: string;
   sessionFile: string | undefined;
   savedFunctions: string[];
+  projectFunctions: string[];
+  sessionFunctions: string[];
+  projectFunctionsEnabled: boolean;
 }>;`,
         documentation:
-          "context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions",
+          "context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions, projectFunctions, sessionFunctions, projectFunctionsEnabled",
         minimumArguments: 0,
         maximumArguments: 0,
+      },
+    },
+  },
+  functions: {
+    interfaceName: "PitFunctionsCapability",
+    methods: {
+      list: {
+        declaration: "list(): Promise<PitProjectFunctionMetadata[]>;",
+        documentation: "functions.list() lists trusted project-persisted functions",
+        minimumArguments: 0,
+        maximumArguments: 0,
+      },
+      get: {
+        declaration: "get(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;",
+        documentation: "functions.get(name) returns project function metadata and source",
+        minimumArguments: 1,
+        maximumArguments: 1,
+      },
+      remove: {
+        declaration: "remove(name: string): Promise<{ name: string; removed: boolean }>;",
+        documentation: "functions.remove(name) removes a trusted project-persisted function",
+        minimumArguments: 1,
+        maximumArguments: 1,
       },
     },
   },

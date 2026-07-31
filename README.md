@@ -149,6 +149,31 @@ Unknown capabilities and methods fail closed at run time.
 
 ## Capabilities
 
+- `workspace`
+  - `read(file, { format?: "hashed" | "raw", offset?, limit? })` — hashed line anchors by default with a whole-file revision; use raw for machine parsing
+  - `edit(file, { revision, changes })` — revision-checked anchored replacements, insertions, deletion, rewriting, and creation
+  - `batch(operations, { failure?: "fail-fast" | "settled" })` — concurrent all-read batches or transactional all-edit batches; mixed batches are rejected and both modes return `{ results }`
+  - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
+  - `list(path?)`
+  - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
+  - `stat(path)`
+- `shell`
+  - `exec(command, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate? })` — shell syntax with caller-controlled output budgets; set `raise: true` to throw on nonzero exit
+  - `execFile(program, args, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate? })` — argument-safe direct execution with the same bounded output controls
+- `http`
+  - `request(url, { method?, headers?, body?, maxBytes? })` — caller-selected body limit below the host maximum
+- `ui`
+  - `confirm(title, message)`
+  - `input(title, placeholder?)`
+  - `select(title, options)`
+  - `notify(message, "info" | "warning" | "error")`
+- `context`
+  - `get()` — cwd, mode, model, thinking level, session file, and effective, project, and session function names
+- `functions`
+  - `list()` — list documented project functions
+  - `get(name)` — return project function metadata and source
+  - `remove(name)` — remove a project function
+
 ### `workspace`
 
 - `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a bounded selection. Hashed format is the default.
@@ -262,6 +287,36 @@ runTests({ coverage: true })
 Saved functions can call other saved functions. Pit injects only referenced functions and their transitive dependencies. It preserves input and return types across calls. It limits nested saved-function calls to a depth of 32.
 
 Saved functions survive session reloads and follow the active session branch. A replacement must preserve the validity of dependent functions. Each branch can contain 64 functions. One function can contain 100 KB of source. The combined source limit is 1 MB.
+
+### Project functions
+
+Project functions are disabled by default. Enable them explicitly for a trusted project in `.pi/pit.json`:
+
+```json
+{
+  "projectFunctions": {
+    "enabled": true
+  }
+}
+```
+
+Add a descriptive JSDoc comment with `@pit project` to intentionally persist a named function across sessions:
+
+```ts
+/**
+ * Runs repository tests.
+ *
+ * @pit project
+ * @param input.coverage - Enable coverage.
+ */
+async function runTests({ shell }, input: { coverage?: boolean } = {}) {
+  return shell.exec(input.coverage ? "npm run coverage" : "npm test", { raise: true });
+}
+```
+
+Project functions follow the same execution rules as session functions: they are committed only after successful execution, or immediately after static validation with `saveOnly: true`. Sources are stored as readable TypeScript files under `.pi/pit/functions/`, loaded at session start, and summarized in the system prompt. An unmarked same-named definition creates a session override; a marked definition updates the project version and clears that override.
+
+Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` from the TypeScript capability to inspect or remove project definitions. Project persistence and management require both explicit opt-in and a trusted project. Disabling the feature leaves existing source files untouched.
 
 The operator runs `/functions` to open the interactive function manager in the TUI. The operator can also run these direct commands:
 

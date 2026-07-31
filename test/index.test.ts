@@ -78,7 +78,7 @@ describe("display", () => {
 });
 
 describe("pit extension", () => {
-  it("registers clear model-facing usage metadata and activates the tool", () => {
+  it("registers clear model-facing usage metadata and activates the tool", async () => {
     expect(tool.label).toBe("TypeScript Workspace");
     expect(tool.promptSnippet).toContain("reusable functions");
     expect(tool.description).toContain("async ({ workspace, shell })");
@@ -160,7 +160,7 @@ describe("pit extension", () => {
       (tool.parameters.properties.params.description?.length ?? 0);
     expect(metadataChars).toBeLessThan(6500);
 
-    sessionStart({}, context());
+    await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
   });
 
@@ -358,7 +358,7 @@ describe("pit extension", () => {
 
   it("persists named functions on the active session branch", async () => {
     await value("async function persistent() { return { ok: true }; }");
-    sessionStart({}, context());
+    await sessionStart({}, context());
     expect(await value("persistent()")).toEqual({ ok: true });
 
     const previousBranch = [...branchEntries];

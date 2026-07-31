@@ -32,6 +32,7 @@ export let cwd: string;
 export let tool: RegisteredTool;
 export let sessionStart: (...args: any[]) => void;
 export let sessionTree: (...args: any[]) => void;
+export let beforeAgentStart: (...args: any[]) => any;
 export let branchEntries: any[];
 export let execMock: ReturnType<typeof vi.fn>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
@@ -44,6 +45,7 @@ export function context(overrides: Record<string, unknown> = {}) {
     model: { provider: "test", id: "model" },
     thinkingLevel: "medium",
     hasUI: true,
+    isProjectTrusted: () => true,
     ui: {
       confirm: vi.fn(async () => true),
       input: vi.fn(async () => "typed"),
@@ -120,6 +122,9 @@ export async function setupHarness(): Promise<void> {
       }
       if (event === "session_tree") {
         sessionTree = callback;
+      }
+      if (event === "before_agent_start") {
+        beforeAgentStart = callback;
       }
     }),
     appendEntry: vi.fn((customType: string, data: unknown) => {

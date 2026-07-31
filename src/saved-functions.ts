@@ -37,9 +37,10 @@ export type FunctionEntry =
   | { name: string; source: string; deleted?: never }
   | { name: string; deleted: true; source?: never };
 export interface FunctionActivity {
-  action: "set" | "run";
+  action: "set" | "run" | "remove";
   name: string;
   replaced?: boolean;
+  scope?: "project";
 }
 export function validateRegistryCapacity(
   registry: ReadonlyMap<string, string>,
@@ -122,6 +123,7 @@ class SavedFunctionViewer {
 export function reconstructFunctions(
   registry: FunctionRegistry,
   entries: readonly unknown[],
+  baseFunctions: ReadonlyMap<string, string> = new Map(),
 ): void {
   registry.clear();
   for (const raw of entries) {
@@ -148,8 +150,10 @@ export function reconstructFunctions(
       if (typeof definition.source !== "string") {
         continue;
       }
-      validateRegistryCapacity(registry, definition.name, definition.source);
-      validateTypeScript(definition.source, registry);
+      const available = new Map([...baseFunctions, ...registry]);
+      validateRegistryCapacity(available, definition.name, definition.source);
+      available.set(definition.name, definition.source);
+      validateTypeScript(definition.source, available);
       registry.set(definition.name, definition.source);
     } catch {
       // Ignore stale or malformed persisted definitions.
@@ -157,7 +161,11 @@ export function reconstructFunctions(
   }
 }
 
-export function registerFunctionManager(pi: ExtensionAPI, savedFunctions: FunctionRegistry): void {
+export function registerFunctionManager(
+  pi: ExtensionAPI,
+  savedFunctions: FunctionRegistry,
+  onChange?: () => void,
+): void {
   const functionSummary = () =>
     [...savedFunctions.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -225,6 +233,7 @@ export function registerFunctionManager(pi: ExtensionAPI, savedFunctions: Functi
         deleted: true,
       } satisfies FunctionEntry);
     }
+    onChange?.();
     ctx.ui.notify(
       `Deleted saved function${namesToDelete.size === 1 ? "" : "s"}: ${[...namesToDelete].join(", ")}`,
       "info",

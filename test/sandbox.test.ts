@@ -4,6 +4,7 @@ import {
   clearSandboxCaches,
   formatDiagnostic,
   getNamedFunctionName,
+  getProjectFunctionMetadata,
   getSandboxCacheStats,
   getSavedFunctionCallSignature,
   resolveSavedFunctionReferences,
@@ -299,6 +300,27 @@ describe("runInSandbox", () => {
       ),
     ).toBe("required(input: string)");
     expect(getSavedFunctionCallSignature("async () => null")).toBeUndefined();
+  });
+
+  it("extracts project function documentation", () => {
+    expect(getProjectFunctionMetadata("")).toBeUndefined();
+    expect(
+      getProjectFunctionMetadata("async function first() {} async function second() {}"),
+    ).toBeUndefined();
+    expect(
+      getProjectFunctionMetadata(`/**
+ * Documented helper.
+ *
+ * Details.
+ * @pit project
+ * @param input.raw
+ */
+async function documented(_capabilities, input) { return input; }`),
+    ).toEqual({
+      name: "documented",
+      summary: "Documented helper.",
+      parameters: [{ name: "input.raw" }],
+    });
   });
 
   it("contextually types expressions using active saved functions", () => {

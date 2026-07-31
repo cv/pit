@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
+  CONFIG_DIR_NAME,
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   highlightCode,
@@ -14,6 +15,7 @@ import { type RenderedResultValue, renderResultValue } from "./result-renderers.
 import {
   type CapabilityHandler,
   getNamedFunctionName,
+  getProjectFunctionMetadata,
   getSavedFunctionCallSignature,
   resolveSavedFunctionReferences,
   runInSandbox,
@@ -33,6 +35,14 @@ import {
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
 import { executeStreamingProcess } from "./host-process.js";
+import {
+  loadProjectFunctionConfig,
+  loadProjectFunctions,
+  type ProjectFunctionMetadataRegistry,
+  projectFunctionCatalog,
+  removeProjectFunction,
+  saveProjectFunction,
+} from "./project-functions.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
@@ -90,6 +100,31 @@ interface TypeScriptDetails {
   truncated: boolean;
   functions?: FunctionActivity[];
   progress?: ShellProgress[];
+}
+
+interface FunctionState {
+  projectEnabled: boolean;
+  project: FunctionRegistry;
+  session: FunctionRegistry;
+  effective: FunctionRegistry;
+  metadata: ProjectFunctionMetadataRegistry;
+}
+
+function refreshEffectiveFunctions(state: FunctionState): void {
+  state.effective.clear();
+  for (const [name, source] of state.project) {
+    state.effective.set(name, source);
+  }
+  for (const [name, source] of state.session) {
+    state.effective.set(name, source);
+  }
+}
+
+function effectiveRegistry(
+  project: ReadonlyMap<string, string>,
+  session: ReadonlyMap<string, string>,
+): FunctionRegistry {
+  return new Map([...project, ...session]);
 }
 
 function boundedInteger(
@@ -224,7 +259,7 @@ async function executeHostProcess(
 function createCapabilities(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
-  registry: FunctionRegistry,
+  functionState: FunctionState,
   activity: FunctionActivity[],
   onShellProgress?: (event: ShellProgressEvent) => void,
 ): CapabilityHandler {
@@ -343,7 +378,7 @@ function createCapabilities(
 
     if (capability === "__pit" && method === "savedFunctionRun") {
       const name = string(args[0], "saved function name");
-      if (!registry.has(name)) {
+      if (!functionState.effective.has(name)) {
         throw new Error(`Saved function "${name}" is unavailable`);
       }
       activity.push({ action: "run", name });
@@ -358,8 +393,46 @@ function createCapabilities(
         model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
         thinkingLevel: ctx.thinkingLevel,
         sessionFile: ctx.sessionManager.getSessionFile(),
-        savedFunctions: [...registry.keys()].sort(),
+        savedFunctions: [...functionState.effective.keys()].sort(),
+        projectFunctions: [...functionState.project.keys()].sort(),
+        sessionFunctions: [...functionState.session.keys()].sort(),
+        projectFunctionsEnabled: functionState.projectEnabled,
       };
+    }
+
+    if (capability === "functions") {
+      if (!ctx.isProjectTrusted()) {
+        throw new Error("Project functions require a trusted project");
+      }
+      if (!functionState.projectEnabled) {
+        throw new Error(
+          `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
+        );
+      }
+      const name = method === "list" ? undefined : string(args[0], "function name");
+      if (name !== undefined) {
+        validateSavedFunctionName(name);
+      }
+      if (method === "list") {
+        return [...functionState.metadata.values()].sort((a, b) => a.name.localeCompare(b.name));
+      }
+      if (method === "get") {
+        const source = functionState.project.get(name as string);
+        if (!source) {
+          throw new Error(`Project function "${name}" is unavailable`);
+        }
+        return { ...functionState.metadata.get(name as string), source };
+      }
+      if (method === "remove") {
+        const removed = await removeProjectFunction(ctx.cwd, name as string);
+        functionState.project.delete(name as string);
+        functionState.metadata.delete(name as string);
+        refreshEffectiveFunctions(functionState);
+        if (removed) {
+          activity.push({ action: "remove", name: name as string, scope: "project" });
+        }
+        return { name, removed };
+      }
     }
 
     /* v8 ignore next -- registry validation rejects unknown public calls before dispatch. */
@@ -560,9 +633,17 @@ function describeResult(
 }
 
 export default function pit(pi: ExtensionAPI) {
-  const savedFunctions: FunctionRegistry = new Map();
+  const functionState: FunctionState = {
+    projectEnabled: false,
+    project: new Map(),
+    session: new Map(),
+    effective: new Map(),
+    metadata: new Map(),
+  };
 
-  registerFunctionManager(pi, savedFunctions);
+  registerFunctionManager(pi, functionState.session, () =>
+    refreshEffectiveFunctions(functionState),
+  );
 
   pi.registerTool({
     name: "typescript",
@@ -586,7 +667,12 @@ export default function pit(pi: ExtensionAPI) {
     }),
     renderCall(args, theme, context) {
       const code = typeof args.code === "string" ? args.code : "";
-      const callLabel = describeCall(args.label, code, args.saveOnly === true, savedFunctions);
+      const callLabel = describeCall(
+        args.label,
+        code,
+        args.saveOnly === true,
+        functionState.effective,
+      );
       const lines = code ? highlightCode(code, "typescript") : [];
       const shown = context.expanded ? lines : [];
       const generation = generationTiming(context);
@@ -608,6 +694,43 @@ export default function pit(pi: ExtensionAPI) {
         text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
       }
 
+      const savedReferences = resolveSavedFunctionReferences(code, functionState.effective);
+      if (savedReferences.length > 0) {
+        if (context.expanded) {
+          let remaining = MAX_EXPANDED_SAVED_TOTAL_LINES;
+          for (const reference of savedReferences) {
+            if (remaining <= 0) {
+              break;
+            }
+            const highlighted = highlightCode(reference.source, "typescript");
+            const count = Math.min(
+              highlighted.length,
+              MAX_EXPANDED_SAVED_FUNCTION_LINES,
+              remaining,
+            );
+            const displayed = highlighted.slice(0, count);
+            const role = reference.direct ? "saved function" : "saved dependency";
+            text += `\n\n${theme.fg("toolTitle", theme.bold(`${role}: ${reference.name}`))}`;
+            text += `\n${displayed.join("\n")}`;
+            if (highlighted.length > count) {
+              text += `\n${theme.fg("muted", `… ${highlighted.length - count} source lines omitted`)}`;
+            }
+            remaining -= count;
+          }
+          const displayedCount = savedReferences.reduce(
+            (total, reference) =>
+              total +
+              Math.min(
+                highlightCode(reference.source, "typescript").length,
+                MAX_EXPANDED_SAVED_FUNCTION_LINES,
+              ),
+            0,
+          );
+          if (displayedCount > MAX_EXPANDED_SAVED_TOTAL_LINES) {
+            text += `\n${theme.fg("muted", "… additional saved source omitted by the 500-line display limit")}`;
+          }
+        }
+      }
       return new Text(text, 0, 0);
     },
     renderResult(result, { expanded, isPartial }, theme, context) {
@@ -741,29 +864,55 @@ export default function pit(pi: ExtensionAPI) {
           }
         : undefined;
       const namedFunction = getNamedFunctionName(params.code);
+      const projectMetadata = getProjectFunctionMetadata(params.code);
       if (params.saveOnly && namedFunction === undefined) {
         throw new Error("saveOnly requires a named top-level function");
       }
       if (params.saveOnly && params.params !== undefined) {
         throw new Error("saveOnly does not accept top-level params");
       }
-      let executionRegistry: FunctionRegistry = savedFunctions;
-      let replacedNamedFunction = false;
+      let executionRegistry = functionState.effective;
+      let candidateProject: FunctionRegistry | undefined;
+      let candidateSession: FunctionRegistry | undefined;
       if (namedFunction) {
         validateSavedFunctionName(namedFunction);
-        validateRegistryCapacity(savedFunctions, namedFunction, params.code);
-        const candidateRegistry = new Map(savedFunctions);
-        candidateRegistry.set(namedFunction, params.code);
-        // Validation compiles every candidate signature together, so replacements
-        // are rejected when they invalidate any dependent definition.
-        validateTypeScript(params.code, candidateRegistry, params.params);
-        executionRegistry = candidateRegistry;
-        replacedNamedFunction = savedFunctions.has(namedFunction);
-        functionActivity.push({
-          action: "set",
-          name: namedFunction,
-          replaced: replacedNamedFunction,
-        });
+        if (projectMetadata) {
+          if (!ctx.isProjectTrusted()) {
+            throw new Error("Project functions require a trusted project");
+          }
+          if (!functionState.projectEnabled) {
+            throw new Error(
+              `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
+            );
+          }
+          validateRegistryCapacity(functionState.project, namedFunction, params.code);
+          candidateProject = new Map(functionState.project);
+          candidateProject.set(namedFunction, params.code);
+          validateTypeScript(params.code, candidateProject, params.params);
+          candidateSession = new Map(functionState.session);
+          candidateSession.delete(namedFunction);
+          executionRegistry = effectiveRegistry(candidateProject, candidateSession);
+          validateTypeScript(params.code, executionRegistry, params.params);
+          functionActivity.push({
+            action: "set",
+            name: namedFunction,
+            replaced: functionState.project.has(namedFunction),
+            scope: "project",
+          });
+        } else {
+          validateRegistryCapacity(functionState.session, namedFunction, params.code);
+          candidateSession = new Map(functionState.session);
+          candidateSession.set(namedFunction, params.code);
+          executionRegistry = effectiveRegistry(functionState.project, candidateSession);
+          // Validation compiles every candidate signature together, so replacements
+          // are rejected when they invalidate any dependent definition.
+          validateTypeScript(params.code, executionRegistry, params.params);
+          functionActivity.push({
+            action: "set",
+            name: namedFunction,
+            replaced: functionState.session.has(namedFunction),
+          });
+        }
       }
       let value: unknown;
       if (params.saveOnly) {
@@ -771,7 +920,7 @@ export default function pit(pi: ExtensionAPI) {
       } else {
         value = await runInSandbox(
           params.code,
-          createCapabilities(pi, ctx, executionRegistry, functionActivity, onShellProgress),
+          createCapabilities(pi, ctx, functionState, functionActivity, onShellProgress),
           {
             ...(signal ? { signal } : {}),
             timeoutMs: params.timeoutMs ?? 30_000,
@@ -780,12 +929,27 @@ export default function pit(pi: ExtensionAPI) {
           },
         );
       }
-      if (namedFunction) {
+      if (namedFunction && projectMetadata && candidateProject && candidateSession) {
+        await saveProjectFunction(ctx.cwd, namedFunction, params.code, functionState.project);
+        functionState.metadata.set(namedFunction, projectMetadata);
+        if (functionState.session.has(namedFunction)) {
+          pi.appendEntry(FUNCTION_ENTRY_TYPE, {
+            name: namedFunction,
+            deleted: true,
+          } satisfies FunctionEntry);
+        }
+        functionState.session.clear();
+        for (const [name, source] of candidateSession) {
+          functionState.session.set(name, source);
+        }
+        refreshEffectiveFunctions(functionState);
+      } else if (namedFunction && candidateSession) {
         pi.appendEntry(FUNCTION_ENTRY_TYPE, {
           name: namedFunction,
           source: params.code,
         } satisfies FunctionEntry);
-        savedFunctions.set(namedFunction, params.code);
+        functionState.session.set(namedFunction, params.code);
+        refreshEffectiveFunctions(functionState);
       }
       const rendered = display(value);
       const output = truncateHead(rendered, {
@@ -794,8 +958,8 @@ export default function pit(pi: ExtensionAPI) {
       });
       const savedNotice = namedFunction
         ? params.saveOnly
-          ? `\n[Saved function "${namedFunction}" without executing it. Invoke later with: ${namedFunction}()]`
-          : `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
+          ? `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}" without executing it. Invoke later with: ${namedFunction}()]`
+          : `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}". Invoke later with: ${namedFunction}()]`
         : "";
       return {
         content: [
@@ -805,7 +969,7 @@ export default function pit(pi: ExtensionAPI) {
               output.content +
               (output.truncated ? "\n[Result truncated]" : "") +
               savedNotice +
-              savedFunctionCatalogNotice(savedFunctions),
+              savedFunctionCatalogNotice(functionState.effective),
           },
         ],
         details: {
@@ -817,11 +981,44 @@ export default function pit(pi: ExtensionAPI) {
     },
   });
 
-  pi.on("session_start", (_event, ctx) => {
-    reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
+  pi.on("session_start", async (_event, ctx) => {
+    const config = await loadProjectFunctionConfig(ctx);
+    functionState.projectEnabled = config.enabled;
+    const errors = config.enabled
+      ? await loadProjectFunctions(ctx, functionState.project, functionState.metadata)
+      : [];
+    if (!config.enabled) {
+      functionState.project.clear();
+      functionState.metadata.clear();
+    }
+    reconstructFunctions(
+      functionState.session,
+      ctx.sessionManager.getBranch(),
+      functionState.project,
+    );
+    refreshEffectiveFunctions(functionState);
+    if (config.error && ctx.hasUI) {
+      ctx.ui.notify(config.error, "warning");
+    }
+    if (errors.length > 0 && ctx.hasUI) {
+      const shown = errors.slice(0, 3).join("; ");
+      const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
+      ctx.ui.notify(`Some project functions could not be loaded: ${shown}${omitted}`, "warning");
+    }
     pi.setActiveTools(["typescript"]);
   });
   pi.on("session_tree", (_event, ctx) => {
-    reconstructFunctions(savedFunctions, ctx.sessionManager.getBranch());
+    reconstructFunctions(
+      functionState.session,
+      ctx.sessionManager.getBranch(),
+      functionState.project,
+    );
+    refreshEffectiveFunctions(functionState);
+  });
+  pi.on("before_agent_start", (event) => {
+    const catalog = projectFunctionCatalog(functionState.metadata);
+    if (catalog) {
+      return { systemPrompt: `${event.systemPrompt}\n\n${catalog}` };
+    }
   });
 }
