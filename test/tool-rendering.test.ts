@@ -22,7 +22,7 @@ describe("tool rendering", () => {
     expect(collapsedLines[0]).not.toContain("timeout=");
     expect(collapsedLines[0]).toContain("\u001b[1m");
     expect(collapsedLines[0]).toContain("› ");
-    expect(collapsedLines[1]?.trim()).toBe("");
+    expect(collapsedLines).toHaveLength(1);
     expect(collapsed).not.toContain("source line 1");
     expect(collapsed).not.toContain("more lines");
 
@@ -69,6 +69,19 @@ describe("tool rendering", () => {
 
     const waiting = renderToolCall({ code: undefined }, { expanded: true, argsComplete: false });
     expect(waiting).toContain("waiting for source…");
+  });
+
+  it("keeps hidden call and result descriptions on adjacent lines", () => {
+    const call = renderToolCall(
+      { label: "Render generated TypeScript", code: "return value" },
+      { expanded: false, argsComplete: true },
+    );
+    const result = renderToolResult(
+      { content: [], details: { value: { value: true }, truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+
+    expect(`${call}\n${result}`.split("\n")).toHaveLength(2);
   });
 
   it("updates generation time every 200ms and freezes when a final result arrives", () => {
@@ -148,9 +161,9 @@ describe("tool rendering", () => {
     expect(collapsed).not.toContain("functions:");
     expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines, 0.0s)");
     const resultLines = collapsed.split("\n");
-    expect(resultLines[0]?.trim()).toBe("");
-    expect(resultLines[1]).toContain("\u001b[1m");
-    expect(resultLines[1]).toContain("✓ ");
+    expect(resultLines).toHaveLength(1);
+    expect(resultLines[0]).toContain("\u001b[1m");
+    expect(resultLines[0]).toContain("✓ ");
     expect(collapsed).not.toContain('"key1"');
     expect(collapsed).not.toContain("more lines");
 

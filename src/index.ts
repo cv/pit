@@ -588,11 +588,9 @@ export default function pit(pi: ExtensionAPI) {
       if (args.saveOnly === true) {
         text += theme.fg("accent", " save-only");
       }
-      if (!context.expanded) {
-        text += "\n";
-      } else if (shown.length > 0) {
+      if (context.expanded && shown.length > 0) {
         text += `\n\n${shown.join("\n")}`;
-      } else {
+      } else if (context.expanded) {
         text += `\n\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
       }
 
@@ -631,7 +629,7 @@ export default function pit(pi: ExtensionAPI) {
       if (context.isError) {
         const message = fallback || "TypeScript execution failed";
         return new Text(
-          `\n${theme.bold(
+          `${expanded ? "\n" : ""}${theme.bold(
             theme.fg("error", `✗ ${callLabel}`) + theme.fg("dim", ` (${executionDuration})`),
           )}\n${theme.fg("error", message)}`,
           0,
@@ -678,7 +676,7 @@ export default function pit(pi: ExtensionAPI) {
       const resultMarker = details?.truncated
         ? theme.fg("warning", "… ")
         : theme.fg("success", "✓ ");
-      let text = `\n${theme.bold(
+      let text = `${expanded ? "\n" : ""}${theme.bold(
         resultMarker +
           theme.fg("toolTitle", resultLabel) +
           theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
