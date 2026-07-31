@@ -1,3 +1,4 @@
+import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { display } from "../src/index.js";
 import { cleanupHarness, setupHarness, tool } from "./extension-fixture.js";
@@ -262,5 +263,43 @@ describe("result renderers", () => {
     expect(render({ ...readValue, content: "not-a-hashed-line" }, 40).join("\n")).toContain(
       "not-a-hashed-line",
     );
+  });
+
+  it("syntax highlights hashed contents independently from their line prefixes", () => {
+    const theme = {
+      fg: (color: string, text: string) =>
+        color === "dim" ? `\u001b[2m\u001b[90m${text}\u001b[39m\u001b[22m` : text,
+      bold: (text: string) => text,
+    };
+    const source = "const answer = 42;\n/* first\nsecond */";
+    const prefixes = ["1:aaa|", "2:bbb|", "3:ccc|"];
+    const component = tool.renderResult?.(
+      {
+        content: [{ type: "text", text: source }],
+        details: {
+          value: {
+            file: "src/example.ts",
+            format: "hashed",
+            content: prefixes
+              .map((prefix, index) => `${prefix}${source.split("\n")[index]}`)
+              .join("\n"),
+            revision: "rev-syntax",
+            lines: 3,
+          },
+          truncated: false,
+        },
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      { isError: false },
+    );
+    const rendered = component?.render(120) ?? [];
+    const highlighted = highlightCode(source, "typescript");
+
+    for (const [index, prefix] of prefixes.entries()) {
+      const line = rendered.find((candidate) => candidate.includes(prefix));
+      expect(line).toContain(`\u001b[2m\u001b[90m${prefix}\u001b[22m`);
+      expect(line).toContain(highlighted[index]);
+    }
   });
 });

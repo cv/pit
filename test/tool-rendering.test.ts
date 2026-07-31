@@ -41,10 +41,7 @@ describe("tool rendering", () => {
     const empty = renderToolCall({ code: "" }, { expanded: false, argsComplete: true });
     expect(empty).toContain("empty source");
 
-    const partial = renderToolCall(
-      { code: undefined },
-      { expanded: false, argsComplete: false },
-    );
+    const partial = renderToolCall({ code: undefined }, { expanded: false, argsComplete: false });
     expect(partial).toContain("generating…");
     expect(partial).toContain("waiting for source…");
   });
@@ -156,11 +153,7 @@ describe("tool rendering", () => {
     );
     expect(error).toContain("bad code");
     expect(
-      renderToolResult(
-        { content: [] },
-        { expanded: false, isPartial: false },
-        { isError: true },
-      ),
+      renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");
   });
 });

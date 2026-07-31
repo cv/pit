@@ -88,6 +88,32 @@ function languageForFile(file: string): string {
   const extension = file.toLowerCase().split(".").pop();
   return FILE_LANGUAGES[extension ?? ""] ?? "text";
 }
+function renderHashedFile(
+  content: string,
+  file: string,
+  theme: ResultTheme,
+): { lines: string[]; hangingIndents: Record<number, number> } {
+  const parsed = content.split("\n").map((line) => {
+    const match = line.match(HASHED_LINE_PATTERN);
+    return match
+      ? { prefix: match[1] as string, content: match[2] as string }
+      : { prefix: undefined, content: line };
+  });
+  const highlighted = highlightCode(
+    parsed.map((line) => line.content).join("\n"),
+    languageForFile(file),
+  );
+  const hangingIndents: Record<number, number> = {};
+  const lines = parsed.map((line, index) => {
+    const highlightedContent = highlighted[index] ?? line.content;
+    if (line.prefix === undefined) {
+      return highlightedContent;
+    }
+    hangingIndents[index] = line.prefix.length;
+    return `${theme.fg("dim", line.prefix)}${highlightedContent}`;
+  });
+  return { lines, hangingIndents };
+}
 
 function renderShell(value: unknown, { theme }: RenderContext): RenderedResultValue | undefined {
   if (
@@ -163,16 +189,9 @@ function renderRead(value: unknown, { theme }: RenderContext): RenderedResultVal
     if (value.format === "raw") {
       contentLines = highlightCode(value.content, languageForFile(value.file));
     } else {
-      contentLines = value.content.split("\n").map((line, index) => {
-        const match = line.match(HASHED_LINE_PATTERN);
-        if (!match) {
-          return line;
-        }
-        const prefix = match[1] as string;
-        const content = match[2] as string;
-        detailHangingIndents[index] = prefix.length;
-        return `${theme.fg("dim", prefix)}${content}`;
-      });
+      const rendered = renderHashedFile(value.content, value.file, theme);
+      contentLines = rendered.lines;
+      Object.assign(detailHangingIndents, rendered.hangingIndents);
     }
     lines.push(...contentLines);
   } else {
