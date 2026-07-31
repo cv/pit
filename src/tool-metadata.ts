@@ -8,7 +8,7 @@ export const PROMPT_GUIDELINES = [
   "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
   "Call typescript with an anonymous async function for one-shot work, passing large or quote-heavy data through top-level params; use a named async function for recurring work or a call such as runTests() to invoke a saved function.",
   "Code passed to typescript is contextually type-checked; use diagnostics to correct capability names, arguments, missing awaits, and result types.",
-  "In typescript, use Promise.all for fail-fast independent work; use Promise.allSettled or local catches when exploratory probes are optional; sequence dependencies and conflicting mutations.",
+  "In typescript, prefer one tool invocation per step; batch independent capability calls with Promise.all inside it instead of issuing multiple parallel typescript calls. Use Promise.allSettled or local catches for optional probes, and sequence dependencies and conflicting mutations.",
   "In typescript, use workspace.read's default hashed mode in a prior call or workspace.search to obtain a revision and anchors before editing; on mismatch, re-read instead of retrying stale anchors, and use raw mode only for machine parsing.",
   "Before an anonymous typescript call, compare the workflow with recent calls and saved functions; on the second substantially similar workflow, define or extend a parameterized named function instead of repeating inline code.",
   "In typescript, prefer matching signatures from the saved-function catalog in prior results; compose saved functions into workflows named after user intent.",
