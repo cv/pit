@@ -218,7 +218,7 @@ describe("pit extension", () => {
     }`);
     expect(defined.details.value).toEqual({ greeting: "Hello, world!" });
     expect(defined.details.functions).toEqual([{ action: "set", name: "greet", replaced: false }]);
-    expect(defined.content[0].text).toContain("Invoke later with: greet()");
+    expect(defined.content[0].text).toContain("Invoke later with: greet(input: unknown)");
     expect(defined.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
@@ -274,6 +274,30 @@ describe("pit extension", () => {
         customType: "pit-functions",
         data: { name: "deferred", source },
       }),
+    );
+
+    const saveOnlyNotice = async (code: string): Promise<string> => {
+      const result = await tool.execute(
+        "call-id",
+        { code, saveOnly: true },
+        undefined,
+        undefined,
+        context(),
+      );
+      return result.content[0].text;
+    };
+    expect(
+      await saveOnlyNotice(
+        "async function requiredNotice(_capabilities, input: { value: string }) { return input.value; }",
+      ),
+    ).toContain("Invoke later with: requiredNotice(input: { value: string })");
+    expect(
+      await saveOnlyNotice(
+        "async function optionalNotice(_capabilities, input?: number) { return input; }",
+      ),
+    ).toContain("Invoke later with: optionalNotice(input?: number)");
+    expect(await saveOnlyNotice("async function noInputNotice() { return null; }")).toContain(
+      "Invoke later with: noInputNotice()",
     );
 
     await tool.execute("call-id", { code: "deferred()" }, undefined, undefined, context());

@@ -218,5 +218,11 @@ describe("project function storage", () => {
     expect(catalog).toContain("input: value to use");
     expect(catalog).toContain("input.raw");
     expect(catalog).toContain("1 more; use functions.list()");
+
+    const unparsableOverride = projectFunctionCatalog(docs, new Map([["alpha", "not a function"]]));
+    expect(unparsableOverride).toContain("- alpha — Session override of project function.");
+    expect(unparsableOverride).not.toContain("alpha(");
+    expect(unparsableOverride).not.toContain("Alpha helper");
+    expect(unparsableOverride).not.toContain("input: value to use");
   });
 });

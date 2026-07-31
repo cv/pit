@@ -92,6 +92,30 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     await value(`async function projectGreeting() { return { greeting: "session" }; }`);
     expect(await value("projectGreeting()")).toEqual({ greeting: "session" });
 
+    const differentlyShapedCatalog = beforeAgentStart({ systemPrompt: "base" }, context());
+    expect(differentlyShapedCatalog.systemPrompt).toContain(
+      "projectGreeting() — Session override of project function.",
+    );
+    expect(differentlyShapedCatalog.systemPrompt).not.toContain(
+      "Greets someone using the project convention.",
+    );
+    expect(differentlyShapedCatalog.systemPrompt).not.toContain("input.name: Name to greet.");
+
+    await value(`async function projectGreeting(
+      _capabilities,
+      input: { name?: string } = {},
+    ) { return { greeting: "session " + (input.name ?? "override") }; }`);
+    expect(await value(`projectGreeting({ name: "Pi" })`)).toEqual({ greeting: "session Pi" });
+
+    const sameShapedCatalog = beforeAgentStart({ systemPrompt: "base" }, context());
+    expect(sameShapedCatalog.systemPrompt).toContain(
+      "projectGreeting(input?: { name?: string }) — Session override of project function.",
+    );
+    expect(sameShapedCatalog.systemPrompt).not.toContain(
+      "Greets someone using the project convention.",
+    );
+    expect(sameShapedCatalog.systemPrompt).not.toContain("input.name: Name to greet.");
+
     setBranchEntries([]);
     await sessionStart({}, context());
     expect(await value(`projectGreeting({ name: "Pi" })`)).toEqual({ greeting: "Hello, Pi" });

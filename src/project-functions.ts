@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   getProjectFunctionMetadata,
+  getSavedFunctionCallSignature,
   type ProjectFunctionMetadata,
   resolveSavedFunctionReferences,
   validateTypeScript,
@@ -333,6 +334,7 @@ export function reconcileProjectFunctionsForSession(
 
 export function projectFunctionCatalog(
   metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  sessionFunctions: ReadonlyMap<string, string> = new Map(),
 ): string {
   if (metadata.size === 0) {
     return "";
@@ -349,8 +351,15 @@ export function projectFunctionCatalog(
     if (shown >= MAX_PROJECT_FUNCTIONS) {
       break;
     }
-    const addition = [`- ${entry.signature} — ${entry.summary.replace(/\s+/g, " ").trim()}`];
-    for (const parameter of entry.parameters) {
+    const isSessionOverride = sessionFunctions.has(entry.name);
+    const effectiveSignature = isSessionOverride
+      ? getSavedFunctionCallSignature(sessionFunctions.get(entry.name) ?? "")
+      : entry.signature;
+    const addition = isSessionOverride
+      ? [`- ${effectiveSignature ?? entry.name} — Session override of project function.`]
+      : [`- ${entry.signature} — ${entry.summary.replace(/\s+/g, " ").trim()}`];
+    const parameters = isSessionOverride ? [] : entry.parameters;
+    for (const parameter of parameters) {
       const description = parameter.description
         ? `: ${parameter.description.replace(/\s+/g, " ").trim()}`
         : "";

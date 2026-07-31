@@ -1080,10 +1080,14 @@ export default function pit(pi: ExtensionAPI) {
         maxBytes: DEFAULT_MAX_BYTES,
         maxLines: DEFAULT_MAX_LINES,
       });
+      const savedSignature = namedFunction
+        ? getSavedFunctionCallSignature(functionState.effective.get(namedFunction) ?? "")
+        : undefined;
+      const invocationGuidance = savedSignature ? `. Invoke later with: ${savedSignature}` : ".";
       const savedNotice = namedFunction
         ? params.saveOnly
-          ? `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}" without executing it. Invoke later with: ${namedFunction}()]`
-          : `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}". Invoke later with: ${namedFunction}()]`
+          ? `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}" without executing it${invocationGuidance}]`
+          : `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}"${invocationGuidance}]`
         : "";
       return {
         content: [
@@ -1146,7 +1150,7 @@ export default function pit(pi: ExtensionAPI) {
     reconcileFunctionState(functionState);
   });
   pi.on("before_agent_start", (event) => {
-    const catalog = projectFunctionCatalog(functionState.metadata);
+    const catalog = projectFunctionCatalog(functionState.metadata, functionState.session);
     if (catalog) {
       return { systemPrompt: `${event.systemPrompt}\n\n${catalog}` };
     }
