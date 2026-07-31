@@ -121,14 +121,18 @@ describe("tool rendering", () => {
       const context = { state, invalidate, args: { label: "Run command", code: "" } };
       const partialResult = { content: [], details: undefined };
 
-      expect(
-        renderToolResult(partialResult, { expanded: false, isPartial: true }, context),
-      ).toContain("Run command (0.0s)");
+      const started = renderToolResult(
+        partialResult,
+        { expanded: false, isPartial: true },
+        context,
+      );
+      expect(started).toContain("Running... (0.0s)");
+      expect(started).not.toContain("Run command");
       vi.advanceTimersByTime(400);
       expect(invalidate).toHaveBeenCalledTimes(2);
       expect(
         renderToolResult(partialResult, { expanded: false, isPartial: true }, context),
-      ).toContain("Run command (0.4s)");
+      ).toContain("Running... (0.4s)");
 
       const completed = renderToolResult(
         partialResult,
@@ -235,7 +239,7 @@ describe("tool rendering", () => {
       { content: [], details: undefined },
       { expanded: true, isPartial: true },
     );
-    expect(partial).toContain("… Run workspace task (0.0s)");
+    expect(partial).toContain("… Running... (0.0s)");
 
     const streaming = renderToolResult(
       {

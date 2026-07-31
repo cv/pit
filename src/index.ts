@@ -600,19 +600,11 @@ export default function pit(pi: ExtensionAPI) {
       const content = result.content[0];
       const fallback = content?.type === "text" ? content.text : "";
       const details = result.details as TypeScriptDetails | undefined;
-      const callArgs = context.args ?? {};
-      const callCode = typeof callArgs.code === "string" ? callArgs.code : "";
-      const callLabel = describeCall(
-        callArgs.label,
-        callCode,
-        callArgs.saveOnly === true,
-        savedFunctions,
-      );
       const executionDuration = executionTiming(context, !isPartial || context.isError);
       if (isPartial) {
         let text = theme.bold(
           theme.fg("warning", "… ") +
-            theme.fg("toolTitle", callLabel) +
+            theme.fg("toolTitle", "Running...") +
             theme.fg("dim", ` (${executionDuration})`),
         );
         if (expanded) {
