@@ -110,6 +110,20 @@ interface FunctionState {
   metadata: ProjectFunctionMetadataRegistry;
 }
 
+type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promise<T>;
+
+function createFunctionStateCommitQueue(): FunctionStateCommit {
+  let tail = Promise.resolve();
+  return <T>(operation: () => Promise<T> | T): Promise<T> => {
+    const result = tail.then(operation);
+    tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+}
+
 function refreshEffectiveFunctions(state: FunctionState): void {
   state.effective.clear();
   for (const [name, source] of state.project) {
@@ -327,6 +341,8 @@ function createCapabilities(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   functionState: FunctionState,
+
+  commitFunctionState: FunctionStateCommit,
   activity: FunctionActivity[],
   onShellProgress?: (event: ShellProgressEvent) => void,
 ): CapabilityHandler {
@@ -491,28 +507,31 @@ function createCapabilities(
         return { ...functionState.metadata.get(name as string), source };
       }
       if (method === "remove") {
-        if (functionState.project.has(name as string)) {
-          const dependents = savedFunctionDependents(functionState, name as string);
-          if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
-            const details = [
-              dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",
-              dependents.transitive.length > 0
-                ? `transitive: ${dependents.transitive.join(", ")}`
-                : "",
-            ].filter(Boolean);
-            throw new Error(
-              `Cannot remove project function "${name}"; dependent saved functions remain (${details.join("; ")})`,
-            );
+        return commitFunctionState(async () => {
+          const functionName = name as string;
+          if (functionState.project.has(functionName)) {
+            const dependents = savedFunctionDependents(functionState, functionName);
+            if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
+              const details = [
+                dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",
+                dependents.transitive.length > 0
+                  ? `transitive: ${dependents.transitive.join(", ")}`
+                  : "",
+              ].filter(Boolean);
+              throw new Error(
+                `Cannot remove project function "${name}"; dependent saved functions remain (${details.join("; ")})`,
+              );
+            }
           }
-        }
-        const removed = await removeProjectFunction(ctx.cwd, name as string);
-        functionState.project.delete(name as string);
-        functionState.metadata.delete(name as string);
-        refreshEffectiveFunctions(functionState);
-        if (removed) {
-          activity.push({ action: "remove", name: name as string, scope: "project" });
-        }
-        return { name, removed };
+          const removed = await removeProjectFunction(ctx.cwd, functionName);
+          functionState.project.delete(functionName);
+          functionState.metadata.delete(functionName);
+          refreshEffectiveFunctions(functionState);
+          if (removed) {
+            activity.push({ action: "remove", name: functionName, scope: "project" });
+          }
+          return { name, removed };
+        });
       }
     }
 
@@ -721,6 +740,8 @@ export default function pit(pi: ExtensionAPI) {
     effective: new Map(),
     metadata: new Map(),
   };
+
+  const commitFunctionState = createFunctionStateCommitQueue();
 
   registerFunctionManager(pi, functionState.session, () =>
     refreshEffectiveFunctions(functionState),
@@ -937,12 +958,6 @@ export default function pit(pi: ExtensionAPI) {
           candidateSession.delete(namedFunction);
           executionRegistry = effectiveRegistry(candidateProject, candidateSession);
           validateTypeScript(params.code, executionRegistry, params.params);
-          functionActivity.push({
-            action: "set",
-            name: namedFunction,
-            replaced: functionState.project.has(namedFunction),
-            scope: "project",
-          });
         } else {
           validateRegistryCapacity(functionState.effective, namedFunction, params.code);
           candidateSession = new Map(functionState.session);
@@ -951,11 +966,6 @@ export default function pit(pi: ExtensionAPI) {
           // Validation compiles every candidate signature together, so replacements
           // are rejected when they invalidate any dependent definition.
           validateTypeScript(params.code, executionRegistry, params.params);
-          functionActivity.push({
-            action: "set",
-            name: namedFunction,
-            replaced: functionState.session.has(namedFunction),
-          });
         }
       }
       let value: unknown;
@@ -964,7 +974,14 @@ export default function pit(pi: ExtensionAPI) {
       } else {
         value = await runInSandbox(
           params.code,
-          createCapabilities(pi, ctx, functionState, functionActivity, onShellProgress),
+          createCapabilities(
+            pi,
+            ctx,
+            functionState,
+            commitFunctionState,
+            functionActivity,
+            onShellProgress,
+          ),
           {
             ...(signal ? { signal } : {}),
             timeoutMs: params.timeoutMs ?? 30_000,
@@ -974,26 +991,57 @@ export default function pit(pi: ExtensionAPI) {
         );
       }
       if (namedFunction && projectMetadata && candidateProject && candidateSession) {
-        await saveProjectFunction(ctx.cwd, namedFunction, params.code, functionState.project);
-        functionState.metadata.set(namedFunction, projectMetadata);
-        if (functionState.session.has(namedFunction)) {
+        await commitFunctionState(async () => {
+          validateRegistryCapacity(functionState.effective, namedFunction, params.code);
+          const currentProject = new Map(functionState.project);
+          currentProject.set(namedFunction, params.code);
+          validateTypeScript(params.code, currentProject, params.params);
+          const currentSession = new Map(functionState.session);
+          currentSession.delete(namedFunction);
+          validateTypeScript(
+            params.code,
+            effectiveRegistry(currentProject, currentSession),
+            params.params,
+          );
+
+          const replaced = functionState.project.has(namedFunction);
+          await saveProjectFunction(ctx.cwd, namedFunction, params.code, functionState.project);
+          functionState.metadata.set(namedFunction, projectMetadata);
+          if (functionState.session.has(namedFunction)) {
+            pi.appendEntry(FUNCTION_ENTRY_TYPE, {
+              name: namedFunction,
+              deleted: true,
+            } satisfies FunctionEntry);
+          }
+          functionState.session.delete(namedFunction);
+          refreshEffectiveFunctions(functionState);
+          functionActivity.push({
+            action: "set",
+            name: namedFunction,
+            replaced,
+            scope: "project",
+          });
+        });
+      } else if (namedFunction && candidateSession) {
+        await commitFunctionState(() => {
+          validateRegistryCapacity(functionState.effective, namedFunction, params.code);
+          const currentSession = new Map(functionState.session);
+          currentSession.set(namedFunction, params.code);
+          validateTypeScript(
+            params.code,
+            effectiveRegistry(functionState.project, currentSession),
+            params.params,
+          );
+
+          const replaced = functionState.session.has(namedFunction);
           pi.appendEntry(FUNCTION_ENTRY_TYPE, {
             name: namedFunction,
-            deleted: true,
+            source: params.code,
           } satisfies FunctionEntry);
-        }
-        functionState.session.clear();
-        for (const [name, source] of candidateSession) {
-          functionState.session.set(name, source);
-        }
-        refreshEffectiveFunctions(functionState);
-      } else if (namedFunction && candidateSession) {
-        pi.appendEntry(FUNCTION_ENTRY_TYPE, {
-          name: namedFunction,
-          source: params.code,
-        } satisfies FunctionEntry);
-        functionState.session.set(namedFunction, params.code);
-        refreshEffectiveFunctions(functionState);
+          functionState.session.set(namedFunction, params.code);
+          refreshEffectiveFunctions(functionState);
+          functionActivity.push({ action: "set", name: namedFunction, replaced });
+        });
       }
       const rendered = display(value);
       const output = truncateHead(rendered, {
