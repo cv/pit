@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupHarness,
   renderToolCall,
@@ -18,8 +18,8 @@ describe("tool rendering", () => {
       { expanded: false, argsComplete: true },
     );
     const collapsedLines = collapsed.split("\n");
-    expect(collapsedLines[0]).toContain("Render generated TypeScript (15 lines)");
-    expect(collapsedLines[0]).toContain("timeout=5000ms");
+    expect(collapsedLines[0]).toContain("Render generated TypeScript (15 lines, 0.0s)");
+    expect(collapsedLines[0]).not.toContain("timeout=");
     expect(collapsedLines[0]).toContain("\u001b[1m");
     expect(collapsedLines[0]).toContain("› ");
     expect(collapsedLines[1]?.trim()).toBe("");
@@ -27,7 +27,7 @@ describe("tool rendering", () => {
     expect(collapsed).not.toContain("more lines");
 
     const expanded = renderToolCall({ code }, { expanded: true, argsComplete: true });
-    expect(expanded).toContain("Run workspace task (15 lines)");
+    expect(expanded).toContain("Run workspace task (15 lines, 0.0s)");
     expect(expanded).toContain("source line 15");
     expect(expanded).not.toContain("more lines");
 
@@ -35,13 +35,13 @@ describe("tool rendering", () => {
       { code: "return 1" },
       { expanded: false, argsComplete: true },
     );
-    expect(singleLine).toContain("1 line)");
+    expect(singleLine).toContain("1 line, 0.0s)");
 
     const saveOnly = renderToolCall(
       { code: "async function later() {}", saveOnly: true },
       { expanded: false, argsComplete: true },
     );
-    expect(saveOnly).toContain("Save later (1 line)");
+    expect(saveOnly).toContain("Save later (1 line, 0.0s)");
     expect(saveOnly).toContain("save-only");
 
     const empty = renderToolCall({ code: "" }, { expanded: false, argsComplete: true });
@@ -50,8 +50,29 @@ describe("tool rendering", () => {
     expect(expandedEmpty).toContain("empty source");
 
     const partial = renderToolCall({ code: undefined }, { expanded: false, argsComplete: false });
-    expect(partial).toContain("generating…");
+    expect(partial).toContain("generating... 0.0s");
     expect(partial).not.toContain("waiting for source…");
+  });
+
+  it("updates generation time every 200ms and freezes when arguments complete", () => {
+    vi.useFakeTimers();
+    try {
+      const state = {};
+      const invalidate = vi.fn();
+      const context = { expanded: false, argsComplete: false, state, invalidate };
+
+      expect(renderToolCall({ code: undefined }, context)).toContain("generating... 0.0s");
+      vi.advanceTimersByTime(400);
+      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(renderToolCall({ code: undefined }, context)).toContain("generating... 0.4s");
+
+      const completed = renderToolCall({ code: "return 1" }, { ...context, argsComplete: true });
+      expect(completed).toContain("1 line, 0.4s");
+      vi.advanceTimersByTime(400);
+      expect(invalidate).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders result values as highlighted JSON", () => {

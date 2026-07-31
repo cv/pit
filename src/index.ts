@@ -48,6 +48,7 @@ export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
 const CAPABILITY_CALL_PATTERN = /\b(workspace|shell|http|ui|context)\.(\w+)\s*\(/;
+const GENERATION_TIMER_INTERVAL_MS = 200;
 
 interface ShellProgress {
   id: number;
@@ -55,6 +56,12 @@ interface ShellProgress {
   status: "running" | "done";
   output: string;
   code?: number;
+}
+
+interface TypeScriptRendererState {
+  generationStartedAt?: number;
+  generationCompletedAt?: number;
+  generationTimer: ReturnType<typeof setInterval> | undefined;
 }
 
 type HostShellProgressEvent =
@@ -401,6 +408,31 @@ function normalizedLabel(value: unknown): string | undefined {
   return label || undefined;
 }
 
+function generationDuration(context: {
+  argsComplete: boolean;
+  state?: unknown;
+  invalidate?: () => void;
+}): string {
+  const state =
+    context.state && typeof context.state === "object"
+      ? (context.state as TypeScriptRendererState)
+      : ({} as TypeScriptRendererState);
+  const now = Date.now();
+  state.generationStartedAt ??= now;
+  if (context.argsComplete) {
+    state.generationCompletedAt ??= now;
+    if (state.generationTimer) {
+      clearInterval(state.generationTimer);
+      state.generationTimer = undefined;
+    }
+  } else if (!state.generationTimer && context.invalidate) {
+    state.generationTimer = setInterval(context.invalidate, GENERATION_TIMER_INTERVAL_MS);
+    (state.generationTimer as { unref?: () => void }).unref?.();
+  }
+  const elapsed = (state.generationCompletedAt ?? now) - state.generationStartedAt;
+  return `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`;
+}
+
 function describeCall(
   label: unknown,
   code: string,
@@ -507,17 +539,15 @@ export default function pit(pi: ExtensionAPI) {
       const callLabel = describeCall(args.label, code, args.saveOnly === true, savedFunctions);
       const lines = code ? highlightCode(code, "typescript") : [];
       const shown = context.expanded ? lines : [];
+      const duration = generationDuration(context);
       const state = context.argsComplete
-        ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
-        : "generating…";
+        ? `${lines.length} line${lines.length === 1 ? "" : "s"}, ${duration}`
+        : `generating... ${duration}`;
       let text = theme.bold(
         theme.fg("accent", "› ") +
           theme.fg("toolTitle", callLabel) +
           theme.fg("dim", ` (${state})`),
       );
-      if (args.timeoutMs !== undefined) {
-        text += theme.fg("dim", ` timeout=${args.timeoutMs}ms`);
-      }
       if (args.saveOnly === true) {
         text += theme.fg("accent", " save-only");
       }
