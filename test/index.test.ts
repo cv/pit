@@ -102,11 +102,12 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(10);
+    expect(tool.promptGuidelines).toHaveLength(11);
     expect(tool.promptGuidelines?.join("\n")).toContain("top-level params");
     expect(tool.promptGuidelines).toContain(
       "In typescript, use Promise.all for fail-fast independent work; use Promise.allSettled or local catches when exploratory probes are optional; sequence dependencies and conflicting mutations.",
     );
+    expect(tool.promptGuidelines?.join("\n")).toContain("second substantially similar workflow");
     expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(
       true,
     );

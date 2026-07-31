@@ -10,6 +10,7 @@ export const PROMPT_GUIDELINES = [
   "Code passed to typescript is contextually type-checked; use diagnostics to correct capability names, arguments, missing awaits, and result types.",
   "In typescript, use Promise.all for fail-fast independent work; use Promise.allSettled or local catches when exploratory probes are optional; sequence dependencies and conflicting mutations.",
   "In typescript, use workspace.read's default hashed mode in a prior call or workspace.search to obtain a revision and anchors before editing; on mismatch, re-read instead of retrying stale anchors, and use raw mode only for machine parsing.",
+  "Before an anonymous typescript call, compare the workflow with recent calls and saved functions; on the second substantially similar workflow, define or extend a parameterized named function instead of repeating inline code.",
   "In typescript, use named functions for recurring workflows and compose saved functions into higher-level functions named after user intent.",
   "In typescript, annotate saved-function input parameters so initial params and later calls retain type checking.",
   "In typescript, prefer shell.execFile(program, args) for ordinary commands; use shell.exec only for shell syntax such as pipes or redirection.",
