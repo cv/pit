@@ -47,8 +47,6 @@ import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
 export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
-const MAX_EXPANDED_SAVED_FUNCTION_LINES = 200;
-const MAX_EXPANDED_SAVED_TOTAL_LINES = 500;
 const CAPABILITY_CALL_PATTERN = /\b(workspace|shell|http|ui|context)\.(\w+)\s*\(/;
 
 interface ShellProgress {
@@ -531,43 +529,6 @@ export default function pit(pi: ExtensionAPI) {
         text += `\n\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
       }
 
-      const savedReferences = resolveSavedFunctionReferences(code, savedFunctions);
-      if (savedReferences.length > 0) {
-        if (context.expanded) {
-          let remaining = MAX_EXPANDED_SAVED_TOTAL_LINES;
-          for (const reference of savedReferences) {
-            if (remaining <= 0) {
-              break;
-            }
-            const highlighted = highlightCode(reference.source, "typescript");
-            const count = Math.min(
-              highlighted.length,
-              MAX_EXPANDED_SAVED_FUNCTION_LINES,
-              remaining,
-            );
-            const displayed = highlighted.slice(0, count);
-            const role = reference.direct ? "saved function" : "saved dependency";
-            text += `\n\n${theme.fg("toolTitle", theme.bold(`${role}: ${reference.name}`))}`;
-            text += `\n${displayed.join("\n")}`;
-            if (highlighted.length > count) {
-              text += `\n${theme.fg("muted", `… ${highlighted.length - count} source lines omitted`)}`;
-            }
-            remaining -= count;
-          }
-          const displayedCount = savedReferences.reduce(
-            (total, reference) =>
-              total +
-              Math.min(
-                highlightCode(reference.source, "typescript").length,
-                MAX_EXPANDED_SAVED_FUNCTION_LINES,
-              ),
-            0,
-          );
-          if (displayedCount > MAX_EXPANDED_SAVED_TOTAL_LINES) {
-            text += `\n${theme.fg("muted", "… additional saved source omitted by the 500-line display limit")}`;
-          }
-        }
-      }
       return new Text(text, 0, 0);
     },
     renderResult(result, { expanded, isPartial }, theme, context) {

@@ -327,57 +327,23 @@ describe("pit extension", () => {
     );
   });
 
-  it("renders injected saved functions and dependencies in expanded calls", async () => {
+  it("does not render injected saved-function sources", async () => {
     await run("async function baseTask() { return { value: 1 }; }");
     await run(
       "async function composedTask() { const base = await baseTask(); return { value: base.value + 1 }; }",
     );
     const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
-    const render = (expanded: boolean) =>
+    const expanded =
       tool
-        .renderCall?.({ code: "composedTask()" }, theme, { expanded, argsComplete: true })
+        .renderCall?.({ code: "composedTask()" }, theme, { expanded: true, argsComplete: true })
         .render(240)
         .join("\n") ?? "";
 
-    const collapsed = render(false);
-    expect(collapsed).not.toContain("uses saved:");
-    expect(collapsed).not.toContain("saved function: composedTask");
-
-    const expanded = render(true);
-    expect(expanded).toContain("saved dependency: baseTask");
-    expect(expanded).toContain("async function baseTask");
-    expect(expanded).toContain("saved function: composedTask");
-    expect(expanded).toContain("async function composedTask");
-
-    const comments = Array.from({ length: 205 }, (_, index) => `// source line ${index + 1}`).join(
-      "\n",
-    );
-    await run(`async function longTask() {\n${comments}\nreturn true;\n}`);
-    const longOutput =
-      tool
-        .renderCall?.({ code: "longTask()" }, theme, { expanded: true, argsComplete: true })
-        .render(240)
-        .join("\n") ?? "";
-    expect(longOutput).toContain("source lines omitted");
-
-    const mediumComments = Array.from(
-      { length: 170 },
-      (_, index) => `// medium line ${index + 1}`,
-    ).join("\n");
-    await run(`async function mediumTaskOne() {\n${mediumComments}\nreturn 1;\n}`);
-    await run(`async function mediumTaskTwo() {\n${mediumComments}\nreturn 2;\n}`);
-    await run(`async function mediumTaskThree() {\n${mediumComments}\nreturn 3;\n}`);
-    const limited =
-      tool
-        .renderCall?.(
-          { code: "longTask() + mediumTaskOne() + mediumTaskTwo() + mediumTaskThree()" },
-          theme,
-          { expanded: true, argsComplete: true },
-        )
-        .render(240)
-        .join("\n") ?? "";
-    expect(limited).toContain("additional saved source omitted by the 500-line display limit");
-  }, 15_000);
+    expect(expanded).toContain("composedTask()");
+    expect(expanded).not.toContain("saved dependency:");
+    expect(expanded).not.toContain("saved function:");
+    expect(expanded).not.toContain("async function baseTask");
+  });
 
   it("allows saved functions to call one another", async () => {
     await value(
