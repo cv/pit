@@ -1,28 +1,15 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
+import type { CapabilityCall } from "./capability-presentation.js";
+import type {
+  RenderContext,
+  RenderedResultValue,
+  ResultTheme,
+  ValueRenderer,
+} from "./result-renderer-types.js";
 
-interface ResultTheme {
-  fg(color: string, text: string): string;
-  bold(text: string): string;
-}
-
-interface RenderContext {
-  theme: ResultTheme;
-  seen: WeakSet<object>;
-  depth: number;
-}
-
-export interface RenderedResultValue {
-  kind: string;
-  lines: string[];
-  summary?: string;
-  detailLines?: string[];
-  hangingIndents?: Record<number, number>;
-  detailHangingIndents?: Record<number, number>;
-}
+export type { RenderedResultValue } from "./result-renderer-types.js";
 
 type JsonRecord = Record<string, unknown>;
-
-type ValueRenderer = (value: unknown, context: RenderContext) => RenderedResultValue | undefined;
 
 const MAX_RECURSIVE_DEPTH = 4;
 const JSON_CONTAINER_PREFIX = /^\s*[\[{]/;
@@ -148,6 +135,23 @@ function renderShell(value: unknown, { theme }: RenderContext): RenderedResultVa
     detailLines: lines.slice(1),
   };
 }
+
+/**
+ * Direct capability results route here before shape-based fallback rendering.
+ * Replace individual Git entries with purpose-built renderers as they are added.
+ */
+const CAPABILITY_RESULT_RENDERERS: Readonly<Record<string, ValueRenderer>> = {
+  "shell.exec": renderShell,
+  "shell.execFile": renderShell,
+  "git.status": renderShell,
+  "git.diff": renderShell,
+  "git.log": renderShell,
+  "git.add": renderShell,
+  "git.commit": renderShell,
+  "git.show": renderShell,
+  "git.push": renderShell,
+  "git.tag": renderShell,
+};
 
 function renderRead(value: unknown, { theme }: RenderContext): RenderedResultValue | undefined {
   if (
@@ -576,6 +580,14 @@ function renderCompound(value: unknown, context: RenderContext): RenderedResultV
 }
 
 function renderKnownValue(value: unknown, context: RenderContext): RenderedResultValue | undefined {
+  if (context.depth === 0 && context.capabilityCall) {
+    const renderer = CAPABILITY_RESULT_RENDERERS[context.capabilityCall.qualifiedName];
+    const rendered = renderer?.(value, context);
+    if (rendered) {
+      return rendered;
+    }
+  }
+
   for (const renderer of VALUE_RENDERERS) {
     const rendered = renderer(value, context);
     if (rendered) {
@@ -592,6 +604,12 @@ function renderValueWithFallback(value: unknown, context: RenderContext): Render
 export function renderResultValue(
   value: unknown,
   theme: ResultTheme,
+  capabilityCall?: CapabilityCall,
 ): RenderedResultValue | undefined {
-  return renderKnownValue(value, { theme, seen: new WeakSet(), depth: 0 });
+  return renderKnownValue(value, {
+    theme,
+    seen: new WeakSet(),
+    depth: 0,
+    ...(capabilityCall ? { capabilityCall } : {}),
+  });
 }

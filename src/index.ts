@@ -2,20 +2,15 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
-  highlightCode,
   truncateHead,
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { validateCapabilityCall } from "./capability-registry.js";
-import { HangingIndentText } from "./hanging-indent-text.js";
-import { type RenderedResultValue, renderResultValue } from "./result-renderers.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
   getSavedFunctionCallSignature,
-  resolveSavedFunctionReferences,
   runInSandbox,
   validateTypeScript,
 } from "./sandbox.js";
@@ -33,6 +28,7 @@ import {
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
 import { executeStreamingProcess } from "./host-process.js";
+import { sanitizeTerminalText } from "./text-sanitization.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
@@ -42,38 +38,16 @@ import {
   PROMPT_SNIPPET,
   SAVE_ONLY_DESCRIPTION,
 } from "./tool-metadata.js";
+import {
+  renderTypeScriptToolCall,
+  renderTypeScriptToolResult,
+  type ShellProgress,
+} from "./typescript-tool-renderer.js";
 import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
 
 export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
-const CAPABILITY_CALL_PATTERN = /\b(workspace|git|shell|http|ui|context)\.(\w+)\s*\(/;
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
-const SPINNER_INTERVAL_MS = 80;
-
-function spinnerFrame(elapsedMs: number): string {
-  const index = Math.floor(Math.max(0, elapsedMs) / SPINNER_INTERVAL_MS) % SPINNER_FRAMES.length;
-  return SPINNER_FRAMES[index] as (typeof SPINNER_FRAMES)[number];
-}
-
-interface ShellProgress {
-  id: number;
-  command: string;
-  status: "running" | "done";
-  output: string;
-  code?: number;
-}
-
-interface ActiveTimingState {
-  startedAt?: number;
-  completedAt?: number;
-  timer?: ReturnType<typeof setInterval> | undefined;
-}
-
-interface TypeScriptRendererState {
-  generation?: ActiveTimingState;
-  execution?: ActiveTimingState;
-}
 
 type HostShellProgressEvent =
   | { phase: "start" }
@@ -84,13 +58,6 @@ type ShellProgressEvent = HostShellProgressEvent & {
   id: number;
   command: string;
 };
-
-interface TypeScriptDetails {
-  value: unknown;
-  truncated: boolean;
-  functions?: FunctionActivity[];
-  progress?: ShellProgress[];
-}
 
 function boundedInteger(
   value: unknown,
@@ -386,19 +353,6 @@ function createCapabilities(
   };
 }
 
-function sanitizeProgressText(value: string): string {
-  let sanitized = "";
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (character === "\r") {
-      sanitized += "\n";
-    } else if (character === "\n" || character === "\t" || (code >= 32 && code !== 127)) {
-      sanitized += character;
-    }
-  }
-  return sanitized;
-}
-
 export function display(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -430,162 +384,6 @@ function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): stri
   return `\n[Saved functions: ${catalog}]`;
 }
 
-function normalizedLabel(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const label = sanitizeProgressText(value).replace(/\s+/g, " ").trim();
-  return label || undefined;
-}
-
-function rendererState(value: unknown): TypeScriptRendererState {
-  return value && typeof value === "object" ? (value as TypeScriptRendererState) : {};
-}
-
-function timingState(
-  state: TypeScriptRendererState,
-  phase: keyof TypeScriptRendererState,
-): ActiveTimingState {
-  const timing = state[phase] ?? {};
-  state[phase] = timing;
-  return timing;
-}
-
-function activeTiming(
-  state: ActiveTimingState,
-  complete: boolean,
-  invalidate?: () => void,
-): { duration: string; spinner: string } {
-  const now = Date.now();
-  state.startedAt ??= now;
-  if (complete) {
-    state.completedAt ??= now;
-    if (state.timer) {
-      clearInterval(state.timer);
-      state.timer = undefined;
-    }
-  } else if (!state.timer && invalidate) {
-    state.timer = setInterval(invalidate, SPINNER_INTERVAL_MS);
-    (state.timer as { unref?: () => void }).unref?.();
-  }
-  const elapsed = (state.completedAt ?? now) - state.startedAt;
-  return {
-    duration: `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`,
-    spinner: spinnerFrame(elapsed),
-  };
-}
-
-function generationTiming(context: {
-  argsComplete: boolean;
-  executionStarted?: boolean;
-  isPartial?: boolean;
-  state?: unknown;
-  invalidate?: () => void;
-}): { duration: string; complete: boolean; spinner: string } {
-  const state = rendererState(context.state);
-  const complete =
-    context.argsComplete || context.executionStarted === true || context.isPartial === false;
-  if (context.executionStarted === true) {
-    timingState(state, "execution").startedAt ??= Date.now();
-  }
-  return {
-    ...activeTiming(timingState(state, "generation"), complete, context.invalidate),
-    complete,
-  };
-}
-
-function executionTiming(
-  context: { state?: unknown; invalidate?: () => void },
-  complete: boolean,
-): { duration: string; spinner: string } {
-  const state = rendererState(context.state);
-  return activeTiming(timingState(state, "execution"), complete, context.invalidate);
-}
-
-function describeCall(
-  label: unknown,
-  code: string,
-  saveOnly: boolean,
-  registry: FunctionRegistry,
-): string {
-  const supplied = normalizedLabel(label);
-  if (supplied) {
-    return supplied;
-  }
-  const named = getNamedFunctionName(code);
-  if (named) {
-    return `${saveOnly ? "Save" : "Define and run"} ${named}`;
-  }
-  const direct = resolveSavedFunctionReferences(code, registry).find(
-    (reference) => reference.direct,
-  );
-  if (direct) {
-    return `Run ${direct.name}`;
-  }
-  const capability = code.match(CAPABILITY_CALL_PATTERN)?.slice(1, 3).join(".");
-  const descriptions: Record<string, string> = {
-    "workspace.read": "Read workspace files",
-    "workspace.search": "Search workspace",
-    "workspace.edit": "Edit workspace files",
-    "workspace.batch": "Run workspace batch",
-    "workspace.glob": "List matching files",
-    "workspace.list": "List workspace entries",
-    "workspace.stat": "Inspect file metadata",
-    "git.status": "Inspect Git status",
-    "git.diff": "Inspect Git changes",
-    "git.log": "Inspect Git history",
-    "git.add": "Stage Git changes",
-    "git.commit": "Commit Git changes",
-    "git.show": "Inspect a Git object",
-    "git.push": "Push Git changes",
-    "git.tag": "Manage Git tags",
-    "shell.execFile": "Run command",
-    "shell.exec": "Run shell command",
-    "http.request": "Request remote data",
-    "context.get": "Inspect session context",
-  };
-  return (capability && descriptions[capability]) || "Run workspace task";
-}
-
-function describeResult(
-  value: unknown,
-  structured: RenderedResultValue | undefined,
-  truncated: boolean,
-  fallback: string,
-): string {
-  if (truncated) {
-    return "Truncated output";
-  }
-  if (structured) {
-    const summary = structured.summary ? ` ${structured.summary}` : "";
-    const verbs: Record<string, string> = {
-      read: "Read",
-      search: "Found",
-      edit: "Edit",
-      shell: "Command",
-      list: "Listed",
-      glob: "Listed",
-      http: "Received",
-      batch: "Batch",
-      stat: "Stat",
-      compound: "Returned",
-    };
-    return `${verbs[structured.kind] ?? "Returned"}${summary}`;
-  }
-  if (value === undefined) {
-    return fallback ? "Returned text" : "No returned value";
-  }
-  if (Array.isArray(value)) {
-    return `Returned ${value.length} item${value.length === 1 ? "" : "s"}`;
-  }
-  if (value !== null && typeof value === "object") {
-    const keys = Object.keys(value);
-    const names = keys.slice(0, 3).join(", ");
-    return `Returned ${keys.length} field${keys.length === 1 ? "" : "s"}${names ? `: ${names}` : ""}`;
-  }
-  return `Returned ${typeof value}`;
-}
-
 export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
 
@@ -612,122 +410,10 @@ export default function pit(pi: ExtensionAPI) {
       ),
     }),
     renderCall(args, theme, context) {
-      const code = typeof args.code === "string" ? args.code : "";
-      const callLabel = describeCall(args.label, code, args.saveOnly === true, savedFunctions);
-      const lines = code ? highlightCode(code, "typescript") : [];
-      const shown = context.expanded ? lines : [];
-      const generation = generationTiming(context);
-      const state = generation.complete
-        ? `${lines.length} line${lines.length === 1 ? "" : "s"}, ${generation.duration}`
-        : `generating... ${generation.duration}`;
-      const callMarker = generation.complete ? "› " : `${generation.spinner} `;
-      let text = theme.bold(
-        theme.fg("accent", callMarker) +
-          theme.fg("toolTitle", callLabel) +
-          theme.fg("dim", ` (${state})`),
-      );
-      if (args.saveOnly === true) {
-        text += theme.fg("accent", " save-only");
-      }
-      if (context.expanded && shown.length > 0) {
-        text += `\n${shown.join("\n")}`;
-      } else if (context.expanded) {
-        text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
-      }
-
-      return new Text(text, 0, 0);
+      return renderTypeScriptToolCall(args, theme, context, savedFunctions);
     },
-    renderResult(result, { expanded, isPartial }, theme, context) {
-      const content = result.content[0];
-      const fallback = content?.type === "text" ? content.text : "";
-      const details = result.details as TypeScriptDetails | undefined;
-      const execution = executionTiming(context, !isPartial || context.isError);
-      if (isPartial) {
-        let text = theme.bold(
-          theme.fg("accent", `${execution.spinner} `) +
-            theme.fg("toolTitle", "Running...") +
-            theme.fg("dim", ` (${execution.duration})`),
-        );
-        if (expanded) {
-          for (const progress of details?.progress?.slice(-4) ?? []) {
-            const state = progress.status === "done" ? `done (${progress.code})` : "running";
-            text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
-            if (progress.output) {
-              text += `\n${theme.fg("muted", progress.output)}`;
-            }
-          }
-        }
-        return new Text(text, 0, 0);
-      }
-      if (context.isError) {
-        const message = fallback || "TypeScript execution failed";
-        return new Text(
-          `${expanded ? "\n" : ""}${theme.bold(
-            theme.fg("error", "✗ Failed") + theme.fg("dim", ` (${execution.duration})`),
-          )}\n${theme.fg("error", message)}`,
-          0,
-          0,
-        );
-      }
-
-      let lines: string[];
-      let hangingIndents: Record<number, number> = {};
-      let structuredResult: RenderedResultValue | undefined;
-      if (details && !details.truncated) {
-        if (details.value === undefined) {
-          lines = highlightCode("undefined", "typescript");
-        } else {
-          structuredResult = renderResultValue(details.value, theme);
-          if (structuredResult) {
-            lines = structuredResult.lines;
-            hangingIndents = structuredResult.hangingIndents ?? {};
-          } else {
-            let source: string;
-            let language = "json";
-            try {
-              source = JSON.stringify(details.value, null, 2) ?? String(details.value);
-            } catch {
-              source = String(details.value);
-              language = "typescript";
-            }
-            lines = highlightCode(source, language);
-          }
-        }
-      } else {
-        lines = fallback ? highlightCode(fallback, "typescript") : [];
-      }
-      const shown = expanded ? lines : [];
-      const state = details?.truncated
-        ? `truncated, ${execution.duration}`
-        : `${lines.length} line${lines.length === 1 ? "" : "s"}, ${execution.duration}`;
-      const resultLabel = describeResult(
-        details?.value,
-        structuredResult,
-        details?.truncated === true,
-        fallback,
-      );
-      const resultMarker = details?.truncated
-        ? theme.fg("warning", "… ")
-        : theme.fg("success", "✓ ");
-      let text = `${expanded ? "\n" : ""}${theme.bold(
-        resultMarker +
-          theme.fg("toolTitle", resultLabel) +
-          theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
-      )}`;
-      const resultContentStart = text.split("\n").length;
-      if (expanded && shown.length > 0) {
-        text += `\n${shown.join("\n")}`;
-      } else if (expanded) {
-        text += `\n${theme.fg("dim", "(no result)")}`;
-      }
-      const displayedHangingIndents = Object.fromEntries(
-        Object.entries(hangingIndents)
-          .filter(([index]) => Number(index) < shown.length)
-          .map(([index, width]) => [resultContentStart + Number(index), width]),
-      );
-      return Object.keys(displayedHangingIndents).length > 0
-        ? new HangingIndentText(text, displayedHangingIndents)
-        : new Text(text, 0, 0);
+    renderResult(result, options, theme, context) {
+      return renderTypeScriptToolResult(result, options, theme, context);
     },
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
@@ -737,12 +423,12 @@ export default function pit(pi: ExtensionAPI) {
         ? (event: ShellProgressEvent) => {
             const current = progressById.get(event.id) ?? {
               id: event.id,
-              command: sanitizeProgressText(event.command),
+              command: sanitizeTerminalText(event.command),
               status: "running" as const,
               output: "",
             };
             if (event.phase === "output") {
-              const chunk = sanitizeProgressText(event.chunk);
+              const chunk = sanitizeTerminalText(event.chunk);
               current.output = truncateTail(current.output + chunk, {
                 maxBytes: 4000,
                 maxLines: 8,

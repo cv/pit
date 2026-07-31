@@ -9,7 +9,7 @@ afterEach(cleanupHarness);
 describe("result renderers", () => {
   it("renders common capability result shapes and compound values", () => {
     const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
-    const renderValue = (resultValue: unknown) =>
+    const renderValue = (resultValue: unknown, source?: string) =>
       tool
         .renderResult?.(
           {
@@ -18,7 +18,7 @@ describe("result renderers", () => {
           },
           { expanded: true, isPartial: false },
           theme,
-          { isError: false },
+          { isError: false, ...(source ? { args: { code: source } } : {}) },
         )
         .render(240)
         .join("\n") ?? "";
@@ -30,6 +30,9 @@ describe("result renderers", () => {
     expect(shellOutput).toContain("tests passed");
     expect(shellOutput).toContain("stderr");
     expect(shellOutput).toContain("warning");
+
+    const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
+    expect(gitOutput).toContain("shell exit 0");
 
     const readOutput = renderValue({
       file: "src/example.ts",

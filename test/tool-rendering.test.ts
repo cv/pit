@@ -201,6 +201,12 @@ describe("tool rendering", () => {
     );
     expect(arrayResult).toContain("Returned 2 items (4 lines, 0.0s)");
 
+    const singleArrayResult = renderToolResult(
+      { content: [], details: { value: [1], truncated: false } },
+      { expanded: false, isPartial: false },
+    );
+    expect(singleArrayResult).toContain("Returned 1 item");
+
     const emptyObjectResult = renderToolResult(
       { content: [], details: { value: {}, truncated: false } },
       { expanded: false, isPartial: false },
@@ -240,6 +246,12 @@ describe("tool rendering", () => {
       { expanded: false, isPartial: false },
     );
     expect(empty).toContain("No returned value (0 lines, 0.0s)");
+
+    const emptyText = renderToolResult(
+      { content: [{ type: "text" }], details: undefined },
+      { expanded: false, isPartial: false },
+    );
+    expect(emptyText).toContain("No returned value");
     const expandedEmptyResult = renderToolResult(
       { content: [], details: undefined },
       { expanded: true, isPartial: false },
