@@ -182,6 +182,7 @@ function describeResult(
       search: "Found",
       edit: "Edit",
       shell: "Command",
+      git: "Git",
       list: "Listed",
       glob: "Listed",
       http: "Received",

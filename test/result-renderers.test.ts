@@ -32,7 +32,8 @@ describe("result renderers", () => {
     expect(shellOutput).toContain("warning");
 
     const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
-    expect(gitOutput).toContain("shell exit 0");
+    expect(gitOutput).toContain("git status exit 0");
+    expect(gitOutput).toContain("Git status, 1 line");
 
     const readOutput = renderValue({
       file: "src/example.ts",

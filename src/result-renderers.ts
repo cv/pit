@@ -1,5 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import type { CapabilityCall } from "./capability-presentation.js";
+import { GIT_RESULT_RENDERERS } from "./git-result-renderers.js";
 import type {
   RenderContext,
   RenderedResultValue,
@@ -136,21 +137,18 @@ function renderShell(value: unknown, { theme }: RenderContext): RenderedResultVa
   };
 }
 
-/**
- * Direct capability results route here before shape-based fallback rendering.
- * Replace individual Git entries with purpose-built renderers as they are added.
- */
+/** Direct capability results route here before shape-based fallback rendering. */
 const CAPABILITY_RESULT_RENDERERS: Readonly<Record<string, ValueRenderer>> = {
   "shell.exec": renderShell,
   "shell.execFile": renderShell,
-  "git.status": renderShell,
-  "git.diff": renderShell,
-  "git.log": renderShell,
-  "git.add": renderShell,
-  "git.commit": renderShell,
-  "git.show": renderShell,
-  "git.push": renderShell,
-  "git.tag": renderShell,
+  "git.status": GIT_RESULT_RENDERERS.status,
+  "git.diff": GIT_RESULT_RENDERERS.diff,
+  "git.log": GIT_RESULT_RENDERERS.log,
+  "git.add": GIT_RESULT_RENDERERS.add,
+  "git.commit": GIT_RESULT_RENDERERS.commit,
+  "git.show": GIT_RESULT_RENDERERS.show,
+  "git.push": GIT_RESULT_RENDERERS.push,
+  "git.tag": GIT_RESULT_RENDERERS.tag,
 };
 
 function renderRead(value: unknown, { theme }: RenderContext): RenderedResultValue | undefined {

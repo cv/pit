@@ -95,6 +95,8 @@ Collapsed rows hide source and result bodies. The operator presses `Ctrl+O` to e
 
 Common capability results use compact structured renderers. These results include Git and shell commands, workspace reads, searches, edits, lists, globs, HTTP responses, stats, and batches. Recognized values inside compound objects appear as named sections. Unknown values use syntax-highlighted JSON.
 
+Direct `git.*` results use method-specific summaries and formatting. Status codes, diffs, commit history, tags, commit output, and push diagnostics receive Git-aware styling while preserving the original serialized result.
+
 Long-running shell calls show a sanitized and bounded tail of standard output and standard error in partial tool updates. These updates do not become part of the final model context.
 
 Display formatting affects only the TUI. It does not change the serialized tool result.
