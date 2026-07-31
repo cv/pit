@@ -9,7 +9,7 @@ export const PROMPT_GUIDELINES = [
   "Code passed to typescript is contextually type-checked; use diagnostics to correct capability names, arguments, missing awaits, and result types.",
   "In typescript, prefer one tool invocation per step; batch independent capability calls with Promise.all inside it instead of issuing multiple parallel typescript calls, and sequence dependencies and conflicting mutations.",
   "Before editing in typescript, obtain the current revision and hashed anchors with workspace.read or workspace.search; re-read after a mismatch.",
-  "Before an anonymous typescript call, compare the workflow with recent calls and saved functions; on the second substantially similar workflow, define or extend a parameterized named function instead of repeating inline code.",
+  "Before an anonymous typescript call, compare the workflow with recent calls and saved functions. Define or extend a parameterized named function as soon as work repeats, has reusable steps, or is likely to recur; reserve anonymous typescript calls for truly ad hoc work.",
   "In typescript, prefer matching signatures from the saved-function catalog in prior results; compose saved functions into workflows named after user intent.",
   "Return a compact JSON-serializable summary from typescript and use only capabilities for external effects.",
 ] as const;
@@ -43,7 +43,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "REUSABLE AND COMPOSED FUNCTIONS",
     "",
-    "Before repeating inline code, define or extend a parameterized function named after user intent. Named functions execute immediately and save only after successful execution; saveOnly: true validates and saves without running:",
+    "Save functions aggressively: define or extend a parameterized function named after user intent for repeated workflows, reusable multi-step operations, and work likely to recur; do not wait for exact repetition. Named functions execute immediately and save only after successful execution; saveOnly: true validates and saves without running:",
     "",
     "async function runTests({ shell }, input: { coverage?: boolean } = {}) {",
     '  const args = input.coverage ? ["run", "coverage"] : ["test"];',

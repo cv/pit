@@ -105,6 +105,8 @@ describe("pit extension", () => {
     expect(tool.description).toContain("missing totalLines means lines");
     expect(tool.description).toContain('kind: "read", file, options?');
     expect(tool.description).toContain("only after successful execution");
+    expect(tool.description).toContain("Save functions aggressively");
+    expect(tool.description).toContain("do not wait for exact repetition");
     expect(tool.parameters.properties.code.description).toContain("named function definition");
     expect(tool.parameters.properties.code.description).toContain("do not import");
     expect(tool.parameters.properties.params.description).toContain("second argument");
@@ -116,7 +118,9 @@ describe("pit extension", () => {
     expect(tool.promptGuidelines?.join("\n")).toContain(
       "instead of issuing multiple parallel typescript calls",
     );
-    expect(tool.promptGuidelines?.join("\n")).toContain("second substantially similar workflow");
+    expect(tool.promptGuidelines?.join("\n")).toContain("as soon as work repeats");
+    expect(tool.promptGuidelines?.join("\n")).toContain("likely to recur");
+    expect(tool.promptGuidelines?.join("\n")).toContain("truly ad hoc work");
     expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(
       true,
     );
