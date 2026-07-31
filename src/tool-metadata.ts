@@ -5,9 +5,9 @@ export const PROMPT_SNIPPET =
   "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions";
 
 export const PROMPT_GUIDELINES = [
-  "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
-  "Code passed to typescript is contextually type-checked; use diagnostics to correct capability names, arguments, missing awaits, and result types.",
-  "In typescript, prefer one tool invocation per step; batch independent capability calls with Promise.all inside it instead of issuing multiple parallel typescript calls, and sequence dependencies and conflicting mutations.",
+  "Use typescript for all workspace, shell, HTTP, UI, and context operations.",
+  "In typescript, code is type-checked. Before fanning out an unfamiliar capability, validate one minimal call. After two failures of the same class, stop varying syntax: inspect contract/state, reduce to a minimal probe, and choose a simpler API if available.",
+  "In typescript, prefer one tool invocation per step: batch independent calls with Promise.all instead of issuing multiple parallel typescript calls; sequence dependencies and conflicting mutations.",
   "In typescript, request only the fields and record limits needed to answer the current question; expand the query only when the first result requires it.",
   "Before editing in typescript, obtain the current revision and hashed anchors with workspace.read or workspace.search. A successful edit invalidates every prior revision and anchor for that file; batch compatible changes against one revision or re-read before the next edit, never mutate the same file concurrently, and re-read after a mismatch.",
   "Before an anonymous typescript call, compare the workflow with recent calls and saved functions. Define or extend a parameterized named function as soon as work repeats, has reusable steps, or is likely to recur; reserve anonymous typescript calls for truly ad hoc work.",

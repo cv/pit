@@ -124,6 +124,10 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
     expect(tool.promptGuidelines).toHaveLength(8);
+    expect(tool.promptGuidelines?.join("\n")).toContain("validate one minimal call");
+    expect(tool.promptGuidelines?.join("\n")).toContain("After two failures of the same class");
+    expect(tool.promptGuidelines?.join("\n")).toContain("stop varying syntax");
+    expect(tool.promptGuidelines?.join("\n")).toContain("choose a simpler API");
     expect(tool.promptGuidelines?.join("\n")).toContain("one tool invocation per step");
     expect(tool.promptGuidelines?.join("\n")).toContain(
       "instead of issuing multiple parallel typescript calls",
