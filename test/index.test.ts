@@ -89,6 +89,11 @@ describe("pit extension", () => {
     expect(tool.description).toContain("Nonzero exits are data by default");
     expect(tool.description).toContain("workspace.search(query");
     expect(tool.description).toContain("shell.execFile(program, args");
+    expect(tool.description).toContain("contextLines?: 0..10");
+    expect(tool.description).toContain("limit?: 1..500");
+    expect(tool.description).toContain("changes: { revision, changes }");
+    expect(tool.description).toContain('insertBefore/insertAfter use "anchor"');
+    expect(tool.description).toContain("cwd?, timeoutMs?, raise?");
     expect(tool.description).toContain("runTests({ coverage: true })");
     expect(tool.description).toContain("REUSABLE AND COMPOSED FUNCTIONS");
     expect(tool.description).toContain(

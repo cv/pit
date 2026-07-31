@@ -79,7 +79,7 @@ export const CAPABILITY_REGISTRY = {
       edit: {
         declaration: "edit(file: string, changes: PitEditChangeSpec): Promise<PitEditResult>;",
         documentation:
-          "workspace.edit(file, { revision, changes }) supports anchored replace/delete/insert and replaceFile/deleteFile",
+          'workspace.edit(file, { revision, changes }); replace/delete use "start"/optional "end", insertBefore/insertAfter use "anchor", and replaceFile/deleteFile need no anchor',
         minimumArguments: 2,
         maximumArguments: 2,
       },
@@ -95,7 +95,7 @@ export const CAPABILITY_REGISTRY = {
   >;
 }>;`,
         documentation:
-          "workspace.batch accepts homogeneous read or edit operations and always returns ordered { results } entries",
+          'workspace.batch uses homogeneous reads [{ kind: "read", file, options? }] or edits [{ kind: "edit", file, changes: { revision, changes } }], accepts { failure?: "fail-fast" | "settled" }, and returns ordered { results }',
         minimumArguments: 1,
         maximumArguments: 2,
       },
@@ -151,7 +151,8 @@ export const CAPABILITY_REGISTRY = {
   filesSearched: number;
   filesSkipped: number;
 }>;`,
-        documentation: "workspace.search(query, options?) returns edit-ready anchors and revisions",
+        documentation:
+          "workspace.search(query, { path?, glob?, regex?, caseSensitive?, contextLines?: 0..10, limit?: 1..500, ignore?, dot? }) returns edit-ready anchors and revisions",
         minimumArguments: 1,
         maximumArguments: 2,
       },
@@ -190,7 +191,7 @@ export const CAPABILITY_REGISTRY = {
   truncated: boolean;
 }>;`,
         documentation:
-          "shell.execFile(program, args, { maxBytes?, maxLines?, truncate?, ... }) for bounded argument-safe execution",
+          'shell.execFile(program, args, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate?: "head" | "tail" }) for bounded argument-safe execution',
         minimumArguments: 2,
         maximumArguments: 3,
       },
@@ -212,7 +213,7 @@ export const CAPABILITY_REGISTRY = {
   truncated: boolean;
 }>;`,
         documentation:
-          "shell.exec(command, { maxBytes?, maxLines?, truncate?, ... }) for bounded shell syntax; shell methods return { stdout, stderr, code, truncated }; Nonzero exits are data by default and { raise: true } throws",
+          'shell.exec(command, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate?: "head" | "tail" }) for shell syntax; methods return { stdout, stderr, code, truncated }; Nonzero exits are data by default, and { raise: true } throws',
         minimumArguments: 1,
         maximumArguments: 2,
       },
