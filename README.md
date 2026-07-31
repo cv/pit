@@ -50,19 +50,19 @@ Pit is a private Git-based Pi package. The operator must have access to the repo
 The operator runs this command to install the pinned release globally:
 
 ```sh
-pi install git:git@github.com:cv/pit.git@v0.5.3
+pi install git:git@github.com:cv/pit.git@v0.6.0
 ```
 
 The operator runs this command to install the pinned release for the current project:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.5.3
+pi install -l git:git@github.com:cv/pit.git@v0.6.0
 ```
 
 The operator runs this command to use the pinned release one time without a settings change:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.5.3
+pi -e git:git@github.com:cv/pit.git@v0.6.0
 ```
 
 A contributor runs these commands to use the local source:
