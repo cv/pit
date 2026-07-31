@@ -54,7 +54,7 @@ describe("tool rendering", () => {
     expect(partial).not.toContain("waiting for source…");
   });
 
-  it("updates generation time every 200ms and freezes when execution starts", () => {
+  it("updates generation time every 200ms and freezes when a final result arrives", () => {
     vi.useFakeTimers();
     try {
       const state = {};
@@ -66,10 +66,7 @@ describe("tool rendering", () => {
       expect(invalidate).toHaveBeenCalledTimes(2);
       expect(renderToolCall({ code: undefined }, context)).toContain("generating... 0.4s");
 
-      const completed = renderToolCall(
-        { code: "return 1" },
-        { ...context, executionStarted: true },
-      );
+      const completed = renderToolCall({ code: "return 1" }, { ...context, isPartial: false });
       expect(completed).toContain("1 line, 0.4s");
       vi.advanceTimersByTime(400);
       expect(invalidate).toHaveBeenCalledTimes(2);

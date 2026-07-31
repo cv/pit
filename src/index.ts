@@ -411,6 +411,7 @@ function normalizedLabel(value: unknown): string | undefined {
 function generationTiming(context: {
   argsComplete: boolean;
   executionStarted?: boolean;
+  isPartial?: boolean;
   state?: unknown;
   invalidate?: () => void;
 }): { duration: string; complete: boolean } {
@@ -419,7 +420,8 @@ function generationTiming(context: {
       ? (context.state as TypeScriptRendererState)
       : ({} as TypeScriptRendererState);
   const now = Date.now();
-  const complete = context.argsComplete || context.executionStarted === true;
+  const complete =
+    context.argsComplete || context.executionStarted === true || context.isPartial === false;
   state.generationStartedAt ??= now;
   if (complete) {
     state.generationCompletedAt ??= now;
