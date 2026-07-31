@@ -89,7 +89,7 @@ The child process cannot directly read workspace files, access the network, or s
 
 ### TUI display
 
-The Pi TUI shows a compact description while the model generates a call. It also shows live generation and execution durations.
+The Pi TUI shows a compact description while the model generates a call. An animated spinner marks active generation and execution, and the row also shows live durations.
 
 Collapsed rows hide source and result bodies. The operator presses `Ctrl+O` to expand a row. The expanded row shows the submitted source and the retained result. Pit does not show injected saved-function source in tool output.
 

@@ -48,7 +48,13 @@ export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
 const CAPABILITY_CALL_PATTERN = /\b(workspace|shell|http|ui|context)\.(\w+)\s*\(/;
-const GENERATION_TIMER_INTERVAL_MS = 200;
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+const SPINNER_INTERVAL_MS = 80;
+
+function spinnerFrame(elapsedMs: number): string {
+  const index = Math.floor(Math.max(0, elapsedMs) / SPINNER_INTERVAL_MS) % SPINNER_FRAMES.length;
+  return SPINNER_FRAMES[index] ?? SPINNER_FRAMES[0];
+}
 
 interface ShellProgress {
   id: number;
@@ -58,13 +64,15 @@ interface ShellProgress {
   code?: number;
 }
 
+interface ActiveTimingState {
+  startedAt?: number;
+  completedAt?: number;
+  timer?: ReturnType<typeof setInterval> | undefined;
+}
+
 interface TypeScriptRendererState {
-  generationStartedAt?: number;
-  generationCompletedAt?: number;
-  generationTimer: ReturnType<typeof setInterval> | undefined;
-  executionStartedAt?: number;
-  executionCompletedAt?: number;
-  executionTimer: ReturnType<typeof setInterval> | undefined;
+  generation?: ActiveTimingState;
+  execution?: ActiveTimingState;
 }
 
 type HostShellProgressEvent =
@@ -411,37 +419,58 @@ function normalizedLabel(value: unknown): string | undefined {
   return label || undefined;
 }
 
+function rendererState(value: unknown): TypeScriptRendererState {
+  return value && typeof value === "object" ? (value as TypeScriptRendererState) : {};
+}
+
+function timingState(
+  state: TypeScriptRendererState,
+  phase: keyof TypeScriptRendererState,
+): ActiveTimingState {
+  const timing = state[phase] ?? {};
+  state[phase] = timing;
+  return timing;
+}
+
+function activeTiming(
+  state: ActiveTimingState,
+  complete: boolean,
+  invalidate?: () => void,
+): { duration: string; spinner: string } {
+  const now = Date.now();
+  state.startedAt ??= now;
+  if (complete) {
+    state.completedAt ??= now;
+    if (state.timer) {
+      clearInterval(state.timer);
+      state.timer = undefined;
+    }
+  } else if (!state.timer && invalidate) {
+    state.timer = setInterval(invalidate, SPINNER_INTERVAL_MS);
+    (state.timer as { unref?: () => void }).unref?.();
+  }
+  const elapsed = (state.completedAt ?? now) - state.startedAt;
+  return {
+    duration: `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`,
+    spinner: spinnerFrame(elapsed),
+  };
+}
+
 function generationTiming(context: {
   argsComplete: boolean;
   executionStarted?: boolean;
   isPartial?: boolean;
   state?: unknown;
   invalidate?: () => void;
-}): { duration: string; complete: boolean } {
-  const state =
-    context.state && typeof context.state === "object"
-      ? (context.state as TypeScriptRendererState)
-      : ({} as TypeScriptRendererState);
-  const now = Date.now();
+}): { duration: string; complete: boolean; spinner: string } {
+  const state = rendererState(context.state);
   const complete =
     context.argsComplete || context.executionStarted === true || context.isPartial === false;
-  state.generationStartedAt ??= now;
   if (context.executionStarted === true) {
-    state.executionStartedAt ??= now;
+    timingState(state, "execution").startedAt ??= Date.now();
   }
-  if (complete) {
-    state.generationCompletedAt ??= now;
-    if (state.generationTimer) {
-      clearInterval(state.generationTimer);
-      state.generationTimer = undefined;
-    }
-  } else if (!state.generationTimer && context.invalidate) {
-    state.generationTimer = setInterval(context.invalidate, GENERATION_TIMER_INTERVAL_MS);
-    (state.generationTimer as { unref?: () => void }).unref?.();
-  }
-  const elapsed = (state.generationCompletedAt ?? now) - state.generationStartedAt;
   return {
-    duration: `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`,
+    ...activeTiming(timingState(state, "generation"), complete, context.invalidate),
     complete,
   };
 }
@@ -449,25 +478,9 @@ function generationTiming(context: {
 function executionTiming(
   context: { state?: unknown; invalidate?: () => void },
   complete: boolean,
-): string {
-  const state =
-    context.state && typeof context.state === "object"
-      ? (context.state as TypeScriptRendererState)
-      : ({} as TypeScriptRendererState);
-  const now = Date.now();
-  state.executionStartedAt ??= now;
-  if (complete) {
-    state.executionCompletedAt ??= now;
-    if (state.executionTimer) {
-      clearInterval(state.executionTimer);
-      state.executionTimer = undefined;
-    }
-  } else if (!state.executionTimer && context.invalidate) {
-    state.executionTimer = setInterval(context.invalidate, GENERATION_TIMER_INTERVAL_MS);
-    (state.executionTimer as { unref?: () => void }).unref?.();
-  }
-  const elapsed = (state.executionCompletedAt ?? now) - state.executionStartedAt;
-  return `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`;
+): { duration: string; spinner: string } {
+  const state = rendererState(context.state);
+  return activeTiming(timingState(state, "execution"), complete, context.invalidate);
 }
 
 function describeCall(
@@ -580,8 +593,9 @@ export default function pit(pi: ExtensionAPI) {
       const state = generation.complete
         ? `${lines.length} line${lines.length === 1 ? "" : "s"}, ${generation.duration}`
         : `generating... ${generation.duration}`;
+      const callMarker = generation.complete ? "› " : `${generation.spinner} `;
       let text = theme.bold(
-        theme.fg("accent", "› ") +
+        theme.fg("accent", callMarker) +
           theme.fg("toolTitle", callLabel) +
           theme.fg("dim", ` (${state})`),
       );
@@ -600,12 +614,12 @@ export default function pit(pi: ExtensionAPI) {
       const content = result.content[0];
       const fallback = content?.type === "text" ? content.text : "";
       const details = result.details as TypeScriptDetails | undefined;
-      const executionDuration = executionTiming(context, !isPartial || context.isError);
+      const execution = executionTiming(context, !isPartial || context.isError);
       if (isPartial) {
         let text = theme.bold(
-          theme.fg("warning", "… ") +
+          theme.fg("accent", `${execution.spinner} `) +
             theme.fg("toolTitle", "Running...") +
-            theme.fg("dim", ` (${executionDuration})`),
+            theme.fg("dim", ` (${execution.duration})`),
         );
         if (expanded) {
           for (const progress of details?.progress?.slice(-4) ?? []) {
@@ -622,7 +636,7 @@ export default function pit(pi: ExtensionAPI) {
         const message = fallback || "TypeScript execution failed";
         return new Text(
           `${expanded ? "\n" : ""}${theme.bold(
-            theme.fg("error", "✗ Failed") + theme.fg("dim", ` (${executionDuration})`),
+            theme.fg("error", "✗ Failed") + theme.fg("dim", ` (${execution.duration})`),
           )}\n${theme.fg("error", message)}`,
           0,
           0,
@@ -657,8 +671,8 @@ export default function pit(pi: ExtensionAPI) {
       }
       const shown = expanded ? lines : [];
       const state = details?.truncated
-        ? `truncated, ${executionDuration}`
-        : `${lines.length} line${lines.length === 1 ? "" : "s"}, ${executionDuration}`;
+        ? `truncated, ${execution.duration}`
+        : `${lines.length} line${lines.length === 1 ? "" : "s"}, ${execution.duration}`;
       const resultLabel = describeResult(
         details?.value,
         structuredResult,

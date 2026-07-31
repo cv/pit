@@ -54,6 +54,7 @@ describe("tool rendering", () => {
     const partial = renderToolCall({ code: undefined }, { expanded: false, argsComplete: false });
     expect(partial).toContain("generating... 0.0s");
     expect(partial).not.toContain("waiting for source…");
+    expect(partial).toContain("⠋ ");
     const inferred = renderToolCall(
       {
         label: "  \n ",
@@ -87,22 +88,26 @@ describe("tool rendering", () => {
     expect(`${call}\n${result}`.split("\n")).toHaveLength(2);
   });
 
-  it("updates generation time every 200ms and freezes when a final result arrives", () => {
+  it("animates generation every 80ms and freezes timing when generation completes", () => {
     vi.useFakeTimers();
     try {
       const state = {};
       const invalidate = vi.fn();
       const context = { expanded: false, argsComplete: false, state, invalidate };
 
-      expect(renderToolCall({ code: undefined }, context)).toContain("generating... 0.0s");
+      expect(renderToolCall({ code: undefined }, context)).toContain(
+        "⠋ Run workspace task (generating... 0.0s)",
+      );
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(2);
-      expect(renderToolCall({ code: undefined }, context)).toContain("generating... 0.4s");
+      expect(invalidate).toHaveBeenCalledTimes(5);
+      expect(renderToolCall({ code: undefined }, context)).toContain(
+        "⠴ Run workspace task (generating... 0.4s)",
+      );
 
       const completed = renderToolCall({ code: "return 1" }, { ...context, isPartial: false });
       expect(completed).toContain("1 line, 0.4s");
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(invalidate).toHaveBeenCalledTimes(5);
       const executionStarted = renderToolCall(
         { code: "return 1" },
         { expanded: false, argsComplete: false, executionStarted: true, state: {} },
@@ -113,7 +118,7 @@ describe("tool rendering", () => {
     }
   });
 
-  it("updates execution time every 200ms and freezes on the final result", () => {
+  it("animates execution every 80ms and freezes timing on the final result", () => {
     vi.useFakeTimers();
     try {
       const state = {};
@@ -126,13 +131,13 @@ describe("tool rendering", () => {
         { expanded: false, isPartial: true },
         context,
       );
-      expect(started).toContain("Running... (0.0s)");
+      expect(started).toContain("⠋ Running... (0.0s)");
       expect(started).not.toContain("Run command");
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(invalidate).toHaveBeenCalledTimes(5);
       expect(
         renderToolResult(partialResult, { expanded: false, isPartial: true }, context),
-      ).toContain("Running... (0.4s)");
+      ).toContain("⠴ Running... (0.4s)");
 
       const completed = renderToolResult(
         partialResult,
@@ -141,7 +146,7 @@ describe("tool rendering", () => {
       );
       expect(completed).toContain("No returned value (0 lines, 0.4s)");
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(invalidate).toHaveBeenCalledTimes(5);
     } finally {
       vi.useRealTimers();
     }
@@ -239,7 +244,7 @@ describe("tool rendering", () => {
       { content: [], details: undefined },
       { expanded: true, isPartial: true },
     );
-    expect(partial).toContain("… Running... (0.0s)");
+    expect(partial).toContain("⠋ Running... (0.0s)");
 
     const streaming = renderToolResult(
       {
