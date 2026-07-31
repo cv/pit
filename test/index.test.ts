@@ -94,8 +94,8 @@ describe("pit extension", () => {
     expect(tool.description).toContain(
       "Use an anonymous function only for genuinely one-shot work",
     );
-    expect(tool.description.indexOf("REUSABLE AND COMPOSED FUNCTIONS")).toBeLessThan(
-      tool.description.indexOf("CALLING CONTRACT"),
+    expect(tool.description.indexOf("CALLING CONTRACT")).toBeLessThan(
+      tool.description.indexOf("REUSABLE AND COMPOSED FUNCTIONS"),
     );
     expect(tool.description).toContain("publishChanges");
     expect(tool.description).toContain("active saved-function signatures");
