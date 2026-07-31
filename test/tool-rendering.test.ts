@@ -290,6 +290,14 @@ describe("tool rendering", () => {
     );
     expect(error).toContain("bad code");
     expect(error).toContain("✗ Compile renderer (0.0s)");
+    expect(error.split("\n")[0]).toContain("✗ Compile renderer");
+    const expandedError = renderToolResult(
+      { content: [{ type: "text", text: "bad code" }] },
+      { expanded: true, isPartial: false },
+      { isError: true, args: { label: "Compile renderer", code: "" } },
+    );
+    expect(expandedError.split("\n")[0]?.trim()).toBe("");
+    expect(expandedError.split("\n")[1]).toContain("✗ Compile renderer");
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");
