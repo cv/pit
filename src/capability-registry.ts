@@ -1,6 +1,8 @@
 export interface CapabilityMethodDefinition {
   declaration: string;
   documentation: string;
+  callDescription: string;
+  resultRenderer?: string;
   minimumArguments: number;
   maximumArguments: number;
 }
@@ -79,10 +81,12 @@ type PitBatchOperation =
     }
   | { kind: "edit"; file: string; changes: PitEditChangeSpec };`;
 
-function gitMethodDefinition(method: string): CapabilityMethodDefinition {
+function gitMethodDefinition(method: string, callDescription: string): CapabilityMethodDefinition {
   return {
     declaration: `${method}(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;`,
     documentation: `git.${method}(args?, options?)`,
+    callDescription,
+    resultRenderer: `git.${method}`,
     minimumArguments: 0,
     maximumArguments: 2,
   };
@@ -93,6 +97,8 @@ export const CAPABILITY_REGISTRY = {
     interfaceName: "PitWorkspaceCapability",
     methods: {
       read: {
+        callDescription: "Read workspace files",
+        resultRenderer: "read",
         declaration: `read(
   file: string,
   options?: { format?: PitReadFormat; offset?: number; limit?: number },
@@ -103,6 +109,8 @@ export const CAPABILITY_REGISTRY = {
         maximumArguments: 2,
       },
       edit: {
+        callDescription: "Edit workspace files",
+        resultRenderer: "edit",
         declaration: "edit(file: string, changes: PitEditChangeSpec): Promise<PitEditResult>;",
         documentation:
           'workspace.edit(file, { revision, changes }); replace/delete use "start"/optional "end", insertBefore/insertAfter use "anchor", and replaceFile/deleteFile need no anchor',
@@ -110,6 +118,8 @@ export const CAPABILITY_REGISTRY = {
         maximumArguments: 2,
       },
       batch: {
+        callDescription: "Run workspace batch",
+        resultRenderer: "batch",
         declaration: `batch(
   operations: PitBatchOperation[],
   options?: { failure?: "fail-fast" | "settled" },
@@ -126,12 +136,16 @@ export const CAPABILITY_REGISTRY = {
         maximumArguments: 2,
       },
       list: {
+        callDescription: "List workspace entries",
+        resultRenderer: "list",
         declaration: "list(path?: string): Promise<PitWorkspaceEntry[]>;",
         documentation: "workspace.list(path?)",
         minimumArguments: 0,
         maximumArguments: 1,
       },
       glob: {
+        callDescription: "List matching files",
+        resultRenderer: "glob",
         declaration: `glob(
   patterns?: string | string[],
   options?: {
@@ -150,6 +164,8 @@ export const CAPABILITY_REGISTRY = {
         maximumArguments: 2,
       },
       search: {
+        callDescription: "Search workspace",
+        resultRenderer: "search",
         declaration: `search(
   query: string,
   options?: {
@@ -183,6 +199,8 @@ export const CAPABILITY_REGISTRY = {
         maximumArguments: 2,
       },
       stat: {
+        callDescription: "Inspect file metadata",
+        resultRenderer: "stat",
         declaration: `stat(path: string): Promise<{
   size: number;
   modified: string;
@@ -200,20 +218,22 @@ export const CAPABILITY_REGISTRY = {
     documentation:
       "git.status, git.diff, git.log, git.add, git.commit, git.show, git.push, and git.tag accept optional argument arrays and shell.execFile options; results are bounded",
     methods: {
-      status: gitMethodDefinition("status"),
-      diff: gitMethodDefinition("diff"),
-      log: gitMethodDefinition("log"),
-      add: gitMethodDefinition("add"),
-      commit: gitMethodDefinition("commit"),
-      show: gitMethodDefinition("show"),
-      push: gitMethodDefinition("push"),
-      tag: gitMethodDefinition("tag"),
+      status: gitMethodDefinition("status", "Inspect Git status"),
+      diff: gitMethodDefinition("diff", "Inspect Git changes"),
+      log: gitMethodDefinition("log", "Inspect Git history"),
+      add: gitMethodDefinition("add", "Stage Git changes"),
+      commit: gitMethodDefinition("commit", "Commit Git changes"),
+      show: gitMethodDefinition("show", "Inspect a Git object"),
+      push: gitMethodDefinition("push", "Push Git changes"),
+      tag: gitMethodDefinition("tag", "Manage Git tags"),
     },
   },
   shell: {
     interfaceName: "PitShellCapability",
     methods: {
       execFile: {
+        callDescription: "Run command",
+        resultRenderer: "shell",
         declaration:
           "execFile(program: string, args: string[], options?: PitProcessOptions): Promise<PitProcessResult>;",
         documentation:
@@ -222,6 +242,8 @@ export const CAPABILITY_REGISTRY = {
         maximumArguments: 3,
       },
       exec: {
+        callDescription: "Run shell command",
+        resultRenderer: "shell",
         declaration:
           "exec(command: string, options?: PitProcessOptions): Promise<PitProcessResult>;",
         documentation:
@@ -235,6 +257,8 @@ export const CAPABILITY_REGISTRY = {
     interfaceName: "PitHttpCapability",
     methods: {
       request: {
+        callDescription: "Request remote data",
+        resultRenderer: "http",
         declaration: `request(
   url: string,
   options?: {
@@ -261,24 +285,28 @@ export const CAPABILITY_REGISTRY = {
     interfaceName: "PitUiCapability",
     methods: {
       confirm: {
+        callDescription: "Confirm with the operator",
         declaration: "confirm(title: string, message: string): Promise<boolean>;",
         documentation: "ui.confirm(title, message)",
         minimumArguments: 2,
         maximumArguments: 2,
       },
       input: {
+        callDescription: "Request operator input",
         declaration: "input(title: string, placeholder?: string): Promise<string | undefined>;",
         documentation: "ui.input(title, placeholder?)",
         minimumArguments: 1,
         maximumArguments: 2,
       },
       select: {
+        callDescription: "Ask the operator to select",
         declaration: "select(title: string, options: string[]): Promise<string | undefined>;",
         documentation: "ui.select(title, options)",
         minimumArguments: 2,
         maximumArguments: 2,
       },
       notify: {
+        callDescription: "Notify the operator",
         declaration:
           'notify(message: string, level?: "info" | "warning" | "error"): Promise<null>;',
         documentation: "ui.notify(message, level?) (UI availability depends on mode)",
@@ -291,6 +319,7 @@ export const CAPABILITY_REGISTRY = {
     interfaceName: "PitContextCapability",
     methods: {
       get: {
+        callDescription: "Inspect session context",
         declaration: `get(): Promise<{
   cwd: string;
   mode: string;
@@ -320,11 +349,18 @@ function methodNames<const Registry extends Record<string, CapabilityDefinition>
 
 export const CAPABILITY_METHODS = methodNames(CAPABILITY_REGISTRY);
 
-export function validateCapabilityCall(capability: string, method: string, args: unknown[]): void {
+export function getCapabilityMethodDefinition(
+  capability: string,
+  method: string,
+): CapabilityMethodDefinition | undefined {
   const definition = CAPABILITY_REGISTRY[capability as CapabilityName];
-  const methodDefinition = definition?.methods[method as keyof typeof definition.methods] as
+  return definition?.methods[method as keyof typeof definition.methods] as
     | CapabilityMethodDefinition
     | undefined;
+}
+
+export function validateCapabilityCall(capability: string, method: string, args: unknown[]): void {
+  const methodDefinition = getCapabilityMethodDefinition(capability, method);
   if (!methodDefinition) {
     throw new Error(`Unknown capability or method: ${capability}.${method}`);
   }

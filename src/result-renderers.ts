@@ -1,5 +1,5 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
-import type { CapabilityCall } from "./capability-presentation.js";
+import { type CapabilityCall, capabilityResultRenderer } from "./capability-presentation.js";
 import { GIT_RESULT_RENDERERS } from "./git-result-renderers.js";
 import type {
   RenderContext,
@@ -139,8 +139,15 @@ function renderShell(value: unknown, { theme }: RenderContext): RenderedResultVa
 
 /** Direct capability results route here before shape-based fallback rendering. */
 const CAPABILITY_RESULT_RENDERERS: Readonly<Record<string, ValueRenderer>> = {
-  "shell.exec": renderShell,
-  "shell.execFile": renderShell,
+  read: renderRead,
+  edit: renderEdit,
+  batch: renderBatch,
+  list: renderWorkspaceList,
+  glob: renderGlob,
+  search: renderSearch,
+  stat: renderStat,
+  shell: renderShell,
+  http: renderHttp,
   "git.status": GIT_RESULT_RENDERERS.status,
   "git.diff": GIT_RESULT_RENDERERS.diff,
   "git.log": GIT_RESULT_RENDERERS.log,
@@ -579,7 +586,8 @@ function renderCompound(value: unknown, context: RenderContext): RenderedResultV
 
 function renderKnownValue(value: unknown, context: RenderContext): RenderedResultValue | undefined {
   if (context.depth === 0 && context.capabilityCall) {
-    const renderer = CAPABILITY_RESULT_RENDERERS[context.capabilityCall.qualifiedName];
+    const rendererName = capabilityResultRenderer(context.capabilityCall);
+    const renderer = rendererName ? CAPABILITY_RESULT_RENDERERS[rendererName] : undefined;
     const rendered = renderer?.(value, context);
     if (rendered) {
       return rendered;

@@ -115,7 +115,7 @@ async ({ workspace, shell }) => {
 }
 ```
 
-Pit contextually types destructured capabilities. Capability annotations are not required. The generated contract is in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). The method declarations, dispatch metadata, arity limits, and model-facing summaries are in [`src/capability-registry.ts`](src/capability-registry.ts).
+Pit contextually types destructured capabilities. Capability annotations are not required. The generated contract is in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Authoritative method declarations, arity limits, model-facing summaries, TUI call descriptions, and result-renderer keys are in [`src/capability-registry.ts`](src/capability-registry.ts). Public host dispatch is exhaustive over the registry's capability names, so adding a capability requires a corresponding implementation before TypeScript checks pass.
 
 Validation detects unknown capabilities, unknown methods, invalid arguments, missing awaits, and incompatible result values. Diagnostics include source locations.
 

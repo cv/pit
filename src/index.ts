@@ -6,7 +6,11 @@ import {
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { validateCapabilityCall } from "./capability-registry.js";
+import {
+  type CAPABILITY_METHODS,
+  type CapabilityName,
+  validateCapabilityCall,
+} from "./capability-registry.js";
 import { CapabilityTraceCollector } from "./capability-trace.js";
 import {
   type CapabilityHandler,
@@ -59,6 +63,16 @@ type ShellProgressEvent = HostShellProgressEvent & {
   id: number;
   command: string;
 };
+
+type PublicCapabilityHandler = (
+  method: string,
+  args: unknown[],
+  signal: AbortSignal,
+) => unknown | Promise<unknown>;
+
+type CapabilityMethodName<Name extends CapabilityName> = (typeof CAPABILITY_METHODS)[Name][number];
+
+type CapabilityMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
 function boundedInteger(
   value: unknown,
@@ -234,15 +248,8 @@ function createCapabilities(
     );
   };
 
-  return async (capability, method, args, signal) => {
-    if (capability !== "__pit") {
-      validateCapabilityCall(capability, method, args);
-    }
-    if (capability === "workspace") {
-      return handleWorkspace(ctx.cwd, method, args, signal);
-    }
-
-    if (capability === "shell" && method === "exec") {
+  const shellHandlers: Record<CapabilityMethodName<"shell">, CapabilityMethodHandler> = {
+    exec: (args, signal) => {
       const command = string(args[0], "command");
       const options = args[1] === undefined ? {} : object(args[1], "options");
       const progress = progressFor(command);
@@ -256,22 +263,47 @@ function createCapabilities(
         progress,
         signal,
       );
-    }
-
-    if (capability === "shell" && method === "execFile") {
+    },
+    execFile: (args, signal) => {
       const program = string(args[0], "program");
       const processArgs = stringArray(args[1], "args");
       const options = args[2] === undefined ? {} : object(args[2], "options");
       return runArgumentSafeProcess(program, processArgs, options, signal);
-    }
+    },
+  };
 
-    if (capability === "git") {
+  const uiHandlers: Record<CapabilityMethodName<"ui">, CapabilityMethodHandler> = {
+    confirm: (args) => ctx.ui.confirm(string(args[0], "title"), string(args[1], "message")),
+    input: (args) =>
+      ctx.ui.input(
+        string(args[0], "title"),
+        args[1] === undefined ? undefined : string(args[1], "placeholder"),
+      ),
+    select: (args) => {
+      if (!Array.isArray(args[1])) {
+        throw new Error("options must be an array");
+      }
+      return ctx.ui.select(string(args[0], "title"), args[1].map(String));
+    },
+    notify: (args) => {
+      ctx.ui.notify(
+        string(args[0], "message"),
+        (args[1] as "info" | "warning" | "error" | undefined) ?? "info",
+      );
+      return null;
+    },
+  };
+
+  const publicHandlers: Record<CapabilityName, PublicCapabilityHandler> = {
+    workspace: (method, args, signal) => handleWorkspace(ctx.cwd, method, args, signal),
+    shell: (method, args, signal) =>
+      shellHandlers[method as CapabilityMethodName<"shell">](args, signal),
+    git: (method, args, signal) => {
       const gitArgs = args[0] === undefined ? [] : stringArray(args[0], "args");
       const options = args[1] === undefined ? {} : object(args[1], "options");
       return runArgumentSafeProcess("git", [method, ...gitArgs], options, signal);
-    }
-
-    if (capability === "http" && method === "request") {
+    },
+    http: async (_method, args, signal) => {
       const url = string(args[0], "url");
       const options = args[1] === undefined ? {} : object(args[1], "options");
       const maxBytes = boundedInteger(
@@ -286,7 +318,7 @@ function createCapabilities(
           ? {}
           : { headers: options.headers as Record<string, string> }),
         ...(options.body === undefined ? {} : { body: string(options.body, "body") }),
-        ...(signal ? { signal } : {}),
+        signal,
       });
       const body = await readHttpBody(response, maxBytes);
       return {
@@ -296,38 +328,24 @@ function createCapabilities(
         body: body.body,
         truncated: body.truncated,
       };
-    }
-
-    if (capability === "ui") {
+    },
+    ui: (method, args, signal) => {
       if (!ctx.hasUI) {
         throw new Error("UI is not available in this mode");
       }
-      switch (method) {
-        case "confirm":
-          return ctx.ui.confirm(string(args[0], "title"), string(args[1], "message"));
-        case "input":
-          return ctx.ui.input(
-            string(args[0], "title"),
-            args[1] === undefined ? undefined : string(args[1], "placeholder"),
-          );
-        case "select": {
-          if (!Array.isArray(args[1])) {
-            throw new Error("options must be an array");
-          }
-          return ctx.ui.select(string(args[0], "title"), args[1].map(String));
-        }
-        case "notify":
-          ctx.ui.notify(
-            string(args[0], "message"),
-            (args[1] as "info" | "warning" | "error" | undefined) ?? "info",
-          );
-          return null;
-        /* v8 ignore next -- registry validation rejects unknown UI methods before dispatch. */
-        default:
-          throw new Error(`Capability registry and UI dispatcher disagree: ${method}`);
-      }
-    }
+      return uiHandlers[method as CapabilityMethodName<"ui">](args, signal);
+    },
+    context: () => ({
+      cwd: ctx.cwd,
+      mode: ctx.mode,
+      model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+      thinkingLevel: ctx.thinkingLevel,
+      sessionFile: ctx.sessionManager.getSessionFile(),
+      savedFunctions: [...registry.keys()].sort(),
+    }),
+  };
 
+  return (capability, method, args, signal) => {
     if (capability === "__pit" && method === "savedFunctionRun") {
       const name = string(args[0], "saved function name");
       if (!registry.has(name)) {
@@ -337,20 +355,8 @@ function createCapabilities(
       return null;
     }
 
-    /* v8 ignore next -- registry validation routes the only context method here. */
-    if (capability === "context" && method === "get") {
-      return {
-        cwd: ctx.cwd,
-        mode: ctx.mode,
-        model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
-        thinkingLevel: ctx.thinkingLevel,
-        sessionFile: ctx.sessionManager.getSessionFile(),
-        savedFunctions: [...registry.keys()].sort(),
-      };
-    }
-
-    /* v8 ignore next -- registry validation rejects unknown public calls before dispatch. */
-    throw new Error(`Capability registry and dispatcher disagree: ${capability}.${method}`);
+    validateCapabilityCall(capability, method, args);
+    return publicHandlers[capability as CapabilityName](method, args, signal);
   };
 }
 
