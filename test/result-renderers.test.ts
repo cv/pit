@@ -204,6 +204,9 @@ describe("result renderers", () => {
     expect(
       renderValue({ size: 8, modified: "2026-01-01T00:00:00.000Z", directory: false, file: true }),
     ).toContain("stat file");
+    expect(
+      renderValue({ size: 0, modified: "2026-01-01T00:00:00.000Z", directory: false, file: false }),
+    ).toContain("stat other");
 
     const recursive: Record<string, unknown> = { status: shell };
     recursive.self = recursive;

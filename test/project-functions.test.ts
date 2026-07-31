@@ -90,6 +90,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     );
     await run("async function versionedProject() { return 99; }");
     expect(await value("versionedProject()")).toBe(99);
+    await run("async function sessionHelper() { return 42; }");
 
     const source =
       "/** Project version two. @pit project */ async function versionedProject() { return 2; }";
@@ -108,6 +109,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       }),
     );
     expect(await value("versionedProject()")).toBe(2);
+    expect(await value("sessionHelper()")).toBe(42);
   });
 
   it("commits project definitions only after successful execution", async () => {

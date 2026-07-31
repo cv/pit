@@ -282,11 +282,11 @@ function jsDocText(value: string | ts.NodeArray<ts.JSDocComment> | undefined): s
   if (!value) {
     return "";
   }
-  let text = "";
-  for (const part of value) {
-    text += part.getText();
-  }
-  return text;
+  return value
+    .map((part) =>
+      part.kind === ts.SyntaxKind.JSDocText ? (part as ts.JSDocText).text : part.getText(),
+    )
+    .join("");
 }
 
 /** Extract and validate an immediately attached `@pit project` JSDoc marker. */
@@ -315,7 +315,7 @@ export function getProjectFunctionMetadata(source: string): ProjectFunctionMetad
     throw new Error(`@pit scope must have value "project"; received ${JSON.stringify(scope)}`);
   }
 
-  const docs = (declaration as ts.FunctionDeclaration & { jsDoc?: ts.JSDoc[] }).jsDoc ?? [];
+  const docs = (declaration as ts.FunctionDeclaration & { jsDoc: ts.JSDoc[] }).jsDoc;
   const summary =
     docs
       .map((doc) => jsDocText(doc.comment).trim().split(JSDOC_PARAGRAPH_SEPARATOR, 1)[0] as string)

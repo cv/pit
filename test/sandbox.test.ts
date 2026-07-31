@@ -321,6 +321,18 @@ async function documented(_capabilities, input) { return input; }`),
       summary: "Documented helper.",
       parameters: [{ name: "input.raw" }],
     });
+    expect(
+      getProjectFunctionMetadata(`/**
+ * Uses {@link documented} metadata.
+ * @pit project
+ * @param input.raw - See {@link documented}.
+ */
+async function linked(_capabilities, input) { return input; }`),
+    ).toEqual({
+      name: "linked",
+      summary: "Uses {@link documented} metadata.",
+      parameters: [{ name: "input.raw", description: "See {@link documented}." }],
+    });
   });
 
   it("contextually types expressions using active saved functions", () => {

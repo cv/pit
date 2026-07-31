@@ -257,7 +257,7 @@ describe("pit extension", () => {
       }),
     );
 
-    await run("deferred()");
+    await tool.execute("call-id", { code: "deferred()" }, undefined, undefined, context());
     expect(execMock).toHaveBeenCalledOnce();
 
     await expect(
