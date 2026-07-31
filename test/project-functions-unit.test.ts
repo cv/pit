@@ -9,6 +9,7 @@ import {
   removeProjectFunction,
   saveProjectFunction,
 } from "../src/project-functions.js";
+import { getProjectFunctionMetadata } from "../src/sandbox.js";
 
 let cwd: string;
 const registry = () => new Map<string, string>();
@@ -119,6 +120,19 @@ describe("project function storage", () => {
     await expect(removeProjectFunction(cwd, "directory")).rejects.toThrow();
   });
 
+  it("derives no-input, required-input, and optional-input signatures", () => {
+    const signatures = [
+      "/** No input. @pit project */ async function noInput() {}",
+      "/** Required input. @pit project */ async function required(_capabilities, input: { value: string }) {}",
+      "/** Optional input. @pit project */ async function optional(_capabilities, input?: number) {}",
+    ].map((source) => getProjectFunctionMetadata(source)?.signature);
+    expect(signatures).toEqual([
+      "noInput()",
+      "required(input: { value: string })",
+      "optional(input?: number)",
+    ]);
+  });
+
   it("formats empty, documented, and bounded catalogs", () => {
     expect(projectFunctionCatalog(new Map())).toBe("");
     const docs = new Map([
@@ -126,14 +140,15 @@ describe("project function storage", () => {
         "alpha",
         {
           name: "alpha",
+          signature: "alpha(input: { raw: string })",
           summary: " Alpha   helper ",
           parameters: [{ name: "input", description: " value  to use " }, { name: "input.raw" }],
         },
       ],
-      ["huge", { name: "huge", summary: "x".repeat(13_000), parameters: [] }],
+      ["huge", { name: "huge", signature: "huge()", summary: "x".repeat(13_000), parameters: [] }],
     ]);
     const catalog = projectFunctionCatalog(docs);
-    expect(catalog).toContain("alpha(input?) — Alpha helper");
+    expect(catalog).toContain("alpha(input: { raw: string }) — Alpha helper");
     expect(catalog).toContain("input: value to use");
     expect(catalog).toContain("input.raw");
     expect(catalog).toContain("1 more; use functions.list()");

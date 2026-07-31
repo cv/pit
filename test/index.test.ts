@@ -158,7 +158,7 @@ describe("pit extension", () => {
       (tool.promptGuidelines?.join("\n").length ?? 0) +
       (tool.parameters.properties.code.description?.length ?? 0) +
       (tool.parameters.properties.params.description?.length ?? 0);
-    expect(metadataChars).toBeLessThan(6500);
+    expect(metadataChars).toBeLessThan(7100);
 
     await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);

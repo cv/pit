@@ -19,7 +19,7 @@ import {
 } from "./saved-functions.js";
 
 const MAX_PROJECT_CATALOG_BYTES = 12_000;
-const MAX_PROJECT_FUNCTIONS = 100;
+const MAX_PROJECT_FUNCTIONS = 64;
 const PROJECT_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
 
 export type ProjectFunctionMetadataRegistry = Map<string, ProjectFunctionMetadata>;
@@ -226,7 +226,7 @@ export function projectFunctionCatalog(
     if (shown >= MAX_PROJECT_FUNCTIONS) {
       break;
     }
-    const addition = [`- ${entry.name}(input?) — ${entry.summary.replace(/\s+/g, " ").trim()}`];
+    const addition = [`- ${entry.signature} — ${entry.summary.replace(/\s+/g, " ").trim()}`];
     for (const parameter of entry.parameters) {
       const description = parameter.description
         ? `: ${parameter.description.replace(/\s+/g, " ").trim()}`

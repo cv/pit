@@ -127,6 +127,32 @@ function effectiveRegistry(
   return new Map([...project, ...session]);
 }
 
+function savedFunctionDependents(
+  state: FunctionState,
+  name: string,
+): { direct: string[]; transitive: string[] } {
+  const direct = new Set<string>();
+  const transitive = new Set<string>();
+  for (const [candidate, source] of [...state.project, ...state.session]) {
+    if (candidate === name) {
+      continue;
+    }
+    const reference = resolveSavedFunctionReferences(source, state.effective).find(
+      (dependency) => dependency.name === name,
+    );
+    if (reference?.direct) {
+      direct.add(candidate);
+      transitive.delete(candidate);
+    } else if (reference && !direct.has(candidate)) {
+      transitive.add(candidate);
+    }
+  }
+  return {
+    direct: [...direct].sort((a, b) => a.localeCompare(b)),
+    transitive: [...transitive].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
 function boundedInteger(
   value: unknown,
   label: string,
@@ -424,6 +450,20 @@ function createCapabilities(
         return { ...functionState.metadata.get(name as string), source };
       }
       if (method === "remove") {
+        if (functionState.project.has(name as string)) {
+          const dependents = savedFunctionDependents(functionState, name as string);
+          if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
+            const details = [
+              dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",
+              dependents.transitive.length > 0
+                ? `transitive: ${dependents.transitive.join(", ")}`
+                : "",
+            ].filter(Boolean);
+            throw new Error(
+              `Cannot remove project function "${name}"; dependent saved functions remain (${details.join("; ")})`,
+            );
+          }
+        }
         const removed = await removeProjectFunction(ctx.cwd, name as string);
         functionState.project.delete(name as string);
         functionState.metadata.delete(name as string);
@@ -486,7 +526,7 @@ function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): stri
 
 function normalizedLabel(value: unknown): string | undefined {
   if (typeof value !== "string") {
-    return undefined;
+    return;
   }
   const label = sanitizeProgressText(value).replace(/\s+/g, " ").trim();
   return label || undefined;
@@ -848,7 +888,7 @@ export default function pit(pi: ExtensionAPI) {
               `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
             );
           }
-          validateRegistryCapacity(functionState.project, namedFunction, params.code);
+          validateRegistryCapacity(functionState.effective, namedFunction, params.code);
           candidateProject = new Map(functionState.project);
           candidateProject.set(namedFunction, params.code);
           validateTypeScript(params.code, candidateProject, params.params);
@@ -863,7 +903,7 @@ export default function pit(pi: ExtensionAPI) {
             scope: "project",
           });
         } else {
-          validateRegistryCapacity(functionState.session, namedFunction, params.code);
+          validateRegistryCapacity(functionState.effective, namedFunction, params.code);
           candidateSession = new Map(functionState.session);
           candidateSession.set(namedFunction, params.code);
           executionRegistry = effectiveRegistry(functionState.project, candidateSession);

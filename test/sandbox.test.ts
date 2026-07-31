@@ -318,6 +318,7 @@ describe("runInSandbox", () => {
 async function documented(_capabilities, input) { return input; }`),
     ).toEqual({
       name: "documented",
+      signature: "documented(input: unknown)",
       summary: "Documented helper.",
       parameters: [{ name: "input.raw" }],
     });
@@ -330,6 +331,7 @@ async function documented(_capabilities, input) { return input; }`),
 async function linked(_capabilities, input) { return input; }`),
     ).toEqual({
       name: "linked",
+      signature: "linked(input: unknown)",
       summary: "Uses {@link documented} metadata.",
       parameters: [{ name: "input.raw", description: "See {@link documented}." }],
     });

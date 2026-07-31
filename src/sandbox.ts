@@ -271,6 +271,7 @@ export interface ProjectFunctionParameter {
 
 export interface ProjectFunctionMetadata {
   name: string;
+  signature: string;
   summary: string;
   parameters: ProjectFunctionParameter[];
 }
@@ -287,6 +288,19 @@ function jsDocText(value: string | ts.NodeArray<ts.JSDocComment> | undefined): s
       part.kind === ts.SyntaxKind.JSDocText ? (part as ts.JSDocText).text : part.getText(),
     )
     .join("");
+}
+
+function functionCallSignature(
+  name: string,
+  parameters: ts.NodeArray<ts.ParameterDeclaration>,
+): string {
+  const input = parameters[1];
+  if (!input) {
+    return `${name}()`;
+  }
+  const optional = input.questionToken || input.initializer ? "?" : "";
+  const type = (input.type?.getText() ?? "unknown").replace(SIGNATURE_WHITESPACE, " ");
+  return `${name}(input${optional}: ${type})`;
 }
 
 /** Extract and validate an immediately attached `@pit project` JSDoc marker. */
@@ -334,7 +348,12 @@ export function getProjectFunctionMetadata(source: string): ProjectFunctionMetad
         ...(description ? { description } : {}),
       };
     });
-  return { name: declaration.name.text, summary, parameters };
+  return {
+    name: declaration.name.text,
+    signature: functionCallSignature(declaration.name.text, declaration.parameters),
+    summary,
+    parameters,
+  };
 }
 
 export function getSavedFunctionCallSignature(source: string): string | undefined {
@@ -342,13 +361,7 @@ export function getSavedFunctionCallSignature(source: string): string | undefine
   if (!(expression && ts.isFunctionExpression(expression) && expression.name)) {
     return;
   }
-  const input = expression.parameters[1];
-  if (!input) {
-    return `${expression.name.text}()`;
-  }
-  const optional = input.questionToken || input.initializer ? "?" : "";
-  const type = (input.type?.getText() ?? "unknown").replace(SIGNATURE_WHITESPACE, " ");
-  return `${expression.name.text}(input${optional}: ${type})`;
+  return functionCallSignature(expression.name.text, expression.parameters);
 }
 
 function savedEntries(savedFunctions: ReadonlyMap<string, string>) {

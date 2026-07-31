@@ -52,6 +52,7 @@ type PitBatchOperation =
 
 type PitProjectFunctionMetadata = {
   name: string;
+  signature: string;
   summary: string;
   parameters: Array<{ name: string; description?: string }>;
 };
