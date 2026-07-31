@@ -115,24 +115,18 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
 
   it("rejects removal with project, transitive, and session dependents", async () => {
     await run("/** Base. @pit project */ async function dependencyBase() { return 1; }");
-    await run(
-      "/** Direct project dependent. @pit project */ async function directProject() { return dependencyBase(); }",
-    );
-    await run(
-      "/** Transitive project dependent. @pit project */ async function transitiveProject() { return directProject(); }",
-    );
-    await run(
-      "/** Another transitive dependent. @pit project */ async function anotherTransitive(): Promise<number> { return directProject(); }",
-    );
     for (const code of [
+      "/** Direct project dependent. @pit project */ async function directProject() { return dependencyBase(); }",
+      "/** Transitive project dependent. @pit project */ async function transitiveProject() { return directProject(); }",
+      "/** Another transitive dependent. @pit project */ async function anotherTransitive(): Promise<number> { return directProject(); }",
       "/** Cycle A. @pit project */ async function cycleA(): Promise<number> { return 0; }",
       "/** Cycle B. @pit project */ async function cycleB(): Promise<number> { return cycleA(); }",
       "/** Cycle A replacement. @pit project */ async function cycleA(): Promise<number> { return cycleB(); }",
+      "async function directProject() { return 2; }",
     ]) {
       await tool.execute("call-id", { code, saveOnly: true }, undefined, undefined, context());
     }
     await run("async function sessionDependent() { return dependencyBase(); }");
-    await run("async function directProject() { return 2; }");
 
     await expect(
       run('async ({ functions }) => functions.remove("dependencyBase")'),
@@ -154,40 +148,6 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     ).resolves.toEqual({ name: "overriddenBase", removed: true });
     await expect(value("overrideConsumer()")).resolves.toBe(2);
   });
-
-  it("applies function-count quotas to the effective project and session registry", async () => {
-    await run("/** Project slot. @pit project */ async function projectSlot() { return true; }");
-    setBranchEntries(
-      Array.from({ length: 63 }, (_, index) => ({
-        type: "custom",
-        customType: "pit-functions",
-        data: {
-          name: `sessionSlot${index}`,
-          source: `async function sessionSlot${index}() { return ${index}; }`,
-        },
-      })),
-    );
-    await sessionStart({}, context());
-    expect((await value("async ({ context }) => context.get()")).savedFunctions).toHaveLength(64);
-    await expect(
-      tool.execute(
-        "call-id",
-        { code: "async function overflowSlot() { return true; }", saveOnly: true },
-        undefined,
-        undefined,
-        context(),
-      ),
-    ).rejects.toThrow("limited to 64 functions");
-    await expect(
-      tool.execute(
-        "call-id",
-        { code: "async function sessionSlot0() { return 100; }", saveOnly: true },
-        undefined,
-        undefined,
-        context(),
-      ),
-    ).resolves.toBeDefined();
-  }, 15_000);
 
   it("commits project definitions only after successful execution", async () => {
     await expect(

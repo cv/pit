@@ -9,6 +9,7 @@ import {
 import {
   CAPABILITY_METHODS,
   display,
+  effectiveRegistry,
   reconstructFunctions,
   validateRegistryCapacity,
 } from "../src/index.js";
@@ -49,6 +50,24 @@ describe("function registry handler", () => {
     expect(() => validateRegistryCapacity(aggregate, "extra", "x")).toThrow(
       "exceeds 976.6KB total source",
     );
+  });
+
+  it("applies capacity to the effective project and session registry", () => {
+    const project = new Map(
+      Array.from({ length: 63 }, (_, index) => [`projectSlot${index}`, "project"]),
+    );
+    const session = new Map([
+      ["projectSlot0", "session override"],
+      ["sessionSlot", "session"],
+    ]);
+    const effective = effectiveRegistry(project, session);
+
+    expect(effective).toHaveLength(64);
+    expect(effective.get("projectSlot0")).toBe("session override");
+    expect(() => validateRegistryCapacity(effective, "overflowSlot", "overflow")).toThrow(
+      "limited to 64 functions",
+    );
+    expect(() => validateRegistryCapacity(effective, "sessionSlot", "replacement")).not.toThrow();
   });
   it("reconstructs valid branch-local function mutations", () => {
     const functions = new Map<string, string>();

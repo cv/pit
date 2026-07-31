@@ -120,7 +120,7 @@ function refreshEffectiveFunctions(state: FunctionState): void {
   }
 }
 
-function effectiveRegistry(
+export function effectiveRegistry(
   project: ReadonlyMap<string, string>,
   session: ReadonlyMap<string, string>,
 ): FunctionRegistry {
@@ -165,7 +165,7 @@ function savedFunctionDependents(
       return false;
     }
     visiting.add(functionKey);
-    for (const dependency of dependencies.get(functionKey) ?? []) {
+    for (const dependency of dependencies.get(functionKey) as Set<string>) {
       if (dependency === target || reachesTarget(dependency, visiting)) {
         visiting.delete(functionKey);
         return true;
