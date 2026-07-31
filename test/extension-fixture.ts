@@ -73,7 +73,7 @@ export async function value(code: string, ctx = context()) {
 
 const testTheme = {
   fg: (_color: string, text: string) => text,
-  bold: (text: string) => text,
+  bold: (text: string) => `\u001b[1m${text}\u001b[22m`,
 };
 
 type RenderContext = Record<string, unknown>;

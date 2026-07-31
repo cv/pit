@@ -17,7 +17,11 @@ describe("tool rendering", () => {
       { label: "Render generated TypeScript", code, timeoutMs: 5000 },
       { expanded: false, argsComplete: true },
     );
-    expect(collapsed).toContain("Render generated TypeScript (15 lines) timeout=5000ms");
+    const collapsedLines = collapsed.split("\n");
+    expect(collapsedLines[0]).toContain("Render generated TypeScript (15 lines)");
+    expect(collapsedLines[0]).toContain("timeout=5000ms");
+    expect(collapsedLines[0]).toContain("\u001b[1m");
+    expect(collapsedLines[1]?.trim()).toBe("");
     expect(collapsed).toContain("source line 1");
     expect(collapsed).not.toContain("source line 15");
     expect(collapsed).toContain("3 more lines (Ctrl+O to expand)");
@@ -68,6 +72,9 @@ describe("tool rendering", () => {
     const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
     expect(collapsed).toContain("functions: saved test, replaced test, ran test");
     expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines)");
+    const resultLines = collapsed.split("\n");
+    expect(resultLines[0]?.trim()).toBe("");
+    expect(resultLines[1]).toContain("\u001b[1m");
     expect(collapsed).toContain('"key1"');
     expect(collapsed).not.toContain('"key15"');
     expect(collapsed).toContain("5 more lines (Ctrl+O to expand)");

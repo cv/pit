@@ -514,8 +514,7 @@ export default function pit(pi: ExtensionAPI) {
       const state = context.argsComplete
         ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
         : "generating…";
-      let text = theme.fg("toolTitle", theme.bold(callLabel));
-      text += theme.fg("dim", ` (${state})`);
+      let text = theme.bold(theme.fg("toolTitle", callLabel) + theme.fg("dim", ` (${state})`));
       if (args.timeoutMs !== undefined) {
         text += theme.fg("dim", ` timeout=${args.timeoutMs}ms`);
       }
@@ -523,9 +522,9 @@ export default function pit(pi: ExtensionAPI) {
         text += theme.fg("accent", " save-only");
       }
       if (shown.length > 0) {
-        text += `\n${shown.join("\n")}`;
+        text += `\n\n${shown.join("\n")}`;
       } else {
-        text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
+        text += `\n\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
       }
       if (!context.expanded && lines.length > shown.length) {
         text += `\n${theme.fg("muted", `… ${lines.length - shown.length} more lines (Ctrl+O to expand)`)}`;
@@ -633,7 +632,16 @@ export default function pit(pi: ExtensionAPI) {
       const state = details?.truncated
         ? "truncated"
         : `${lines.length} line${lines.length === 1 ? "" : "s"}`;
-      let text = "";
+      const resultLabel = describeResult(
+        details?.value,
+        structuredResult,
+        details?.truncated === true,
+        fallback,
+      );
+      let text = `\n${theme.bold(
+        theme.fg("toolTitle", resultLabel) +
+          theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
+      )}`;
       const functionActivity = details?.functions;
       if (functionActivity && functionActivity.length > 0) {
         const operations = functionActivity.map((operation) => {
@@ -642,15 +650,8 @@ export default function pit(pi: ExtensionAPI) {
           }
           return `ran ${operation.name}`;
         });
-        text += `${theme.fg("accent", `functions: ${operations.join(", ")}`)}\n`;
+        text += `\n${theme.fg("accent", `functions: ${operations.join(", ")}`)}`;
       }
-      text += theme.fg(
-        "toolTitle",
-        theme.bold(
-          describeResult(details?.value, structuredResult, details?.truncated === true, fallback),
-        ),
-      );
-      text += theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`);
       const resultContentStart = text.split("\n").length;
       if (shown.length > 0) {
         text += `\n${shown.join("\n")}`;
