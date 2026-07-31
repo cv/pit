@@ -70,6 +70,26 @@ export async function value(code: string, ctx = context()) {
   return (await run(code, ctx)).details.value;
 }
 
+const testTheme = {
+  fg: (_color: string, text: string) => text,
+  bold: (text: string) => text,
+};
+
+type RenderContext = Record<string, unknown>;
+type RenderResultOptions = { expanded: boolean; isPartial: boolean };
+
+export function renderToolCall(args: unknown, context: RenderContext): string {
+  return tool.renderCall?.(args, testTheme, context).render(200).join("\n") ?? "";
+}
+
+export function renderToolResult(
+  result: unknown,
+  options: RenderResultOptions,
+  context: RenderContext = { isError: false },
+): string {
+  return tool.renderResult?.(result, options, testTheme, context).render(200).join("\n") ?? "";
+}
+
 export function setBranchEntries(entries: any[]): void {
   branchEntries = entries;
 }
