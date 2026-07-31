@@ -589,9 +589,9 @@ export default function pit(pi: ExtensionAPI) {
         text += theme.fg("accent", " save-only");
       }
       if (context.expanded && shown.length > 0) {
-        text += `\n\n${shown.join("\n")}`;
+        text += `\n${shown.join("\n")}`;
       } else if (context.expanded) {
-        text += `\n\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
+        text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
       }
 
       return new Text(text, 0, 0);

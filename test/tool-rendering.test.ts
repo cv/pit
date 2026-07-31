@@ -30,6 +30,7 @@ describe("tool rendering", () => {
     expect(expanded).toContain("Run workspace task (15 lines, 0.0s)");
     expect(expanded).toContain("source line 15");
     expect(expanded).not.toContain("more lines");
+    expect(expanded.split("\n")[1]).toContain("source line 1");
 
     const singleLine = renderToolCall(
       { code: "return 1" },
@@ -48,6 +49,7 @@ describe("tool rendering", () => {
     expect(empty).not.toContain("empty source");
     const expandedEmpty = renderToolCall({ code: "" }, { expanded: true, argsComplete: true });
     expect(expandedEmpty).toContain("empty source");
+    expect(expandedEmpty.split("\n")[1]).toContain("empty source");
 
     const partial = renderToolCall({ code: undefined }, { expanded: false, argsComplete: false });
     expect(partial).toContain("generating... 0.0s");
@@ -69,6 +71,7 @@ describe("tool rendering", () => {
 
     const waiting = renderToolCall({ code: undefined }, { expanded: true, argsComplete: false });
     expect(waiting).toContain("waiting for source…");
+    expect(waiting.split("\n")[1]).toContain("waiting for source…");
   });
 
   it("keeps hidden call and result descriptions on adjacent lines", () => {
