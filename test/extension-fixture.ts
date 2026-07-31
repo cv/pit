@@ -16,6 +16,7 @@ export interface RegisteredTool {
   promptGuidelines?: string[];
   parameters: {
     properties: {
+      label: { description?: string };
       code: { description?: string };
       params: { description?: string };
       saveOnly: { description?: string };
@@ -87,7 +88,12 @@ export function renderToolResult(
   options: RenderResultOptions,
   context: RenderContext = { isError: false },
 ): string {
-  return tool.renderResult?.(result, options, testTheme, context).render(200).join("\n") ?? "";
+  return (
+    tool
+      .renderResult?.(result, options, testTheme, { args: {}, ...context })
+      .render(200)
+      .join("\n") ?? ""
+  );
 }
 
 export function setBranchEntries(entries: any[]): void {

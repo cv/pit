@@ -117,6 +117,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain("one named function per intent");
     expect(tool.description).toContain("instead of creating overlapping variants");
     expect(tool.description).toContain("Add input modes or compose existing saved functions");
+    expect(tool.parameters.properties.label.description).toContain("15 words");
     expect(tool.parameters.properties.code.description).toContain("named function definition");
     expect(tool.parameters.properties.code.description).toContain("do not import");
     expect(tool.parameters.properties.params.description).toContain("second argument");

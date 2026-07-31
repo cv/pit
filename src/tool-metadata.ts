@@ -15,6 +15,9 @@ export const PROMPT_GUIDELINES = [
   "Filter and summarize inside typescript; return counts, IDs, and bounded relevant excerpts—not complete files, HTTP bodies, search corpora, or session records. If truncated, narrow the query rather than enlarging it; use capabilities for external effects.",
 ] as const;
 
+export const LABEL_DESCRIPTION =
+  "Short concrete verb phrase describing the call in the TUI; about 15 words is a guideline, not a limit.";
+
 export const CODE_DESCRIPTION =
   "Contextually type-checked TypeScript expression or named function definition. Await capabilities, do not import, and return a JSON-serializable value.";
 

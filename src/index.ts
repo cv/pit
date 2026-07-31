@@ -10,7 +10,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { validateCapabilityCall } from "./capability-registry.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
-import { renderResultValue } from "./result-renderers.js";
+import { type RenderedResultValue, renderResultValue } from "./result-renderers.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
@@ -36,6 +36,7 @@ import { executeStreamingProcess } from "./host-process.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
+  LABEL_DESCRIPTION,
   PARAMS_DESCRIPTION,
   PROMPT_GUIDELINES,
   PROMPT_SNIPPET,
@@ -50,6 +51,7 @@ const COLLAPSED_CODE_LINES = 12;
 const COLLAPSED_RESULT_LINES = 12;
 const MAX_EXPANDED_SAVED_FUNCTION_LINES = 200;
 const MAX_EXPANDED_SAVED_TOTAL_LINES = 500;
+const CAPABILITY_CALL_PATTERN = /\b(workspace|shell|http|ui|context)\.(\w+)\s*\(/;
 
 interface ShellProgress {
   id: number;
@@ -395,6 +397,90 @@ function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): stri
   return `\n[Saved functions: ${catalog}]`;
 }
 
+function normalizedLabel(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const label = sanitizeProgressText(value).replace(/\s+/g, " ").trim();
+  return label || undefined;
+}
+
+function describeCall(
+  label: unknown,
+  code: string,
+  saveOnly: boolean,
+  registry: FunctionRegistry,
+): string {
+  const supplied = normalizedLabel(label);
+  if (supplied) {
+    return supplied;
+  }
+  const named = getNamedFunctionName(code);
+  if (named) {
+    return `${saveOnly ? "Save" : "Define and run"} ${named}`;
+  }
+  const direct = resolveSavedFunctionReferences(code, registry).find(
+    (reference) => reference.direct,
+  );
+  if (direct) {
+    return `Run ${direct.name}`;
+  }
+  const capability = code.match(CAPABILITY_CALL_PATTERN)?.slice(1, 3).join(".");
+  const descriptions: Record<string, string> = {
+    "workspace.read": "Read workspace files",
+    "workspace.search": "Search workspace",
+    "workspace.edit": "Edit workspace files",
+    "workspace.batch": "Run workspace batch",
+    "workspace.glob": "List matching files",
+    "workspace.list": "List workspace entries",
+    "workspace.stat": "Inspect file metadata",
+    "shell.execFile": "Run command",
+    "shell.exec": "Run shell command",
+    "http.request": "Request remote data",
+    "context.get": "Inspect session context",
+  };
+  return (capability && descriptions[capability]) || "Run workspace task";
+}
+
+function describeResult(
+  value: unknown,
+  structured: RenderedResultValue | undefined,
+  truncated: boolean,
+  fallback: string,
+): string {
+  if (truncated) {
+    return "Truncated output";
+  }
+  if (structured) {
+    const summary = structured.summary ? ` ${structured.summary}` : "";
+    const verbs: Record<string, string> = {
+      read: "Read",
+      search: "Found",
+      edit: "Edit",
+      shell: "Command",
+      list: "Listed",
+      glob: "Listed",
+      http: "Received",
+      batch: "Batch",
+      stat: "Stat",
+      compound: "Returned",
+    };
+    return `${verbs[structured.kind] ?? "Returned"}${summary}`;
+  }
+  if (value === undefined) {
+    return fallback ? "Returned text" : "No returned value";
+  }
+  if (Array.isArray(value)) {
+    return `Returned ${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  if (value !== null && typeof value === "object") {
+    const keys = Object.keys(value);
+    const names = keys.slice(0, 3).join(", ");
+    return `Returned ${keys.length} field${keys.length === 1 ? "" : "s"}${names ? `: ${names}` : ""}`;
+  }
+  return `Returned ${typeof value}`;
+}
+
 export default function pit(pi: ExtensionAPI) {
   const savedFunctions: FunctionRegistry = new Map();
 
@@ -407,6 +493,7 @@ export default function pit(pi: ExtensionAPI) {
     promptSnippet: PROMPT_SNIPPET,
     promptGuidelines: [...PROMPT_GUIDELINES],
     parameters: Type.Object({
+      label: Type.Optional(Type.String({ description: LABEL_DESCRIPTION })),
       code: Type.String({ description: CODE_DESCRIPTION }),
       params: Type.Optional(Type.Unknown({ description: PARAMS_DESCRIPTION })),
       saveOnly: Type.Optional(Type.Boolean({ description: SAVE_ONLY_DESCRIPTION })),
@@ -421,12 +508,13 @@ export default function pit(pi: ExtensionAPI) {
     }),
     renderCall(args, theme, context) {
       const code = typeof args.code === "string" ? args.code : "";
+      const callLabel = describeCall(args.label, code, args.saveOnly === true, savedFunctions);
       const lines = code ? highlightCode(code, "typescript") : [];
       const shown = context.expanded ? lines : lines.slice(0, COLLAPSED_CODE_LINES);
       const state = context.argsComplete
         ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
         : "generating…";
-      let text = theme.fg("toolTitle", theme.bold("typescript"));
+      let text = theme.fg("toolTitle", theme.bold(callLabel));
       text += theme.fg("dim", ` (${state})`);
       if (args.timeoutMs !== undefined) {
         text += theme.fg("dim", ` timeout=${args.timeoutMs}ms`);
@@ -487,8 +575,16 @@ export default function pit(pi: ExtensionAPI) {
       const content = result.content[0];
       const fallback = content?.type === "text" ? content.text : "";
       const details = result.details as TypeScriptDetails | undefined;
+      const callArgs = context.args ?? {};
+      const callCode = typeof callArgs.code === "string" ? callArgs.code : "";
+      const callLabel = describeCall(
+        callArgs.label,
+        callCode,
+        callArgs.saveOnly === true,
+        savedFunctions,
+      );
       if (isPartial) {
-        let text = theme.fg("warning", "Running TypeScript…");
+        let text = theme.fg("warning", `${callLabel}…`);
         for (const progress of details?.progress?.slice(-4) ?? []) {
           const state = progress.status === "done" ? `done (${progress.code})` : "running";
           text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
@@ -499,19 +595,25 @@ export default function pit(pi: ExtensionAPI) {
         return new Text(text, 0, 0);
       }
       if (context.isError) {
-        return new Text(theme.fg("error", fallback || "TypeScript execution failed"), 0, 0);
+        const message = fallback || "TypeScript execution failed";
+        return new Text(
+          `${theme.fg("error", theme.bold(`Failed: ${callLabel}`))}\n${theme.fg("error", message)}`,
+          0,
+          0,
+        );
       }
 
       let lines: string[];
       let hangingIndents: Record<number, number> = {};
+      let structuredResult: RenderedResultValue | undefined;
       if (details && !details.truncated) {
         if (details.value === undefined) {
           lines = highlightCode("undefined", "typescript");
         } else {
-          const structured = renderResultValue(details.value, theme);
-          if (structured) {
-            lines = structured.lines;
-            hangingIndents = structured.hangingIndents ?? {};
+          structuredResult = renderResultValue(details.value, theme);
+          if (structuredResult) {
+            lines = structuredResult.lines;
+            hangingIndents = structuredResult.hangingIndents ?? {};
           } else {
             let source: string;
             let language = "json";
@@ -542,7 +644,12 @@ export default function pit(pi: ExtensionAPI) {
         });
         text += `${theme.fg("accent", `functions: ${operations.join(", ")}`)}\n`;
       }
-      text += theme.fg("toolTitle", theme.bold("result"));
+      text += theme.fg(
+        "toolTitle",
+        theme.bold(
+          describeResult(details?.value, structuredResult, details?.truncated === true, fallback),
+        ),
+      );
       text += theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`);
       const resultContentStart = text.split("\n").length;
       if (shown.length > 0) {

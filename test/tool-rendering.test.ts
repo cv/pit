@@ -14,15 +14,16 @@ describe("tool rendering", () => {
     const code = Array.from({ length: 15 }, (_, index) => `// source line ${index + 1}`).join("\n");
 
     const collapsed = renderToolCall(
-      { code, timeoutMs: 5000 },
+      { label: "Render generated TypeScript", code, timeoutMs: 5000 },
       { expanded: false, argsComplete: true },
     );
-    expect(collapsed).toContain("typescript (15 lines) timeout=5000ms");
+    expect(collapsed).toContain("Render generated TypeScript (15 lines) timeout=5000ms");
     expect(collapsed).toContain("source line 1");
     expect(collapsed).not.toContain("source line 15");
     expect(collapsed).toContain("3 more lines (Ctrl+O to expand)");
 
     const expanded = renderToolCall({ code }, { expanded: true, argsComplete: true });
+    expect(expanded).toContain("Run workspace task (15 lines)");
     expect(expanded).toContain("source line 15");
     expect(expanded).not.toContain("more lines");
 
@@ -36,6 +37,7 @@ describe("tool rendering", () => {
       { code: "async function later() {}", saveOnly: true },
       { expanded: false, argsComplete: true },
     );
+    expect(saveOnly).toContain("Save later (1 line)");
     expect(saveOnly).toContain("save-only");
 
     const empty = renderToolCall({ code: "" }, { expanded: false, argsComplete: true });
@@ -65,7 +67,7 @@ describe("tool rendering", () => {
 
     const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
     expect(collapsed).toContain("functions: saved test, replaced test, ran test");
-    expect(collapsed).toContain("result (17 lines)");
+    expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines)");
     expect(collapsed).toContain('"key1"');
     expect(collapsed).not.toContain('"key15"');
     expect(collapsed).toContain("5 more lines (Ctrl+O to expand)");
@@ -97,7 +99,7 @@ describe("tool rendering", () => {
       },
       { expanded: false, isPartial: false },
     );
-    expect(truncated).toContain("result (truncated)");
+    expect(truncated).toContain("Truncated output (truncated)");
     expect(truncated).toContain("partial output");
 
     const empty = renderToolResult(
@@ -110,7 +112,7 @@ describe("tool rendering", () => {
       { content: [], details: undefined },
       { expanded: false, isPartial: true },
     );
-    expect(partial).toContain("Running TypeScript…");
+    expect(partial).toContain("Run workspace task…");
 
     const streaming = renderToolResult(
       {
@@ -149,9 +151,10 @@ describe("tool rendering", () => {
     const error = renderToolResult(
       { content: [{ type: "text", text: "bad code" }] },
       { expanded: false, isPartial: false },
-      { isError: true },
+      { isError: true, args: { label: "Compile renderer", code: "" } },
     );
     expect(error).toContain("bad code");
+    expect(error).toContain("Failed: Compile renderer");
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");
