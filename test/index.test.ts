@@ -113,11 +113,13 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
-    expect(tool.promptGuidelines).toHaveLength(7);
+    expect(tool.promptGuidelines).toHaveLength(8);
     expect(tool.promptGuidelines?.join("\n")).toContain("one tool invocation per step");
     expect(tool.promptGuidelines?.join("\n")).toContain(
       "instead of issuing multiple parallel typescript calls",
     );
+    expect(tool.promptGuidelines?.join("\n")).toContain("only the fields and record limits");
+    expect(tool.promptGuidelines?.join("\n")).toContain("expand the query only");
     expect(tool.promptGuidelines?.join("\n")).toContain("as soon as work repeats");
     expect(tool.promptGuidelines?.join("\n")).toContain("likely to recur");
     expect(tool.promptGuidelines?.join("\n")).toContain("truly ad hoc work");
