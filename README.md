@@ -28,19 +28,19 @@ Pit is distributed as a Git-based Pi package. The repository is private, so inst
 Install the pinned release globally:
 
 ```sh
-pi install git:git@github.com:cv/pit.git@v0.4.1
+pi install git:git@github.com:cv/pit.git@v0.4.2
 ```
 
 Install for the current project:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.4.1
+pi install -l git:git@github.com:cv/pit.git@v0.4.2
 ```
 
 Try it for one run without changing settings:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.4.1
+pi -e git:git@github.com:cv/pit.git@v0.4.2
 ```
 
 For local development:
