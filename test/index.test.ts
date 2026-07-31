@@ -108,6 +108,8 @@ describe("pit extension", () => {
     expect(tool.description).toContain('kind: "replace"');
     expect(tool.description).toContain("replaceFile");
     expect(tool.description).toContain("missing totalLines means lines");
+    expect(tool.description).toContain("discard every prior revision and anchor");
+    expect(tool.description).toContain("never mutate the same file concurrently");
     expect(tool.description).toContain('kind: "read", file, options?');
     expect(tool.description).toContain("only after successful execution");
     expect(tool.description).toContain("Save functions aggressively");
@@ -125,6 +127,8 @@ describe("pit extension", () => {
     );
     expect(tool.promptGuidelines?.join("\n")).toContain("only the fields and record limits");
     expect(tool.promptGuidelines?.join("\n")).toContain("expand the query only");
+    expect(tool.promptGuidelines?.join("\n")).toContain("successful edit invalidates");
+    expect(tool.promptGuidelines?.join("\n")).toContain("re-read before the next edit");
     expect(tool.promptGuidelines?.join("\n")).toContain("as soon as work repeats");
     expect(tool.promptGuidelines?.join("\n")).toContain("likely to recur");
     expect(tool.promptGuidelines?.join("\n")).toContain("truly ad hoc work");
