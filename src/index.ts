@@ -408,18 +408,20 @@ function normalizedLabel(value: unknown): string | undefined {
   return label || undefined;
 }
 
-function generationDuration(context: {
+function generationTiming(context: {
   argsComplete: boolean;
+  executionStarted?: boolean;
   state?: unknown;
   invalidate?: () => void;
-}): string {
+}): { duration: string; complete: boolean } {
   const state =
     context.state && typeof context.state === "object"
       ? (context.state as TypeScriptRendererState)
       : ({} as TypeScriptRendererState);
   const now = Date.now();
+  const complete = context.argsComplete || context.executionStarted === true;
   state.generationStartedAt ??= now;
-  if (context.argsComplete) {
+  if (complete) {
     state.generationCompletedAt ??= now;
     if (state.generationTimer) {
       clearInterval(state.generationTimer);
@@ -430,7 +432,10 @@ function generationDuration(context: {
     (state.generationTimer as { unref?: () => void }).unref?.();
   }
   const elapsed = (state.generationCompletedAt ?? now) - state.generationStartedAt;
-  return `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`;
+  return {
+    duration: `${(Math.max(0, elapsed) / 1000).toFixed(1)}s`,
+    complete,
+  };
 }
 
 function describeCall(
@@ -539,10 +544,10 @@ export default function pit(pi: ExtensionAPI) {
       const callLabel = describeCall(args.label, code, args.saveOnly === true, savedFunctions);
       const lines = code ? highlightCode(code, "typescript") : [];
       const shown = context.expanded ? lines : [];
-      const duration = generationDuration(context);
-      const state = context.argsComplete
-        ? `${lines.length} line${lines.length === 1 ? "" : "s"}, ${duration}`
-        : `generating... ${duration}`;
+      const generation = generationTiming(context);
+      const state = generation.complete
+        ? `${lines.length} line${lines.length === 1 ? "" : "s"}, ${generation.duration}`
+        : `generating... ${generation.duration}`;
       let text = theme.bold(
         theme.fg("accent", "› ") +
           theme.fg("toolTitle", callLabel) +
