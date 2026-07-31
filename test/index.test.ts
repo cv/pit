@@ -16,6 +16,7 @@ import {
   branchEntries,
   cleanupHarness,
   context,
+  execMock,
   functionsCommand,
   run,
   runWithParams,
@@ -108,7 +109,8 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.promptGuidelines).toHaveLength(11);
+    expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
+    expect(tool.promptGuidelines).toHaveLength(12);
     expect(tool.promptGuidelines?.join("\n")).toContain("top-level params");
     expect(tool.promptGuidelines).toContain(
       "In typescript, use Promise.all for fail-fast independent work; use Promise.allSettled or local catches when exploratory probes are optional; sequence dependencies and conflicting mutations.",
@@ -176,6 +178,12 @@ describe("pit extension", () => {
 
     const singleLine = render({ code: "return 1" }, { expanded: false, argsComplete: true });
     expect(singleLine).toContain("1 line)");
+
+    const saveOnly = render(
+      { code: "async function later() {}", saveOnly: true },
+      { expanded: false, argsComplete: true },
+    );
+    expect(saveOnly).toContain("save-only");
 
     const empty = render({ code: "" }, { expanded: false, argsComplete: true });
     expect(empty).toContain("empty source");
@@ -336,6 +344,55 @@ describe("pit extension", () => {
     const info = await value("async ({ context }) => context.get()");
     expect(info.savedFunctions).toEqual(["greet"]);
     expect(branchEntries.some((entry) => entry.data?.name === "broken")).toBe(false);
+  });
+
+  it("saves named functions without executing them", async () => {
+    const source = `async function deferred({ shell }) {
+      return shell.execFile("node", ["--version"]);
+    }`;
+    const saved = await tool.execute(
+      "call-id",
+      { code: source, saveOnly: true },
+      undefined,
+      undefined,
+      context(),
+    );
+
+    expect(execMock).not.toHaveBeenCalled();
+    expect(saved.details.value).toEqual({ savedFunction: "deferred", executed: false });
+    expect(saved.content[0].text).toContain('Saved function "deferred" without executing it');
+    expect(branchEntries).toContainEqual(
+      expect.objectContaining({
+        customType: "pit-functions",
+        data: { name: "deferred", source },
+      }),
+    );
+
+    await run("deferred()");
+    expect(execMock).toHaveBeenCalledOnce();
+
+    await expect(
+      tool.execute(
+        "call-id",
+        { code: "async () => true", saveOnly: true },
+        undefined,
+        undefined,
+        context(),
+      ),
+    ).rejects.toThrow("saveOnly requires a named top-level function");
+    await expect(
+      tool.execute(
+        "call-id",
+        {
+          code: "async function withInput(_capabilities, input: object) { return input; }",
+          params: {},
+          saveOnly: true,
+        },
+        undefined,
+        undefined,
+        context(),
+      ),
+    ).rejects.toThrow("saveOnly does not accept top-level params");
   });
 
   it("rejects replacements that invalidate saved dependents", async () => {

@@ -158,6 +158,15 @@ async function runTests({ shell }, input: { coverage?: boolean } = {}) {
 }
 ```
 
+To define a reusable function without running it, set `saveOnly: true`. Save-only definitions are statically validated and persisted immediately; top-level `params` are not accepted:
+
+```json
+{
+  "code": "async function runChecks({ shell }) { return shell.execFile('npm', ['test'], { raise: true }); }",
+  "saveOnly": true
+}
+```
+
 If the named function needs input on its first execution, provide optional top-level `params`. Pit validates the value against an annotated second parameter and passes it through:
 
 ```json
@@ -174,7 +183,7 @@ runTests()
 runTests({ coverage: true })
 ```
 
-Named functions are staged for validation and initial execution, then persisted as non-context session entries only after that execution succeeds. They survive reloads and follow the active session branch. Redefining the same name replaces its source only after the replacement and its dependents validate and the replacement executes successfully. Each branch is limited to 64 functions, 100 KB per function, and 1 MB of combined saved source. Active saved names are available from `context.get().savedFunctions`. Only referenced definitions and their transitive dependencies are injected as typed lexical bindings into each fresh restricted child process.
+Named functions normally stage validation and initial execution, then persist as non-context session entries only after execution succeeds. With `saveOnly: true`, a named function is statically validated and persisted without execution; redefining in save-only mode likewise replaces it after static validation. Functions survive reloads and follow the active session branch. Replacements are rejected when they invalidate dependents. Each branch is limited to 64 functions, 100 KB per function, and 1 MB of combined saved source. Active saved names are available from `context.get().savedFunctions`. Only referenced definitions and their transitive dependencies are injected as typed lexical bindings into each fresh restricted child process.
 
 ### Composing workflows
 

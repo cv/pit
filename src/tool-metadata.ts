@@ -12,6 +12,7 @@ export const PROMPT_GUIDELINES = [
   "In typescript, use workspace.read's default hashed mode in a prior call or workspace.search to obtain a revision and anchors before editing; on mismatch, re-read instead of retrying stale anchors, and use raw mode only for machine parsing.",
   "Before an anonymous typescript call, compare the workflow with recent calls and saved functions; on the second substantially similar workflow, define or extend a parameterized named function instead of repeating inline code.",
   "In typescript, use named functions for recurring workflows and compose saved functions into higher-level functions named after user intent.",
+  "To create a reusable function without running it, call typescript with saveOnly: true and a named top-level function; invoke it later after review.",
   "In typescript, annotate saved-function input parameters so initial params and later calls retain type checking.",
   "In typescript, prefer shell.execFile(program, args) for ordinary commands; use shell.exec only for shell syntax such as pipes or redirection.",
   "In typescript, use { raise: true } when a failed shell command should stop a composed workflow.",
@@ -19,10 +20,13 @@ export const PROMPT_GUIDELINES = [
 ] as const;
 
 export const CODE_DESCRIPTION =
-  'A contextually type-checked TypeScript expression. Use an anonymous function for one-shot work, a named top-level function such as async function runTests({ shell }) { return shell.execFile("npm", ["test"], { raise: true }); } for recurring work, or runTests() to invoke a saved function. Start independent calls with Promise.all, await capability promises, do not import modules, and return compact JSON-serializable data.';
+  'Contextually type-checked TypeScript. Use an anonymous function for one-shot work, async function runTests({ shell }) { return shell.execFile("npm", ["test"]); } for reusable work, or runTests() later. Use Promise.all for independent calls, await capabilities, do not import, and return compact JSON.';
 
 export const PARAMS_DESCRIPTION =
-  "Optional JSON-serializable input passed as the function second argument. Prefer params over embedding large patches, file contents, commit messages, or quote-heavy data in code. Annotate the input parameter for contextual validation.";
+  "Optional JSON input passed as the function second argument. Use it for large patches, file contents, or quote-heavy data; annotate the input parameter.";
+
+export const SAVE_ONLY_DESCRIPTION =
+  "Validate and save a named top-level function without executing it; top-level params are not accepted.";
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
@@ -30,14 +34,15 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "REUSABLE AND COMPOSED FUNCTIONS",
     "",
-    "Before repeating a workflow inline, define or extend a parameterized function named after user intent. Named top-level functions execute immediately and are saved on the active branch only after successful execution:",
+    "Before repeating inline code, define or extend a parameterized function named after user intent. Named functions execute immediately and save only after successful execution; saveOnly: true validates and saves without running:",
     "",
     "async function runTests({ shell }, input: { coverage?: boolean } = {}) {",
     '  const args = input.coverage ? ["run", "coverage"] : ["test"];',
     '  return shell.execFile("npm", args, { raise: true });',
     "}",
     "",
-    "Provide top-level params for initial input. Later invoke runTests() or runTests({ coverage: true }). Only referenced saved functions and transitive dependencies are injected. Use context.get().savedFunctions or /functions to inspect names.",
+    "Later invoke runTests() or runTests({ coverage: true }). Only referenced definitions and dependencies are injected. Inspect saved names with context.get() or /functions.",
+    "To define now and invoke later, submit the named function with saveOnly: true and omit top-level params.",
     "",
     "Compose recurring sequences into higher-level named workflows. For example, publishChanges can await runValidation(), then use shell.execFile for git add, commit, and push with { raise: true }.",
     "",
@@ -53,7 +58,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "  return { packageJson: JSON.parse(file.content), status };",
     "}",
     "",
-    "Capability calls are async. Use Promise.all for fail-fast independent work and Promise.allSettled or local catches for optional exploratory probes. Pass large or quote-heavy payloads through top-level params and accept them as the function second argument. Sequence dependencies and conflicting mutations, and return compact JSON-serializable data. Imports and direct filesystem, network, and subprocess access are unavailable.",
+    "Capability calls are async. Use Promise.all for independent work and Promise.allSettled or local catches for optional probes. Put large data in top-level params, sequence dependencies and mutations, and return compact JSON. Imports and direct host access are unavailable.",
     "",
     "HASHED EDIT WORKFLOW",
     "",

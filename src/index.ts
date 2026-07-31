@@ -38,6 +38,7 @@ import {
   PARAMS_DESCRIPTION,
   PROMPT_GUIDELINES,
   PROMPT_SNIPPET,
+  SAVE_ONLY_DESCRIPTION,
 } from "./tool-metadata.js";
 import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
 
@@ -390,6 +391,7 @@ export default function pit(pi: ExtensionAPI) {
     parameters: Type.Object({
       code: Type.String({ description: CODE_DESCRIPTION }),
       params: Type.Optional(Type.Unknown({ description: PARAMS_DESCRIPTION })),
+      saveOnly: Type.Optional(Type.Boolean({ description: SAVE_ONLY_DESCRIPTION })),
       timeoutMs: Type.Optional(
         Type.Integer({
           minimum: 1,
@@ -410,6 +412,9 @@ export default function pit(pi: ExtensionAPI) {
       text += theme.fg("dim", ` (${state})`);
       if (args.timeoutMs !== undefined) {
         text += theme.fg("dim", ` timeout=${args.timeoutMs}ms`);
+      }
+      if (args.saveOnly === true) {
+        text += theme.fg("accent", " save-only");
       }
       if (shown.length > 0) {
         text += `\n${shown.join("\n")}`;
@@ -578,6 +583,12 @@ export default function pit(pi: ExtensionAPI) {
           }
         : undefined;
       const namedFunction = getNamedFunctionName(params.code);
+      if (params.saveOnly && namedFunction === undefined) {
+        throw new Error("saveOnly requires a named top-level function");
+      }
+      if (params.saveOnly && params.params !== undefined) {
+        throw new Error("saveOnly does not accept top-level params");
+      }
       let executionRegistry: FunctionRegistry = savedFunctions;
       let replacedNamedFunction = false;
       if (namedFunction) {
@@ -596,16 +607,21 @@ export default function pit(pi: ExtensionAPI) {
           replaced: replacedNamedFunction,
         });
       }
-      const value = await runInSandbox(
-        params.code,
-        createCapabilities(pi, ctx, executionRegistry, functionActivity, onShellProgress),
-        {
-          ...(signal ? { signal } : {}),
-          timeoutMs: params.timeoutMs ?? 30_000,
-          savedFunctions: executionRegistry,
-          ...(params.params === undefined ? {} : { input: params.params }),
-        },
-      );
+      let value: unknown;
+      if (params.saveOnly) {
+        value = { savedFunction: namedFunction, executed: false };
+      } else {
+        value = await runInSandbox(
+          params.code,
+          createCapabilities(pi, ctx, executionRegistry, functionActivity, onShellProgress),
+          {
+            ...(signal ? { signal } : {}),
+            timeoutMs: params.timeoutMs ?? 30_000,
+            savedFunctions: executionRegistry,
+            ...(params.params === undefined ? {} : { input: params.params }),
+          },
+        );
+      }
       if (namedFunction) {
         pi.appendEntry(FUNCTION_ENTRY_TYPE, {
           name: namedFunction,
@@ -619,7 +635,9 @@ export default function pit(pi: ExtensionAPI) {
         maxLines: DEFAULT_MAX_LINES,
       });
       const savedNotice = namedFunction
-        ? `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
+        ? params.saveOnly
+          ? `\n[Saved function "${namedFunction}" without executing it. Invoke later with: ${namedFunction}()]`
+          : `\n[Saved function "${namedFunction}". Invoke later with: ${namedFunction}()]`
         : "";
       return {
         content: [

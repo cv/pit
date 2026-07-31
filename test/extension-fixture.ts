@@ -18,6 +18,7 @@ export interface RegisteredTool {
     properties: {
       code: { description?: string };
       params: { description?: string };
+      saveOnly: { description?: string };
       timeoutMs: { description?: string };
     };
   };
