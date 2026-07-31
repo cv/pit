@@ -121,12 +121,24 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     await run(
       "/** Transitive project dependent. @pit project */ async function transitiveProject() { return directProject(); }",
     );
+    await run(
+      "/** Another transitive dependent. @pit project */ async function anotherTransitive(): Promise<number> { return directProject(); }",
+    );
+    for (const code of [
+      "/** Cycle A. @pit project */ async function cycleA(): Promise<number> { return 0; }",
+      "/** Cycle B. @pit project */ async function cycleB(): Promise<number> { return cycleA(); }",
+      "/** Cycle A replacement. @pit project */ async function cycleA(): Promise<number> { return cycleB(); }",
+    ]) {
+      await tool.execute("call-id", { code, saveOnly: true }, undefined, undefined, context());
+    }
     await run("async function sessionDependent() { return dependencyBase(); }");
     await run("async function directProject() { return 2; }");
 
     await expect(
       run('async ({ functions }) => functions.remove("dependencyBase")'),
-    ).rejects.toThrow("direct: directProject, sessionDependent; transitive: transitiveProject");
+    ).rejects.toThrow(
+      "direct: directProject, sessionDependent; transitive: anotherTransitive, transitiveProject",
+    );
     await expect(
       readFile(join(cwd, ".pi/pit/functions/dependencyBase.ts"), "utf8"),
     ).resolves.toContain("dependencyBase");
