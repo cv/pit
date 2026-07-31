@@ -53,7 +53,7 @@ const SPINNER_INTERVAL_MS = 80;
 
 function spinnerFrame(elapsedMs: number): string {
   const index = Math.floor(Math.max(0, elapsedMs) / SPINNER_INTERVAL_MS) % SPINNER_FRAMES.length;
-  return SPINNER_FRAMES[index] ?? SPINNER_FRAMES[0];
+  return SPINNER_FRAMES[index] as (typeof SPINNER_FRAMES)[number];
 }
 
 interface ShellProgress {
