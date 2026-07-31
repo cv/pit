@@ -42,6 +42,7 @@ import {
   projectFunctionCatalog,
   reconcileProjectFunctionsForSession,
   removeProjectFunction,
+  savedFunctionDependents,
   saveProjectFunction,
 } from "./project-functions.js";
 import {
@@ -156,73 +157,6 @@ export function effectiveRegistry(
   session: ReadonlyMap<string, string>,
 ): FunctionRegistry {
   return new Map([...project, ...session]);
-}
-
-function savedFunctionDependents(
-  state: FunctionState,
-  name: string,
-): { direct: string[]; transitive: string[] } {
-  type ScopedFunction = { name: string; scope: "project" | "session"; source: string };
-  const key = (scope: ScopedFunction["scope"], functionName: string) => `${scope}:${functionName}`;
-  const target = key("project", name);
-  const functions = new Map<string, ScopedFunction>();
-  for (const [functionName, source] of state.project) {
-    functions.set(key("project", functionName), { name: functionName, scope: "project", source });
-  }
-  for (const [functionName, source] of state.session) {
-    functions.set(key("session", functionName), { name: functionName, scope: "session", source });
-  }
-
-  const dependencies = new Map<string, Set<string>>();
-  for (const [functionKey, candidate] of functions) {
-    const registry = candidate.scope === "project" ? state.project : state.effective;
-    const references = resolveSavedFunctionReferences(candidate.source, registry).filter(
-      (reference) => reference.direct,
-    );
-    dependencies.set(
-      functionKey,
-      new Set(
-        references.map((reference) =>
-          candidate.scope === "session" && state.session.has(reference.name)
-            ? key("session", reference.name)
-            : key("project", reference.name),
-        ),
-      ),
-    );
-  }
-
-  const reachesTarget = (functionKey: string, visiting = new Set<string>()): boolean => {
-    if (visiting.has(functionKey)) {
-      return false;
-    }
-    visiting.add(functionKey);
-    for (const dependency of dependencies.get(functionKey) as Set<string>) {
-      if (dependency === target || reachesTarget(dependency, visiting)) {
-        visiting.delete(functionKey);
-        return true;
-      }
-    }
-    visiting.delete(functionKey);
-    return false;
-  };
-
-  const direct = new Set<string>();
-  const transitive = new Set<string>();
-  for (const [functionKey, candidate] of functions) {
-    if (functionKey === target) {
-      continue;
-    }
-    if (dependencies.get(functionKey)?.has(target)) {
-      direct.add(candidate.name);
-      transitive.delete(candidate.name);
-    } else if (!direct.has(candidate.name) && reachesTarget(functionKey)) {
-      transitive.add(candidate.name);
-    }
-  }
-  return {
-    direct: [...direct].sort((a, b) => a.localeCompare(b)),
-    transitive: [...transitive].sort((a, b) => a.localeCompare(b)),
-  };
 }
 
 function boundedInteger(
@@ -526,8 +460,13 @@ function createCapabilities(
       if (method === "remove") {
         return commitFunctionState(async () => {
           const functionName = name as string;
-          if (functionState.project.has(functionName)) {
-            const dependents = savedFunctionDependents(functionState, functionName);
+          if (functionState.projectCandidates.has(functionName)) {
+            const dependents = savedFunctionDependents(
+              functionState.projectCandidates,
+              functionState.session,
+              functionState.effective,
+              functionName,
+            );
             if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
               const details = [
                 dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",

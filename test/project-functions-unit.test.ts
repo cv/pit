@@ -8,6 +8,7 @@ import {
   projectFunctionCatalog,
   reconcileProjectFunctionsForSession,
   removeProjectFunction,
+  savedFunctionDependents,
   saveProjectFunction,
 } from "../src/project-functions.js";
 import { getProjectFunctionMetadata } from "../src/sandbox.js";
@@ -238,6 +239,28 @@ describe("project function storage", () => {
     expect(active.has("zQuotaDependency")).toBe(true);
     expect(active.has("bQuotaDependent")).toBe(false);
     expect(errors).toEqual([expect.stringMatching(/bQuotaDependent.*total source/)]);
+    expect(savedFunctionDependents(active, new Map(), active, "zQuotaDependency")).toEqual({
+      direct: [],
+      transitive: [],
+    });
+    expect(savedFunctionDependents(candidates, new Map(), active, "zQuotaDependency")).toEqual({
+      direct: ["bQuotaDependent"],
+      transitive: [],
+    });
+
+    const candidatesAfterDeletion = new Map(candidates);
+    candidatesAfterDeletion.delete("zQuotaDependency");
+    const activeAfterDeletion = registry();
+    expect(
+      reconcileProjectFunctionsForSession(
+        candidatesAfterDeletion,
+        new Map(),
+        new Map(),
+        activeAfterDeletion,
+        metadata(),
+      ),
+    ).toEqual([]);
+    expect(activeAfterDeletion.has("bQuotaDependent")).toBe(true);
   });
 
   it("rejects a session dependent when its required project closure cannot fit", () => {
