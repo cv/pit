@@ -6,21 +6,16 @@ export const PROMPT_SNIPPET =
 
 export const PROMPT_GUIDELINES = [
   "Use typescript for workspace inspection, file changes, shell commands, HTTP requests, UI interactions, and session-context queries.",
-  "Call typescript with an anonymous async function for one-shot work, passing large or quote-heavy data through top-level params; use a named async function for recurring work or a call such as runTests() to invoke a saved function.",
   "Code passed to typescript is contextually type-checked; use diagnostics to correct capability names, arguments, missing awaits, and result types.",
-  "In typescript, prefer one tool invocation per step; batch independent capability calls with Promise.all inside it instead of issuing multiple parallel typescript calls. Use Promise.allSettled or local catches for optional probes, and sequence dependencies and conflicting mutations.",
-  "In typescript, use workspace.read's default hashed mode in a prior call or workspace.search to obtain a revision and anchors before editing; on mismatch, re-read instead of retrying stale anchors, and use raw mode only for machine parsing.",
+  "In typescript, prefer one tool invocation per step; batch independent capability calls with Promise.all inside it instead of issuing multiple parallel typescript calls, and sequence dependencies and conflicting mutations.",
+  "Before editing in typescript, obtain the current revision and hashed anchors with workspace.read or workspace.search; re-read after a mismatch.",
   "Before an anonymous typescript call, compare the workflow with recent calls and saved functions; on the second substantially similar workflow, define or extend a parameterized named function instead of repeating inline code.",
   "In typescript, prefer matching signatures from the saved-function catalog in prior results; compose saved functions into workflows named after user intent.",
-  "To create a reusable function without running it, call typescript with saveOnly: true and a named top-level function; invoke it later after review.",
-  "In typescript, annotate saved-function input parameters so initial params and later calls retain type checking.",
-  "In typescript, prefer shell.execFile(program, args) for ordinary commands; use shell.exec only for shell syntax such as pipes or redirection.",
-  "In typescript, use { raise: true } when a failed shell command should stop a composed workflow.",
   "Return a compact JSON-serializable summary from typescript and use only capabilities for external effects.",
 ] as const;
 
 export const CODE_DESCRIPTION =
-  'Contextually type-checked TypeScript. Use an anonymous function for one-shot work, async function runTests({ shell }) { return shell.execFile("npm", ["test"]); } for reusable work, or runTests() later. Use Promise.all for independent calls, await capabilities, do not import, and return compact JSON.';
+  "Contextually type-checked TypeScript expression or named function definition. Await capabilities, do not import, and return a JSON-serializable value.";
 
 export const PARAMS_DESCRIPTION =
   "Optional JSON input passed as the function second argument. Use it for large patches, file contents, or quote-heavy data; annotate the input parameter.";
@@ -58,7 +53,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "  return { packageJson: JSON.parse(file.content), status };",
     "}",
     "",
-    "Capability calls are async. Use Promise.all for independent work and Promise.allSettled or local catches for optional probes. Put large data in top-level params, sequence dependencies and mutations, and return compact JSON. Imports and direct host access are unavailable.",
+    "Capability calls are async. Put large data in top-level params, sequence dependencies and mutations, and use Promise.allSettled or local catches when optional probes should not fail the call. Imports and direct host access are unavailable.",
     "",
     "HASHED EDIT WORKFLOW",
     "",

@@ -105,15 +105,13 @@ describe("pit extension", () => {
     expect(tool.description).toContain("missing totalLines means lines");
     expect(tool.description).toContain('kind: "read", file, options?');
     expect(tool.description).toContain("only after successful execution");
-    expect(tool.parameters.properties.code.description).toContain("async function runTests");
-    expect(tool.parameters.properties.code.description).toContain("Promise.all");
+    expect(tool.parameters.properties.code.description).toContain("named function definition");
+    expect(tool.parameters.properties.code.description).toContain("do not import");
     expect(tool.parameters.properties.params.description).toContain("second argument");
     expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
-    expect(tool.promptGuidelines).toHaveLength(12);
-    expect(tool.promptGuidelines?.join("\n")).toContain("top-level params");
-    expect(tool.promptGuidelines?.join("\n")).toContain("Promise.allSettled");
+    expect(tool.promptGuidelines).toHaveLength(7);
     expect(tool.promptGuidelines?.join("\n")).toContain("one tool invocation per step");
     expect(tool.promptGuidelines?.join("\n")).toContain(
       "instead of issuing multiple parallel typescript calls",
