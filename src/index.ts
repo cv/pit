@@ -630,7 +630,7 @@ export default function pit(pi: ExtensionAPI) {
         const message = fallback || "TypeScript execution failed";
         return new Text(
           `${expanded ? "\n" : ""}${theme.bold(
-            theme.fg("error", `✗ ${callLabel}`) + theme.fg("dim", ` (${executionDuration})`),
+            theme.fg("error", "✗ Failed") + theme.fg("dim", ` (${executionDuration})`),
           )}\n${theme.fg("error", message)}`,
           0,
           0,
