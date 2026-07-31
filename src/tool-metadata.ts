@@ -12,7 +12,7 @@ export const PROMPT_GUIDELINES = [
   "Before editing in typescript, obtain the current revision and hashed anchors with workspace.read or workspace.search. A successful edit invalidates every prior revision and anchor for that file; batch compatible changes against one revision or re-read before the next edit, never mutate the same file concurrently, and re-read after a mismatch.",
   "Before an anonymous typescript call, compare the workflow with recent calls and saved functions. Define or extend a parameterized named function as soon as work repeats, has reusable steps, or is likely to recur; reserve anonymous typescript calls for truly ad hoc work.",
   "In typescript, maintain one parameterized saved function per intent: reuse, replace, or extend the closest saved-function signature, and add input modes or compose existing functions instead of creating overlapping variants.",
-  "Return a compact JSON-serializable summary from typescript and use only capabilities for external effects.",
+  "Filter and summarize inside typescript; return counts, IDs, and bounded relevant excerpts—not complete files, HTTP bodies, search corpora, or session records. If truncated, narrow the query rather than enlarging it; use capabilities for external effects.",
 ] as const;
 
 export const CODE_DESCRIPTION =

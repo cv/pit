@@ -130,6 +130,11 @@ describe("pit extension", () => {
     );
     expect(tool.promptGuidelines?.join("\n")).toContain("only the fields and record limits");
     expect(tool.promptGuidelines?.join("\n")).toContain("expand the query only");
+    expect(tool.promptGuidelines?.join("\n")).toContain("Filter and summarize inside typescript");
+    expect(tool.promptGuidelines?.join("\n")).toContain("bounded relevant excerpts");
+    expect(tool.promptGuidelines?.join("\n")).toContain(
+      "narrow the query rather than enlarging it",
+    );
     expect(tool.promptGuidelines?.join("\n")).toContain("successful edit invalidates");
     expect(tool.promptGuidelines?.join("\n")).toContain("re-read before the next edit");
     expect(tool.promptGuidelines?.join("\n")).toContain("as soon as work repeats");
