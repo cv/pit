@@ -425,7 +425,7 @@ export const CAPABILITY_REGISTRY = {
         callDescription: "Call the GitHub API",
         resultRenderer: "gh",
         declaration:
-          "api(endpoint: string, args?: string[], options?: PitGhOptions): Promise<PitProcessResult>;",
+          "api(endpoint: string, args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;",
         documentation: "gh.api(endpoint, args?, options?) is a bounded argument-safe escape hatch",
         minimumArguments: 1,
         maximumArguments: 3,

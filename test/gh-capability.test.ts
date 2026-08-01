@@ -122,10 +122,17 @@ describe("gh renderer", () => {
         "--json",
         "tagName,name,url,isDraft,isPrerelease,publishedAt",
       ]);
+      expect(prepareGhCommand("releaseView", [undefined, { repo: "cv/pit" }]).args).toContain(
+        "cv/pit",
+      );
       expect(prepareGhCommand("releaseCreate", ["v1", { title: "Release" }]).args).not.toContain(
         "--notes",
       );
       expect(prepareGhCommand("api", ["user"]).args).toEqual(["api", "user"]);
+      expect(prepareGhCommand("api", ["user", [], { repo: "ignored" }]).args).toEqual([
+        "api",
+        "user",
+      ]);
     });
 
     it("covers argument validation helpers", () => {

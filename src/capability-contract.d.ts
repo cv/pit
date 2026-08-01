@@ -222,7 +222,7 @@ interface PitGhCapability {
 
   releaseCreate(tag: string, input: PitGhCreateOptions): Promise<PitProcessResult>;
 
-  api(endpoint: string, args?: string[], options?: PitGhOptions): Promise<PitProcessResult>;
+  api(endpoint: string, args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 }
 
 interface PitShellCapability {

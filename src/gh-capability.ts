@@ -159,7 +159,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
         args: [
           "release",
           "view",
-          ...(args[0] === undefined ? [] : [text(args[0], "tag")]),
+          ...(args[0] === undefined || args[0] === null ? [] : [text(args[0], "tag")]),
           ...repo(o),
           "--json",
           "tagName,name,url,isDraft,isPrerelease,publishedAt",
@@ -189,7 +189,6 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "api",
           text(args[0], "endpoint"),
           ...(args[1] === undefined ? [] : list(args[1], "args")),
-          ...repo(o),
         ],
         options: options(o),
       };
