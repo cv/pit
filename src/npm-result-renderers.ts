@@ -1,38 +1,17 @@
+import {
+  nonemptyLines as lines,
+  type ProcessResult,
+  parseProcessResult,
+  type SemanticOutcome,
+  semanticOutcome,
+} from "./cli.js";
 import type { RenderedResultValue, ValueRenderer } from "./result-renderer-types.js";
 
-interface ProcessResult {
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape prefix is intentional.
-const ANSI_PATTERN = /\x1b\[[0-?]*[ -\/]*[@-~]/g;
+const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 const TEST_COUNT_PATTERN = /Tests\s+(\d+)\s+passed/i;
 const INSTALL_SUMMARY_PATTERN = /^(added|removed|changed|up to date|audited)\b/i;
 
-function processResult(value: unknown): ProcessResult | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).length !== 4 ||
-    typeof record.stdout !== "string" ||
-    typeof record.stderr !== "string" ||
-    typeof record.code !== "number" ||
-    typeof record.truncated !== "boolean"
-  ) {
-    return;
-  }
-  return record as unknown as ProcessResult;
-}
-function lines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter(Boolean);
-}
 function plural(count: number, noun: string, pluralForm = `${noun}s`): string {
   return `${count} ${count === 1 ? noun : pluralForm}`;
 }
@@ -45,15 +24,19 @@ function json(value: string): unknown {
 }
 function renderer(
   method: string,
-  summarize: (result: ProcessResult) => { summary: string; output?: string[] },
+  summarize: (result: ProcessResult) => {
+    summary: string;
+    output?: string[];
+    outcome?: Exclude<SemanticOutcome, "error">;
+  },
 ): ValueRenderer {
   return (value, context) => {
-    const result = processResult(value);
+    const result = parseProcessResult(value);
     if (!result) {
       return;
     }
     const rendered = summarize(result);
-    const status = result.code === 0 ? "success" : "error";
+    const status = semanticOutcome(result, rendered.outcome);
     const suffix = result.truncated ? context.theme.fg("warning", ", truncated") : "";
     const output = rendered.output ?? lines(result.stdout);
     const display = [
@@ -112,6 +95,7 @@ const audit = renderer("audit", (result) => {
       ? `audit, ${plural(total, "vulnerability", "vulnerabilities")}`
       : `audit, exit ${result.code}`,
     output,
+    outcome: total > 0 ? "warning" : "success",
   };
 });
 const outdated = renderer("outdated", (result) => {
@@ -128,6 +112,7 @@ const outdated = renderer("outdated", (result) => {
       ([name, item]) =>
         `${name}: ${item.current ?? "?"} → ${item.wanted ?? item.latest ?? "?"}${item.latest && item.latest !== item.wanted ? ` (latest ${item.latest})` : ""}`,
     ),
+    outcome: entries.length > 0 ? "warning" : "success",
   };
 });
 const pack = renderer("pack", (result) => {

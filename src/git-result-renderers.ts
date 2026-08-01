@@ -1,4 +1,5 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
+import { nonemptyLines, type ProcessResult, parseProcessResult } from "./cli.js";
 import type {
   RenderContext,
   RenderedResultValue,
@@ -6,59 +7,23 @@ import type {
   ValueRenderer,
 } from "./result-renderer-types.js";
 
-interface ProcessResult {
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}
-
 const STATUS_PORCELAIN_PATTERN = /^.. /;
 const LOG_ONE_LINE_PATTERN = /^([0-9a-f]{7,40})(\s+)(.*)$/i;
 const LOG_COMMIT_LINE_PATTERN = /^(commit)\s+([0-9a-f]{7,40})(.*)$/i;
 const SHOW_DIFF_PATTERN = /^(?:commit\s|diff --git )/m;
-const JSON_CONTAINER_PATTERN = /^\s*[\[{]/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function processResult(value: unknown): ProcessResult | undefined {
-  if (!isRecord(value)) {
-    return;
-  }
-  const keys = Object.keys(value);
-  if (
-    keys.length !== 4 ||
-    !["stdout", "stderr", "code", "truncated"].every((key) => key in value) ||
-    typeof value.stdout !== "string" ||
-    typeof value.stderr !== "string" ||
-    typeof value.code !== "number" ||
-    typeof value.truncated !== "boolean"
-  ) {
-    return;
-  }
-  return value as unknown as ProcessResult;
-}
+const JSON_CONTAINER_PATTERN = /^\s*[[{]/;
 
 type ParsedGitRenderer = (result: ProcessResult, context: RenderContext) => RenderedResultValue;
 
 function gitRenderer(renderer: ParsedGitRenderer): ValueRenderer {
   return (value, context) => {
-    const result = processResult(value);
+    const result = parseProcessResult(value);
     return result ? renderer(result, context) : undefined;
   };
 }
 
 function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
-}
-
-function nonemptyLines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter(Boolean);
 }
 
 function gitHeader(method: string, result: ProcessResult, theme: ResultTheme): string {

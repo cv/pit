@@ -1,33 +1,16 @@
 import type { CAPABILITY_METHODS } from "./capability-registry.js";
+import { stringArrayValue as list, recordValue as object, stringValue as text } from "./cli.js";
 
 type GhMethod = (typeof CAPABILITY_METHODS)["gh"][number];
 export interface PreparedGhCommand {
   args: string[];
   options: Record<string, unknown>;
 }
-function object(value: unknown, label = "options"): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-function text(value: unknown, label: string): string {
-  if (typeof value !== "string") {
-    throw new TypeError(`${label} must be a string`);
-  }
-  return value;
-}
 function number(value: unknown, label: string): number {
   if (!Number.isInteger(value)) {
     throw new TypeError(`${label} must be an integer`);
   }
   return value as number;
-}
-function list(value: unknown, label: string): string[] {
-  if (!(Array.isArray(value) && value.every((x) => typeof x === "string"))) {
-    throw new TypeError(`${label} must be an array of strings`);
-  }
-  return value;
 }
 function options(value: unknown, special: string[] = []) {
   if (value === undefined) {

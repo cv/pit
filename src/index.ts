@@ -4,7 +4,6 @@ import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   truncateHead,
-  truncateTail,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
@@ -12,6 +11,12 @@ import {
   type CapabilityName,
   validateCapabilityCall,
 } from "./capability-registry.js";
+import {
+  boundedIntegerValue as boundedInteger,
+  recordValue as object,
+  stringValue as string,
+  stringArrayValue as stringArray,
+} from "./cli.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
@@ -39,8 +44,8 @@ import { ExecutionProgressController } from "./execution-progress.js";
 import type { HostShellProgressEvent, ShellProgressEvent } from "./execution-types.js";
 
 import { prepareGhCommand } from "./gh-capability.js";
-import { executeStreamingProcess } from "./host-process.js";
 import { prepareNpmCommand } from "./npm-capability.js";
+import { executeHostProcess, formatProcessCommand } from "./process-runner.js";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
@@ -64,7 +69,7 @@ import {
   renderTypeScriptToolCall,
   renderTypeScriptToolResult,
 } from "./typescript-tool-renderer.js";
-import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
+import { handleWorkspace } from "./workspace.js";
 
 export { CAPABILITY_METHODS } from "./capability-registry.js";
 
@@ -135,19 +140,6 @@ export function effectiveRegistry(
   return new Map([...project, ...session]);
 }
 
-function boundedInteger(
-  value: unknown,
-  label: string,
-  maximum: number,
-  defaultValue: number,
-): number {
-  const resolved = Number(value ?? defaultValue);
-  if (!Number.isInteger(resolved) || resolved < 1 || resolved > maximum) {
-    throw new Error(`${label} must be an integer between 1 and ${maximum}`);
-  }
-  return resolved;
-}
-
 async function readHttpBody(
   response: Response,
   maxBytes: number,
@@ -184,95 +176,6 @@ async function readHttpBody(
     }
   }
   return { body: Buffer.concat(chunks, bytes).toString("utf8"), truncated };
-}
-
-function object(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function string(value: unknown, label: string): string {
-  if (typeof value !== "string") {
-    throw new TypeError(`${label} must be a string`);
-  }
-  return value;
-}
-
-function stringArray(value: unknown, label: string): string[] {
-  if (!(Array.isArray(value) && value.every((entry) => typeof entry === "string"))) {
-    throw new TypeError(`${label} must be an array of strings`);
-  }
-  return value;
-}
-
-function formatProcessCommand(program: string, args: string[]): string {
-  return [program, ...args.map((argument) => JSON.stringify(argument))].join(" ");
-}
-
-async function executeHostProcess(
-  pi: ExtensionAPI,
-  program: string,
-  args: string[],
-  displayCommand: string,
-  options: Record<string, unknown>,
-  defaultCwd: string,
-  onProgress?: (event: HostShellProgressEvent) => void,
-  signal?: AbortSignal,
-) {
-  if (options.raise !== undefined && typeof options.raise !== "boolean") {
-    throw new TypeError("options.raise must be a boolean");
-  }
-  const cwd =
-    options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
-  const maxBytes = boundedInteger(
-    options.maxBytes,
-    "options.maxBytes",
-    DEFAULT_MAX_BYTES,
-    DEFAULT_MAX_BYTES,
-  );
-  const maxLines = boundedInteger(
-    options.maxLines,
-    "options.maxLines",
-    DEFAULT_MAX_LINES,
-    DEFAULT_MAX_LINES,
-  );
-  const truncate = options.truncate ?? "tail";
-  if (truncate !== "head" && truncate !== "tail") {
-    throw new Error('options.truncate must be "head" or "tail"');
-  }
-  const truncateOutput = truncate === "head" ? truncateHead : truncateTail;
-  const timeout = Number(options.timeoutMs ?? 120_000);
-  onProgress?.({ phase: "start" });
-  const result = onProgress
-    ? await executeStreamingProcess(program, args, {
-        cwd,
-        timeout,
-        ...(signal ? { signal } : {}),
-        onChunk: (stream, chunk) => onProgress({ phase: "output", stream, chunk }),
-      })
-    : await pi.exec(program, args, {
-        cwd,
-        ...(signal ? { signal } : {}),
-        timeout,
-      });
-  onProgress?.({ phase: "end", code: result.code });
-  const stdout = truncateOutput(result.stdout, { maxBytes, maxLines });
-  const stderr = truncateOutput(result.stderr, { maxBytes, maxLines });
-  if (options.raise === true && result.code !== 0) {
-    const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4000);
-    throw new Error(
-      `Command failed with exit code ${result.code}: ${displayCommand}` +
-        (detail ? `\n${detail}` : ""),
-    );
-  }
-  return {
-    stdout: stdout.content,
-    stderr: stderr.content,
-    code: result.code,
-    truncated: stdout.truncated || stderr.truncated,
-  };
 }
 
 function createCapabilities(

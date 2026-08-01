@@ -1,26 +1,6 @@
+import { nonemptyLines, outcomeColor, parseProcessResult, semanticOutcome } from "./cli.js";
 import type { RenderContext, RenderedResultValue, ValueRenderer } from "./result-renderer-types.js";
 
-interface ProcessResult {
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}
-function parse(value: unknown): ProcessResult | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return;
-  }
-  const r = value as Record<string, unknown>;
-  if (
-    typeof r.stdout !== "string" ||
-    typeof r.stderr !== "string" ||
-    typeof r.code !== "number" ||
-    typeof r.truncated !== "boolean"
-  ) {
-    return;
-  }
-  return r as unknown as ProcessResult;
-}
 function json(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -35,8 +15,22 @@ function itemLine(item: Record<string, unknown>): string {
   const url = item.url ?? "";
   return [id ? `#${id}` : "", title, state ? `[${state}]` : "", url].filter(Boolean).join(" ");
 }
+
+const FAILED_STATES = new Set(["failure", "failed", "cancelled", "timed_out", "action_required"]);
+function hasFailedDomainItem(value: unknown): boolean {
+  const items = Array.isArray(value) ? value : [value];
+  return items.some((item) => {
+    if (!(item && typeof item === "object" && !Array.isArray(item))) {
+      return false;
+    }
+    const record = item as Record<string, unknown>;
+    return [record.conclusion, record.status, record.state].some(
+      (state) => typeof state === "string" && FAILED_STATES.has(state.toLowerCase()),
+    );
+  });
+}
 export const renderGhResult: ValueRenderer = (value, context: RenderContext) => {
-  const result = parse(value);
+  const result = parseProcessResult(value);
   if (!result) {
     return;
   }
@@ -72,10 +66,11 @@ export const renderGhResult: ValueRenderer = (value, context: RenderContext) => 
         ),
     ];
   } else {
-    output = result.stdout.split("\n").filter(Boolean);
+    output = nonemptyLines(result.stdout);
   }
-  const stderr = result.stderr.split("\n").filter(Boolean);
-  const status = result.code === 0 ? "success" : "error";
+  const stderr = nonemptyLines(result.stderr);
+  const domainOutcome = hasFailedDomainItem(parsed) ? "warning" : undefined;
+  const status = outcomeColor(semanticOutcome(result, domainOutcome));
   const lines = [
     `${context.theme.fg("toolTitle", context.theme.bold("gh"))} ${context.theme.fg(status, `exit ${result.code}`)}${result.truncated ? context.theme.fg("warning", ", truncated") : ""}`,
     ...output,
