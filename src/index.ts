@@ -1,6 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-  CONFIG_DIR_NAME,
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   truncateHead,
@@ -11,7 +10,6 @@ import type { ShellProgressEvent } from "./execution-types.js";
 import {
   createFunctionState,
   createFunctionStateCommitQueue,
-  effectiveRegistry,
   reconcileFunctionState,
 } from "./function-state.js";
 import { createCapabilities } from "./host-capabilities.js";
@@ -19,25 +17,13 @@ import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
   projectFunctionCatalog,
-  saveProjectFunction,
 } from "./project-functions.js";
+import { getSavedFunctionCallSignature, runInSandbox } from "./sandbox.js";
+import { SavedFunctionService } from "./saved-function-service.js";
 import {
-  getNamedFunctionName,
-  getProjectFunctionMetadata,
-  getSavedFunctionCallSignature,
-  runInSandbox,
-  validateTypeScript,
-} from "./sandbox.js";
-import {
-  FUNCTION_ENTRY_TYPE,
   type FunctionActivity,
-  type FunctionEntry,
-  type FunctionRegistry,
-  functionScopeRegistry,
   reconstructFunctions,
   registerFunctionManager,
-  validateRegistryCapacity,
-  validateSavedFunctionName,
 } from "./saved-functions.js";
 import {
   CODE_DESCRIPTION,
@@ -92,6 +78,11 @@ export default function pit(pi: ExtensionAPI) {
   const functionState = createFunctionState();
 
   const commitFunctionState = createFunctionStateCommitQueue();
+  const savedFunctionService = new SavedFunctionService({
+    state: functionState,
+    commit: commitFunctionState,
+    appendEntry: (type, entry) => pi.appendEntry(type, entry),
+  });
 
   registerFunctionManager(pi, functionState.session, () => {
     reconcileFunctionState(functionState);
@@ -143,50 +134,16 @@ export default function pit(pi: ExtensionAPI) {
         ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
         : undefined;
       try {
-        const namedFunction = getNamedFunctionName(params.code);
-        const projectMetadata = getProjectFunctionMetadata(params.code);
-        if (params.saveOnly && namedFunction === undefined) {
-          throw new Error("saveOnly requires a named top-level function");
-        }
-        if (params.saveOnly && params.params !== undefined) {
-          throw new Error("saveOnly does not accept top-level params");
-        }
-        let executionRegistry = functionState.effective;
-        let candidateProject: FunctionRegistry | undefined;
-        let candidateSession: FunctionRegistry | undefined;
-        if (namedFunction) {
-          validateSavedFunctionName(namedFunction);
-          if (projectMetadata) {
-            if (!ctx.isProjectTrusted()) {
-              throw new Error("Project functions require a trusted project");
-            }
-            if (!functionState.projectEnabled) {
-              throw new Error(
-                `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
-              );
-            }
-            validateRegistryCapacity(functionState.effective, namedFunction, params.code);
-            candidateProject = new Map(functionState.project);
-            candidateProject.set(namedFunction, params.code);
-            validateTypeScript(params.code, candidateProject, params.params);
-            candidateSession = new Map(functionState.session);
-            candidateSession.delete(namedFunction);
-            executionRegistry = effectiveRegistry(candidateProject, candidateSession);
-            validateTypeScript(params.code, executionRegistry, params.params);
-          } else {
-            validateRegistryCapacity(functionState.effective, namedFunction, params.code);
-            candidateSession = new Map(functionState.session);
-            candidateSession.set(namedFunction, params.code);
-            executionRegistry = effectiveRegistry(functionState.project, candidateSession);
-            // Validation compiles every candidate signature together, so replacements
-            // are rejected when they invalidate any dependent definition.
-            validateTypeScript(params.code, executionRegistry, params.params);
-          }
-        }
-        const executionScopes = functionScopeRegistry(
-          executionRegistry,
-          candidateSession ?? functionState.session,
-        );
+        const preparedFunction = savedFunctionService.prepare({
+          source: params.code,
+          ...(params.params === undefined ? {} : { input: params.params }),
+          ...(params.saveOnly ? { saveOnly: true } : {}),
+          context: ctx,
+        });
+        const namedFunction = preparedFunction.name;
+        const projectMetadata = preparedFunction.projectMetadata;
+        const executionRegistry = preparedFunction.registry;
+        const executionScopes = preparedFunction.scopes;
         let value: unknown;
         if (params.saveOnly) {
           value = { savedFunction: namedFunction, executed: false };
@@ -211,66 +168,7 @@ export default function pit(pi: ExtensionAPI) {
             },
           );
         }
-        if (namedFunction && projectMetadata && candidateProject && candidateSession) {
-          await commitFunctionState(async () => {
-            validateRegistryCapacity(functionState.effective, namedFunction, params.code);
-            const currentProject = new Map(functionState.project);
-            currentProject.set(namedFunction, params.code);
-            validateTypeScript(params.code, currentProject, params.params);
-            const currentSession = new Map(functionState.session);
-            currentSession.delete(namedFunction);
-            validateTypeScript(
-              params.code,
-              effectiveRegistry(currentProject, currentSession),
-              params.params,
-            );
-
-            const replaced = functionState.project.has(namedFunction);
-            await saveProjectFunction(
-              ctx.cwd,
-              namedFunction,
-              params.code,
-              functionState.projectCandidates,
-            );
-            functionState.project.set(namedFunction, params.code);
-            functionState.metadata.set(namedFunction, projectMetadata);
-            functionState.candidateMetadata.set(namedFunction, projectMetadata);
-            if (functionState.session.has(namedFunction)) {
-              pi.appendEntry(FUNCTION_ENTRY_TYPE, {
-                name: namedFunction,
-                deleted: true,
-              } satisfies FunctionEntry);
-            }
-            functionState.session.delete(namedFunction);
-            reconcileFunctionState(functionState);
-            functionActivity.push({
-              action: "set",
-              name: namedFunction,
-              replaced,
-              scope: "project",
-            });
-          });
-        } else if (namedFunction && candidateSession) {
-          await commitFunctionState(() => {
-            validateRegistryCapacity(functionState.effective, namedFunction, params.code);
-            const currentSession = new Map(functionState.session);
-            currentSession.set(namedFunction, params.code);
-            validateTypeScript(
-              params.code,
-              effectiveRegistry(functionState.project, currentSession),
-              params.params,
-            );
-
-            const replaced = functionState.session.has(namedFunction);
-            pi.appendEntry(FUNCTION_ENTRY_TYPE, {
-              name: namedFunction,
-              source: params.code,
-            } satisfies FunctionEntry);
-            functionState.session.set(namedFunction, params.code);
-            reconcileFunctionState(functionState);
-            functionActivity.push({ action: "set", name: namedFunction, replaced });
-          });
-        }
+        await savedFunctionService.commit(preparedFunction, ctx, functionActivity);
         const rendered = display(value);
         const output = truncateHead(rendered, {
           maxBytes: DEFAULT_MAX_BYTES,
