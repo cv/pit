@@ -578,7 +578,18 @@ export default function pit(pi: ExtensionAPI) {
     },
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
-      const executionProgress = new ExecutionProgressController(update);
+      const executionProgress = new ExecutionProgressController(
+        update
+          ? (partial) =>
+              update({
+                ...partial,
+                details: {
+                  ...partial.details,
+                  ...(functionActivity.length > 0 ? { functions: [...functionActivity] } : {}),
+                },
+              })
+          : undefined,
+      );
       const onShellProgress = update
         ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
         : undefined;

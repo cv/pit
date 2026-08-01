@@ -99,6 +99,8 @@ Direct `git.*` results use method-specific summaries and formatting. Status code
 
 Each invocation retains up to 128 runtime capability traces for TUI attribution. A trace records capability and method names, source order, timing, duration, and outcome. Argument metadata contains only bounded type-and-size summaries, never argument values. Additional calls set a truncation flag instead of growing session details without bound. Runtime traces let saved-function results use the same capability-specific renderers as direct calls; ambiguous multi-call results retain generic fallback rendering.
 
+Expanded running tool rows show a live capability dashboard in source order. Each row includes capability and method, running/succeeded/failed state, and duration. Project and session function runs are labeled by scope. Shell output remains a separate bounded tail, and trace transitions from non-shell capabilities trigger updates even when they produce no streaming output.
+
 Long-running shell calls show a sanitized and bounded tail of standard output and standard error in partial tool updates. These updates do not become part of the final model context.
 
 Display formatting affects only the TUI. It does not change the serialized tool result.

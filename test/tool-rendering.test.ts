@@ -275,6 +275,32 @@ describe("tool rendering", () => {
             { id: 2, command: "git status", status: "done", code: 0, output: "clean" },
             { id: 3, command: "sleep 1", status: "running", output: "" },
           ],
+          functions: [
+            { action: "run", name: "projectChecks", scope: "project" },
+            { action: "run", name: "sessionChecks" },
+          ],
+          traces: [
+            {
+              id: 1,
+              sequence: 1,
+              capability: "npm",
+              method: "test",
+              arguments: [],
+              startedAt: Date.now(),
+              status: "running",
+            },
+            {
+              id: 2,
+              sequence: 2,
+              capability: "git",
+              method: "status",
+              arguments: [],
+              startedAt: 1,
+              durationMs: 5,
+              status: "succeeded",
+            },
+          ],
+          tracesTruncated: true,
         },
       },
       { expanded: true, isPartial: true },
@@ -283,6 +309,13 @@ describe("tool rendering", () => {
     expect(streaming).toContain("test output");
     expect(streaming).toContain("[done (0)] git status");
     expect(streaming).toContain("[running] sleep 1");
+    expect(streaming).toContain("project function projectChecks");
+    expect(streaming).toContain("session function sessionChecks");
+    expect(streaming).toContain("npm.test");
+    expect(streaming).toContain("running");
+    expect(streaming).toContain("git.status");
+    expect(streaming).toContain("succeeded");
+    expect(streaming).toContain("additional capability traces omitted");
 
     const symbolResult = renderToolResult(
       { content: [], details: { value: Symbol("value"), truncated: false } },

@@ -10,7 +10,7 @@ import { HangingIndentText } from "./hanging-indent-text.js";
 import type { RenderedResultValue } from "./result-renderer-types.js";
 import { renderResultValue } from "./result-renderers.js";
 import { getNamedFunctionName, resolveSavedFunctionReferences } from "./sandbox.js";
-import type { FunctionRegistry } from "./saved-functions.js";
+import type { FunctionActivity, FunctionRegistry } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
@@ -30,6 +30,7 @@ interface TypeScriptDetails {
   progress?: ShellProgress[];
   traces?: CapabilityTrace[];
   tracesTruncated?: true;
+  functions?: FunctionActivity[];
 }
 
 function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | undefined {
@@ -266,6 +267,39 @@ export function renderTypeScriptToolCall(
   return new Text(text, 0, 0);
 }
 
+function renderExecutionDashboard(
+  details: TypeScriptDetails | undefined,
+  theme: RenderTheme,
+): string {
+  let text = "";
+  const activities = details?.functions;
+  for (const activity of activities
+    ? activities.filter((entry) => entry.action === "run").slice(-4)
+    : []) {
+    const scope = activity.scope ?? "session";
+    text += `\n${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${scope} function`)} ${activity.name}`;
+  }
+  const now = Date.now();
+  const traceEntries = details?.traces;
+  const traces = traceEntries
+    ? traceEntries.filter((trace) => trace.capability !== "__pit").slice(-8)
+    : [];
+  for (const trace of traces) {
+    const duration = trace.durationMs ?? Math.max(0, now - trace.startedAt);
+    const marker =
+      trace.status === "running"
+        ? theme.fg("accent", "●")
+        : trace.status === "succeeded"
+          ? theme.fg("success", "✓")
+          : theme.fg("error", "✗");
+    text += `\n${marker} ${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
+  }
+  if (details?.tracesTruncated) {
+    text += `\n${theme.fg("warning", "… additional capability traces omitted")}`;
+  }
+  return text;
+}
+
 export function renderTypeScriptToolResult(
   result: ToolResultLike,
   options: { expanded: boolean; isPartial: boolean },
@@ -284,6 +318,7 @@ export function renderTypeScriptToolResult(
         theme.fg("dim", ` (${execution.duration})`),
     );
     if (expanded) {
+      text += renderExecutionDashboard(details, theme);
       for (const progress of details?.progress?.slice(-4) ?? []) {
         const state = progress.status === "done" ? `done (${progress.code})` : "running";
         text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
