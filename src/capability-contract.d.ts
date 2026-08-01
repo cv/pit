@@ -38,6 +38,10 @@ type PitNpmPackOptions = PitProcessOptions & {
   dryRun?: boolean;
 };
 
+type PitGhOptions = PitProcessOptions & { repo?: string };
+type PitGhListOptions = PitGhOptions & { state?: "open" | "closed" | "all"; limit?: number };
+type PitGhCreateOptions = PitGhOptions & { title: string; body?: string };
+
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = `${number}:${string}`;
 
@@ -195,6 +199,32 @@ interface PitNpmCapability {
   pack(options?: PitNpmPackOptions): Promise<PitProcessResult>;
 }
 
+interface PitGhCapability {
+  issueList(options?: PitGhListOptions): Promise<PitProcessResult>;
+
+  issueView(number: number, options?: PitGhOptions): Promise<PitProcessResult>;
+
+  issueCreate(input: PitGhCreateOptions): Promise<PitProcessResult>;
+
+  issueComment(number: number, body: string, options?: PitGhOptions): Promise<PitProcessResult>;
+
+  issueClose(number: number, options?: PitGhOptions): Promise<PitProcessResult>;
+
+  prList(options?: PitGhListOptions): Promise<PitProcessResult>;
+
+  prView(number: number, options?: PitGhOptions): Promise<PitProcessResult>;
+
+  runList(options?: PitGhOptions & { limit?: number }): Promise<PitProcessResult>;
+
+  runView(id: number, options?: PitGhOptions): Promise<PitProcessResult>;
+
+  releaseView(tag?: string, options?: PitGhOptions): Promise<PitProcessResult>;
+
+  releaseCreate(tag: string, input: PitGhCreateOptions): Promise<PitProcessResult>;
+
+  api(endpoint: string, args?: string[], options?: PitGhOptions): Promise<PitProcessResult>;
+}
+
 interface PitShellCapability {
   execFile(program: string, args: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 
@@ -255,6 +285,7 @@ interface PitCapabilities {
   workspace: PitWorkspaceCapability;
   git: PitGitCapability;
   npm: PitNpmCapability;
+  gh: PitGhCapability;
   shell: PitShellCapability;
   http: PitHttpCapability;
   ui: PitUiCapability;

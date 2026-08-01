@@ -34,6 +34,7 @@ import {
 
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
+import { prepareGhCommand } from "./gh-capability.js";
 import { executeStreamingProcess } from "./host-process.js";
 import { prepareNpmCommand } from "./npm-capability.js";
 import {
@@ -376,6 +377,10 @@ function createCapabilities(
     npm: (method, args, signal) => {
       const command = prepareNpmCommand(method as Parameters<typeof prepareNpmCommand>[0], args);
       return runArgumentSafeProcess("npm", command.args, command.options, signal);
+    },
+    gh: (method, args, signal) => {
+      const command = prepareGhCommand(method as Parameters<typeof prepareGhCommand>[0], args);
+      return runArgumentSafeProcess("gh", command.args, command.options, signal);
     },
     http: async (_method, args, signal) => {
       const url = string(args[0], "url");

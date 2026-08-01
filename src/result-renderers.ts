@@ -1,5 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { type CapabilityCall, capabilityResultRenderer } from "./capability-presentation.js";
+import { renderGhResult } from "./gh-result-renderer.js";
 import { GIT_RESULT_RENDERERS } from "./git-result-renderers.js";
 import { NPM_RESULT_RENDERERS } from "./npm-result-renderers.js";
 import type {
@@ -150,6 +151,7 @@ const CAPABILITY_RESULT_RENDERERS = {
   stat: renderStat,
   shell: renderShell,
   http: renderHttp,
+  gh: renderGhResult,
   "git.status": GIT_RESULT_RENDERERS.status,
   "git.diff": GIT_RESULT_RENDERERS.diff,
   "git.log": GIT_RESULT_RENDERERS.log,

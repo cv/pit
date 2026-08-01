@@ -210,6 +210,7 @@ function describeResult(
       shell: "Command",
       git: "Git",
       npm: "npm",
+      gh: "GitHub",
       list: "Listed",
       glob: "Listed",
       http: "Received",

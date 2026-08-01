@@ -212,6 +212,17 @@ Arguments are passed directly after the fixed subcommand without shell interpola
 Use `shell.execFile("npm", ...)` for unsupported npm commands. npm lifecycle scripts execute with the permissions of the Pi process; `ignoreScripts` is available when installs must suppress them.
 
 
+### `gh`
+
+- `issueList(options?)`, `issueView(number, options?)`, `issueCreate(input)`, `issueComment(number, body, options?)`, and `issueClose(number, options?)` manage issues.
+- `prList(options?)` and `prView(number, options?)` inspect pull requests.
+- `runList(options?)` and `runView(id, options?)` inspect GitHub Actions runs and jobs.
+- `releaseView(tag?, options?)` and `releaseCreate(tag, input)` inspect and create releases.
+- `api(endpoint, args?, options?)` is a bounded argument-safe escape hatch.
+
+List and view methods request structured JSON internally. All methods accept `repo` in their options or input where applicable. Use `shell.execFile("gh", ...)` for unsupported GitHub CLI commands.
+
+
 ### `shell`
 
 - `exec(command, options?)` runs a command through the shell.

@@ -10,6 +10,7 @@ export type ResultRendererKey =
   | "stat"
   | "shell"
   | "http"
+  | "gh"
   | "git.status"
   | "git.diff"
   | "git.log"

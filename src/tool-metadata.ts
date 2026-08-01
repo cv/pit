@@ -7,7 +7,7 @@ export const PROMPT_SNIPPET =
 export const PROMPT_GUIDELINES = [
   "Use typescript for all workspace, Git, shell, HTTP, UI, and context operations.",
   "In typescript, prefer git.status/diff/log/add/commit/show/push/tag for those Git subcommands; use shell.execFile only for other Git subcommands.",
-  "In typescript, prefer npm.run/test/install/audit/outdated/pack for those npm workflows; use shell.execFile only for unsupported npm commands.",
+  "In typescript, prefer npm.run/test/install/audit/outdated/pack and gh issue/pr/run/release methods for supported workflows; use shell.execFile only for unsupported commands.",
   "In typescript, code is type-checked. Before fanning out an unfamiliar capability, validate one minimal call. After two failures of the same class, stop varying syntax: inspect contract/state, reduce to a minimal probe, and choose a simpler API if available.",
   "In typescript, prefer one tool invocation per step: batch independent calls with Promise.all instead of issuing multiple parallel typescript calls; sequence dependencies and conflicting mutations.",
   "In typescript, request only the fields and record limits needed to answer the current question; expand the query only when the first result requires it.",
