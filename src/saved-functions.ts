@@ -40,7 +40,7 @@ export interface FunctionActivity {
   action: "set" | "run" | "remove";
   name: string;
   replaced?: boolean;
-  scope?: "project";
+  scope?: "project" | "session";
 }
 export function validateSavedFunctionSource(source: string): void {
   if (Buffer.byteLength(source) > MAX_SAVED_FUNCTION_BYTES) {

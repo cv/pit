@@ -239,7 +239,7 @@ describe("pit extension", () => {
 
     const invoked = await run(`greet({ name: "Pi" })`);
     expect(invoked.details.value).toEqual({ greeting: "Hello, Pi!" });
-    expect(invoked.details.functions).toEqual([{ action: "run", name: "greet" }]);
+    expect(invoked.details.functions).toEqual([{ action: "run", name: "greet", scope: "session" }]);
     expect(invoked.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
 
     const replaced = await run(`async function greet() { return { greeting: "replaced" }; }`);

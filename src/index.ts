@@ -12,7 +12,6 @@ import {
   type CapabilityName,
   validateCapabilityCall,
 } from "./capability-registry.js";
-import { CapabilityTraceCollector } from "./capability-trace.js";
 import {
   type CapabilityHandler,
   getNamedFunctionName,
@@ -34,6 +33,12 @@ import {
 
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
+import {
+  ExecutionProgressController,
+  type HostShellProgressEvent,
+  type ShellProgressEvent,
+} from "./execution-progress.js";
+
 import { prepareGhCommand } from "./gh-capability.js";
 import { executeStreamingProcess } from "./host-process.js";
 import { prepareNpmCommand } from "./npm-capability.js";
@@ -47,7 +52,6 @@ import {
   savedFunctionDependents,
   saveProjectFunction,
 } from "./project-functions.js";
-import { sanitizeTerminalText } from "./text-sanitization.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
@@ -60,23 +64,12 @@ import {
 import {
   renderTypeScriptToolCall,
   renderTypeScriptToolResult,
-  type ShellProgress,
 } from "./typescript-tool-renderer.js";
 import { handleWorkspace, resolveWorkspacePath } from "./workspace.js";
 
 export { CAPABILITY_METHODS } from "./capability-registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
-
-type HostShellProgressEvent =
-  | { phase: "start" }
-  | { phase: "output"; stream: "stdout" | "stderr"; chunk: string }
-  | { phase: "end"; code: number };
-
-type ShellProgressEvent = HostShellProgressEvent & {
-  id: number;
-  command: string;
-};
 
 type PublicCapabilityHandler = (
   method: string,
@@ -491,7 +484,14 @@ function createCapabilities(
       if (!functionState.effective.has(name)) {
         throw new Error(`Saved function "${name}" is unavailable`);
       }
-      activity.push({ action: "run", name });
+      activity.push({
+        action: "run",
+        name,
+        scope:
+          functionState.project.has(name) && !functionState.session.has(name)
+            ? "project"
+            : "session",
+      });
       return null;
     }
 
@@ -578,50 +578,9 @@ export default function pit(pi: ExtensionAPI) {
     },
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
-      const capabilityTraces = new CapabilityTraceCollector();
-      const capabilityTraceDetails = () => {
-        const snapshot = capabilityTraces.snapshot();
-        return {
-          ...(snapshot.traces.length > 0 ? { traces: snapshot.traces } : {}),
-          ...(snapshot.truncated ? { tracesTruncated: true as const } : {}),
-        };
-      };
-      const progressById = new Map<number, ShellProgress>();
-      let lastProgressUpdate = 0;
+      const executionProgress = new ExecutionProgressController(update);
       const onShellProgress = update
-        ? (event: ShellProgressEvent) => {
-            const current = progressById.get(event.id) ?? {
-              id: event.id,
-              command: sanitizeTerminalText(event.command),
-              status: "running" as const,
-              output: "",
-            };
-            if (event.phase === "output") {
-              const chunk = sanitizeTerminalText(event.chunk);
-              current.output = truncateTail(current.output + chunk, {
-                maxBytes: 4000,
-                maxLines: 8,
-              }).content;
-            }
-            if (event.phase === "end") {
-              current.status = "done";
-              current.code = event.code;
-            }
-            progressById.set(event.id, current);
-            const now = Date.now();
-            if (event.phase !== "output" || now - lastProgressUpdate >= 100) {
-              lastProgressUpdate = now;
-              update({
-                content: [{ type: "text", text: "Running TypeScript…" }],
-                details: {
-                  value: undefined,
-                  truncated: false,
-                  progress: [...progressById.values()],
-                  ...capabilityTraceDetails(),
-                },
-              });
-            }
-          }
+        ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
         : undefined;
       const namedFunction = getNamedFunctionName(params.code);
       const projectMetadata = getProjectFunctionMetadata(params.code);
@@ -682,7 +641,7 @@ export default function pit(pi: ExtensionAPI) {
             timeoutMs: params.timeoutMs ?? 30_000,
             savedFunctions: executionRegistry,
             ...(params.params === undefined ? {} : { input: params.params }),
-            onCapabilityTrace: (trace) => capabilityTraces.record(trace),
+            onCapabilityTrace: (trace) => executionProgress.recordTrace(trace),
           },
         );
       }
@@ -775,7 +734,7 @@ export default function pit(pi: ExtensionAPI) {
           value: output.truncated ? undefined : value,
           truncated: output.truncated,
           ...(functionActivity.length > 0 ? { functions: functionActivity } : {}),
-          ...capabilityTraceDetails(),
+          ...executionProgress.details(),
         },
       };
     },
