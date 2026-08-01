@@ -6,7 +6,7 @@ export interface CapabilityCall {
   qualifiedName: string;
 }
 
-const CAPABILITY_CALL_PATTERN = /\b(workspace|git|shell|http|ui|context)\.(\w+)\s*\(/;
+const CAPABILITY_CALL_PATTERN = /\b(workspace|git|npm|shell|http|ui|context|functions)\.(\w+)\s*\(/;
 
 export function inferCapabilityCall(source: string): CapabilityCall | undefined {
   const match = source.match(CAPABILITY_CALL_PATTERN);

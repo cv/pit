@@ -1,6 +1,7 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { type CapabilityCall, capabilityResultRenderer } from "./capability-presentation.js";
 import { GIT_RESULT_RENDERERS } from "./git-result-renderers.js";
+import { NPM_RESULT_RENDERERS } from "./npm-result-renderers.js";
 import type {
   RenderContext,
   RenderedResultValue,
@@ -156,6 +157,12 @@ const CAPABILITY_RESULT_RENDERERS: Readonly<Record<string, ValueRenderer>> = {
   "git.show": GIT_RESULT_RENDERERS.show,
   "git.push": GIT_RESULT_RENDERERS.push,
   "git.tag": GIT_RESULT_RENDERERS.tag,
+  "npm.run": NPM_RESULT_RENDERERS.run,
+  "npm.test": NPM_RESULT_RENDERERS.test,
+  "npm.install": NPM_RESULT_RENDERERS.install,
+  "npm.audit": NPM_RESULT_RENDERERS.audit,
+  "npm.outdated": NPM_RESULT_RENDERERS.outdated,
+  "npm.pack": NPM_RESULT_RENDERERS.pack,
 };
 
 function renderRead(value: unknown, { theme }: RenderContext): RenderedResultValue | undefined {

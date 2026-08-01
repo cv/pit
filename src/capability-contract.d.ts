@@ -18,6 +18,26 @@ type PitProcessResult = {
   truncated: boolean;
 };
 
+type PitNpmTestOptions = PitProcessOptions & {
+  args?: string[];
+  coverage?: boolean;
+};
+
+type PitNpmInstallOptions = PitProcessOptions & {
+  dev?: boolean;
+  exact?: boolean;
+  packageLockOnly?: boolean;
+  ignoreScripts?: boolean;
+};
+
+type PitNpmAuditOptions = PitProcessOptions & {
+  omitDev?: boolean;
+};
+
+type PitNpmPackOptions = PitProcessOptions & {
+  dryRun?: boolean;
+};
+
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = `${number}:${string}`;
 
@@ -161,6 +181,20 @@ interface PitGitCapability {
   tag(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 }
 
+interface PitNpmCapability {
+  run(script: string, args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  test(options?: PitNpmTestOptions): Promise<PitProcessResult>;
+
+  install(packages?: string[], options?: PitNpmInstallOptions): Promise<PitProcessResult>;
+
+  audit(options?: PitNpmAuditOptions): Promise<PitProcessResult>;
+
+  outdated(options?: PitProcessOptions): Promise<PitProcessResult>;
+
+  pack(options?: PitNpmPackOptions): Promise<PitProcessResult>;
+}
+
 interface PitShellCapability {
   execFile(program: string, args: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 
@@ -220,6 +254,7 @@ interface PitFunctionsCapability {
 interface PitCapabilities {
   workspace: PitWorkspaceCapability;
   git: PitGitCapability;
+  npm: PitNpmCapability;
   shell: PitShellCapability;
   http: PitHttpCapability;
   ui: PitUiCapability;

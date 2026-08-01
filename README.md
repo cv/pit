@@ -200,12 +200,24 @@ Unknown capabilities and methods fail closed at run time.
 - `tag(args?, options?)` runs `git tag`.
 Arguments are passed directly after the fixed subcommand without shell interpolation. Use `shell.execFile("git", ...)` for less common Git subcommands.
 
+### `npm`
+
+- `run(script, args?, options?)` runs a package script with argument-safe arguments.
+- `test({ args?, coverage?, ...options }?)` runs the `test` or `coverage` package script.
+- `install(packages?, { dev?, exact?, packageLockOnly?, ignoreScripts?, ...options }?)` installs dependencies.
+- `audit({ omitDev?, ...options }?)` requests bounded JSON audit output.
+- `outdated(options?)` requests bounded JSON outdated-package output.
+- `pack({ dryRun?, ...options }?)` requests JSON package metadata and defaults to a dry run.
+
+Use `shell.execFile("npm", ...)` for unsupported npm commands. npm lifecycle scripts execute with the permissions of the Pi process; `ignoreScripts` is available when installs must suppress them.
+
+
 ### `shell`
 
 - `exec(command, options?)` runs a command through the shell.
 - `execFile(program, args, options?)` runs a program with an argument array.
 
-Git and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. A value of `true` for `raise` makes a nonzero exit stop the function.
+Git, npm, and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. A value of `true` for `raise` makes a nonzero exit stop the function.
 
 ### `http`
 

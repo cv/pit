@@ -35,6 +35,7 @@ import {
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
 import { executeStreamingProcess } from "./host-process.js";
+import { prepareNpmCommand } from "./npm-capability.js";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
@@ -372,6 +373,10 @@ function createCapabilities(
       const options = args[1] === undefined ? {} : object(args[1], "options");
       return runArgumentSafeProcess("git", [method, ...gitArgs], options, signal);
     },
+    npm: (method, args, signal) => {
+      const command = prepareNpmCommand(method as Parameters<typeof prepareNpmCommand>[0], args);
+      return runArgumentSafeProcess("npm", command.args, command.options, signal);
+    },
     http: async (_method, args, signal) => {
       const url = string(args[0], "url");
       const options = args[1] === undefined ? {} : object(args[1], "options");
@@ -472,7 +477,6 @@ function createCapabilities(
           return { name, removed };
         });
       }
-      return undefined;
     },
   };
 

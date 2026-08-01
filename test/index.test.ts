@@ -143,8 +143,9 @@ describe("pit extension", () => {
     expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
-    expect(tool.promptGuidelines).toHaveLength(9);
+    expect(tool.promptGuidelines).toHaveLength(10);
     expect(tool.promptGuidelines?.join("\n")).toContain("prefer git.status/diff/log");
+    expect(tool.promptGuidelines?.join("\n")).toContain("prefer npm.run/test/install");
     expect(tool.promptGuidelines?.join("\n")).toContain("validate one minimal call");
     expect(tool.promptGuidelines?.join("\n")).toContain("After two failures of the same class");
     expect(tool.promptGuidelines?.join("\n")).toContain("stop varying syntax");
@@ -178,7 +179,7 @@ describe("pit extension", () => {
       (tool.promptGuidelines?.join("\n").length ?? 0) +
       (tool.parameters.properties.code.description?.length ?? 0) +
       (tool.parameters.properties.params.description?.length ?? 0);
-    expect(metadataChars).toBeLessThan(7400);
+    expect(metadataChars).toBeLessThan(7600);
 
     await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);

@@ -209,6 +209,7 @@ function describeResult(
       edit: "Edit",
       shell: "Command",
       git: "Git",
+      npm: "npm",
       list: "Listed",
       glob: "Listed",
       http: "Received",
