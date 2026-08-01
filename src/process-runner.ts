@@ -5,13 +5,42 @@ import {
   truncateHead,
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
-import { boundedIntegerValue } from "./cli.js";
+import { boundedIntegerValue, type ProcessResult } from "./cli.js";
 import type { HostShellProgressEvent } from "./execution-types.js";
 import { executeStreamingProcess } from "./host-process.js";
 import { resolveWorkspacePath } from "./workspace.js";
 
 export function formatProcessCommand(program: string, args: string[]): string {
   return [program, ...args.map((argument) => JSON.stringify(argument))].join(" ");
+}
+
+export interface ProcessRequest {
+  program: string;
+  args: string[];
+  options: Record<string, unknown>;
+  displayCommand?: string;
+  onProgress?: (event: HostShellProgressEvent) => void;
+  signal?: AbortSignal;
+}
+
+export interface ProcessRunner {
+  run(request: ProcessRequest): Promise<ProcessResult>;
+}
+
+export function createProcessRunner(pi: ExtensionAPI, defaultCwd: string): ProcessRunner {
+  return {
+    run: (request) =>
+      executeHostProcess(
+        pi,
+        request.program,
+        request.args,
+        request.displayCommand ?? formatProcessCommand(request.program, request.args),
+        request.options,
+        defaultCwd,
+        request.onProgress,
+        request.signal,
+      ),
+  };
 }
 
 export async function executeHostProcess(

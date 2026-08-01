@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeHostProcess, formatProcessCommand } from "../src/process-runner.js";
+import {
+  createProcessRunner,
+  executeHostProcess,
+  formatProcessCommand,
+} from "../src/process-runner.js";
 
 describe("process runner", () => {
   it("runs bounded non-streaming commands without optional progress or signal", async () => {
@@ -18,5 +22,13 @@ describe("process runner", () => {
       timeout: 120_000,
     });
     expect(formatProcessCommand("git", ["status", "two words"])).toBe('git "status" "two words"');
+  });
+
+  it("runs object requests through configured dependencies", async () => {
+    const exec = async () => ({ stdout: "ok", stderr: "", code: 0 });
+    const runner = createProcessRunner({ exec } as any, process.cwd());
+    await expect(
+      runner.run({ program: "git", args: ["status"], options: {} }),
+    ).resolves.toMatchObject({ code: 0, stdout: "ok" });
   });
 });
