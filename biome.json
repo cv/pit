@@ -141,6 +141,18 @@
       }
     },
     {
+      "includes": [".pi/pit/functions/**/*.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredVariables": "off",
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+
+    {
       "includes": ["src/sandbox.ts"],
       "linter": {
         "rules": {
