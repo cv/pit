@@ -18,6 +18,7 @@ export interface ShellProgress {
 export interface ExecutionProgressSnapshot {
   progress?: ShellProgress[];
   traces?: CapabilityTrace[];
+  progressTruncated?: true;
   tracesTruncated?: true;
 }
 

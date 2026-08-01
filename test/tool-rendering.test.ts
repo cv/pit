@@ -275,6 +275,7 @@ describe("tool rendering", () => {
             { id: 2, command: "git status", status: "done", code: 0, output: "clean" },
             { id: 3, command: "sleep 1", status: "running", output: "" },
           ],
+          progressTruncated: true,
           functions: [
             { action: "run", name: "projectChecks", scope: "project" },
             { action: "run", name: "sessionChecks" },
@@ -306,6 +307,7 @@ describe("tool rendering", () => {
       { expanded: true, isPartial: true },
     );
     expect(streaming).toContain("[running] npm test");
+    expect(streaming).toContain("earlier shell calls omitted");
     expect(streaming).toContain("test output");
     expect(streaming).toContain("[done (0)] git status");
     expect(streaming).toContain("[running] sleep 1");

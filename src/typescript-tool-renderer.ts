@@ -30,10 +30,7 @@ function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | und
   if (publicTraces.length !== 1) {
     return;
   }
-  const [trace] = publicTraces;
-  if (!trace) {
-    return;
-  }
+  const trace = publicTraces[0] as (typeof publicTraces)[number];
   return {
     capability: trace.capability,
     method: trace.method,
@@ -314,6 +311,9 @@ export function renderTypeScriptToolResult(
         if (progress.output) {
           text += `\n${theme.fg("muted", progress.output)}`;
         }
+      }
+      if (details?.progressTruncated) {
+        text += `\n${theme.fg("warning", "… earlier shell calls omitted")}`;
       }
     }
     return new Text(text, 0, 0);
