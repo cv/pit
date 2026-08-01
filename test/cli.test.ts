@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   boundedIntegerValue,
   nonemptyLines,
-  outcomeColor,
   parseProcessResult,
   recordValue,
   semanticOutcome,
@@ -33,10 +32,15 @@ describe("CLI contracts", () => {
 
   it("keeps process failures separate from domain warnings", () => {
     expect(semanticOutcome(processResult())).toBe("success");
-    expect(semanticOutcome(processResult(), "warning")).toBe("warning");
+    expect(semanticOutcome(processResult(), { domainOutcome: "warning" })).toBe("warning");
     expect(semanticOutcome(processResult(1))).toBe("error");
-    expect(semanticOutcome(processResult(1), "warning")).toBe("warning");
-    expect(outcomeColor("warning")).toBe("warning");
+    expect(semanticOutcome(processResult(1), { domainOutcome: "warning" })).toBe("error");
+    expect(
+      semanticOutcome(processResult(1), {
+        domainOutcome: "warning",
+        acceptedExitCodes: [1],
+      }),
+    ).toBe("warning");
     expect(nonemptyLines("one  \n\ntwo\n")).toEqual(["one", "two"]);
   });
 });

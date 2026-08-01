@@ -1,4 +1,4 @@
-import { nonemptyLines, outcomeColor, parseProcessResult, semanticOutcome } from "./cli.js";
+import { nonemptyLines, parseProcessResult, semanticOutcome } from "./cli.js";
 import type { RenderContext, RenderedResultValue, ValueRenderer } from "./result-renderer-types.js";
 
 function json(value: string): unknown {
@@ -70,7 +70,9 @@ export const renderGhResult: ValueRenderer = (value, context: RenderContext) => 
   }
   const stderr = nonemptyLines(result.stderr);
   const domainOutcome = hasFailedDomainItem(parsed) ? "warning" : undefined;
-  const status = outcomeColor(semanticOutcome(result, domainOutcome));
+  const status = semanticOutcome(result, {
+    ...(domainOutcome ? { domainOutcome } : {}),
+  });
   const lines = [
     `${context.theme.fg("toolTitle", context.theme.bold("gh"))} ${context.theme.fg(status, `exit ${result.code}`)}${result.truncated ? context.theme.fg("warning", ", truncated") : ""}`,
     ...output,

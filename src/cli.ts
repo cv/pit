@@ -67,13 +67,18 @@ export function nonemptyLines(value: string): string[] {
     .filter(Boolean);
 }
 
-export function semanticOutcome(
-  result: ProcessResult,
-  domainOutcome?: Exclude<SemanticOutcome, "error">,
-): SemanticOutcome {
-  return result.code === 0 ? (domainOutcome ?? "success") : (domainOutcome ?? "error");
+export interface SemanticOutcomeOptions {
+  domainOutcome?: Exclude<SemanticOutcome, "error">;
+  acceptedExitCodes?: readonly number[];
 }
 
-export function outcomeColor(outcome: SemanticOutcome): "success" | "warning" | "error" {
-  return outcome;
+export function semanticOutcome(
+  result: ProcessResult,
+  options: SemanticOutcomeOptions = {},
+): SemanticOutcome {
+  const accepted = result.code === 0 || options.acceptedExitCodes?.includes(result.code) === true;
+  if (!accepted) {
+    return "error";
+  }
+  return options.domainOutcome ?? "success";
 }

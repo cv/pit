@@ -35,4 +35,19 @@ describe("semantic process outcomes", () => {
     const rendered = renderGhResult(result("plain output"), context);
     expect(rendered?.lines[0]).toContain("<success>exit 0</success>");
   });
+
+  it("does not let domain data mask unaccepted process failures", () => {
+    const emptyAudit = NPM_RESULT_RENDERERS.audit(
+      result(JSON.stringify({ metadata: { vulnerabilities: { total: 0 } } }), 1),
+      context,
+    );
+    const emptyOutdated = NPM_RESULT_RENDERERS.outdated(result("{}", 1), context);
+    const failedGh = renderGhResult(
+      result(JSON.stringify([{ conclusion: "failure" }]), 1),
+      context,
+    );
+    expect(emptyAudit?.lines[0]).toContain("<error>exit 1</error>");
+    expect(emptyOutdated?.lines[0]).toContain("<error>exit 1</error>");
+    expect(failedGh?.lines[0]).toContain("<error>exit 1</error>");
+  });
 });

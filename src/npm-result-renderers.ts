@@ -28,6 +28,7 @@ function renderer(
     summary: string;
     output?: string[];
     outcome?: Exclude<SemanticOutcome, "error">;
+    acceptedExitCodes?: readonly number[];
   },
 ): ValueRenderer {
   return (value, context) => {
@@ -36,7 +37,10 @@ function renderer(
       return;
     }
     const rendered = summarize(result);
-    const status = semanticOutcome(result, rendered.outcome);
+    const status = semanticOutcome(result, {
+      ...(rendered.outcome ? { domainOutcome: rendered.outcome } : {}),
+      ...(rendered.acceptedExitCodes ? { acceptedExitCodes: rendered.acceptedExitCodes } : {}),
+    });
     const suffix = result.truncated ? context.theme.fg("warning", ", truncated") : "";
     const output = rendered.output ?? lines(result.stdout);
     const display = [
@@ -95,7 +99,7 @@ const audit = renderer("audit", (result) => {
       ? `audit, ${plural(total, "vulnerability", "vulnerabilities")}`
       : `audit, exit ${result.code}`,
     output,
-    outcome: total > 0 ? "warning" : "success",
+    ...(total > 0 ? { outcome: "warning" as const, acceptedExitCodes: [1] } : {}),
   };
 });
 const outdated = renderer("outdated", (result) => {
@@ -112,7 +116,7 @@ const outdated = renderer("outdated", (result) => {
       ([name, item]) =>
         `${name}: ${item.current ?? "?"} → ${item.wanted ?? item.latest ?? "?"}${item.latest && item.latest !== item.wanted ? ` (latest ${item.latest})` : ""}`,
     ),
-    outcome: entries.length > 0 ? "warning" : "success",
+    ...(entries.length > 0 ? { outcome: "warning" as const, acceptedExitCodes: [1] } : {}),
   };
 });
 const pack = renderer("pack", (result) => {
