@@ -26,11 +26,17 @@ export class ExecutionProgressController {
   }
 
   recordTrace(trace: CapabilityTrace): void {
+    if (this.#disposed) {
+      return;
+    }
     this.#traces.record(trace);
     this.#schedule();
   }
 
   recordShell(event: ShellProgressEvent): void {
+    if (this.#disposed) {
+      return;
+    }
     const current = this.#shell.get(event.id) ?? {
       id: event.id,
       command: sanitizeTerminalText(event.command),
@@ -86,6 +92,7 @@ export class ExecutionProgressController {
     }
     this.#dirty = true;
     const now = Date.now();
+    // The first change emits immediately; burst changes share one trailing update.
     if (this.#lastEmitAt === undefined || now - this.#lastEmitAt >= UPDATE_INTERVAL_MS) {
       this.#clearTimer();
       this.#emitNow();
@@ -123,6 +130,7 @@ export class ExecutionProgressController {
     if (completed <= MAX_COMPLETED_SHELL_CALLS) {
       return;
     }
+    // Pruning follows every end event, so an over-limit map contains a completed entry.
     const [oldestCompletedId] = [...this.#shell].find(([, entry]) => entry.status === "done") as [
       number,
       ShellProgress,

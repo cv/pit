@@ -57,9 +57,11 @@ describe("ExecutionProgressController", () => {
     c.dispose();
     c.flush();
     c.recordTrace(startCapabilityTrace(3, 3, "context", "get", []));
+    c.recordShell({ id: 1, command: "late", phase: "start" });
     vi.runAllTimers();
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(c.snapshot().traces).toHaveLength(3);
+    expect(c.snapshot().traces).toHaveLength(2);
+    expect(c.snapshot().progress).toBeUndefined();
   });
 
   it("retains all running shell calls and only 32 completed calls in source order", () => {

@@ -14,7 +14,7 @@ import type { FunctionActivity, FunctionRegistry } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
-const SPINNER_INTERVAL_MS = 80;
+const SPINNER_INTERVAL_MS = 200;
 
 interface TypeScriptDetails extends ExecutionProgressSnapshot {
   value: unknown;
@@ -278,7 +278,11 @@ function renderExecutionDashboard(
         : trace.status === "succeeded"
           ? theme.fg("success", "✓")
           : theme.fg("error", "✗");
-    text += `\n${marker} ${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
+    const owner = trace.function
+      ? `${trace.function.scope} function ${trace.function.name} › `
+      : "";
+    const indent = trace.function ? "  ".repeat(Math.min(trace.function.depth, 8)) : "";
+    text += `\n${indent}${marker} ${theme.fg("dim", owner)}${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
   }
   if (details?.tracesTruncated) {
     text += `\n${theme.fg("warning", "… additional capability traces omitted")}`;

@@ -219,7 +219,13 @@ describe("runInSandbox", () => {
       handler,
     );
     expect(result).toEqual({ value: 42 });
-    expect(handler).toHaveBeenCalledWith("shell", "exec", ["sum"], expect.any(AbortSignal));
+    expect(handler).toHaveBeenCalledWith(
+      "shell",
+      "exec",
+      ["sum"],
+      expect.any(AbortSignal),
+      undefined,
+    );
   });
 
   it("emits bounded runtime traces for concurrent success and failure", async () => {
@@ -296,10 +302,62 @@ describe("runInSandbox", () => {
       "savedFunctionRun",
       ["answer"],
       expect.any(AbortSignal),
+      expect.objectContaining({
+        invocationId: 1,
+        name: "answer",
+        scope: "session",
+        depth: 1,
+      }),
     );
     await expect(runInSandbox("unrelated()", handler, { savedFunctions })).rejects.toThrow(
       /number.*PitProgram/,
     );
+  });
+
+  it("attributes nested and concurrent saved-function capability calls", async () => {
+    const savedFunctions = new Map([
+      ["outer", "async function outer(_capabilities, input) { return inner(input); }"],
+      ["inner", "async function inner({ context }, input) { await context.get(); return input; }"],
+    ]);
+    const savedFunctionScopes = new Map<string, "project" | "session">([
+      ["outer", "project"],
+      ["inner", "session"],
+    ]);
+    const traces: CapabilityTrace[] = [];
+    await runInSandbox(
+      'async () => Promise.all([outer("nested"), inner("direct")])',
+      async (capability, method) => {
+        if (capability === "__pit" && method === "savedFunctionRun") {
+          return null;
+        }
+        if (capability === "context" && method === "get") {
+          return { cwd: "/tmp" };
+        }
+        throw new Error("unexpected capability call");
+      },
+      { savedFunctions, savedFunctionScopes, onCapabilityTrace: (trace) => traces.push(trace) },
+    );
+
+    const completed = traces.filter((trace) => trace.status === "succeeded");
+    const outer = completed.find(
+      (trace) => trace.capability === "__pit" && trace.function?.name === "outer",
+    )?.function;
+    const innerCalls = completed
+      .filter((trace) => trace.capability === "context")
+      .map((trace) => trace.function);
+    expect(outer).toMatchObject({ scope: "project", depth: 1 });
+    expect(innerCalls).toHaveLength(2);
+    expect(innerCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: "session", depth: 1 }),
+        expect.objectContaining({
+          scope: "session",
+          depth: 2,
+          parentInvocationId: outer?.invocationId,
+        }),
+      ]),
+    );
+    expect(new Set(innerCalls.map((context) => context?.invocationId)).size).toBe(2);
   });
 
   it("preserves saved function input and return types", () => {

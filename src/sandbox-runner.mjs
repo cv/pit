@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 // This file runs in a Node process started with the permission model enabled.
 // Keep it dependency-free: it is the only file the child may read.
 const write = process.stdout.write.bind(process.stdout);
@@ -13,6 +15,8 @@ let callCount = 0;
 let token;
 let buffer = "";
 let finishing = false;
+const functionContexts = new AsyncLocalStorage();
+let nextInvocationId = 1;
 
 // Agent code can use console for diagnostics without corrupting stdout RPC.
 globalThis.console = new console.Console(process.stderr, process.stderr);
@@ -63,7 +67,15 @@ function call(capability, method, args) {
   const promise = new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
     try {
-      send({ type: "call", id, capability, method, args });
+      const functionContext = functionContexts.getStore();
+      send({
+        type: "call",
+        id,
+        capability,
+        method,
+        args,
+        ...(functionContext ? { functionContext } : {}),
+      });
     } catch (error) {
       pending.delete(id);
       reject(error);
@@ -103,6 +115,22 @@ const capabilities = new Proxy(Object.create(null), {
   },
 });
 
+async function runSavedFunction(name, scope, callback) {
+  const parent = functionContexts.getStore();
+  const depth = (parent?.depth ?? 0) + 1;
+  if (depth > 32) {
+    throw new Error("Saved function call depth exceeded 32");
+  }
+  const context = {
+    invocationId: nextInvocationId++,
+    ...(parent ? { parentInvocationId: parent.invocationId } : {}),
+    name,
+    scope,
+    depth,
+  };
+  return await functionContexts.run(context, callback);
+}
+
 async function start(source, input) {
   try {
     // Indirect eval prevents evaluated code from seeing this module's lexical
@@ -111,7 +139,7 @@ async function start(source, input) {
     if (typeof main !== "function") {
       throw new TypeError("TypeScript source must evaluate to a function");
     }
-    const value = await main(capabilities, input);
+    const value = await main(capabilities, input, runSavedFunction);
     finishing = true;
     await waitForPendingCalls();
     send({ type: "result", value });

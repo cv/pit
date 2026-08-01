@@ -12,11 +12,34 @@ import {
   saveProjectFunction,
 } from "../src/project-functions.js";
 import { getProjectFunctionMetadata } from "../src/sandbox.js";
+import { functionRunScope, functionScopeRegistry } from "../src/saved-functions.js";
 
 let cwd: string;
 const registry = () => new Map<string, string>();
 const metadata = () => new Map();
 const ctx = (trusted = true) => ({ cwd, isProjectTrusted: () => trusted }) as any;
+
+it("maps effective function scopes with session override precedence", () => {
+  const scopes = functionScopeRegistry(
+    new Map([
+      ["projectOnly", "source"],
+      ["overridden", "session source"],
+    ]),
+    new Map([["overridden", "session source"]]),
+  );
+  expect([...scopes]).toEqual([
+    ["projectOnly", "project"],
+    ["overridden", "session"],
+  ]);
+});
+
+it("prefers attributed function scope and resolves registry fallbacks", () => {
+  const project = new Map([["projectOnly", "source"]]);
+  const session = new Map([["sessionOnly", "source"]]);
+  expect(functionRunScope("projectOnly", project, session)).toBe("project");
+  expect(functionRunScope("sessionOnly", project, session)).toBe("session");
+  expect(functionRunScope("projectOnly", project, session, "session")).toBe("session");
+});
 
 function sizedProjectFunction(name: string, bytes: number): string {
   const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;

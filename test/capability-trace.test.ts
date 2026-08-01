@@ -24,6 +24,13 @@ describe("capability traces", () => {
         "omitted",
       ],
       100,
+      {
+        invocationId: 11,
+        parentInvocationId: 9,
+        name: "function".repeat(20),
+        scope: "project",
+        depth: 2,
+      },
     );
 
     expect(trace).toMatchObject({
@@ -45,6 +52,13 @@ describe("capability traces", () => {
     });
     expect(trace.capability).toHaveLength(80);
     expect(trace.method).toHaveLength(80);
+    expect(trace.function).toMatchObject({
+      invocationId: 11,
+      parentInvocationId: 9,
+      scope: "project",
+      depth: 2,
+    });
+    expect(trace.function?.name).toHaveLength(80);
     expect(JSON.stringify(trace)).not.toContain("secret-token");
     expect(JSON.stringify(trace)).not.toContain("password");
   });

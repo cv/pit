@@ -32,6 +32,27 @@ const RESERVED_FUNCTION_NAMES = new Set([
 ]);
 
 export type FunctionRegistry = Map<string, string>;
+
+export function functionScopeRegistry(
+  effective: ReadonlyMap<string, string>,
+  session: ReadonlyMap<string, string>,
+): Map<string, "project" | "session"> {
+  return new Map(
+    [...effective.keys()].map((name) => [name, session.has(name) ? "session" : "project"] as const),
+  );
+}
+
+export function functionRunScope(
+  name: string,
+  project: ReadonlyMap<string, string>,
+  session: ReadonlyMap<string, string>,
+  attributedScope?: "project" | "session",
+): "project" | "session" {
+  if (attributedScope) {
+    return attributedScope;
+  }
+  return project.has(name) && !session.has(name) ? "project" : "session";
+}
 export const FUNCTION_ENTRY_TYPE = "pit-functions";
 export type FunctionEntry =
   | { name: string; source: string; deleted?: never }

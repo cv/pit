@@ -94,7 +94,7 @@ describe("tool rendering", () => {
     expect(`${call}\n${result}`.split("\n")).toHaveLength(2);
   });
 
-  it("animates generation every 80ms and freezes timing when generation completes", () => {
+  it("animates generation every 200ms and freezes timing when generation completes", () => {
     vi.useFakeTimers();
     try {
       const state = {};
@@ -105,15 +105,15 @@ describe("tool rendering", () => {
         "⠋ Run workspace task (generating... 0.0s)",
       );
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(5);
+      expect(invalidate).toHaveBeenCalledTimes(2);
       expect(renderToolCall({ code: undefined }, context)).toContain(
-        "⠴ Run workspace task (generating... 0.4s)",
+        "⠹ Run workspace task (generating... 0.4s)",
       );
 
       const completed = renderToolCall({ code: "return 1" }, { ...context, isPartial: false });
       expect(completed).toContain("1 line, 0.4s");
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(5);
+      expect(invalidate).toHaveBeenCalledTimes(2);
       const executionStarted = renderToolCall(
         { code: "return 1" },
         { expanded: false, argsComplete: false, executionStarted: true, state: {} },
@@ -124,7 +124,7 @@ describe("tool rendering", () => {
     }
   });
 
-  it("animates execution every 80ms and freezes timing on the final result", () => {
+  it("animates execution every 200ms and freezes timing on the final result", () => {
     vi.useFakeTimers();
     try {
       const state = {};
@@ -140,10 +140,10 @@ describe("tool rendering", () => {
       expect(started).toContain("⠋ Running... (0.0s)");
       expect(started).not.toContain("Run command");
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(5);
+      expect(invalidate).toHaveBeenCalledTimes(2);
       expect(
         renderToolResult(partialResult, { expanded: false, isPartial: true }, context),
-      ).toContain("⠴ Running... (0.4s)");
+      ).toContain("⠹ Running... (0.4s)");
 
       const completed = renderToolResult(
         partialResult,
@@ -152,7 +152,7 @@ describe("tool rendering", () => {
       );
       expect(completed).toContain("No returned value (0 lines, 0.4s)");
       vi.advanceTimersByTime(400);
-      expect(invalidate).toHaveBeenCalledTimes(5);
+      expect(invalidate).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
@@ -289,6 +289,12 @@ describe("tool rendering", () => {
               arguments: [],
               startedAt: Date.now(),
               status: "running",
+              function: {
+                invocationId: 1,
+                name: "projectChecks",
+                scope: "project",
+                depth: 1,
+              },
             },
             {
               id: 2,
@@ -314,6 +320,7 @@ describe("tool rendering", () => {
     expect(streaming).toContain("project function projectChecks");
     expect(streaming).toContain("session function sessionChecks");
     expect(streaming).toContain("npm.test");
+    expect(streaming).toContain("project function projectChecks › npm.test");
     expect(streaming).toContain("running");
     expect(streaming).toContain("git.status");
     expect(streaming).toContain("succeeded");

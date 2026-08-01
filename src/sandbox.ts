@@ -6,6 +6,7 @@ import { transform } from "esbuild";
 import * as ts from "typescript";
 import {
   type CapabilityTrace,
+  type FunctionExecutionContext,
   finishCapabilityTrace,
   startCapabilityTrace,
 } from "./capability-trace.js";
@@ -19,6 +20,7 @@ export interface SandboxOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   savedFunctions?: ReadonlyMap<string, string>;
+  savedFunctionScopes?: ReadonlyMap<string, "project" | "session">;
   input?: unknown;
   onCapabilityTrace?: (trace: CapabilityTrace) => void;
 }
@@ -28,6 +30,7 @@ export type CapabilityHandler = (
   method: string,
   args: unknown[],
   signal: AbortSignal,
+  functionContext?: FunctionExecutionContext,
 ) => unknown | Promise<unknown>;
 
 interface WireMessage {
@@ -37,6 +40,7 @@ interface WireMessage {
   capability?: string;
   method?: string;
   args?: unknown[];
+  functionContext?: FunctionExecutionContext;
   value?: unknown;
   error?: string;
   input?: unknown;
@@ -492,19 +496,23 @@ export function validateTypeScript(
   cacheSet(validationCache, cacheKey, null);
 }
 
-function runtimeProgram(source: string, savedFunctions: ReadonlyMap<string, string>): string {
+function runtimeProgram(
+  source: string,
+  savedFunctions: ReadonlyMap<string, string>,
+  savedFunctionScopes: ReadonlyMap<string, "project" | "session">,
+): string {
   const entries = savedEntries(savedFunctions);
   const raw = entries.map(
     ([, savedSource], index) => `const __pit_saved_${index} = (${savedSource});`,
   );
-  const bound = entries.map(
-    ([name], index) =>
-      `const ${name} = async (__pit_input) => { if (__pit_saved_depth >= 32) throw new Error("Saved function call depth exceeded 32"); await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); __pit_saved_depth++; try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } finally { __pit_saved_depth--; } };`,
-  );
+  const bound = entries.map(([name], index) => {
+    const scope = savedFunctionScopes.get(name) ?? "session";
+    return `const ${name} = async (__pit_input) => __pit_run_saved(${JSON.stringify(name)}, ${JSON.stringify(scope)}, async () => { await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } });`;
+  });
   const invocation = isProgramExpression(source)
     ? `const __pit_submission = (${source}); return await __pit_submission(__pit_capabilities, __pit_input);`
     : `return await (${source});`;
-  return `async (__pit_capabilities, __pit_input) => { let __pit_saved_depth = 0; ${raw.join("\n")} ${bound.join("\n")} ${invocation} }`;
+  return `async (__pit_capabilities, __pit_input, __pit_run_saved) => { ${raw.join("\n")} ${bound.join("\n")} ${invocation} }`;
 }
 
 async function compileTypeScript(source: string): Promise<string> {
@@ -553,7 +561,9 @@ export async function runInSandbox(
   );
   validateTypeScript(source, injectedFunctions, options.input, savedFunctions.keys());
 
-  const compiled = await compileTypeScript(runtimeProgram(source, injectedFunctions));
+  const compiled = await compileTypeScript(
+    runtimeProgram(source, injectedFunctions, options.savedFunctionScopes ?? new Map()),
+  );
   const token = randomBytes(24).toString("base64url");
   const child = spawn(
     process.execPath,
@@ -688,7 +698,15 @@ export async function runInSandbox(
             Pick<WireMessage, "id" | "capability" | "method" | "args">
           >;
           callCount++;
-          const trace = startCapabilityTrace(id, callCount, capability, method, args);
+          const trace = startCapabilityTrace(
+            id,
+            callCount,
+            capability,
+            method,
+            args,
+            Date.now(),
+            message.functionContext,
+          );
           reportCapabilityTrace(trace);
           const finishTrace = (status: "succeeded" | "failed" | "rejected") => {
             reportCapabilityTrace(finishCapabilityTrace(trace, status));
@@ -714,7 +732,7 @@ export async function runInSandbox(
           activeCalls++;
           let task: Promise<void>;
           task = Promise.resolve()
-            .then(() => handler(capability, method, args, capabilitySignal))
+            .then(() => handler(capability, method, args, capabilitySignal, trace.function))
             .then(
               (value) => {
                 if (!send({ type: "response", id, value })) {

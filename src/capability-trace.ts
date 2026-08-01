@@ -5,6 +5,14 @@ export interface CapabilityArgumentSummary {
   size?: number;
 }
 
+export interface FunctionExecutionContext {
+  invocationId: number;
+  parentInvocationId?: number;
+  name: string;
+  scope: "project" | "session";
+  depth: number;
+}
+
 export interface CapabilityTrace {
   id: number;
   sequence: number;
@@ -15,6 +23,7 @@ export interface CapabilityTrace {
   startedAt: number;
   durationMs?: number;
   status: CapabilityTraceStatus;
+  function?: FunctionExecutionContext;
 }
 
 export interface CapabilityTraceSnapshot {
@@ -91,6 +100,7 @@ export function startCapabilityTrace(
   method: string,
   args: unknown[],
   startedAt = Date.now(),
+  functionContext?: FunctionExecutionContext,
 ): CapabilityTrace {
   return {
     id,
@@ -101,6 +111,9 @@ export function startCapabilityTrace(
     ...(args.length > MAX_TRACE_ARGUMENTS ? { argumentsTruncated: true as const } : {}),
     startedAt,
     status: "running",
+    ...(functionContext
+      ? { function: { ...functionContext, name: boundedName(functionContext.name) } }
+      : {}),
   };
 }
 

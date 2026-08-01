@@ -25,6 +25,8 @@ import {
   type FunctionActivity,
   type FunctionEntry,
   type FunctionRegistry,
+  functionRunScope,
+  functionScopeRegistry,
   reconstructFunctions,
   registerFunctionManager,
   validateRegistryCapacity,
@@ -475,7 +477,7 @@ function createCapabilities(
     },
   };
 
-  return (capability, method, args, signal) => {
+  return (capability, method, args, signal, functionContext) => {
     if (capability === "__pit" && method === "savedFunctionRun") {
       const name = string(args[0], "saved function name");
       if (!functionState.effective.has(name)) {
@@ -484,10 +486,12 @@ function createCapabilities(
       activity.push({
         action: "run",
         name,
-        scope:
-          functionState.project.has(name) && !functionState.session.has(name)
-            ? "project"
-            : "session",
+        scope: functionRunScope(
+          name,
+          functionState.project,
+          functionState.session,
+          functionContext?.scope,
+        ),
       });
       return null;
     }
@@ -633,6 +637,10 @@ export default function pit(pi: ExtensionAPI) {
             validateTypeScript(params.code, executionRegistry, params.params);
           }
         }
+        const executionScopes = functionScopeRegistry(
+          executionRegistry,
+          candidateSession ?? functionState.session,
+        );
         let value: unknown;
         if (params.saveOnly) {
           value = { savedFunction: namedFunction, executed: false };
@@ -651,6 +659,7 @@ export default function pit(pi: ExtensionAPI) {
               ...(signal ? { signal } : {}),
               timeoutMs: params.timeoutMs ?? 30_000,
               savedFunctions: executionRegistry,
+              savedFunctionScopes: executionScopes,
               ...(params.params === undefined ? {} : { input: params.params }),
               onCapabilityTrace: (trace) => executionProgress.recordTrace(trace),
             },
