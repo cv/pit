@@ -66,6 +66,13 @@ type PitBatchOperation =
     }
   | { kind: "edit"; file: string; changes: PitEditChangeSpec };
 
+type PitProjectFunctionMetadata = {
+  name: string;
+  signature: string;
+  summary: string;
+  parameters: Array<{ name: string; description?: string }>;
+};
+
 interface PitWorkspaceCapability {
   read(
     file: string,
@@ -196,7 +203,18 @@ interface PitContextCapability {
     thinkingLevel: string;
     sessionFile: string | undefined;
     savedFunctions: string[];
+    projectFunctions: string[];
+    sessionFunctions: string[];
+    projectFunctionsEnabled: boolean;
   }>;
+}
+
+interface PitFunctionsCapability {
+  list(): Promise<PitProjectFunctionMetadata[]>;
+
+  get(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;
+
+  remove(name: string): Promise<{ name: string; removed: boolean }>;
 }
 
 interface PitCapabilities {
@@ -206,6 +224,7 @@ interface PitCapabilities {
   http: PitHttpCapability;
   ui: PitUiCapability;
   context: PitContextCapability;
+  functions: PitFunctionsCapability;
 }
 
 type PitSavedInput<T extends (...args: any[]) => any> =

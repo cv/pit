@@ -9,6 +9,7 @@ import {
 import {
   CAPABILITY_METHODS,
   display,
+  effectiveRegistry,
   reconstructFunctions,
   validateRegistryCapacity,
 } from "../src/index.js";
@@ -50,6 +51,24 @@ describe("function registry handler", () => {
       "exceeds 976.6KB total source",
     );
   });
+
+  it("applies capacity to the effective project and session registry", () => {
+    const project = new Map(
+      Array.from({ length: 63 }, (_, index) => [`projectSlot${index}`, "project"]),
+    );
+    const session = new Map([
+      ["projectSlot0", "session override"],
+      ["sessionSlot", "session"],
+    ]);
+    const effective = effectiveRegistry(project, session);
+
+    expect(effective).toHaveLength(64);
+    expect(effective.get("projectSlot0")).toBe("session override");
+    expect(() => validateRegistryCapacity(effective, "overflowSlot", "overflow")).toThrow(
+      "limited to 64 functions",
+    );
+    expect(() => validateRegistryCapacity(effective, "sessionSlot", "replacement")).not.toThrow();
+  });
   it("reconstructs valid branch-local function mutations", () => {
     const functions = new Map<string, string>();
     const source = `() => "saved"`;
@@ -78,7 +97,7 @@ describe("display", () => {
 });
 
 describe("pit extension", () => {
-  it("registers clear model-facing usage metadata and activates the tool", () => {
+  it("registers clear model-facing usage metadata and activates the tool", async () => {
     expect(tool.label).toBe("TypeScript Workspace");
     expect(tool.promptSnippet).toContain("reusable functions");
     expect(tool.description).toContain("async ({ workspace, git })");
@@ -159,9 +178,9 @@ describe("pit extension", () => {
       (tool.promptGuidelines?.join("\n").length ?? 0) +
       (tool.parameters.properties.code.description?.length ?? 0) +
       (tool.parameters.properties.params.description?.length ?? 0);
-    expect(metadataChars).toBeLessThan(7000);
+    expect(metadataChars).toBeLessThan(7400);
 
-    sessionStart({}, context());
+    await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
   });
 
@@ -204,7 +223,7 @@ describe("pit extension", () => {
     }`);
     expect(defined.details.value).toEqual({ greeting: "Hello, world!" });
     expect(defined.details.functions).toEqual([{ action: "set", name: "greet", replaced: false }]);
-    expect(defined.content[0].text).toContain("Invoke later with: greet()");
+    expect(defined.content[0].text).toContain("Invoke later with: greet(input: unknown)");
     expect(defined.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
@@ -262,7 +281,31 @@ describe("pit extension", () => {
       }),
     );
 
-    await run("deferred()");
+    const saveOnlyNotice = async (code: string): Promise<string> => {
+      const result = await tool.execute(
+        "call-id",
+        { code, saveOnly: true },
+        undefined,
+        undefined,
+        context(),
+      );
+      return result.content[0].text;
+    };
+    expect(
+      await saveOnlyNotice(
+        "async function requiredNotice(_capabilities, input: { value: string }) { return input.value; }",
+      ),
+    ).toContain("Invoke later with: requiredNotice(input: { value: string })");
+    expect(
+      await saveOnlyNotice(
+        "async function optionalNotice(_capabilities, input?: number) { return input; }",
+      ),
+    ).toContain("Invoke later with: optionalNotice(input?: number)");
+    expect(await saveOnlyNotice("async function noInputNotice() { return null; }")).toContain(
+      "Invoke later with: noInputNotice()",
+    );
+
+    await tool.execute("call-id", { code: "deferred()" }, undefined, undefined, context());
     expect(execMock).toHaveBeenCalledOnce();
 
     await expect(
@@ -363,7 +406,7 @@ describe("pit extension", () => {
 
   it("persists named functions on the active session branch", async () => {
     await value("async function persistent() { return { ok: true }; }");
-    sessionStart({}, context());
+    await sessionStart({}, context());
     expect(await value("persistent()")).toEqual({ ok: true });
 
     const previousBranch = [...branchEntries];

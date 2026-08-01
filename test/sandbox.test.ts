@@ -5,6 +5,7 @@ import {
   clearSandboxCaches,
   formatDiagnostic,
   getNamedFunctionName,
+  getProjectFunctionMetadata,
   getSandboxCacheStats,
   getSavedFunctionCallSignature,
   resolveSavedFunctionReferences,
@@ -356,6 +357,41 @@ describe("runInSandbox", () => {
       ),
     ).toBe("required(input: string)");
     expect(getSavedFunctionCallSignature("async () => null")).toBeUndefined();
+  });
+
+  it("extracts project function documentation", () => {
+    expect(getProjectFunctionMetadata("")).toBeUndefined();
+    expect(
+      getProjectFunctionMetadata("async function first() {} async function second() {}"),
+    ).toBeUndefined();
+    expect(
+      getProjectFunctionMetadata(`/**
+ * Documented helper.
+ *
+ * Details.
+ * @pit project
+ * @param input.raw
+ */
+async function documented(_capabilities, input) { return input; }`),
+    ).toEqual({
+      name: "documented",
+      signature: "documented(input: unknown)",
+      summary: "Documented helper.",
+      parameters: [{ name: "input.raw" }],
+    });
+    expect(
+      getProjectFunctionMetadata(`/**
+ * Uses {@link documented} metadata.
+ * @pit project
+ * @param input.raw - See {@link documented}.
+ */
+async function linked(_capabilities, input) { return input; }`),
+    ).toEqual({
+      name: "linked",
+      signature: "linked(input: unknown)",
+      summary: "Uses {@link documented} metadata.",
+      parameters: [{ name: "input.raw", description: "See {@link documented}." }],
+    });
   });
 
   it("contextually types expressions using active saved functions", () => {

@@ -11,6 +11,8 @@ import {
 } from "./capability-trace.js";
 
 const SIGNATURE_WHITESPACE = /\s+/g;
+const JSDOC_PARAGRAPH_SEPARATOR = /\r?\n\s*\r?\n/;
+const JSDOC_PARAMETER_PREFIX = /^-\s*/;
 
 export interface SandboxOptions {
   memoryLimitMb?: number;
@@ -268,18 +270,104 @@ export function getNamedFunctionName(source: string): string | undefined {
     : undefined;
 }
 
-export function getSavedFunctionCallSignature(source: string): string | undefined {
-  const expression = submissionExpression(source);
-  if (!(expression && ts.isFunctionExpression(expression) && expression.name)) {
-    return undefined;
+export interface ProjectFunctionParameter {
+  name: string;
+  description?: string;
+}
+
+export interface ProjectFunctionMetadata {
+  name: string;
+  signature: string;
+  summary: string;
+  parameters: ProjectFunctionParameter[];
+}
+
+function jsDocText(value: string | ts.NodeArray<ts.JSDocComment> | undefined): string {
+  if (typeof value === "string") {
+    return value;
   }
-  const input = expression.parameters[1];
+  if (!value) {
+    return "";
+  }
+  return value
+    .map((part) =>
+      part.kind === ts.SyntaxKind.JSDocText ? (part as ts.JSDocText).text : part.getText(),
+    )
+    .join("");
+}
+
+function functionCallSignature(
+  name: string,
+  parameters: ts.NodeArray<ts.ParameterDeclaration>,
+): string {
+  const input = parameters[1];
   if (!input) {
-    return `${expression.name.text}()`;
+    return `${name}()`;
   }
   const optional = input.questionToken || input.initializer ? "?" : "";
   const type = (input.type?.getText() ?? "unknown").replace(SIGNATURE_WHITESPACE, " ");
-  return `${expression.name.text}(input${optional}: ${type})`;
+  return `${name}(input${optional}: ${type})`;
+}
+
+/** Extract and validate an immediately attached `@pit project` JSDoc marker. */
+export function getProjectFunctionMetadata(source: string): ProjectFunctionMetadata | undefined {
+  const file = ts.createSourceFile(
+    "/pit/project-function.ts",
+    source,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TS,
+  );
+  if (file.statements.length !== 1) {
+    return;
+  }
+  const declaration = file.statements[0];
+  if (!(declaration && ts.isFunctionDeclaration(declaration) && declaration.name)) {
+    return;
+  }
+
+  const pitTags = ts.getJSDocTags(declaration).filter((tag) => tag.tagName.text === "pit");
+  if (pitTags.length === 0) {
+    return;
+  }
+  const scope = jsDocText(pitTags.at(-1)?.comment).trim();
+  if (scope !== "project") {
+    throw new Error(`@pit scope must have value "project"; received ${JSON.stringify(scope)}`);
+  }
+
+  const docs = (declaration as ts.FunctionDeclaration & { jsDoc: ts.JSDoc[] }).jsDoc;
+  const summary =
+    docs
+      .map((doc) => jsDocText(doc.comment).trim().split(JSDOC_PARAGRAPH_SEPARATOR, 1)[0] as string)
+      .find(Boolean) ?? "";
+  if (!summary) {
+    throw new Error("project functions require a JSDoc summary before @pit project");
+  }
+
+  const parameters = ts
+    .getJSDocTags(declaration)
+    .filter(ts.isJSDocParameterTag)
+    .map((tag) => {
+      const description = jsDocText(tag.comment).trim().replace(JSDOC_PARAMETER_PREFIX, "");
+      return {
+        name: tag.name.getText(file),
+        ...(description ? { description } : {}),
+      };
+    });
+  return {
+    name: declaration.name.text,
+    signature: functionCallSignature(declaration.name.text, declaration.parameters),
+    summary,
+    parameters,
+  };
+}
+
+export function getSavedFunctionCallSignature(source: string): string | undefined {
+  const expression = submissionExpression(source);
+  if (!(expression && ts.isFunctionExpression(expression) && expression.name)) {
+    return;
+  }
+  return functionCallSignature(expression.name.text, expression.parameters);
 }
 
 function savedEntries(savedFunctions: ReadonlyMap<string, string>) {

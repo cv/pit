@@ -37,19 +37,25 @@ export type FunctionEntry =
   | { name: string; source: string; deleted?: never }
   | { name: string; deleted: true; source?: never };
 export interface FunctionActivity {
-  action: "set" | "run";
+  action: "set" | "run" | "remove";
   name: string;
   replaced?: boolean;
+  scope?: "project";
 }
+export function validateSavedFunctionSource(source: string): void {
+  if (Buffer.byteLength(source) > MAX_SAVED_FUNCTION_BYTES) {
+    throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
+  }
+}
+
 export function validateRegistryCapacity(
   registry: ReadonlyMap<string, string>,
   name: string,
   source: string,
 ): void {
+  validateSavedFunctionSource(source);
+
   const sourceBytes = Buffer.byteLength(source);
-  if (sourceBytes > MAX_SAVED_FUNCTION_BYTES) {
-    throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
-  }
   if (!registry.has(name) && registry.size >= MAX_SAVED_FUNCTIONS) {
     throw new Error(`saved function registry is limited to ${MAX_SAVED_FUNCTIONS} functions`);
   }
@@ -59,6 +65,21 @@ export function validateRegistryCapacity(
     0,
   );
   if (currentBytes - previousBytes + sourceBytes > MAX_SAVED_FUNCTION_TOTAL_BYTES) {
+    throw new Error(
+      `saved function registry exceeds ${formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`,
+    );
+  }
+}
+
+export function validateEffectiveRegistryCapacity(registry: ReadonlyMap<string, string>): void {
+  if (registry.size > MAX_SAVED_FUNCTIONS) {
+    throw new Error(`saved function registry is limited to ${MAX_SAVED_FUNCTIONS} functions`);
+  }
+  const totalBytes = [...registry.values()].reduce(
+    (total, source) => total + Buffer.byteLength(source),
+    0,
+  );
+  if (totalBytes > MAX_SAVED_FUNCTION_TOTAL_BYTES) {
     throw new Error(
       `saved function registry exceeds ${formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`,
     );
@@ -122,6 +143,9 @@ class SavedFunctionViewer {
 export function reconstructFunctions(
   registry: FunctionRegistry,
   entries: readonly unknown[],
+  baseFunctions: ReadonlyMap<string, string> = new Map(),
+
+  capacityBaseFunctions: ReadonlyMap<string, string> = baseFunctions,
 ): void {
   registry.clear();
   for (const raw of entries) {
@@ -148,8 +172,11 @@ export function reconstructFunctions(
       if (typeof definition.source !== "string") {
         continue;
       }
-      validateRegistryCapacity(registry, definition.name, definition.source);
-      validateTypeScript(definition.source, registry);
+      const capacityAvailable = new Map([...capacityBaseFunctions, ...registry]);
+      validateRegistryCapacity(capacityAvailable, definition.name, definition.source);
+      const available = new Map([...baseFunctions, ...registry]);
+      available.set(definition.name, definition.source);
+      validateTypeScript(definition.source, available);
       registry.set(definition.name, definition.source);
     } catch {
       // Ignore stale or malformed persisted definitions.
@@ -157,7 +184,11 @@ export function reconstructFunctions(
   }
 }
 
-export function registerFunctionManager(pi: ExtensionAPI, savedFunctions: FunctionRegistry): void {
+export function registerFunctionManager(
+  pi: ExtensionAPI,
+  savedFunctions: FunctionRegistry,
+  onChange?: () => void,
+): void {
   const functionSummary = () =>
     [...savedFunctions.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -225,6 +256,7 @@ export function registerFunctionManager(pi: ExtensionAPI, savedFunctions: Functi
         deleted: true,
       } satisfies FunctionEntry);
     }
+    onChange?.();
     ctx.ui.notify(
       `Deleted saved function${namesToDelete.size === 1 ? "" : "s"}: ${[...namesToDelete].join(", ")}`,
       "info",

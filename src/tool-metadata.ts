@@ -11,7 +11,7 @@ export const PROMPT_GUIDELINES = [
   "In typescript, prefer one tool invocation per step: batch independent calls with Promise.all instead of issuing multiple parallel typescript calls; sequence dependencies and conflicting mutations.",
   "In typescript, request only the fields and record limits needed to answer the current question; expand the query only when the first result requires it.",
   "Before editing in typescript, obtain the current revision and hashed anchors with workspace.read or workspace.search. A successful edit invalidates every prior revision and anchor for that file; batch compatible changes against one revision or re-read before the next edit, never mutate the same file concurrently, and re-read after a mismatch.",
-  "Before an anonymous typescript call, compare the workflow with recent calls and saved functions. Define or extend a parameterized named function as soon as work repeats, has reusable steps, or is likely to recur; reserve anonymous typescript calls for truly ad hoc work.",
+  "Before an anonymous typescript call, compare the workflow with recent calls and saved functions. Define or extend a parameterized named function as soon as work repeats, has reusable steps, or is likely to recur; reserve anonymous typescript calls for truly ad hoc work. Use @pit project JSDoc only for intentional trusted-project persistence.",
   "In typescript, maintain one parameterized saved function per intent: reuse, replace, or extend the closest saved-function signature, and add input modes or compose existing functions instead of creating overlapping variants.",
   "Filter and summarize inside typescript; return counts, IDs, and bounded relevant excerpts—not complete files, HTTP bodies, search corpora, or session records. If truncated, narrow the query rather than enlarging it; use capabilities for external effects.",
 ] as const;
@@ -57,6 +57,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "",
     "Results include active saved-function signatures. Invoke runTests() or runTests({ coverage: true }); only referenced definitions and dependencies are injected.",
     "To define now and invoke later, submit the named function with saveOnly: true and omit top-level params.",
+    "For trusted projects, a JSDoc summary plus @pit project persists a function; unmarked same-named definitions remain session overrides.",
     "",
     "Add input modes or compose existing saved functions before creating another helper. For example, publishChanges can await runValidation(), then use git.add, git.commit, and git.push with { raise: true }.",
     "",

@@ -153,6 +153,31 @@ Unknown capabilities and methods fail closed at run time.
 
 ## Capabilities
 
+- `workspace`
+  - `read(file, { format?: "hashed" | "raw", offset?, limit? })` — hashed line anchors by default with a whole-file revision; use raw for machine parsing
+  - `edit(file, { revision, changes })` — revision-checked anchored replacements, insertions, deletion, rewriting, and creation
+  - `batch(operations, { failure?: "fail-fast" | "settled" })` — concurrent all-read batches or transactional all-edit batches; mixed batches are rejected and both modes return `{ results }`
+  - `search(query, options?)` — bounded structured text search with interruptible regex matching and context
+  - `list(path?)`
+  - `glob(pattern | patterns, { limit?, dot?, onlyFiles?, ignore? })` — deterministic bounded entries with truncation metadata
+  - `stat(path)`
+- `shell`
+  - `exec(command, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate? })` — shell syntax with caller-controlled output budgets; set `raise: true` to throw on nonzero exit
+  - `execFile(program, args, { cwd?, timeoutMs?, raise?, maxBytes?, maxLines?, truncate? })` — argument-safe direct execution with the same bounded output controls
+- `http`
+  - `request(url, { method?, headers?, body?, maxBytes? })` — caller-selected body limit below the host maximum
+- `ui`
+  - `confirm(title, message)`
+  - `input(title, placeholder?)`
+  - `select(title, options)`
+  - `notify(message, "info" | "warning" | "error")`
+- `context`
+  - `get()` — cwd, mode, model, thinking level, session file, and effective, project, and session function names
+- `functions`
+  - `list()` — list documented project functions
+  - `get(name)` — return project function metadata and source
+  - `remove(name)` — remove a project function
+
 ### `workspace`
 
 - `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a bounded selection. Hashed format is the default.
@@ -197,7 +222,7 @@ UI methods require a mode that provides a UI.
 
 ### `context`
 
-- `get()` returns the working directory, mode, model, thinking level, session file, and saved-function names.
+- `get()` returns the working directory, mode, model, thinking level, session file, and effective, project, and session function names.
 
 Paths are relative to the Pi working directory. Absolute paths are also valid. Workspace mutation results use slash-normalized paths relative to the working directory. A path outside the working directory contains `../` segments in the result.
 
@@ -275,11 +300,41 @@ runTests()
 runTests({ coverage: true })
 ```
 
-Saved functions can call other saved functions. Pit injects only referenced functions and their transitive dependencies. It preserves input and return types across calls. It limits nested saved-function calls to a depth of 32.
+Unmarked named functions stage validation and initial execution, then persist as session entries only after execution succeeds. With `saveOnly: true`, a session function is statically validated and persisted without execution. Session functions survive reloads and follow the active session branch. Replacements are rejected when they invalidate dependents.
 
-Saved functions survive session reloads and follow the active session branch. A replacement must preserve the validity of dependent functions. Each branch can contain 64 functions. One function can contain 100 KB of source. The combined source limit is 1 MB.
+Saved functions can call other saved functions. Pit injects only referenced functions and their transitive dependencies as typed lexical bindings into each fresh restricted child process. It preserves input and return types across calls and limits nested saved-function calls to a depth of 32. The effective registry—the union of project functions and session functions, with session definitions overriding same-named project definitions—is limited to 64 functions, 100 KB per function, and 1 MB of combined saved source. Successful tool results include a compact catalog of active invocation signatures; names are also available from `context.get().savedFunctions`.
 
-The operator runs `/functions` to open the interactive function manager in the TUI. The operator can also run these direct commands:
+### Project functions
+
+Project functions are disabled by default. Enable them explicitly for a trusted project in `.pi/pit.json`:
+
+```json
+{
+  "projectFunctions": {
+    "enabled": true
+  }
+}
+```
+
+Add a descriptive JSDoc comment with `@pit project` to intentionally persist a named function across sessions:
+
+```ts
+/**
+ * Runs repository tests.
+ *
+ * @pit project
+ * @param input.coverage - Enable coverage.
+ */
+async function runTests({ shell }, input: { coverage?: boolean } = {}) {
+  return shell.exec(input.coverage ? "npm run coverage" : "npm test", { raise: true });
+}
+```
+
+Project functions follow the same execution rules as session functions: they are committed only after successful execution, or immediately after static validation with `saveOnly: true`. Sources are stored as readable TypeScript files under `.pi/pit/functions/`, loaded at session start, and summarized in the system prompt with signatures derived from each function's actual input declaration. An unmarked same-named definition creates a session override; a marked definition updates the project version and clears that override. Project source is loaded only after explicit opt-in and Pi's project-trust check; execution still occurs in the same restricted child process as session functions.
+
+Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` from the TypeScript capability to inspect or remove project definitions. Removal is rejected when any validated persisted project candidate or active session function directly or transitively depends on the target, preventing reconciliation from admitting a stranded definition. Project references remain project-scoped, while session references use effective same-named session overrides. Project persistence and management require both explicit opt-in and a trusted project. Disabling the feature leaves existing source files untouched.
+
+The `/functions` command manages branch-local session functions. The operator runs it without arguments to open the interactive manager in the TUI, or uses these direct commands:
 
 ```text
 /functions list
@@ -287,7 +342,7 @@ The operator runs `/functions` to open the interactive function manager in the T
 /functions delete runTests
 ```
 
-Deletion creates a branch-local tombstone. If another saved function depends on the selected function, Pit asks for confirmation before it deletes both functions.
+Deleting a session function with `/functions delete` creates a branch-local tombstone and, after confirmation, also deletes its session dependents. In contrast, the project capability's `functions.remove(name)` rejects removal while any dependent project or session function remains.
 
 ## Security model
 
@@ -312,7 +367,7 @@ This isolation is stronger than `node:vm`, which is not a security boundary. It 
 ## Limitations
 
 - Pit depends on the Node permission model and requires Node 22.19 or newer.
-- Saved functions belong to one session branch. Pit does not provide a shared project function library.
+- Session functions belong to one session branch. Project functions are local to one explicitly enabled, trusted project; Pit does not provide a cross-project function library.
 - Workspace paths are not restricted to the current project.
 - Shell commands are not restricted by an allowlist.
 - The `git` capability allowlists subcommands, but it does not restrict their arguments, hooks, remotes, or network destinations.
