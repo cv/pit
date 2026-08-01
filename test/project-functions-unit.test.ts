@@ -6,7 +6,7 @@ import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
   projectFunctionCatalog,
-  reconcileProjectFunctionsForSession,
+  reconcileProjectFunctionsForSession as reconcileProjectFunctionState,
   removeProjectFunction,
   savedFunctionDependents,
   saveProjectFunction,
@@ -18,6 +18,22 @@ let cwd: string;
 const registry = () => new Map<string, string>();
 const metadata = () => new Map();
 const ctx = (trusted = true) => ({ cwd, isProjectTrusted: () => trusted }) as any;
+
+function reconcileProjectFunctionsForSession(
+  candidates: ReadonlyMap<string, string>,
+  candidateMetadata: Parameters<typeof reconcileProjectFunctionState>[0]["candidateMetadata"],
+  session: Map<string, string>,
+  active: Map<string, string>,
+  activeMetadata: Parameters<typeof reconcileProjectFunctionState>[0]["metadata"],
+) {
+  return reconcileProjectFunctionState({
+    candidates,
+    candidateMetadata,
+    session,
+    registry: active,
+    metadata: activeMetadata,
+  });
+}
 
 it("maps effective function scopes with session override precedence", () => {
   const scopes = functionScopeRegistry(

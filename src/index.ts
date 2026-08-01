@@ -114,6 +114,7 @@ export default function pit(pi: ExtensionAPI) {
     renderResult(result, options, theme, context) {
       return renderTypeScriptToolResult(result, options, theme, context);
     },
+    // biome-ignore lint/complexity/useMaxParams: Pi defines the tool execute callback signature.
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
       const executionProgress = new ExecutionProgressController(

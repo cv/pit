@@ -1,14 +1,35 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { finishCapabilityTrace, startCapabilityTrace } from "../src/capability-trace.js";
+import {
+  startCapabilityTrace as createCapabilityTrace,
+  finishCapabilityTrace,
+} from "../src/capability-trace.js";
 import { ExecutionProgressController } from "../src/execution-progress.js";
+
+function startCapabilityTrace(
+  id: number,
+  sequence: number,
+  capability: string,
+  method: string,
+  args: unknown[],
+  startedAt?: number,
+) {
+  return createCapabilityTrace({
+    id,
+    sequence,
+    capability,
+    method,
+    args,
+    ...(startedAt === undefined ? {} : { startedAt }),
+  });
+}
 
 afterEach(() => vi.useRealTimers());
 
 describe("ExecutionProgressController", () => {
   it("emits immediately and coalesces burst transitions for 200 ms", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+    vi.setSystemTime(1000);
     const listener = vi.fn();
     const c = new ExecutionProgressController(listener);
     const start = startCapabilityTrace(1, 1, "git", "status", [], 10);
@@ -34,7 +55,7 @@ describe("ExecutionProgressController", () => {
 
   it("flushes a pending final snapshot synchronously", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+    vi.setSystemTime(1000);
     const listener = vi.fn();
     const c = new ExecutionProgressController(listener);
     const start = startCapabilityTrace(1, 1, "npm", "test", []);
@@ -49,7 +70,7 @@ describe("ExecutionProgressController", () => {
 
   it("cancels pending work and suppresses callbacks after disposal", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+    vi.setSystemTime(1000);
     const listener = vi.fn();
     const c = new ExecutionProgressController(listener);
     c.recordTrace(startCapabilityTrace(1, 1, "git", "status", []));

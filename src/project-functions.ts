@@ -299,13 +299,21 @@ export function savedFunctionDependents(
   };
 }
 
-export function reconcileProjectFunctionsForSession(
-  candidates: ReadonlyMap<string, string>,
-  candidateMetadata: ReadonlyMap<string, ProjectFunctionMetadata>,
-  session: FunctionRegistry,
-  registry: FunctionRegistry,
-  metadata: ProjectFunctionMetadataRegistry,
-): string[] {
+export interface ProjectFunctionReconciliation {
+  candidates: ReadonlyMap<string, string>;
+  candidateMetadata: ReadonlyMap<string, ProjectFunctionMetadata>;
+  session: FunctionRegistry;
+  registry: FunctionRegistry;
+  metadata: ProjectFunctionMetadataRegistry;
+}
+
+export function reconcileProjectFunctionsForSession({
+  candidates,
+  candidateMetadata,
+  session,
+  registry,
+  metadata,
+}: ProjectFunctionReconciliation): string[] {
   const sessionCandidates = new Map(session);
   session.clear();
   registry.clear();

@@ -8,14 +8,14 @@ import {
 describe("process runner", () => {
   it("runs bounded non-streaming commands without optional progress or signal", async () => {
     const exec = vi.fn(async () => ({ stdout: "ok\n", stderr: "", code: 0 }));
-    const result = await executeHostProcess(
-      { exec } as any,
-      "git",
-      ["status", "--short"],
-      "git status --short",
-      {},
-      process.cwd(),
-    );
+    const result = await executeHostProcess({
+      pi: { exec } as any,
+      defaultCwd: process.cwd(),
+      program: "git",
+      args: ["status", "--short"],
+      displayCommand: "git status --short",
+      options: {},
+    });
     expect(result).toEqual({ stdout: "ok\n", stderr: "", code: 0, truncated: false });
     expect(exec).toHaveBeenCalledWith("git", ["status", "--short"], {
       cwd: process.cwd(),

@@ -22,7 +22,14 @@ describe("host capability router", () => {
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
     });
-    expect(await handler("context", "get", [], new AbortController().signal)).toMatchObject({
+    expect(
+      await handler({
+        capability: "context",
+        method: "get",
+        args: [],
+        signal: new AbortController().signal,
+      }),
+    ).toMatchObject({
       cwd: "/project",
       savedFunctions: ["projectFn", "sessionFn"],
       projectFunctions: ["projectFn"],
@@ -39,8 +46,13 @@ describe("host capability router", () => {
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
     });
-    expect(() => handler("missing", "method", [], new AbortController().signal)).toThrow(
-      "Unknown capability or method",
-    );
+    expect(() =>
+      handler({
+        capability: "missing",
+        method: "method",
+        args: [],
+        signal: new AbortController().signal,
+      }),
+    ).toThrow("Unknown capability or method");
   });
 });

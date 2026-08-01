@@ -25,13 +25,15 @@ export interface SandboxOptions {
   onCapabilityTrace?: (trace: CapabilityTrace) => void;
 }
 
-export type CapabilityHandler = (
-  capability: string,
-  method: string,
-  args: unknown[],
-  signal: AbortSignal,
-  functionContext?: FunctionExecutionContext,
-) => unknown | Promise<unknown>;
+export interface CapabilityRequest {
+  capability: string;
+  method: string;
+  args: unknown[];
+  signal: AbortSignal;
+  functionContext?: FunctionExecutionContext;
+}
+
+export type CapabilityHandler = (request: CapabilityRequest) => unknown | Promise<unknown>;
 
 interface WireMessage {
   token?: string;
@@ -724,15 +726,16 @@ export async function runInSandbox(
             Pick<WireMessage, "id" | "capability" | "method" | "args">
           >;
           callCount++;
-          const trace = startCapabilityTrace(
+          const functionContext = parseFunctionExecutionContext(message.functionContext);
+          const trace = startCapabilityTrace({
             id,
-            callCount,
+            sequence: callCount,
             capability,
             method,
             args,
-            Date.now(),
-            parseFunctionExecutionContext(message.functionContext),
-          );
+            startedAt: Date.now(),
+            ...(functionContext ? { functionContext } : {}),
+          });
           reportCapabilityTrace(trace);
           const finishTrace = (status: "succeeded" | "failed" | "rejected") => {
             reportCapabilityTrace(finishCapabilityTrace(trace, status));
@@ -758,7 +761,15 @@ export async function runInSandbox(
           activeCalls++;
           let task: Promise<void>;
           task = Promise.resolve()
-            .then(() => handler(capability, method, args, capabilitySignal, trace.function))
+            .then(() =>
+              handler({
+                capability,
+                method,
+                args,
+                signal: capabilitySignal,
+                ...(trace.function ? { functionContext: trace.function } : {}),
+              }),
+            )
             .then(
               (value) => {
                 if (!send({ type: "response", id, value })) {

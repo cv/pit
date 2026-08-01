@@ -2,6 +2,7 @@ import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import type { CapabilityTrace } from "../src/capability-trace.js";
 import {
+  type CapabilityRequest,
   clearSandboxCaches,
   formatDiagnostic,
   getNamedFunctionName,
@@ -255,11 +256,12 @@ describe("runInSandbox", () => {
     );
     expect(result).toEqual({ value: 42 });
     expect(handler).toHaveBeenCalledWith(
-      "shell",
-      "exec",
-      ["sum"],
-      expect.any(AbortSignal),
-      undefined,
+      expect.objectContaining({
+        capability: "shell",
+        method: "exec",
+        args: ["sum"],
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -270,7 +272,7 @@ describe("runInSandbox", () => {
         shell.exec("secret command"),
         context.get(),
       ])`,
-      async (capability) => {
+      async ({ capability }) => {
         if (capability === "shell") {
           return { stdout: "ok", stderr: "", code: 0, truncated: false };
         }
@@ -324,7 +326,7 @@ describe("runInSandbox", () => {
       ["answer", "async function answer(_capabilities, input) { return { answer: input.value }; }"],
       ["unrelated", "42"],
     ]);
-    const handler = vi.fn(async (capability: string, method: string) => {
+    const handler = vi.fn(async ({ capability, method }: CapabilityRequest) => {
       if (capability === "__pit" && method === "savedFunctionRun") {
         return null;
       }
@@ -333,15 +335,17 @@ describe("runInSandbox", () => {
     const result = await runInSandbox("answer({ value: 42 })", handler, { savedFunctions });
     expect(result).toEqual({ answer: 42 });
     expect(handler).toHaveBeenCalledWith(
-      "__pit",
-      "savedFunctionRun",
-      ["answer"],
-      expect.any(AbortSignal),
       expect.objectContaining({
-        invocationId: 1,
-        name: "answer",
-        scope: "session",
-        depth: 1,
+        capability: "__pit",
+        method: "savedFunctionRun",
+        args: ["answer"],
+        signal: expect.any(AbortSignal),
+        functionContext: expect.objectContaining({
+          invocationId: 1,
+          name: "answer",
+          scope: "session",
+          depth: 1,
+        }),
       }),
     );
     await expect(runInSandbox("unrelated()", handler, { savedFunctions })).rejects.toThrow(
@@ -361,7 +365,7 @@ describe("runInSandbox", () => {
     const traces: CapabilityTrace[] = [];
     await runInSandbox(
       'async () => Promise.all([outer("nested"), inner("direct")])',
-      async (capability, method) => {
+      async ({ capability, method }) => {
         if (capability === "__pit" && method === "savedFunctionRun") {
           return null;
         }
@@ -592,7 +596,7 @@ async function linked(_capabilities, input) { return input; }`),
     await expect(
       runInSandbox(
         "async ({ context }) => context.get()",
-        async (_capability, _method, _args, signal) =>
+        async ({ signal }) =>
           new Promise((_resolve, reject) => {
             signal.addEventListener(
               "abort",

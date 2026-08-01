@@ -30,7 +30,7 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": "off",
         "noExcessiveLinesPerFunction": "off",
-        "useMaxParams": "off",
+        "useMaxParams": "error",
         "noVoid": "off"
       },
       "performance": {
@@ -82,6 +82,9 @@
       "includes": ["test/**"],
       "linter": {
         "rules": {
+          "complexity": {
+            "useMaxParams": "off"
+          },
           "suspicious": {
             "noExplicitAny": "off",
             "noShadow": "off",

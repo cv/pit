@@ -49,13 +49,13 @@ export function refreshEffectiveFunctions(state: FunctionState): void {
 }
 
 export function reconcileFunctionState(state: FunctionState): string[] {
-  const errors = reconcileProjectFunctionsForSession(
-    state.projectCandidates,
-    state.candidateMetadata,
-    state.session,
-    state.project,
-    state.metadata,
-  );
+  const errors = reconcileProjectFunctionsForSession({
+    candidates: state.projectCandidates,
+    candidateMetadata: state.candidateMetadata,
+    session: state.session,
+    registry: state.project,
+    metadata: state.metadata,
+  });
   refreshEffectiveFunctions(state);
   return errors;
 }

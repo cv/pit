@@ -284,7 +284,7 @@ export function createCapabilities({
     },
   };
 
-  return (capability, method, args, signal, functionContext) => {
+  return ({ capability, method, args, signal, functionContext }) => {
     if (capability === "__pit" && method === "savedFunctionRun") {
       const name = string(args[0], "saved function name");
       if (!functionState.effective.has(name)) {

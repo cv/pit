@@ -93,15 +93,25 @@ function argumentSummary(value: unknown): CapabilityArgumentSummary {
   return { type: "other" };
 }
 
-export function startCapabilityTrace(
-  id: number,
-  sequence: number,
-  capability: string,
-  method: string,
-  args: unknown[],
+export interface StartCapabilityTraceInput {
+  id: number;
+  sequence: number;
+  capability: string;
+  method: string;
+  args: unknown[];
+  startedAt?: number;
+  functionContext?: FunctionExecutionContext;
+}
+
+export function startCapabilityTrace({
+  id,
+  sequence,
+  capability,
+  method,
+  args,
   startedAt = Date.now(),
-  functionContext?: FunctionExecutionContext,
-): CapabilityTrace {
+  functionContext,
+}: StartCapabilityTraceInput): CapabilityTrace {
   return {
     id,
     sequence,

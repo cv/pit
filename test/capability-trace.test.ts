@@ -1,9 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
   CapabilityTraceCollector,
+  startCapabilityTrace as createCapabilityTrace,
+  type FunctionExecutionContext,
   finishCapabilityTrace,
-  startCapabilityTrace,
 } from "../src/capability-trace.js";
+
+function startCapabilityTrace(
+  id: number,
+  sequence: number,
+  capability: string,
+  method: string,
+  args: unknown[],
+  startedAt?: number,
+  functionContext?: FunctionExecutionContext,
+) {
+  return createCapabilityTrace({
+    id,
+    sequence,
+    capability,
+    method,
+    args,
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(functionContext ? { functionContext } : {}),
+  });
+}
 
 describe("capability traces", () => {
   it("summarizes arguments without retaining values", () => {

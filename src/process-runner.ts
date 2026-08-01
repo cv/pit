@@ -30,29 +30,24 @@ export interface ProcessRunner {
 export function createProcessRunner(pi: ExtensionAPI, defaultCwd: string): ProcessRunner {
   return {
     run: (request) =>
-      executeHostProcess(
+      executeHostProcess({
         pi,
-        request.program,
-        request.args,
-        request.displayCommand ?? formatProcessCommand(request.program, request.args),
-        request.options,
         defaultCwd,
-        request.onProgress,
-        request.signal,
-      ),
+        ...request,
+      }),
   };
 }
 
-export async function executeHostProcess(
-  pi: ExtensionAPI,
-  program: string,
-  args: string[],
-  displayCommand: string,
-  options: Record<string, unknown>,
-  defaultCwd: string,
-  onProgress?: (event: HostShellProgressEvent) => void,
-  signal?: AbortSignal,
-) {
+export async function executeHostProcess({
+  pi,
+  defaultCwd,
+  program,
+  args,
+  options,
+  displayCommand = formatProcessCommand(program, args),
+  onProgress,
+  signal,
+}: ProcessRequest & { pi: ExtensionAPI; defaultCwd: string }): Promise<ProcessResult> {
   if (options.raise !== undefined && typeof options.raise !== "boolean") {
     throw new TypeError("options.raise must be a boolean");
   }
