@@ -33,11 +33,8 @@ import {
 
 export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
 
-import {
-  ExecutionProgressController,
-  type HostShellProgressEvent,
-  type ShellProgressEvent,
-} from "./execution-progress.js";
+import { ExecutionProgressController } from "./execution-progress.js";
+import type { HostShellProgressEvent, ShellProgressEvent } from "./execution-types.js";
 
 import { prepareGhCommand } from "./gh-capability.js";
 import { executeStreamingProcess } from "./host-process.js";
@@ -580,11 +577,13 @@ export default function pit(pi: ExtensionAPI) {
       const functionActivity: FunctionActivity[] = [];
       const executionProgress = new ExecutionProgressController(
         update
-          ? (partial) =>
+          ? (snapshot) =>
               update({
-                ...partial,
+                content: [{ type: "text", text: "Running TypeScript…" }],
                 details: {
-                  ...partial.details,
+                  value: undefined,
+                  truncated: false,
+                  ...snapshot,
                   ...(functionActivity.length > 0 ? { functions: [...functionActivity] } : {}),
                 },
               })
@@ -745,7 +744,7 @@ export default function pit(pi: ExtensionAPI) {
           value: output.truncated ? undefined : value,
           truncated: output.truncated,
           ...(functionActivity.length > 0 ? { functions: functionActivity } : {}),
-          ...executionProgress.details(),
+          ...executionProgress.snapshot(),
         },
       };
     },

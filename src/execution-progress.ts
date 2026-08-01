@@ -1,31 +1,21 @@
 import { truncateTail } from "@earendil-works/pi-coding-agent";
 import { type CapabilityTrace, CapabilityTraceCollector } from "./capability-trace.js";
+import type {
+  ExecutionProgressListener,
+  ExecutionProgressSnapshot,
+  ShellProgress,
+  ShellProgressEvent,
+} from "./execution-types.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
-import type { ShellProgress } from "./typescript-tool-renderer.js";
-
-export type HostShellProgressEvent =
-  | { phase: "start" }
-  | { phase: "output"; stream: "stdout" | "stderr"; chunk: string }
-  | { phase: "end"; code: number };
-export type ShellProgressEvent = HostShellProgressEvent & { id: number; command: string };
-export interface ExecutionProgressDetails {
-  progress?: ShellProgress[];
-  traces?: CapabilityTrace[];
-  tracesTruncated?: true;
-}
-type Update = (value: {
-  content: Array<{ type: "text"; text: string }>;
-  details: { value: undefined; truncated: false } & ExecutionProgressDetails;
-}) => void;
 
 export class ExecutionProgressController {
   readonly #traces = new CapabilityTraceCollector();
   readonly #shell = new Map<number, ShellProgress>();
-  readonly #update: Update | undefined;
+  readonly #listener: ExecutionProgressListener | undefined;
   #lastOutputUpdate = 0;
 
-  constructor(update?: Update) {
-    this.#update = update;
+  constructor(listener?: ExecutionProgressListener) {
+    this.#listener = listener;
   }
 
   recordTrace(trace: CapabilityTrace): void {
@@ -58,19 +48,18 @@ export class ExecutionProgressController {
     }
   }
 
-  details(): ExecutionProgressDetails {
+  snapshot(): ExecutionProgressSnapshot {
     const trace = this.#traces.snapshot();
     return {
-      ...(this.#shell.size ? { progress: [...this.#shell.values()] } : {}),
+      ...(this.#shell.size
+        ? { progress: [...this.#shell.values()].map((entry) => ({ ...entry })) }
+        : {}),
       ...(trace.traces.length ? { traces: trace.traces } : {}),
       ...(trace.truncated ? { tracesTruncated: true as const } : {}),
     };
   }
 
   #emit(): void {
-    this.#update?.({
-      content: [{ type: "text", text: "Running TypeScript…" }],
-      details: { value: undefined, truncated: false, ...this.details() },
-    });
+    this.#listener?.(this.snapshot());
   }
 }

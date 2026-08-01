@@ -5,7 +5,7 @@ import {
   describeCapabilityCall,
   inferCapabilityCall,
 } from "./capability-presentation.js";
-import type { CapabilityTrace } from "./capability-trace.js";
+import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import type { RenderedResultValue } from "./result-renderer-types.js";
 import { renderResultValue } from "./result-renderers.js";
@@ -16,20 +16,9 @@ import { sanitizeTerminalText } from "./text-sanitization.js";
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const SPINNER_INTERVAL_MS = 80;
 
-export interface ShellProgress {
-  id: number;
-  command: string;
-  status: "running" | "done";
-  output: string;
-  code?: number;
-}
-
-interface TypeScriptDetails {
+interface TypeScriptDetails extends ExecutionProgressSnapshot {
   value: unknown;
   truncated: boolean;
-  progress?: ShellProgress[];
-  traces?: CapabilityTrace[];
-  tracesTruncated?: true;
   functions?: FunctionActivity[];
 }
 
