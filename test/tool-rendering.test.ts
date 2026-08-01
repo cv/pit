@@ -407,6 +407,24 @@ describe("tool rendering", () => {
     expect(childIndex).toBeGreaterThan(outerIndex);
     expect(shellIndex).toBeGreaterThan(childIndex);
 
+    const warningResult = renderToolResult(
+      {
+        content: [],
+        details: {
+          value: {
+            stdout: JSON.stringify({ pit: { current: "1", latest: "2" } }),
+            stderr: "",
+            code: 1,
+            truncated: false,
+          },
+          truncated: false,
+        },
+      },
+      { expanded: false, isPartial: false },
+      { args: { code: "async ({ npm }) => npm.outdated()" } },
+    );
+    expect(warningResult).toContain("⚠ npm outdated, 1 package");
+
     const symbolResult = renderToolResult(
       { content: [], details: { value: Symbol("value"), truncated: false } },
       { expanded: false, isPartial: false },

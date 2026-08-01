@@ -57,6 +57,7 @@ function renderer(
     return {
       kind: "npm",
       lines: display,
+      outcome: status,
       summary: `${rendered.summary}${result.truncated ? ", truncated" : ""}`,
       detailLines: display.slice(1),
     } satisfies RenderedResultValue;

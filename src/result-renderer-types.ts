@@ -43,6 +43,7 @@ export interface RenderedResultValue {
   kind: string;
   lines: string[];
   summary?: string;
+  outcome?: "success" | "warning" | "error";
   detailLines?: string[];
   hangingIndents?: Record<number, number>;
   detailHangingIndents?: Record<number, number>;

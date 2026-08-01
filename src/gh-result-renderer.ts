@@ -86,6 +86,7 @@ export const renderGhResult: ValueRenderer = (value, context: RenderContext) => 
   return {
     kind: "gh",
     lines,
+    outcome: status,
     summary: `${parsed ? `${count} result${count === 1 ? "" : "s"}` : `exit ${result.code}`}${result.truncated ? ", truncated" : ""}`,
     detailLines: lines.slice(1),
   } satisfies RenderedResultValue;

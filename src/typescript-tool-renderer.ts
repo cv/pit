@@ -466,11 +466,17 @@ export function renderTypeScriptToolResult(
     details?.truncated === true,
     fallback,
   );
-  const resultMarker = details?.truncated ? theme.fg("warning", "… ") : theme.fg("success", "✓ ");
+  const resultOutcome = details?.truncated ? "warning" : (structuredResult?.outcome ?? "success");
+  const resultMarker =
+    resultOutcome === "warning"
+      ? theme.fg("warning", "⚠ ")
+      : resultOutcome === "error"
+        ? theme.fg("error", "✗ ")
+        : theme.fg("success", "✓ ");
   let text = `${expanded ? "\n" : ""}${theme.bold(
     resultMarker +
       theme.fg("toolTitle", resultLabel) +
-      theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
+      theme.fg(resultOutcome === "success" ? "dim" : resultOutcome, ` (${state})`),
   )}`;
   if (expanded) {
     const dashboard = renderExecutionDashboard(details, theme);

@@ -21,6 +21,8 @@ describe("semantic process outcomes", () => {
     );
     expect(audit?.lines[0]).toContain("<warning>exit 1</warning>");
     expect(outdated?.lines[0]).toContain("<warning>exit 1</warning>");
+    expect(audit?.outcome).toBe("warning");
+    expect(outdated?.outcome).toBe("warning");
   });
 
   it("renders failed workflow data as a warning while the query succeeds", () => {
@@ -49,5 +51,8 @@ describe("semantic process outcomes", () => {
     expect(emptyAudit?.lines[0]).toContain("<error>exit 1</error>");
     expect(emptyOutdated?.lines[0]).toContain("<error>exit 1</error>");
     expect(failedGh?.lines[0]).toContain("<error>exit 1</error>");
+    expect(emptyAudit?.outcome).toBe("error");
+    expect(emptyOutdated?.outcome).toBe("error");
+    expect(failedGh?.outcome).toBe("error");
   });
 });
