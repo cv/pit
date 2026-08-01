@@ -93,6 +93,29 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     expect(await value(`projectGreeting({ name: "Pi" })`)).toEqual({ greeting: "Hello, Pi" });
   });
 
+  it("reloads project functions that invoke the typed npm capability", async () => {
+    const source = `/** Runs project tests. @pit project */
+async function projectTests({ npm }) {
+  return npm.test({ raise: true });
+}`;
+    await run(source);
+    execMock.mockClear();
+
+    await sessionStart({}, context());
+    const invoked = await run("projectTests()");
+
+    expect(execMock).toHaveBeenCalledWith(
+      "npm",
+      ["run", "test"],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(invoked.details.traces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ capability: "npm", method: "test", status: "succeeded" }),
+      ]),
+    );
+  });
+
   it("prefers session overrides until the session branch reloads", async () => {
     await writeProjectFunction(
       "projectGreeting",

@@ -1,4 +1,5 @@
 import { getCapabilityMethodDefinition } from "./capability-registry.js";
+import type { ResultRendererKey } from "./result-renderer-types.js";
 
 export interface CapabilityCall {
   capability: string;
@@ -6,7 +7,7 @@ export interface CapabilityCall {
   qualifiedName: string;
 }
 
-const CAPABILITY_CALL_PATTERN = /\b(workspace|git|npm|shell|http|ui|context|functions)\.(\w+)\s*\(/;
+const CAPABILITY_CALL_PATTERN = /\b([A-Za-z_$][\w$]*)\.(\w+)\s*\(/;
 
 export function inferCapabilityCall(source: string): CapabilityCall | undefined {
   const match = source.match(CAPABILITY_CALL_PATTERN);
@@ -26,7 +27,9 @@ export function describeCapabilityCall(call: CapabilityCall | undefined): string
     : undefined;
 }
 
-export function capabilityResultRenderer(call: CapabilityCall | undefined): string | undefined {
+export function capabilityResultRenderer(
+  call: CapabilityCall | undefined,
+): ResultRendererKey | undefined {
   return call
     ? getCapabilityMethodDefinition(call.capability, call.method)?.resultRenderer
     : undefined;

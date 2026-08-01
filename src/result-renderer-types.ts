@@ -1,5 +1,30 @@
 import type { CapabilityCall } from "./capability-presentation.js";
 
+export type ResultRendererKey =
+  | "read"
+  | "edit"
+  | "batch"
+  | "list"
+  | "glob"
+  | "search"
+  | "stat"
+  | "shell"
+  | "http"
+  | "git.status"
+  | "git.diff"
+  | "git.log"
+  | "git.add"
+  | "git.commit"
+  | "git.show"
+  | "git.push"
+  | "git.tag"
+  | "npm.run"
+  | "npm.test"
+  | "npm.install"
+  | "npm.audit"
+  | "npm.outdated"
+  | "npm.pack";
+
 export interface ResultTheme {
   fg(color: string, text: string): string;
   bold(text: string): string;

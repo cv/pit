@@ -279,11 +279,9 @@ A read batch can use `fail-fast` or `settled` failure handling. An edit batch mu
 For work that can recur, the model submits a named top-level function:
 
 ```ts
-async function runTests({ shell }, input: { coverage?: boolean } = {}) {
-  const args = input.coverage ? ["run", "coverage"] : ["test"];
-  return shell.execFile("npm", args, { raise: true });
+async function runTests({ npm }, input: { coverage?: boolean } = {}) {
+  return npm.test({ coverage: input.coverage, raise: true });
 }
-```
 
 Pit validates and runs the function. Pit saves it only after execution succeeds.
 

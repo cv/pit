@@ -1,8 +1,10 @@
+import type { ResultRendererKey } from "./result-renderer-types.js";
+
 export interface CapabilityMethodDefinition {
   declaration: string;
   documentation: string;
   callDescription: string;
-  resultRenderer?: string;
+  resultRenderer?: ResultRendererKey;
   minimumArguments: number;
   maximumArguments: number;
 }
@@ -113,7 +115,7 @@ function gitMethodDefinition(method: string, callDescription: string): Capabilit
     declaration: `${method}(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;`,
     documentation: `git.${method}(args?, options?)`,
     callDescription,
-    resultRenderer: `git.${method}`,
+    resultRenderer: `git.${method}` as ResultRendererKey,
     minimumArguments: 0,
     maximumArguments: 2,
   };

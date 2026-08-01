@@ -5,6 +5,7 @@ import { NPM_RESULT_RENDERERS } from "./npm-result-renderers.js";
 import type {
   RenderContext,
   RenderedResultValue,
+  ResultRendererKey,
   ResultTheme,
   ValueRenderer,
 } from "./result-renderer-types.js";
@@ -139,7 +140,7 @@ function renderShell(value: unknown, { theme }: RenderContext): RenderedResultVa
 }
 
 /** Direct capability results route here before shape-based fallback rendering. */
-const CAPABILITY_RESULT_RENDERERS: Readonly<Record<string, ValueRenderer>> = {
+const CAPABILITY_RESULT_RENDERERS = {
   read: renderRead,
   edit: renderEdit,
   batch: renderBatch,
@@ -163,7 +164,7 @@ const CAPABILITY_RESULT_RENDERERS: Readonly<Record<string, ValueRenderer>> = {
   "npm.audit": NPM_RESULT_RENDERERS.audit,
   "npm.outdated": NPM_RESULT_RENDERERS.outdated,
   "npm.pack": NPM_RESULT_RENDERERS.pack,
-};
+} as const satisfies Record<ResultRendererKey, ValueRenderer>;
 
 function renderRead(value: unknown, { theme }: RenderContext): RenderedResultValue | undefined {
   if (
