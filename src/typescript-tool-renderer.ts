@@ -8,8 +8,8 @@ import {
 import type { CapabilityTrace } from "./capability-trace.js";
 import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
+import { renderResultValue } from "./renderers/generic.js";
 import type { RenderedResultValue } from "./result-renderer-types.js";
-import { renderResultValue } from "./result-renderers.js";
 import { getNamedFunctionName, resolveSavedFunctionReferences } from "./sandbox.js";
 import type { FunctionActivity, FunctionRegistry } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";

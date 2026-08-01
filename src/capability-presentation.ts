@@ -1,11 +1,9 @@
+import type { CapabilityCall } from "./capability-core.js";
+
+export type { CapabilityCall } from "./capability-core.js";
+
 import { getCapabilityMethodDefinition } from "./capability-registry.js";
 import type { ResultRendererKey } from "./result-renderer-types.js";
-
-export interface CapabilityCall {
-  capability: string;
-  method: string;
-  qualifiedName: string;
-}
 
 const CAPABILITY_CALL_PATTERN = /\b([A-Za-z_$][\w$]*)\.(\w+)\s*\(/;
 

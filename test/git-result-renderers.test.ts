@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CapabilityCall } from "../src/capability-presentation.js";
-import { renderResultValue } from "../src/result-renderers.js";
+import { renderResultValue } from "../src/renderers/generic.js";
 
 const theme = {
   fg: (color: string, text: string) => `<${color}>${text}</${color}>`,

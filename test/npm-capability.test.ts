@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CapabilityCall } from "../src/capability-presentation.js";
 import { prepareNpmCommand } from "../src/npm-capability.js";
-import { renderResultValue } from "../src/result-renderers.js";
+import { renderResultValue } from "../src/renderers/generic.js";
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 const result = (stdout = "", stderr = "", code = 0, truncated = false) => ({

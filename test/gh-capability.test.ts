@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CapabilityCall } from "../src/capability-presentation.js";
 import { prepareGhCommand } from "../src/gh-capability.js";
-import { renderResultValue } from "../src/result-renderers.js";
+import { renderResultValue } from "../src/renderers/generic.js";
 
 const theme = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
 const result = (stdout = "", stderr = "", code = 0, truncated = false) => ({

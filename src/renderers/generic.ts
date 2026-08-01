@@ -1,17 +1,17 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
-import { type CapabilityCall, capabilityResultRenderer } from "./capability-presentation.js";
-import { renderGhResult } from "./gh-result-renderer.js";
-import { GIT_RESULT_RENDERERS } from "./git-result-renderers.js";
-import { NPM_RESULT_RENDERERS } from "./npm-result-renderers.js";
+import { type CapabilityCall, capabilityResultRenderer } from "../capability-presentation.js";
+import { renderGhResult } from "../gh-result-renderer.js";
+import { GIT_RESULT_RENDERERS } from "../git-result-renderers.js";
+import { NPM_RESULT_RENDERERS } from "../npm-result-renderers.js";
 import type {
   RenderContext,
   RenderedResultValue,
   ResultRendererKey,
   ResultTheme,
   ValueRenderer,
-} from "./result-renderer-types.js";
+} from "../result-renderer-types.js";
 
-export type { RenderedResultValue } from "./result-renderer-types.js";
+export type { RenderedResultValue } from "../result-renderer-types.js";
 
 type JsonRecord = Record<string, unknown>;
 
