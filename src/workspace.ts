@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { dirname } from "node:path";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
@@ -9,41 +9,17 @@ import {
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import fg from "fast-glob";
-import { CAPABILITY_METHODS } from "./capability-registry.js";
-import { fileRevision, lineAnchor, prepareEdit } from "./hashline.js";
-import { InterruptibleRegexMatcher } from "./regex-worker.js";
+import { fileRevision, prepareEdit } from "./hashline.js";
+import {
+  checkAbort,
+  object,
+  resolveWorkspacePath,
+  string,
+  workspaceResultPath,
+} from "./workspace-paths.js";
+import { searchWorkspace } from "./workspace-search.js";
 
-const MAX_SEARCH_FILE_BYTES = 1_000_000;
-const MAX_SEARCH_FILES = 2000;
-const MAX_SEARCH_RESULTS = 500;
 const MAX_GLOB_RESULTS = 10_000;
-const AT_PATH_PREFIX = /^@/;
-export const WORKSPACE_METHODS = CAPABILITY_METHODS.workspace;
-
-function object(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function string(value: unknown, label: string): string {
-  if (typeof value !== "string") {
-    throw new TypeError(`${label} must be a string`);
-  }
-  return value;
-}
-
-function checkAbort(signal?: AbortSignal): void {
-  signal?.throwIfAborted();
-}
-export function resolveWorkspacePath(cwd: string, value: unknown): string {
-  return resolve(cwd, string(value, "path").replace(AT_PATH_PREFIX, ""));
-}
-
-function workspaceResultPath(cwd: string, path: string): string {
-  return relative(cwd, path).replaceAll("\\", "/");
-}
 
 async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
@@ -366,181 +342,6 @@ function batchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
     throw new Error("batch options are only supported for read operations");
   }
   return batchEdits(cwd, parsed, signal);
-}
-
-interface SearchContextLine {
-  line: number;
-  anchor: string;
-  text: string;
-}
-
-interface SearchMatch extends SearchContextLine {
-  file: string;
-  revision: string;
-  column: number;
-  before: SearchContextLine[];
-  after: SearchContextLine[];
-}
-
-async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
-  const query = string(args[0], "query");
-  if (!query) {
-    throw new Error("query must not be empty");
-  }
-  const options = args[1] === undefined ? {} : object(args[1], "options");
-  const searchPath = options.path === undefined ? cwd : resolveWorkspacePath(cwd, options.path);
-  const regex = options.regex === undefined ? false : Boolean(options.regex);
-  const caseSensitive = options.caseSensitive === undefined ? true : Boolean(options.caseSensitive);
-  const contextLines = Number(options.contextLines ?? 0);
-  const limit = Number(options.limit ?? 100);
-  if (!Number.isInteger(contextLines) || contextLines < 0 || contextLines > 10) {
-    throw new Error("contextLines must be an integer between 0 and 10");
-  }
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_RESULTS) {
-    throw new Error(`limit must be an integer between 1 and ${MAX_SEARCH_RESULTS}`);
-  }
-
-  if (regex) {
-    try {
-      RegExp(query, caseSensitive ? "g" : "gi");
-    } catch (error) {
-      throw new Error(`Invalid search regex: ${String(error)}`);
-    }
-  }
-
-  const pathInfo = await stat(searchPath);
-  let files: string[];
-  if (pathInfo.isFile()) {
-    files = [searchPath];
-  } else if (pathInfo.isDirectory()) {
-    const patterns =
-      typeof options.glob === "string" || Array.isArray(options.glob)
-        ? (options.glob as string | string[])
-        : "**/*";
-    const ignore = [
-      "**/.git/**",
-      "**/node_modules/**",
-      ...(Array.isArray(options.ignore) ? options.ignore.map(String) : []),
-    ];
-    const discovered: string[] = [];
-    const stream = fg.stream(patterns, {
-      cwd: searchPath,
-      dot: Boolean(options.dot),
-      onlyFiles: true,
-      ignore,
-      followSymbolicLinks: false,
-      absolute: true,
-    });
-    for await (const entry of stream) {
-      discovered.push(String(entry));
-      /* v8 ignore next -- the hard file cap is impractical to exercise in unit fixtures. */
-      if (discovered.length === MAX_SEARCH_FILES) {
-        break;
-      }
-    }
-    files = discovered.sort((a, b) => a.localeCompare(b));
-  } else {
-    throw new Error("search path must be a file or directory");
-  }
-
-  const matches: SearchMatch[] = [];
-  let filesSearched = 0;
-  let filesSkipped = 0;
-  let truncated = false;
-  const regexMatcher = regex ? new InterruptibleRegexMatcher(query, caseSensitive) : undefined;
-  try {
-    for (const file of files) {
-      checkAbort(signal);
-      let buffer: Buffer;
-      try {
-        const info = await stat(file);
-        if (info.size > MAX_SEARCH_FILE_BYTES) {
-          filesSkipped++;
-          continue;
-        }
-        buffer = await readFile(file, { signal });
-      } catch {
-        filesSkipped++;
-        continue;
-      }
-      if (buffer.includes(0)) {
-        filesSkipped++;
-        continue;
-      }
-      filesSearched++;
-      const contents = buffer.toString("utf8");
-      const revision = fileRevision(contents);
-      const filePath = workspaceResultPath(cwd, file);
-      const lines = contents
-        .split("\n")
-        .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
-      const contextLine = (lineIndex: number): SearchContextLine => {
-        // biome-ignore lint/style/noNonNullAssertion: callers use indices bounded by lines.length.
-        const text = lines[lineIndex]!;
-        return { line: lineIndex + 1, anchor: lineAnchor(lineIndex + 1, text), text };
-      };
-      const regexMatches = regexMatcher
-        ? await regexMatcher.match(lines, limit - matches.length)
-        : [];
-      const regexColumns = new Map<number, number[]>();
-      for (const match of regexMatches) {
-        const columns = regexColumns.get(match.lineIndex) ?? [];
-        columns.push(match.column);
-        regexColumns.set(match.lineIndex, columns);
-      }
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-        // biome-ignore lint/style/noNonNullAssertion: lineIndex is bounded by lines.length.
-        const text = lines[lineIndex]!;
-        const columns: number[] = regexColumns.get(lineIndex) ?? [];
-        if (!regexMatcher) {
-          const haystack = caseSensitive ? text : text.toLowerCase();
-          const needle = caseSensitive ? query : query.toLowerCase();
-          let offset = 0;
-          while (
-            offset <= haystack.length - needle.length &&
-            columns.length < limit - matches.length
-          ) {
-            const found = haystack.indexOf(needle, offset);
-            if (found < 0) {
-              break;
-            }
-            columns.push(found);
-            offset = found + Math.max(1, needle.length);
-          }
-        }
-        for (const column of columns) {
-          matches.push({
-            file: filePath,
-            revision,
-            line: lineIndex + 1,
-            anchor: lineAnchor(lineIndex + 1, text),
-            column: column + 1,
-            text,
-            before: Array.from({ length: Math.min(contextLines, lineIndex) }, (_, index) =>
-              contextLine(lineIndex - Math.min(contextLines, lineIndex) + index),
-            ),
-            after: Array.from(
-              { length: Math.min(contextLines, lines.length - lineIndex - 1) },
-              (_, index) => contextLine(lineIndex + index + 1),
-            ),
-          });
-          if (matches.length >= limit) {
-            truncated = true;
-            break;
-          }
-        }
-        if (truncated) {
-          break;
-        }
-      }
-      if (truncated) {
-        break;
-      }
-    }
-  } finally {
-    await regexMatcher?.close();
-  }
-  return { matches, truncated, filesSearched, filesSkipped };
 }
 
 async function globWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {

@@ -5,9 +5,9 @@ import {
   describeCapabilityCall,
   inferCapabilityCall,
 } from "./capability-presentation.js";
-import type { CapabilityTrace } from "./capability-trace.js";
 import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
+import { renderExecutionDashboard } from "./renderers/execution-dashboard.js";
 import { renderResultValue } from "./renderers/generic.js";
 import type { RenderedResultValue } from "./result-renderer-types.js";
 import { getNamedFunctionName, resolveSavedFunctionReferences } from "./sandbox.js";
@@ -254,219 +254,114 @@ export function renderTypeScriptToolCall(
   return new Text(text, 0, 0);
 }
 
-function renderExecutionDashboard(
-  details: TypeScriptDetails | undefined,
-  theme: RenderTheme,
-): string {
-  let text = "";
-  const traceEntries = details?.traces ?? [];
-  const recent = traceEntries.slice(-12);
-  const contexts = new Map(
-    traceEntries.flatMap((trace) =>
-      trace.function ? [[trace.function.invocationId, trace.function] as const] : [],
-    ),
-  );
-  const firstSequence = new Map<number, number>();
-  for (const trace of traceEntries) {
-    if (trace.function && !firstSequence.has(trace.function.invocationId)) {
-      firstSequence.set(trace.function.invocationId, trace.sequence);
-    }
-  }
-  const involved = new Set<number>();
-  for (const trace of recent) {
-    let current = trace.function;
-    while (current && !involved.has(current.invocationId)) {
-      involved.add(current.invocationId);
-      current = current.parentInvocationId ? contexts.get(current.parentInvocationId) : undefined;
-    }
-  }
-
-  const attributedActivities = new Set(
-    [...contexts.values()].map((context) => `${context.scope}:${context.name}`),
-  );
-  const activities = details?.functions;
-  for (const activity of activities
-    ? activities
-        .filter((entry) => entry.action === "run")
-        .filter((entry) => !attributedActivities.has(`${entry.scope ?? "session"}:${entry.name}`))
-        .slice(-4)
-    : []) {
-    const scope = activity.scope ?? "session";
-    text += `\n${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${scope} function`)} ${activity.name}`;
-  }
-
-  const callsByInvocation = new Map<number, CapabilityTrace[]>();
-  const rootCalls: CapabilityTrace[] = [];
-  for (const trace of recent) {
-    if (trace.capability === "__pit") {
-      continue;
-    }
-    if (trace.function) {
-      const calls = callsByInvocation.get(trace.function.invocationId) ?? [];
-      calls.push(trace);
-      callsByInvocation.set(trace.function.invocationId, calls);
-    } else {
-      rootCalls.push(trace);
-    }
-  }
-  const children = new Map<number, number[]>();
-  const roots: number[] = [];
-  for (const id of involved) {
-    const context = contexts.get(id);
-    const parent = context?.parentInvocationId;
-    if (parent && involved.has(parent)) {
-      const ids = children.get(parent) ?? [];
-      ids.push(id);
-      children.set(parent, ids);
-    } else {
-      roots.push(id);
-    }
-  }
-  const sequenceFor = (id: number) => firstSequence.get(id) ?? Number.MAX_SAFE_INTEGER;
-  roots.sort((left, right) => sequenceFor(left) - sequenceFor(right));
-  for (const ids of children.values()) {
-    ids.sort((left, right) => sequenceFor(left) - sequenceFor(right));
-  }
-
-  const now = Date.now();
-  const renderTrace = (trace: CapabilityTrace, depth: number) => {
-    const duration = trace.durationMs ?? Math.max(0, now - trace.startedAt);
-    const marker =
-      trace.status === "running"
-        ? theme.fg("accent", "●")
-        : trace.status === "succeeded"
-          ? theme.fg("success", "✓")
-          : theme.fg("error", "✗");
-    text += `\n${"  ".repeat(Math.min(depth, 8))}${marker} ${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
-  };
-  const renderedInvocations = new Set<number>();
-  const renderInvocation = (id: number, depth: number) => {
-    if (renderedInvocations.has(id)) {
-      return;
-    }
-    renderedInvocations.add(id);
-    const context = contexts.get(id);
-    if (!context) {
-      return;
-    }
-    text += `\n${"  ".repeat(Math.min(depth, 8))}${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${context.scope} function`)} ${context.name} ${theme.fg("dim", `#${id}`)}`;
-    const events = [
-      ...(callsByInvocation.get(id) ?? []).map((trace) => ({
-        sequence: trace.sequence,
-        trace,
-      })),
-      ...(children.get(id) ?? []).map((childId) => ({
-        sequence: sequenceFor(childId),
-        childId,
-      })),
-    ].sort((left, right) => left.sequence - right.sequence);
-    for (const event of events) {
-      if ("trace" in event) {
-        renderTrace(event.trace, depth + 1);
-      } else {
-        renderInvocation(event.childId, depth + 1);
-      }
-    }
-  };
-  const rootEvents = [
-    ...rootCalls.map((trace) => ({ sequence: trace.sequence, trace })),
-    ...roots.map((id) => ({ sequence: sequenceFor(id), invocationId: id })),
-  ].sort((left, right) => left.sequence - right.sequence);
-  for (const event of rootEvents) {
-    if ("trace" in event) {
-      renderTrace(event.trace, 0);
-    } else {
-      renderInvocation(event.invocationId, 0);
-    }
-  }
-  if (details?.tracesTruncated) {
-    text += `\n${theme.fg("warning", "… additional capability traces omitted")}`;
-  }
-  return text;
+interface ResultRenderingState {
+  lines: string[];
+  hangingIndents: Record<number, number>;
+  structuredResult?: RenderedResultValue;
 }
 
-export function renderTypeScriptToolResult(
-  result: ToolResultLike,
-  options: { expanded: boolean; isPartial: boolean },
-  theme: RenderTheme,
-  context: ToolResultContext,
-) {
-  const { expanded, isPartial } = options;
-  const content = result.content[0];
-  const fallback = content?.type === "text" ? (content.text ?? "") : "";
-  const details = result.details as TypeScriptDetails | undefined;
-  const execution = executionTiming(context, !isPartial || context.isError === true);
-  if (isPartial) {
-    let text = theme.bold(
-      theme.fg("accent", `${execution.spinner} `) +
-        theme.fg("toolTitle", "Running...") +
-        theme.fg("dim", ` (${execution.duration})`),
-    );
-    if (expanded) {
-      text += renderExecutionDashboard(details, theme);
-      for (const progress of details?.progress?.slice(-4) ?? []) {
-        const state = progress.status === "done" ? `done (${progress.code})` : "running";
-        text += `\n${theme.fg("accent", `[${state}]`)} ${theme.fg("dim", progress.command)}`;
-        if (progress.output) {
-          text += `\n${theme.fg("muted", progress.output)}`;
-        }
-      }
-      if (details?.progressTruncated) {
-        text += `\n${theme.fg("warning", "… earlier shell calls omitted")}`;
+function renderPartialToolResult(input: {
+  expanded: boolean;
+  details?: TypeScriptDetails;
+  theme: RenderTheme;
+  execution: { spinner: string; duration: string };
+}) {
+  let text = input.theme.bold(
+    input.theme.fg("accent", `${input.execution.spinner} `) +
+      input.theme.fg("toolTitle", "Running...") +
+      input.theme.fg("dim", ` (${input.execution.duration})`),
+  );
+  if (input.expanded) {
+    text += renderExecutionDashboard(input.details, input.theme);
+    for (const progress of input.details?.progress?.slice(-4) ?? []) {
+      const state = progress.status === "done" ? `done (${progress.code})` : "running";
+      text += `\n${input.theme.fg("accent", `[${state}]`)} ${input.theme.fg("dim", progress.command)}`;
+      if (progress.output) {
+        text += `\n${input.theme.fg("muted", progress.output)}`;
       }
     }
-    return new Text(text, 0, 0);
+    if (input.details?.progressTruncated) {
+      text += `\n${input.theme.fg("warning", "… earlier shell calls omitted")}`;
+    }
   }
-  if (context.isError) {
-    const message = fallback || "TypeScript execution failed";
-    return new Text(
-      `${expanded ? "\n" : ""}${theme.bold(
-        theme.fg("error", "✗ Failed") + theme.fg("dim", ` (${execution.duration})`),
-      )}\n${theme.fg("error", message)}`,
-      0,
-      0,
-    );
-  }
+  return new Text(text, 0, 0);
+}
 
-  let lines: string[];
-  let hangingIndents: Record<number, number> = {};
-  let structuredResult: RenderedResultValue | undefined;
-  if (details && !details.truncated) {
-    if (details.value === undefined) {
-      lines = highlightCode("undefined", "typescript");
-    } else {
-      const source = typeof context.args?.code === "string" ? context.args.code : "";
-      const capabilityCall = runtimeCapabilityCall(details) ?? inferCapabilityCall(source);
-      structuredResult = renderResultValue(details.value, theme, capabilityCall);
-      if (structuredResult) {
-        lines = structuredResult.lines;
-        hangingIndents = structuredResult.hangingIndents ?? {};
-      } else {
-        let serialized: string;
-        let language = "json";
-        try {
-          serialized = JSON.stringify(details.value, null, 2) ?? String(details.value);
-        } catch {
-          serialized = String(details.value);
-          language = "typescript";
-        }
-        lines = highlightCode(serialized, language);
-      }
-    }
-  } else {
-    lines = fallback ? highlightCode(fallback, "typescript") : [];
+function renderToolError(input: {
+  expanded: boolean;
+  fallback: string;
+  duration: string;
+  theme: RenderTheme;
+}) {
+  const message = input.fallback || "TypeScript execution failed";
+  return new Text(
+    `${input.expanded ? "\n" : ""}${input.theme.bold(
+      input.theme.fg("error", "✗ Failed") + input.theme.fg("dim", ` (${input.duration})`),
+    )}\n${input.theme.fg("error", message)}`,
+    0,
+    0,
+  );
+}
+
+function renderStructuredToolValue(input: {
+  details?: TypeScriptDetails;
+  fallback: string;
+  theme: RenderTheme;
+  context: ToolResultContext;
+}): ResultRenderingState {
+  const { details, fallback, theme, context } = input;
+  if (!(details && !details.truncated)) {
+    return {
+      lines: fallback ? highlightCode(fallback, "typescript") : [],
+      hangingIndents: {},
+    };
   }
-  const shown = expanded ? lines : [];
+  if (details.value === undefined) {
+    return { lines: highlightCode("undefined", "typescript"), hangingIndents: {} };
+  }
+  const source = typeof context.args?.code === "string" ? context.args.code : "";
+  const capabilityCall = runtimeCapabilityCall(details) ?? inferCapabilityCall(source);
+  const structuredResult = renderResultValue(details.value, theme, capabilityCall);
+  if (structuredResult) {
+    return {
+      lines: structuredResult.lines,
+      hangingIndents: structuredResult.hangingIndents ?? {},
+      structuredResult,
+    };
+  }
+  let serialized: string;
+  let language = "json";
+  try {
+    serialized = JSON.stringify(details.value, null, 2) ?? String(details.value);
+  } catch {
+    serialized = String(details.value);
+    language = "typescript";
+  }
+  return { lines: highlightCode(serialized, language), hangingIndents: {} };
+}
+
+function renderCompletedToolResult(input: {
+  expanded: boolean;
+  details?: TypeScriptDetails;
+  fallback: string;
+  duration: string;
+  theme: RenderTheme;
+  rendering: ResultRenderingState;
+}) {
+  const { expanded, details, fallback, duration, theme, rendering } = input;
+  const shown = expanded ? rendering.lines : [];
   const state = details?.truncated
-    ? `truncated, ${execution.duration}`
-    : `${lines.length} line${lines.length === 1 ? "" : "s"}, ${execution.duration}`;
+    ? `truncated, ${duration}`
+    : `${rendering.lines.length} line${rendering.lines.length === 1 ? "" : "s"}, ${duration}`;
   const resultLabel = describeResult(
     details?.value,
-    structuredResult,
+    rendering.structuredResult,
     details?.truncated === true,
     fallback,
   );
-  const resultOutcome = details?.truncated ? "warning" : (structuredResult?.outcome ?? "success");
+  const resultOutcome = details?.truncated
+    ? "warning"
+    : (rendering.structuredResult?.outcome ?? "success");
   const resultMarker =
     resultOutcome === "warning"
       ? theme.fg("warning", "⚠ ")
@@ -491,11 +386,53 @@ export function renderTypeScriptToolResult(
     text += `\n${theme.fg("dim", "(no result)")}`;
   }
   const displayedHangingIndents = Object.fromEntries(
-    Object.entries(hangingIndents)
+    Object.entries(rendering.hangingIndents)
       .filter(([index]) => Number(index) < shown.length)
       .map(([index, width]) => [resultContentStart + Number(index), width]),
   );
   return Object.keys(displayedHangingIndents).length > 0
     ? new HangingIndentText(text, displayedHangingIndents)
     : new Text(text, 0, 0);
+}
+
+export function renderTypeScriptToolResult(
+  result: ToolResultLike,
+  options: { expanded: boolean; isPartial: boolean },
+  theme: RenderTheme,
+  context: ToolResultContext,
+) {
+  const content = result.content[0];
+  const fallback = content?.type === "text" ? (content.text ?? "") : "";
+  const details = result.details as TypeScriptDetails | undefined;
+  const execution = executionTiming(context, !options.isPartial || context.isError === true);
+  if (options.isPartial) {
+    return renderPartialToolResult({
+      expanded: options.expanded,
+      ...(details ? { details } : {}),
+      theme,
+      execution,
+    });
+  }
+  if (context.isError) {
+    return renderToolError({
+      expanded: options.expanded,
+      fallback,
+      duration: execution.duration,
+      theme,
+    });
+  }
+  const rendering = renderStructuredToolValue({
+    ...(details ? { details } : {}),
+    fallback,
+    theme,
+    context,
+  });
+  return renderCompletedToolResult({
+    expanded: options.expanded,
+    ...(details ? { details } : {}),
+    fallback,
+    duration: execution.duration,
+    theme,
+    rendering,
+  });
 }

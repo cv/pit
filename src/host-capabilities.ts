@@ -85,24 +85,30 @@ export interface HostCapabilityServices {
   onShellProgress?: (event: ShellProgressEvent) => void;
 }
 
-export function createCapabilities({
-  pi,
-  ctx,
-  functionState,
-  commitFunctionState,
-  activity,
-  onShellProgress,
-}: HostCapabilityServices): CapabilityHandler {
-  const processRunner = createProcessRunner(pi, ctx.cwd);
+interface ProcessCapabilityHandlers {
+  shell: Record<CapabilityMethodName<"shell">, CapabilityMethodHandler>;
+  run(
+    program: string,
+    args: string[],
+    options: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<unknown>;
+}
+
+function createProcessCapabilityHandlers(input: {
+  pi: ExtensionAPI;
+  cwd: string;
+  onShellProgress?: (event: ShellProgressEvent) => void;
+}): ProcessCapabilityHandlers {
+  const processRunner = createProcessRunner(input.pi, input.cwd);
   let nextShellProgressId = 1;
   const progressFor = (command: string) => {
     const id = nextShellProgressId++;
-    return onShellProgress
-      ? (event: HostShellProgressEvent) => onShellProgress({ id, command, ...event })
+    return input.onShellProgress
+      ? (event: HostShellProgressEvent) => input.onShellProgress?.({ id, command, ...event })
       : undefined;
   };
-
-  const runArgumentSafeProcess = (
+  const run = (
     program: string,
     args: string[],
     options: Record<string, unknown>,
@@ -119,28 +125,47 @@ export function createCapabilities({
       signal,
     });
   };
-
-  const shellHandlers: Record<CapabilityMethodName<"shell">, CapabilityMethodHandler> = {
-    exec: (args, signal) => {
-      const command = string(args[0], "command");
-      const options = args[1] === undefined ? {} : object(args[1], "options");
-      const progress = progressFor(command);
-      return processRunner.run({
-        program: "/bin/sh",
-        args: ["-lc", command],
-        displayCommand: command,
-        options,
-        ...(progress ? { onProgress: progress } : {}),
-        signal,
-      });
-    },
-    execFile: (args, signal) => {
-      const program = string(args[0], "program");
-      const processArgs = stringArray(args[1], "args");
-      const options = args[2] === undefined ? {} : object(args[2], "options");
-      return runArgumentSafeProcess(program, processArgs, options, signal);
+  return {
+    run,
+    shell: {
+      exec: (args, signal) => {
+        const command = string(args[0], "command");
+        const options = args[1] === undefined ? {} : object(args[1], "options");
+        const progress = progressFor(command);
+        return processRunner.run({
+          program: "/bin/sh",
+          args: ["-lc", command],
+          displayCommand: command,
+          options,
+          ...(progress ? { onProgress: progress } : {}),
+          signal,
+        });
+      },
+      execFile: (args, signal) => {
+        const program = string(args[0], "program");
+        const processArgs = stringArray(args[1], "args");
+        const options = args[2] === undefined ? {} : object(args[2], "options");
+        return run(program, processArgs, options, signal);
+      },
     },
   };
+}
+
+export function createCapabilities({
+  pi,
+  ctx,
+  functionState,
+  commitFunctionState,
+  activity,
+  onShellProgress,
+}: HostCapabilityServices): CapabilityHandler {
+  const processHandlers = createProcessCapabilityHandlers({
+    pi,
+    cwd: ctx.cwd,
+    ...(onShellProgress ? { onShellProgress } : {}),
+  });
+  const runArgumentSafeProcess = processHandlers.run;
+  const shellHandlers = processHandlers.shell;
 
   const uiHandlers: Record<CapabilityMethodName<"ui">, CapabilityMethodHandler> = {
     confirm: (args) => ctx.ui.confirm(string(args[0], "title"), string(args[1], "message")),

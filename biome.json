@@ -28,8 +28,14 @@
         "useQwikValidLexicalScope": "off"
       },
       "complexity": {
-        "noExcessiveCognitiveComplexity": "off",
-        "noExcessiveLinesPerFunction": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 40 }
+        },
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": { "maxLines": 150, "skipBlankLines": true }
+        },
         "useMaxParams": "error",
         "noVoid": "off"
       },
@@ -39,7 +45,10 @@
       "style": {
         "noContinue": "off",
         "noDefaultExport": "off",
-        "noExcessiveLinesPerFile": "off",
+        "noExcessiveLinesPerFile": {
+          "level": "error",
+          "options": { "maxLines": 500, "skipBlankLines": true }
+        },
         "noIncrementDecrement": "off",
         "noMagicNumbers": "off",
         "noParameterProperties": "off",
@@ -83,6 +92,7 @@
       "linter": {
         "rules": {
           "complexity": {
+            "noExcessiveLinesPerFunction": "off",
             "useMaxParams": "off"
           },
           "suspicious": {
@@ -96,6 +106,7 @@
             "useTopLevelRegex": "off"
           },
           "style": {
+            "noExcessiveLinesPerFile": "off",
             "useThrowOnlyError": "off"
           }
         }
@@ -156,10 +167,11 @@
     },
 
     {
-      "includes": ["src/sandbox.ts"],
+      "includes": ["src/sandbox.ts", "src/sandbox-program.ts"],
       "linter": {
         "rules": {
           "performance": {
+            "noBarrelFile": "off",
             "noNamespaceImport": "off"
           },
           "style": {
