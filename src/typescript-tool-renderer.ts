@@ -5,6 +5,7 @@ import {
   describeCapabilityCall,
   inferCapabilityCall,
 } from "./capability-presentation.js";
+import type { CapabilityTrace } from "./capability-trace.js";
 import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import type { RenderedResultValue } from "./result-renderer-types.js";
@@ -259,11 +260,27 @@ function renderExecutionDashboard(
 ): string {
   let text = "";
   const traceEntries = details?.traces ?? [];
+  const recent = traceEntries.slice(-12);
   const contexts = new Map(
     traceEntries.flatMap((trace) =>
       trace.function ? [[trace.function.invocationId, trace.function] as const] : [],
     ),
   );
+  const firstSequence = new Map<number, number>();
+  for (const trace of traceEntries) {
+    if (trace.function && !firstSequence.has(trace.function.invocationId)) {
+      firstSequence.set(trace.function.invocationId, trace.sequence);
+    }
+  }
+  const involved = new Set<number>();
+  for (const trace of recent) {
+    let current = trace.function;
+    while (current && !involved.has(current.invocationId)) {
+      involved.add(current.invocationId);
+      current = current.parentInvocationId ? contexts.get(current.parentInvocationId) : undefined;
+    }
+  }
+
   const attributedActivities = new Set(
     [...contexts.values()].map((context) => `${context.scope}:${context.name}`),
   );
@@ -278,32 +295,41 @@ function renderExecutionDashboard(
     text += `\n${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${scope} function`)} ${activity.name}`;
   }
 
-  const invocationDepth = (invocationId: number): number => {
-    let depth = 0;
-    let current = contexts.get(invocationId);
-    const visited = new Set<number>();
-    while (current && !visited.has(current.invocationId)) {
-      visited.add(current.invocationId);
-      depth++;
-      current = current.parentInvocationId ? contexts.get(current.parentInvocationId) : undefined;
-    }
-    return depth;
-  };
-
-  const now = Date.now();
-  const seenInvocations = new Set<number>();
-  const recent = traceEntries.slice(-12);
+  const callsByInvocation = new Map<number, CapabilityTrace[]>();
+  const rootCalls: CapabilityTrace[] = [];
   for (const trace of recent) {
-    const functionContext = trace.function;
-    if (functionContext && !seenInvocations.has(functionContext.invocationId)) {
-      seenInvocations.add(functionContext.invocationId);
-      const depth = invocationDepth(functionContext.invocationId);
-      const indent = "  ".repeat(Math.max(0, depth - 1));
-      text += `\n${indent}${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${functionContext.scope} function`)} ${functionContext.name} ${theme.fg("dim", `#${functionContext.invocationId}`)}`;
-    }
     if (trace.capability === "__pit") {
       continue;
     }
+    if (trace.function) {
+      const calls = callsByInvocation.get(trace.function.invocationId) ?? [];
+      calls.push(trace);
+      callsByInvocation.set(trace.function.invocationId, calls);
+    } else {
+      rootCalls.push(trace);
+    }
+  }
+  const children = new Map<number, number[]>();
+  const roots: number[] = [];
+  for (const id of involved) {
+    const context = contexts.get(id);
+    const parent = context?.parentInvocationId;
+    if (parent && involved.has(parent)) {
+      const ids = children.get(parent) ?? [];
+      ids.push(id);
+      children.set(parent, ids);
+    } else {
+      roots.push(id);
+    }
+  }
+  const sequenceFor = (id: number) => firstSequence.get(id) ?? Number.MAX_SAFE_INTEGER;
+  roots.sort((left, right) => sequenceFor(left) - sequenceFor(right));
+  for (const ids of children.values()) {
+    ids.sort((left, right) => sequenceFor(left) - sequenceFor(right));
+  }
+
+  const now = Date.now();
+  const renderTrace = (trace: CapabilityTrace, depth: number) => {
     const duration = trace.durationMs ?? Math.max(0, now - trace.startedAt);
     const marker =
       trace.status === "running"
@@ -311,10 +337,47 @@ function renderExecutionDashboard(
         : trace.status === "succeeded"
           ? theme.fg("success", "✓")
           : theme.fg("error", "✗");
-    const indent = functionContext
-      ? "  ".repeat(Math.min(invocationDepth(functionContext.invocationId), 8))
-      : "";
-    text += `\n${indent}${marker} ${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
+    text += `\n${"  ".repeat(Math.min(depth, 8))}${marker} ${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
+  };
+  const renderedInvocations = new Set<number>();
+  const renderInvocation = (id: number, depth: number) => {
+    if (renderedInvocations.has(id)) {
+      return;
+    }
+    renderedInvocations.add(id);
+    const context = contexts.get(id);
+    if (!context) {
+      return;
+    }
+    text += `\n${"  ".repeat(Math.min(depth, 8))}${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${context.scope} function`)} ${context.name} ${theme.fg("dim", `#${id}`)}`;
+    const events = [
+      ...(callsByInvocation.get(id) ?? []).map((trace) => ({
+        sequence: trace.sequence,
+        trace,
+      })),
+      ...(children.get(id) ?? []).map((childId) => ({
+        sequence: sequenceFor(childId),
+        childId,
+      })),
+    ].sort((left, right) => left.sequence - right.sequence);
+    for (const event of events) {
+      if ("trace" in event) {
+        renderTrace(event.trace, depth + 1);
+      } else {
+        renderInvocation(event.childId, depth + 1);
+      }
+    }
+  };
+  const rootEvents = [
+    ...rootCalls.map((trace) => ({ sequence: trace.sequence, trace })),
+    ...roots.map((id) => ({ sequence: sequenceFor(id), invocationId: id })),
+  ].sort((left, right) => left.sequence - right.sequence);
+  for (const event of rootEvents) {
+    if ("trace" in event) {
+      renderTrace(event.trace, 0);
+    } else {
+      renderInvocation(event.invocationId, 0);
+    }
   }
   if (details?.tracesTruncated) {
     text += `\n${theme.fg("warning", "… additional capability traces omitted")}`;
@@ -409,6 +472,12 @@ export function renderTypeScriptToolResult(
       theme.fg("toolTitle", resultLabel) +
       theme.fg(details?.truncated ? "warning" : "dim", ` (${state})`),
   )}`;
+  if (expanded) {
+    const dashboard = renderExecutionDashboard(details, theme);
+    if (dashboard) {
+      text += `\n${theme.bold(theme.fg("toolTitle", "Execution"))}${dashboard}`;
+    }
+  }
   const resultContentStart = text.split("\n").length;
   if (expanded && shown.length > 0) {
     text += `\n${shown.join("\n")}`;

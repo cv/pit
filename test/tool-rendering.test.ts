@@ -327,6 +327,86 @@ describe("tool rendering", () => {
     expect(streaming).toContain("succeeded");
     expect(streaming).toContain("additional capability traces omitted");
 
+    const finalDashboard = renderToolResult(
+      {
+        content: [{ type: "text", text: "done" }],
+        details: {
+          value: { done: true },
+          truncated: false,
+          traces: [
+            {
+              id: 1,
+              sequence: 1,
+              capability: "__pit",
+              method: "savedFunctionRun",
+              arguments: [],
+              startedAt: 1,
+              durationMs: 1,
+              status: "succeeded",
+              function: {
+                invocationId: 1,
+                name: "outer",
+                scope: "session",
+                depth: 1,
+              },
+            },
+            {
+              id: 2,
+              sequence: 2,
+              capability: "__pit",
+              method: "savedFunctionRun",
+              arguments: [],
+              startedAt: 2,
+              durationMs: 1,
+              status: "succeeded",
+              function: {
+                invocationId: 2,
+                parentInvocationId: 1,
+                name: "child",
+                scope: "session",
+                depth: 2,
+              },
+            },
+            {
+              id: 3,
+              sequence: 3,
+              capability: "context",
+              method: "get",
+              arguments: [],
+              startedAt: 3,
+              durationMs: 1,
+              status: "succeeded",
+            },
+            {
+              id: 4,
+              sequence: 4,
+              capability: "shell",
+              method: "execFile",
+              arguments: [],
+              startedAt: 4,
+              durationMs: 10,
+              status: "succeeded",
+              function: {
+                invocationId: 2,
+                parentInvocationId: 1,
+                name: "child",
+                scope: "session",
+                depth: 2,
+              },
+            },
+          ],
+        },
+      },
+      { expanded: true, isPartial: false },
+    );
+    expect(finalDashboard).toContain("Execution");
+    const outerIndex = finalDashboard.indexOf("session function outer #1");
+    const childIndex = finalDashboard.indexOf("session function child #2");
+    const shellIndex = finalDashboard.indexOf("shell.execFile");
+    expect(outerIndex).toBeGreaterThan(-1);
+    expect(childIndex).toBeGreaterThan(outerIndex);
+    expect(shellIndex).toBeGreaterThan(childIndex);
+
     const symbolResult = renderToolResult(
       { content: [], details: { value: Symbol("value"), truncated: false } },
       { expanded: false, isPartial: false },
