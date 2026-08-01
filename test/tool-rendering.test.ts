@@ -320,7 +320,8 @@ describe("tool rendering", () => {
     expect(streaming).toContain("project function projectChecks");
     expect(streaming).toContain("session function sessionChecks");
     expect(streaming).toContain("npm.test");
-    expect(streaming).toContain("project function projectChecks › npm.test");
+    expect(streaming).toContain("project function projectChecks #1");
+    expect(streaming.match(/project function projectChecks/g)).toHaveLength(1);
     expect(streaming).toContain("running");
     expect(streaming).toContain("git.status");
     expect(streaming).toContain("succeeded");

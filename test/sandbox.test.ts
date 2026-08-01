@@ -8,10 +8,45 @@ import {
   getProjectFunctionMetadata,
   getSandboxCacheStats,
   getSavedFunctionCallSignature,
+  parseFunctionExecutionContext,
   resolveSavedFunctionReferences,
   runInSandbox,
   validateTypeScript,
 } from "../src/sandbox.js";
+
+describe("function execution wire context", () => {
+  it("accepts valid bounded invocation context", () => {
+    expect(
+      parseFunctionExecutionContext({
+        invocationId: 2,
+        parentInvocationId: 1,
+        name: "nested",
+        scope: "project",
+        depth: 2,
+      }),
+    ).toEqual({
+      invocationId: 2,
+      parentInvocationId: 1,
+      name: "nested",
+      scope: "project",
+      depth: 2,
+    });
+  });
+
+  it.each([
+    undefined,
+    null,
+    [],
+    {},
+    { invocationId: 0, name: "x", scope: "project", depth: 1 },
+    { invocationId: 1, name: "", scope: "project", depth: 1 },
+    { invocationId: 1, name: "x", scope: "other", depth: 1 },
+    { invocationId: 1, name: "x", scope: "session", depth: 33 },
+    { invocationId: 1, parentInvocationId: 0, name: "x", scope: "session", depth: 1 },
+  ])("rejects malformed context %#", (value) => {
+    expect(parseFunctionExecutionContext(value)).toBeUndefined();
+  });
+});
 
 describe("validateTypeScript", () => {
   it("formats global and non-program diagnostics", () => {

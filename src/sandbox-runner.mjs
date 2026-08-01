@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // This file runs in a Node process started with the permission model enabled.
-// Keep it dependency-free: it is the only file the child may read.
+// Keep it free of project and external dependencies; it is the only file the child may read.
 const write = process.stdout.write.bind(process.stdout);
 const parse = JSON.parse.bind(JSON);
 const stringify = JSON.stringify.bind(JSON);

@@ -46,6 +46,32 @@ interface WireMessage {
   input?: unknown;
 }
 
+export function parseFunctionExecutionContext(
+  value: unknown,
+): FunctionExecutionContext | undefined {
+  if (!(value && typeof value === "object" && !Array.isArray(value))) {
+    return;
+  }
+  const context = value as Record<string, unknown>;
+  if (
+    !(Number.isSafeInteger(context.invocationId) && Number(context.invocationId) > 0) ||
+    !(typeof context.name === "string" && context.name.length > 0) ||
+    (context.scope !== "project" && context.scope !== "session") ||
+    !(
+      Number.isSafeInteger(context.depth) &&
+      Number(context.depth) >= 1 &&
+      Number(context.depth) <= 32
+    ) ||
+    !(
+      context.parentInvocationId === undefined ||
+      (Number.isSafeInteger(context.parentInvocationId) && Number(context.parentInvocationId) > 0)
+    )
+  ) {
+    return;
+  }
+  return context as unknown as FunctionExecutionContext;
+}
+
 const RUNNER = fileURLToPath(new URL("./sandbox-runner.mjs", import.meta.url));
 const CAPABILITY_CONTRACT = readFileSync(
   fileURLToPath(new URL("./capability-contract.d.ts", import.meta.url)),
@@ -705,7 +731,7 @@ export async function runInSandbox(
             method,
             args,
             Date.now(),
-            message.functionContext,
+            parseFunctionExecutionContext(message.functionContext),
           );
           reportCapabilityTrace(trace);
           const finishTrace = (status: "succeeded" | "failed" | "rejected") => {

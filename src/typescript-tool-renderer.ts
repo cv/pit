@@ -258,19 +258,52 @@ function renderExecutionDashboard(
   theme: RenderTheme,
 ): string {
   let text = "";
+  const traceEntries = details?.traces ?? [];
+  const contexts = new Map(
+    traceEntries.flatMap((trace) =>
+      trace.function ? [[trace.function.invocationId, trace.function] as const] : [],
+    ),
+  );
+  const attributedActivities = new Set(
+    [...contexts.values()].map((context) => `${context.scope}:${context.name}`),
+  );
   const activities = details?.functions;
   for (const activity of activities
-    ? activities.filter((entry) => entry.action === "run").slice(-4)
+    ? activities
+        .filter((entry) => entry.action === "run")
+        .filter((entry) => !attributedActivities.has(`${entry.scope ?? "session"}:${entry.name}`))
+        .slice(-4)
     : []) {
     const scope = activity.scope ?? "session";
     text += `\n${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${scope} function`)} ${activity.name}`;
   }
+
+  const invocationDepth = (invocationId: number): number => {
+    let depth = 0;
+    let current = contexts.get(invocationId);
+    const visited = new Set<number>();
+    while (current && !visited.has(current.invocationId)) {
+      visited.add(current.invocationId);
+      depth++;
+      current = current.parentInvocationId ? contexts.get(current.parentInvocationId) : undefined;
+    }
+    return depth;
+  };
+
   const now = Date.now();
-  const traceEntries = details?.traces;
-  const traces = traceEntries
-    ? traceEntries.filter((trace) => trace.capability !== "__pit").slice(-8)
-    : [];
-  for (const trace of traces) {
+  const seenInvocations = new Set<number>();
+  const recent = traceEntries.slice(-12);
+  for (const trace of recent) {
+    const functionContext = trace.function;
+    if (functionContext && !seenInvocations.has(functionContext.invocationId)) {
+      seenInvocations.add(functionContext.invocationId);
+      const depth = invocationDepth(functionContext.invocationId);
+      const indent = "  ".repeat(Math.max(0, depth - 1));
+      text += `\n${indent}${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${functionContext.scope} function`)} ${functionContext.name} ${theme.fg("dim", `#${functionContext.invocationId}`)}`;
+    }
+    if (trace.capability === "__pit") {
+      continue;
+    }
     const duration = trace.durationMs ?? Math.max(0, now - trace.startedAt);
     const marker =
       trace.status === "running"
@@ -278,11 +311,10 @@ function renderExecutionDashboard(
         : trace.status === "succeeded"
           ? theme.fg("success", "✓")
           : theme.fg("error", "✗");
-    const owner = trace.function
-      ? `${trace.function.scope} function ${trace.function.name} › `
+    const indent = functionContext
+      ? "  ".repeat(Math.min(invocationDepth(functionContext.invocationId), 8))
       : "";
-    const indent = trace.function ? "  ".repeat(Math.min(trace.function.depth, 8)) : "";
-    text += `\n${indent}${marker} ${theme.fg("dim", owner)}${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
+    text += `\n${indent}${marker} ${theme.fg("toolTitle", `${trace.capability}.${trace.method}`)} ${theme.fg("dim", `${trace.status}, ${(duration / 1000).toFixed(1)}s`)}`;
   }
   if (details?.tracesTruncated) {
     text += `\n${theme.fg("warning", "… additional capability traces omitted")}`;
