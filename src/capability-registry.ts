@@ -177,12 +177,16 @@ export function validateCapabilityCall(capability: string, method: string, args:
 
 export function capabilityDocumentation(): string[] {
   return Object.entries(CAPABILITY_REGISTRY).map(([name, definition]) => {
+    const promptSummary = "promptSummary" in definition ? definition.promptSummary : undefined;
     const documentation =
-      "documentation" in definition
+      promptSummary ??
+      ("documentation" in definition
         ? definition.documentation
         : Object.values(definition.methods)
-            .map((method) => method.documentation)
-            .join("; ");
+            .map((method) =>
+              "promptSummary" in method ? method.promptSummary : method.documentation,
+            )
+            .join("; "));
     return `${name}: ${documentation}.`;
   });
 }

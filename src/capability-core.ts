@@ -33,6 +33,7 @@ export type ResultRendererKey =
 export interface CapabilityMethodDefinition {
   declaration: string;
   documentation: string;
+  promptSummary?: string;
   callDescription: string;
   resultRenderer?: ResultRendererKey;
   minimumArguments: number;
@@ -42,6 +43,7 @@ export interface CapabilityMethodDefinition {
 export interface CapabilityDefinition {
   interfaceName: string;
   documentation?: string;
+  promptSummary?: string;
   methods: Record<string, CapabilityMethodDefinition>;
 }
 

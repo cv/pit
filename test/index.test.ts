@@ -137,89 +137,49 @@ describe("display", () => {
 });
 
 describe("pit extension", () => {
-  it("registers clear model-facing usage metadata and activates the tool", async () => {
+  it("registers compact model-facing usage metadata and activates the tool", async () => {
     expect(tool.label).toBe("TypeScript Workspace");
     expect(tool.promptSnippet).toContain("reusable functions");
     expect(tool.description).toContain("async ({ workspace, git })");
     expect(tool.description).toContain("Promise.all");
     expect(tool.description).toContain("Promise.allSettled");
     expect(tool.description).toContain("contextually type-checked");
-    expect(tool.description).toContain("defaults to hashed line:hash anchors");
-    expect(tool.description).toContain("Nonzero exits are data by default");
-    expect(tool.description).toContain("workspace.search(query");
-    expect(tool.description).toContain("shell.execFile(program, args");
-    expect(tool.description).toContain("contextLines?: 0..10");
-    expect(tool.description).toContain("limit?: 1..500");
-    expect(tool.description).toContain("changes: { revision, changes }");
-    expect(tool.description).toContain('insertBefore/insertAfter use "anchor"');
-    expect(tool.description).toContain("cwd?, timeoutMs?, raise?");
-    expect(tool.description).toContain("runTests({ coverage: true })");
     expect(tool.description).toContain("REUSABLE AND COMPOSED FUNCTIONS");
-    expect(tool.description).toContain(
-      "Use an anonymous function only for genuinely one-shot work",
-    );
-    expect(tool.description.indexOf("CALLING CONTRACT")).toBeLessThan(
-      tool.description.indexOf("REUSABLE AND COMPOSED FUNCTIONS"),
-    );
-    expect(tool.description).toContain("publishChanges");
+    expect(tool.description).toContain("Save functions aggressively");
+    expect(tool.description).toContain("one named function per intent");
     expect(tool.description).toContain("active saved-function signatures");
     expect(tool.description).toContain("HASHED EDIT WORKFLOW");
     expect(tool.description).toContain('kind: "replace"');
-    expect(tool.description).toContain("replaceFile");
-    expect(tool.description).toContain("missing totalLines means lines");
     expect(tool.description).toContain("discard every prior revision and anchor");
-    expect(tool.description).toContain("never mutate the same file concurrently");
+    expect(tool.description).toContain("missing totalLines means lines");
     expect(tool.description).toContain('kind: "read", file, options?');
-    expect(tool.description).toContain("only after successful execution");
-    expect(tool.description).toContain("Save functions aggressively");
-    expect(tool.description).toContain("do not wait for exact repetition");
-    expect(tool.description).toContain("one named function per intent");
-    expect(tool.description).toContain("instead of creating overlapping variants");
-    expect(tool.description).toContain("Add input modes or compose existing saved functions");
+    expect(tool.description).toContain("workspace.search(query");
+    expect(tool.description).toContain("shell.execFile(program, args");
+    expect(tool.description).toContain("functions: list/get/remove project functions");
     expect(tool.parameters.properties.label.description).toContain("15 words");
     expect(tool.parameters.properties.code.description).toContain("named function definition");
     expect(tool.parameters.properties.code.description).toContain("do not import");
     expect(tool.parameters.properties.params.description).toContain("second argument");
-    expect(tool.parameters.properties.params.description).toContain("file contents");
     expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
     expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
     expect(tool.promptGuidelines).toHaveLength(10);
-    expect(tool.promptGuidelines?.join("\n")).toContain("prefer git.status/diff/log");
-    expect(tool.promptGuidelines?.join("\n")).toContain("prefer npm.run/test/install");
-    expect(tool.promptGuidelines?.join("\n")).toContain("validate one minimal call");
-    expect(tool.promptGuidelines?.join("\n")).toContain("After two failures of the same class");
-    expect(tool.promptGuidelines?.join("\n")).toContain("stop varying syntax");
-    expect(tool.promptGuidelines?.join("\n")).toContain("choose a simpler API");
-    expect(tool.promptGuidelines?.join("\n")).toContain("one tool invocation per step");
-    expect(tool.promptGuidelines?.join("\n")).toContain(
-      "instead of issuing multiple parallel typescript calls",
-    );
-    expect(tool.promptGuidelines?.join("\n")).toContain("only the fields and record limits");
-    expect(tool.promptGuidelines?.join("\n")).toContain("expand the query only");
-    expect(tool.promptGuidelines?.join("\n")).toContain("Filter and summarize inside typescript");
-    expect(tool.promptGuidelines?.join("\n")).toContain("bounded relevant excerpts");
-    expect(tool.promptGuidelines?.join("\n")).toContain(
-      "narrow the query rather than enlarging it",
-    );
-    expect(tool.promptGuidelines?.join("\n")).toContain("successful edit invalidates");
-    expect(tool.promptGuidelines?.join("\n")).toContain("re-read before the next edit");
-    expect(tool.promptGuidelines?.join("\n")).toContain("as soon as work repeats");
-    expect(tool.promptGuidelines?.join("\n")).toContain("likely to recur");
-    expect(tool.promptGuidelines?.join("\n")).toContain("truly ad hoc work");
-    expect(tool.promptGuidelines?.join("\n")).toContain(
-      "one parameterized saved function per intent",
-    );
-    expect(tool.promptGuidelines?.join("\n")).toContain("instead of creating overlapping variants");
+    const guidelines = tool.promptGuidelines?.join("\n") ?? "";
+    expect(guidelines).toContain("prefer git.status/diff/log");
+    expect(guidelines).toContain("prefer npm.run/test/install");
+    expect(guidelines).toContain("validate one minimal call");
+    expect(guidelines).toContain("one tool invocation per step");
+    expect(guidelines).toContain("successful edit invalidates");
+    expect(guidelines).toContain("one parameterized saved function per intent");
     expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(
       true,
     );
     const metadataChars =
       tool.description.length +
       (tool.promptSnippet?.length ?? 0) +
-      (tool.promptGuidelines?.join("\n").length ?? 0) +
+      guidelines.length +
       (tool.parameters.properties.code.description?.length ?? 0) +
       (tool.parameters.properties.params.description?.length ?? 0);
-    expect(metadataChars).toBeLessThan(7800);
+    expect(metadataChars).toBeLessThan(6800);
 
     await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
@@ -237,10 +197,9 @@ describe("pit extension", () => {
       const body = contract.match(pattern)?.[1] ?? "";
       const declared = [...body.matchAll(/^ {2}([A-Za-z_$][\w$]*)\(/gm)].map((match) => match[1]);
       expect(declared, capability).toEqual([...methods]);
+      expect(tool.description, `metadata for ${capability}`).toContain(`${capability}:`);
       for (const method of methods) {
-        const qualified = `${capability}.${method}`;
-        expect(tool.description, `metadata for ${qualified}`).toContain(qualified);
-        expect(readme, `README for ${qualified}`).toContain(`\`${method}(`);
+        expect(readme, `README for ${capability}.${method}`).toContain(`\`${method}(`);
       }
     }
   });

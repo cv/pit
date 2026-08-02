@@ -2,6 +2,8 @@ import { defineCapability } from "../capability-core.js";
 
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",
+  promptSummary:
+    "list/get/remove project functions; listAll/getSaved inspect scopes; promote/removeSession manage session functions",
   methods: {
     list: {
       callDescription: "List project functions",
@@ -27,7 +29,7 @@ export const functionsCapability = defineCapability({
     listAll: {
       callDescription: "List all saved functions",
       declaration: "listAll(): Promise<PitSavedFunctionMetadata[]>;",
-      documentation: "functions.listAll",
+      documentation: "functions.listAll() lists effective project and session functions with scope",
       minimumArguments: 0,
       maximumArguments: 0,
     },
@@ -35,7 +37,7 @@ export const functionsCapability = defineCapability({
       callDescription: "Inspect a saved function",
       declaration:
         "getSaved(name: string): Promise<PitSavedFunctionMetadata & { source: string }>;",
-      documentation: "functions.getSaved",
+      documentation: "functions.getSaved(name) returns effective saved source and scope",
       minimumArguments: 1,
       maximumArguments: 1,
     },
@@ -43,14 +45,14 @@ export const functionsCapability = defineCapability({
       callDescription: "Save a session function to the project",
       declaration:
         "promote(name: string, summary: string): Promise<{ name: string; promoted: true }>;",
-      documentation: "functions.promote",
+      documentation: "functions.promote(name, summary) persists a session function to the project",
       minimumArguments: 2,
       maximumArguments: 2,
     },
     removeSession: {
       callDescription: "Remove a session function",
       declaration: "removeSession(name: string): Promise<{ name: string; removed: string[] }>;",
-      documentation: "functions.removeSession",
+      documentation: "functions.removeSession(name) removes a session function and its dependents",
       minimumArguments: 1,
       maximumArguments: 1,
     },
