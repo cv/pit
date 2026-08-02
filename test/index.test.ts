@@ -11,6 +11,7 @@ import {
   display,
   effectiveRegistry,
   reconstructFunctions,
+  savedFunctionCatalogNotice,
   validateRegistryCapacity,
 } from "../src/index.js";
 import { registerFunctionManager } from "../src/saved-functions.js";
@@ -50,6 +51,24 @@ describe("function registry handler", () => {
     expect(() => validateRegistryCapacity(aggregate, "fn0", "x".repeat(100_000))).not.toThrow();
     expect(() => validateRegistryCapacity(aggregate, "extra", "x")).toThrow(
       "exceeds 976.6KB total source",
+    );
+  });
+
+  it("bounds session catalogs by complete signatures", () => {
+    const functions = new Map(
+      Array.from({ length: 64 }, (_, index) => {
+        const name = `catalogFunction${String(index).padStart(2, "0")}${"x".repeat(40)}`;
+        return [name, `async function ${name}() { return true; }`] as const;
+      }),
+    );
+    const catalog = savedFunctionCatalogNotice(functions);
+
+    expect(Buffer.byteLength(catalog)).toBeLessThanOrEqual(1200);
+    expect(catalog).toMatch(/^\n\[Session functions: catalogFunction00x+\(\)/);
+    expect(catalog).toMatch(/, … \d+ more\]$/);
+    const entries = catalog.slice("\n[Session functions: ".length, -1).split(", ");
+    expect(entries.slice(0, -1).every((entry) => /^catalogFunction\d{2}x+\(\)$/.test(entry))).toBe(
+      true,
     );
   });
 
@@ -224,7 +243,7 @@ describe("pit extension", () => {
     expect(defined.details.value).toEqual({ greeting: "Hello, world!" });
     expect(defined.details.functions).toEqual([{ action: "set", name: "greet", replaced: false }]);
     expect(defined.content[0].text).toContain("Invoke later with: greet(input: unknown)");
-    expect(defined.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
+    expect(defined.content[0].text).toContain("[Session functions: greet(input: unknown)]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         type: "custom",
@@ -239,7 +258,7 @@ describe("pit extension", () => {
     const invoked = await run(`greet({ name: "Pi" })`);
     expect(invoked.details.value).toEqual({ greeting: "Hello, Pi!" });
     expect(invoked.details.functions).toEqual([{ action: "run", name: "greet", scope: "session" }]);
-    expect(invoked.content[0].text).toContain("[Saved functions: greet(input: unknown)]");
+    expect(invoked.content[0].text).toContain("[Session functions: greet(input: unknown)]");
 
     const replaced = await run(`async function greet() { return { greeting: "replaced" }; }`);
     expect(replaced.details.functions).toEqual([{ action: "set", name: "greet", replaced: true }]);
@@ -273,7 +292,7 @@ describe("pit extension", () => {
     expect(execMock).not.toHaveBeenCalled();
     expect(saved.details.value).toEqual({ savedFunction: "deferred", executed: false });
     expect(saved.content[0].text).toContain('Saved function "deferred" without executing it');
-    expect(saved.content[0].text).toContain("[Saved functions: deferred()]");
+    expect(saved.content[0].text).toContain("[Session functions: deferred()]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         customType: "pit-functions",
@@ -407,7 +426,9 @@ describe("pit extension", () => {
   it("persists named functions on the active session branch", async () => {
     await value("async function persistent() { return { ok: true }; }");
     await sessionStart({}, context());
-    expect(await value("persistent()")).toEqual({ ok: true });
+    const reloaded = await run("persistent()");
+    expect(reloaded.details.value).toEqual({ ok: true });
+    expect(reloaded.content[0].text).toContain("[Session functions: persistent()]");
 
     const previousBranch = [...branchEntries];
     setBranchEntries([]);
@@ -416,7 +437,9 @@ describe("pit extension", () => {
 
     setBranchEntries(previousBranch);
     sessionTree({}, context());
-    expect(await value("persistent()")).toEqual({ ok: true });
+    const restored = await run("persistent()");
+    expect(restored.details.value).toEqual({ ok: true });
+    expect(restored.content[0].text).toContain("[Session functions: persistent()]");
   });
 
   it("handles empty, missing, non-TUI, and cancelled function management", async () => {

@@ -80,6 +80,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       { action: "set", name: "projectGreeting", scope: "project", replaced: false },
     ]);
     expect(defined.content[0].text).toContain("Saved project function");
+    expect(defined.content[0].text).not.toContain("[Session functions:");
     expect(await readFile(join(cwd, ".pi/pit/functions/projectGreeting.ts"), "utf8")).toContain(
       "@pit project",
     );
@@ -90,7 +91,9 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
 
     setBranchEntries([]);
     await sessionStart({}, context());
-    expect(await value(`projectGreeting({ name: "Pi" })`)).toEqual({ greeting: "Hello, Pi" });
+    const invoked = await run(`projectGreeting({ name: "Pi" })`);
+    expect(invoked.details.value).toEqual({ greeting: "Hello, Pi" });
+    expect(invoked.content[0].text).not.toContain("[Session functions:");
   });
 
   it("saves a selected session function to the project", async () => {
@@ -174,7 +177,8 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     await run(
       "/** Scoped project helper. @pit project */ async function scopedProject() { return 'project'; }",
     );
-    await run("async function scopedProject() { return 'session'; }");
+    const overridden = await run("async function scopedProject() { return 'session'; }");
+    expect(overridden.content[0].text).toContain("[Session functions: scopedProject()]");
     const listed = context();
     await functionsCommand.handler("list", listed);
     expect(listed.ui.notify).toHaveBeenCalledWith(

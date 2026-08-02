@@ -215,7 +215,7 @@ The effective registry contains project functions and session functions. A sessi
 - 100 KB for one function.
 - 1 MB of combined saved source.
 
-Successful tool results include a compact catalog of active invocation signatures. `context.get().savedFunctions` also lists the names.
+Successful tool results include a compact, compaction-safe catalog of active session-function signatures. Project functions are documented in the system prompt instead of being repeated in every result. Catalogs contain only complete signatures and report omitted entries when they reach the output budget. `context.get().savedFunctions` also lists all effective names.
 
 ### Share trusted project functions
 

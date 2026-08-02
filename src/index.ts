@@ -62,7 +62,7 @@ export function display(value: unknown): string {
 
 const MAX_SAVED_FUNCTION_CATALOG_BYTES = 1200;
 
-function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): string {
+export function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): string {
   const signatures = [...registry.values()]
     .map(getSavedFunctionCallSignature)
     .filter((signature): signature is string => signature !== undefined)
@@ -70,11 +70,20 @@ function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): stri
   if (signatures.length === 0) {
     return "";
   }
-  const catalog = truncateHead(signatures.join(", "), {
-    maxBytes: MAX_SAVED_FUNCTION_CATALOG_BYTES,
-    maxLines: 1,
-  }).content;
-  return `\n[Saved functions: ${catalog}]`;
+
+  const notice = (shown: readonly string[], omitted: number): string => {
+    const entries = omitted > 0 ? [...shown, `… ${omitted} more`] : shown;
+    return `\n[Session functions: ${entries.join(", ")}]`;
+  };
+  let catalog = notice([], signatures.length);
+  for (let shown = 1; shown <= signatures.length; shown++) {
+    const candidate = notice(signatures.slice(0, shown), signatures.length - shown);
+    if (Buffer.byteLength(candidate) > MAX_SAVED_FUNCTION_CATALOG_BYTES) {
+      break;
+    }
+    catalog = candidate;
+  }
+  return catalog;
 }
 
 interface FunctionManagerRegistration {
@@ -239,7 +248,7 @@ export default function pit(pi: ExtensionAPI) {
                 output.content +
                 (output.truncated ? "\n[Result truncated]" : "") +
                 savedNotice +
-                savedFunctionCatalogNotice(functionState.effective),
+                savedFunctionCatalogNotice(functionState.session),
             },
           ],
           details: {
