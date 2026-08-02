@@ -33,5 +33,21 @@ export function createSessionCapabilityHandler({
       pi.setSessionName(name);
       return { name };
     }
+    if (method === "compact") {
+      const instructions =
+        args[0] === undefined ? undefined : string(args[0], "compaction instructions").trim();
+      return new Promise((resolve, reject) => {
+        ctx.compact({
+          ...(instructions ? { customInstructions: instructions } : {}),
+          onComplete: (result) =>
+            resolve({
+              firstKeptEntryId: result.firstKeptEntryId,
+              tokensBefore: result.tokensBefore,
+              estimatedTokensAfter: result.estimatedTokensAfter,
+            }),
+          onError: reject,
+        });
+      });
+    }
   };
 }

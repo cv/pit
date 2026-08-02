@@ -322,6 +322,12 @@ interface PitSessionCapability {
   getName(): Promise<string | undefined>;
 
   setName(name: string): Promise<{ name: string }>;
+
+  compact(instructions?: string): Promise<{
+    firstKeptEntryId: string;
+    tokensBefore: number;
+    estimatedTokensAfter: number | undefined;
+  }>;
 }
 
 interface PitCommandsCapability {

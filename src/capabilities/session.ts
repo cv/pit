@@ -2,7 +2,7 @@ import { defineCapability } from "../capability-core.js";
 
 export const sessionCapability = defineCapability({
   interfaceName: "PitSessionCapability",
-  promptSummary: "info/getName/setName",
+  promptSummary: "info/getName/setName/compact",
   methods: {
     info: {
       callDescription: "Inspect session metadata",
@@ -33,6 +33,18 @@ export const sessionCapability = defineCapability({
       declaration: "setName(name: string): Promise<{ name: string }>;",
       documentation: "session.setName(name) sets the current display name",
       minimumArguments: 1,
+      maximumArguments: 1,
+    },
+    compact: {
+      callDescription: "Compact session context",
+      declaration: `compact(instructions?: string): Promise<{
+  firstKeptEntryId: string;
+  tokensBefore: number;
+  estimatedTokensAfter: number | undefined;
+}>;`,
+      documentation:
+        "session.compact(instructions?) awaits manual compaction and returns bounded metadata",
+      minimumArguments: 0,
       maximumArguments: 1,
     },
   },

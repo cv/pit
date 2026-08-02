@@ -390,6 +390,7 @@ UI methods require a mode that provides a UI.
 - `info()` returns the session ID, file, display name, entry counts, leaf ID, and context usage.
 - `getName()` returns the session display name.
 - `setName(name)` sets the session display name.
+- `compact(instructions?)` awaits manual compaction and returns bounded cut-point and token metadata without returning the generated summary.
 
 ### `commands`
 

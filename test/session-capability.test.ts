@@ -20,7 +20,7 @@ describe("session capability", () => {
         entryCount: 0,
         branchEntryCount: 0,
         contextTokens: 1234,
-        contextWindow: 200000,
+        contextWindow: 200_000,
         contextPercent: 0.617,
       },
       name: undefined,
@@ -56,6 +56,40 @@ describe("session capability", () => {
   it("rejects an empty session display name", async () => {
     await expect(run(`async ({ session }) => session.setName("   ")`)).rejects.toThrow(
       "must not be empty",
+    );
+  });
+
+  it("awaits compaction and returns bounded metadata", async () => {
+    let instructions: string | undefined;
+    const ctx = context({
+      compact: (options: any) => {
+        instructions = options.customInstructions;
+        queueMicrotask(() =>
+          options.onComplete({
+            summary: "large generated summary",
+            firstKeptEntryId: "kept-entry",
+            tokensBefore: 500_000,
+            estimatedTokensAfter: 42_000,
+          }),
+        );
+      },
+    });
+    await expect(
+      value(`async ({ session }) => session.compact("  Focus on capability work.  ")`, ctx),
+    ).resolves.toEqual({
+      firstKeptEntryId: "kept-entry",
+      tokensBefore: 500_000,
+      estimatedTokensAfter: 42_000,
+    });
+    expect(instructions).toBe("Focus on capability work.");
+  });
+
+  it("propagates compaction failures", async () => {
+    const ctx = context({
+      compact: (options: any) => queueMicrotask(() => options.onError(new Error("compact failed"))),
+    });
+    await expect(run("async ({ session }) => session.compact()", ctx)).rejects.toThrow(
+      "compact failed",
     );
   });
 });
