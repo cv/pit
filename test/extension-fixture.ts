@@ -39,6 +39,7 @@ export let setActiveTools: ReturnType<typeof vi.fn>;
 export let functionsCommand: { handler: (args: string, ctx: any) => Promise<void> };
 let sessionName: string | undefined;
 let slashCommands: any[] = [];
+let configuredModels: any[] = [];
 
 export function context(overrides: Record<string, unknown> = {}) {
   return {
@@ -49,6 +50,15 @@ export function context(overrides: Record<string, unknown> = {}) {
     hasUI: true,
     isProjectTrusted: () => true,
     getContextUsage: () => ({ tokens: 1234, contextWindow: 200000, percent: 0.617 }),
+    modelRegistry: {
+      refresh: vi.fn(async () => undefined),
+      getAll: () => configuredModels,
+      getAvailable: () => configuredModels.filter((model) => model.available !== false),
+      find: (provider: string, id: string) =>
+        configuredModels.find((model) => model.provider === provider && model.id === id),
+      hasConfiguredAuth: (model: any) => model.available !== false,
+    },
+    scopedModels: [],
     ui: {
       confirm: vi.fn(async () => true),
       input: vi.fn(async () => "typed"),
@@ -112,11 +122,16 @@ export function setSlashCommands(commands: any[]): void {
   slashCommands = commands;
 }
 
+export function setConfiguredModels(models: any[]): void {
+  configuredModels = models;
+}
+
 export async function setupHarness(): Promise<void> {
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
   branchEntries = [];
   sessionName = undefined;
   slashCommands = [];
+  configuredModels = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   const pi = {
@@ -147,6 +162,7 @@ export async function setupHarness(): Promise<void> {
     }),
     getSessionName: vi.fn(() => sessionName),
     getCommands: vi.fn(() => slashCommands),
+    setModel: vi.fn(async (model: any) => model.available !== false),
     setActiveTools,
     exec: execMock,
   };

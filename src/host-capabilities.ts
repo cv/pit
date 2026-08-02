@@ -15,6 +15,7 @@ import type { HostShellProgressEvent, ShellProgressEvent } from "./execution-typ
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
 import { createFunctionCapabilityHandler } from "./functions-capability-handler.js";
 import { prepareGhCommand } from "./gh-capability.js";
+import { createModelsCapabilityHandler } from "./models-capability-handler.js";
 import { prepareNpmCommand } from "./npm-capability.js";
 import { createProcessRunner, formatProcessCommand } from "./process-runner.js";
 import type { CapabilityHandler } from "./sandbox.js";
@@ -254,6 +255,7 @@ export function createCapabilities({
     }),
     session: createSessionCapabilityHandler({ pi, ctx }),
     commands: createCommandsCapabilityHandler({ pi }),
+    models: createModelsCapabilityHandler({ pi, ctx }),
   };
 
   return ({ capability, method, args, signal, functionContext }) => {

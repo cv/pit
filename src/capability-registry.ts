@@ -4,6 +4,7 @@ import { functionsCapability } from "./capabilities/functions.js";
 import { ghCapability } from "./capabilities/gh.js";
 import { gitCapability } from "./capabilities/git.js";
 import { httpCapability } from "./capabilities/http.js";
+import { modelsCapability } from "./capabilities/models.js";
 import { npmCapability } from "./capabilities/npm.js";
 import { sessionCapability } from "./capabilities/session.js";
 import { shellCapability } from "./capabilities/shell.js";
@@ -122,6 +123,18 @@ type PitSlashCommand = {
   };
 };
 
+type PitModelMetadata = {
+  provider: string;
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: string[];
+  contextWindow: number;
+  maxTokens: number;
+  available: boolean;
+  scoped: boolean;
+};
+
 type PitProjectFunctionMetadata = {
   name: string;
   signature: string;
@@ -148,6 +161,7 @@ export const CAPABILITY_REGISTRY = defineCapabilities({
   context: contextCapability,
   session: sessionCapability,
   commands: commandsCapability,
+  models: modelsCapability,
   functions: functionsCapability,
 });
 

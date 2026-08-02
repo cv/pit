@@ -31,7 +31,7 @@ export const SAVE_ONLY_DESCRIPTION =
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
-    "Execute a contextually type-checked TypeScript expression in a fresh restricted process.",
+    "Run contextually type-checked TypeScript in a fresh restricted process.",
     "",
     "CALLING CONTRACT — CHOOSE REUSE FIRST",
     "",

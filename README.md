@@ -80,6 +80,7 @@ Pit injects only the capabilities that submitted code requests.
 | `context` | Inspect the active Pi and Pit context. |
 | `session` | Inspect session metadata and manage its display name. |
 | `commands` | List extension, prompt-template, and skill slash commands with provenance. |
+| `models` | List configured models, inspect the current model, and select a model. |
 | `functions` | Inspect and remove trusted project functions. |
 
 See [Capability reference](#capability-reference) for method details.
@@ -393,6 +394,12 @@ UI methods require a mode that provides a UI.
 ### `commands`
 
 - `list()` returns bounded extension, prompt-template, and skill commands with canonical source information. Built-in interactive commands are not included.
+
+### `models`
+
+- `current()` returns bounded metadata for the active model.
+- `list(options?)` returns bounded model metadata; available models are the default.
+- `set(provider, id)` selects an explicit configured model and fails when credentials are unavailable.
 
 ### `functions`
 

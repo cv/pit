@@ -103,6 +103,18 @@ type PitSlashCommand = {
   };
 };
 
+type PitModelMetadata = {
+  provider: string;
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: string[];
+  contextWindow: number;
+  maxTokens: number;
+  available: boolean;
+  scoped: boolean;
+};
+
 type PitProjectFunctionMetadata = {
   name: string;
   signature: string;
@@ -316,6 +328,18 @@ interface PitCommandsCapability {
   list(): Promise<{ commands: PitSlashCommand[]; truncated: boolean }>;
 }
 
+interface PitModelsCapability {
+  current(): Promise<PitModelMetadata | undefined>;
+
+  list(options?: {
+    availableOnly?: boolean;
+    query?: string;
+    limit?: number;
+  }): Promise<{ models: PitModelMetadata[]; truncated: boolean }>;
+
+  set(provider: string, id: string): Promise<{ provider: string; id: string; changed: boolean }>;
+}
+
 interface PitFunctionsCapability {
   list(): Promise<PitProjectFunctionMetadata[]>;
 
@@ -343,6 +367,7 @@ interface PitCapabilities {
   context: PitContextCapability;
   session: PitSessionCapability;
   commands: PitCommandsCapability;
+  models: PitModelsCapability;
   functions: PitFunctionsCapability;
 }
 
