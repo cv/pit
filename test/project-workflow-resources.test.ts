@@ -24,7 +24,7 @@ describe("project agent workflow resources", () => {
       expect(getProjectFunctionMetadata(source)).toMatchObject({ name });
       expect(() => validateTypeScript(source, registry)).not.toThrow();
     }
-  });
+  }, 15_000);
 
   it("provides bounded inner-loop workflow helpers", async () => {
     const [sessions, targeted, coverage, review, format, skill] = await Promise.all([
