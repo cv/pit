@@ -1,6 +1,6 @@
 {
   "name": "pit",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "A single, capability-injected TypeScript tool for Pi",
   "type": "module",
   "files": [
