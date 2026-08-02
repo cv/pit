@@ -14,6 +14,21 @@ description: Implements and delivers Pit issues with typed tools, bounded valida
 5. Prefer typed npm, Git, and GitHub capabilities. Use raw CLI only for unsupported operations.
 6. Batch independent reads and probes, but serialize mutations and dependent transitions.
 
+## Inner loop
+
+Use the project helpers when they match the task:
+
+```ts
+runPitTargetedTests({ files: ["test/example.test.ts"] })
+reviewPitChanges()
+inspectPitCoverageGaps({ files: ["src/example.ts"] })
+formatPitChanges()
+```
+
+`formatPitChanges()` invalidates anchors for every file that it writes. Re-read those files before another mutation.
+
+For workflow analysis, use `analyzePitSession()` for one session and `analyzePitSessions()` for project-wide trends.
+
 ## Validate
 
 Invoke the trusted project function once:

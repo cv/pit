@@ -4,8 +4,13 @@ import { getProjectFunctionMetadata, validateTypeScript } from "../src/sandbox.j
 
 const functionFiles = [
   ["analyzePitSession", ".pi/pit/functions/analyzePitSession.ts"],
-  ["validatePit", ".pi/pit/functions/validatePit.ts"],
+  ["analyzePitSessions", ".pi/pit/functions/analyzePitSessions.ts"],
+  ["formatPitChanges", ".pi/pit/functions/formatPitChanges.ts"],
+  ["inspectPitCoverageGaps", ".pi/pit/functions/inspectPitCoverageGaps.ts"],
   ["preparePitDelivery", ".pi/pit/functions/preparePitDelivery.ts"],
+  ["reviewPitChanges", ".pi/pit/functions/reviewPitChanges.ts"],
+  ["runPitTargetedTests", ".pi/pit/functions/runPitTargetedTests.ts"],
+  ["validatePit", ".pi/pit/functions/validatePit.ts"],
   ["waitForGitHubRun", ".pi/pit/functions/waitForGitHubRun.ts"],
 ] as const;
 
@@ -19,6 +24,27 @@ describe("project agent workflow resources", () => {
       expect(getProjectFunctionMetadata(source)).toMatchObject({ name });
       expect(() => validateTypeScript(source, registry)).not.toThrow();
     }
+  });
+
+  it("provides bounded inner-loop workflow helpers", async () => {
+    const [sessions, targeted, coverage, review, format, skill] = await Promise.all([
+      readFile(".pi/pit/functions/analyzePitSessions.ts", "utf8"),
+      readFile(".pi/pit/functions/runPitTargetedTests.ts", "utf8"),
+      readFile(".pi/pit/functions/inspectPitCoverageGaps.ts", "utf8"),
+      readFile(".pi/pit/functions/reviewPitChanges.ts", "utf8"),
+      readFile(".pi/pit/functions/formatPitChanges.ts", "utf8"),
+      readFile(".pi/skills/pit-delivery/SKILL.md", "utf8"),
+    ]);
+    expect(sessions).toContain("analyzePitSession");
+    expect(sessions).toContain("offset += 4");
+    expect(targeted).toContain("Targeted tests must be safe");
+    expect(targeted).toContain("raise: false");
+    expect(coverage).toContain("cbranch-no|cstat-no|fstat-no");
+    expect(review).toContain('["--cached", "--check"]');
+    expect(format).toContain('"--write"');
+    expect(format).toContain("anchorsInvalidated");
+    expect(skill).toContain("runPitTargetedTests");
+    expect(skill).toContain("formatPitChanges()");
   });
 
   it("uses bounded and non-duplicative delivery workflows", async () => {
