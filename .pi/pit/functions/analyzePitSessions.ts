@@ -61,6 +61,7 @@ async function analyzePitSessions(
     failures: total("failures"),
     workflowFailures,
     gateFailures: total("gateFailures"),
+    expectedFailures: total("expectedFailures"),
     workflowFailureRatePercent: Number(
       ((100 * workflowFailures) / Math.max(1, toolCalls)).toFixed(1),
     ),
@@ -75,6 +76,7 @@ async function analyzePitSessions(
       toolCalls: audit.toolCalls,
       workflowFailures: audit.workflowFailures,
       gateFailures: audit.gateFailures,
+      expectedFailures: audit.expectedFailures,
       categories: audit.categories,
     })),
   };

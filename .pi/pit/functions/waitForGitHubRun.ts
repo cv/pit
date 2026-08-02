@@ -2,7 +2,7 @@
  * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
  *
  * @pit project
- * @param input.attempts - Maximum status checks. The default is 36.
+ * @param input.attempts - Maximum status checks. The default is 48.
  * @param input.intervalMs - Delay between checks. The default is 5000 ms.
  * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
  */
@@ -17,7 +17,7 @@ async function waitForGitHubRun(
   },
 ) {
   const intervalMs = Math.max(1000, Math.min(input.intervalMs ?? 5000, 30000));
-  const requestedAttempts = Math.max(1, Math.min(input.attempts ?? 36, 120));
+  const requestedAttempts = Math.max(1, Math.min(input.attempts ?? 48, 120));
   const maximumAttempts = Math.floor(290000 / intervalMs) + 1;
   const attempts = Math.min(requestedAttempts, maximumAttempts);
   const raise = input.raise ?? true;
