@@ -75,6 +75,20 @@ export interface SavedFunctionServiceDependencies {
   appendEntry(type: string, entry: FunctionEntry): void;
 }
 
+export interface SavedFunctionRemovalPlan {
+  name: string;
+  scope: "project" | "session";
+  directDependents: string[];
+  transitiveDependents: string[];
+  removalClosure: string[];
+  requiresCascade: boolean;
+  blocked: boolean;
+}
+
+export interface SessionFunctionRemovalOptions {
+  cascade?: boolean;
+}
+
 function projectFunctionSource(source: string, summary: string): string {
   const normalizedSummary = summary.trim().replace(/\s+/g, " ").replaceAll("*/", "* /");
   if (!normalizedSummary) {
@@ -162,25 +176,79 @@ export class SavedFunctionService {
     });
   }
 
-  planSessionRemoval(name: string): string[] {
-    if (!this.#state.session.has(name)) {
-      throw new Error(`Session function "${name}" was not found`);
+  planRemoval(name: string, requestedScope?: "project" | "session"): SavedFunctionRemovalPlan {
+    const scope =
+      requestedScope ??
+      (this.#state.session.has(name)
+        ? "session"
+        : this.#state.projectCandidates.has(name)
+          ? "project"
+          : undefined);
+    if (scope === undefined) {
+      throw new Error(`Saved function "${name}" was not found`);
     }
-    const dependents = getSavedFunctionDependencyGraph(this.#state.effective).dependents(name);
-    return [name, ...dependents.direct, ...dependents.transitive]
-      .filter((candidate) => this.#state.session.has(candidate))
-      .sort((a, b) => a.localeCompare(b));
+    if (scope === "session") {
+      if (!this.#state.session.has(name)) {
+        throw new Error(`Session function "${name}" was not found`);
+      }
+      const dependents = getSavedFunctionDependencyGraph(this.#state.effective).dependents(name);
+      const directDependents = dependents.direct.filter((candidate) =>
+        this.#state.session.has(candidate),
+      );
+      const transitiveDependents = dependents.transitive.filter((candidate) =>
+        this.#state.session.has(candidate),
+      );
+      return {
+        name,
+        scope,
+        directDependents,
+        transitiveDependents,
+        removalClosure: [name, ...directDependents, ...transitiveDependents].sort((a, b) =>
+          a.localeCompare(b),
+        ),
+        requiresCascade: directDependents.length > 0 || transitiveDependents.length > 0,
+        blocked: false,
+      };
+    }
+    if (!this.#state.projectCandidates.has(name)) {
+      throw new Error(`Project function "${name}" was not found`);
+    }
+    const dependents = savedFunctionDependents(
+      this.#state.projectCandidates,
+      this.#state.session,
+      this.#state.effective,
+      name,
+    );
+    return {
+      name,
+      scope,
+      directDependents: dependents.direct,
+      transitiveDependents: dependents.transitive,
+      removalClosure: [name],
+      requiresCascade: false,
+      blocked: dependents.direct.length > 0 || dependents.transitive.length > 0,
+    };
   }
 
-  removeSession(name: string): Promise<string[]> {
+  planSessionRemoval(name: string): string[] {
+    return this.planRemoval(name, "session").removalClosure;
+  }
+
+  removeSession(name: string, options: SessionFunctionRemovalOptions = {}): Promise<string[]> {
     return this.#commit(() => {
-      const namesToRemove = this.planSessionRemoval(name);
-      for (const removedName of namesToRemove) {
+      const plan = this.planRemoval(name, "session");
+      if (plan.requiresCascade && options.cascade !== true) {
+        const dependents = [...plan.directDependents, ...plan.transitiveDependents];
+        throw new Error(
+          `Cannot remove session function "${name}" without explicit cascade (dependents: ${dependents.join(", ")}); pass { cascade: true }`,
+        );
+      }
+      for (const removedName of plan.removalClosure) {
         this.#appendEntry(FUNCTION_ENTRY_TYPE, { name: removedName, deleted: true });
         this.#state.session.delete(removedName);
       }
       reconcileFunctionState(this.#state);
-      return namesToRemove;
+      return plan.removalClosure;
     });
   }
 

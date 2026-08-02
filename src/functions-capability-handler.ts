@@ -3,9 +3,9 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { stringValue as string } from "./cli.js";
+import { recordValue as record, stringValue as string } from "./cli.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
-import { getSavedFunctionCallSignature } from "./sandbox.js";
+import { getSavedFunctionCallSignature, getSavedFunctionDependencyGraph } from "./sandbox.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./saved-function-service.js";
 import type { FunctionActivity } from "./saved-functions.js";
 import { validateSavedFunctionName } from "./saved-functions.js";
@@ -32,13 +32,24 @@ export function createFunctionCapabilityHandler({
     commit: commitFunctionState,
     appendEntry: (type, entry) => pi.appendEntry(type, entry),
   });
-  const savedMetadata = (name: string, source: string) => ({
-    name,
-    scope: functionState.session.has(name) ? ("session" as const) : ("project" as const),
-    signature: getSavedFunctionCallSignature(source) ?? `${name}()`,
-    lines: source.split("\n").length,
-    bytes: Buffer.byteLength(source),
-  });
+  const savedMetadata = (name: string, source: string) => {
+    const scope = functionState.session.has(name) ? ("session" as const) : ("project" as const);
+    const graph = getSavedFunctionDependencyGraph(
+      scope === "session" ? functionState.effective : functionState.project,
+    );
+    const plan = service.planRemoval(name, scope);
+    return {
+      name,
+      scope,
+      /* v8 ignore next -- saved registries contain validated named function declarations. */
+      signature: getSavedFunctionCallSignature(source) ?? `${name}()`,
+      lines: source.split("\n").length,
+      bytes: Buffer.byteLength(source),
+      directDependencies: [...graph.directDependencies(name)],
+      directDependents: plan.directDependents,
+      overridesProject: scope === "session" && functionState.project.has(name),
+    };
+  };
   const requireProjectAccess = (): void => {
     if (!ctx.isProjectTrusted()) {
       throw new Error("Project functions require a trusted project");
@@ -48,6 +59,28 @@ export function createFunctionCapabilityHandler({
         `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
       );
     }
+  };
+
+  const removalScope = (value: unknown): "project" | "session" | undefined => {
+    const scope = value === undefined ? undefined : string(value, "function scope");
+    if (scope !== undefined && scope !== "project" && scope !== "session") {
+      throw new Error('function scope must be "project" or "session"');
+    }
+    return scope;
+  };
+  const removalCascade = (value: unknown): boolean => {
+    if (value === undefined) {
+      return false;
+    }
+    const options = record(value, "removeSession options");
+    const unknown = Object.keys(options).filter((key) => key !== "cascade");
+    if (unknown.length > 0) {
+      throw new Error(`removeSession options contain unknown fields: ${unknown.join(", ")}`);
+    }
+    if (options.cascade !== undefined && typeof options.cascade !== "boolean") {
+      throw new TypeError("removeSession options.cascade must be a boolean");
+    }
+    return options.cascade === true;
   };
 
   return (method, args) => {
@@ -90,9 +123,13 @@ export function createFunctionCapabilityHandler({
         .promoteToProject({ name: functionName, summary, context: ctx, activity })
         .then(() => ({ name: functionName, promoted: true as const }));
     }
+    if (method === "planRemoval") {
+      return service.planRemoval(name as string, removalScope(args[1]));
+    }
     if (method === "removeSession") {
       const functionName = name as string;
-      return service.removeSession(functionName).then((removed) => {
+      const cascade = removalCascade(args[1]);
+      return service.removeSession(functionName, { cascade }).then((removed) => {
         for (const removedName of removed) {
           activity.push({ action: "remove", name: removedName, scope: "session" });
         }

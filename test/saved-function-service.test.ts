@@ -161,28 +161,55 @@ describe("SavedFunctionService", () => {
     ).resolves.toBe(false);
   });
 
-  it("plans and serializes dependency-aware session removals", async () => {
+  it("plans, guards, and serializes dependency-aware session removals", async () => {
     const { state, entries, service } = fixture();
     state.session.set("baseHelper", "async function baseHelper() { return 1; }");
     state.session.set(
       "dependentHelper",
       "async function dependentHelper() { return (await baseHelper()) + 1; }",
     );
+    state.session.set(
+      "transitiveHelper",
+      "async function transitiveHelper() { return (await dependentHelper()) + 1; }",
+    );
     refreshEffectiveFunctions(state);
 
-    expect(service.planSessionRemoval("baseHelper")).toEqual(["baseHelper", "dependentHelper"]);
+    expect(service.planRemoval("baseHelper")).toEqual({
+      name: "baseHelper",
+      scope: "session",
+      directDependents: ["dependentHelper"],
+      transitiveDependents: ["transitiveHelper"],
+      removalClosure: ["baseHelper", "dependentHelper", "transitiveHelper"],
+      requiresCascade: true,
+      blocked: false,
+    });
+    expect(service.planSessionRemoval("baseHelper")).toEqual([
+      "baseHelper",
+      "dependentHelper",
+      "transitiveHelper",
+    ]);
+    expect(() => service.planRemoval("missingHelper")).toThrow(
+      'Saved function "missingHelper" was not found',
+    );
+    expect(() => service.planRemoval("missingHelper", "project")).toThrow(
+      'Project function "missingHelper" was not found',
+    );
     expect(() => service.planSessionRemoval("missingHelper")).toThrow(
       'Session function "missingHelper" was not found',
     );
+    await expect(service.removeSession("baseHelper")).rejects.toThrow("without explicit cascade");
+    expect(state.session).toHaveLength(3);
+    expect(entries).toEqual([]);
 
-    const first = service.removeSession("baseHelper");
-    const concurrent = service.removeSession("baseHelper");
-    await expect(first).resolves.toEqual(["baseHelper", "dependentHelper"]);
+    const first = service.removeSession("baseHelper", { cascade: true });
+    const concurrent = service.removeSession("baseHelper", { cascade: true });
+    await expect(first).resolves.toEqual(["baseHelper", "dependentHelper", "transitiveHelper"]);
     await expect(concurrent).rejects.toThrow('Session function "baseHelper" was not found');
     expect(state.session).toHaveLength(0);
     expect(entries.map(({ entry }) => entry)).toEqual([
       { name: "baseHelper", deleted: true },
       { name: "dependentHelper", deleted: true },
+      { name: "transitiveHelper", deleted: true },
     ]);
   });
 

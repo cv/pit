@@ -149,7 +149,23 @@ type PitSavedFunctionMetadata = {
   signature: string;
   lines: number;
   bytes: number;
-};`;
+  directDependencies: string[];
+  directDependents: string[];
+  overridesProject: boolean;
+};
+
+type PitSavedFunctionRemovalPlan = {
+  name: string;
+  scope: "project" | "session";
+  directDependents: string[];
+  transitiveDependents: string[];
+  removalClosure: string[];
+  requiresCascade: boolean;
+  blocked: boolean;
+};
+
+type PitRemoveOptions = { cascade?: boolean };
+type PitRemoveResult = { name: string; removed: string[] };`;
 
 export const CAPABILITY_REGISTRY = defineCapabilities({
   workspace: workspaceCapability,

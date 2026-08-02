@@ -249,7 +249,7 @@ Pit stores project functions as readable TypeScript files in `.pi/pit/functions/
 
 Pit loads project source only after explicit opt-in and Pi's project-trust check. The function still runs in the same restricted process as a session function.
 
-Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` to manage project definitions. Use `functions.listAll()` and `functions.getSaved(name)` to inspect effective project and session functions. Use `functions.promote(name, summary)` to save a session function to the project. Use `functions.removeSession(name)` to remove a branch-local function and its session dependents. Project removal fails when a project or session function depends on the target. Project references remain project-scoped. Session references use effective same-named session overrides. Disabling project functions does not delete existing source files.
+Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` to manage project definitions. Use `functions.listAll()` and `functions.getSaved(name)` to inspect effective project and session functions, including direct dependencies, direct dependents, and session override state. Use `functions.planRemoval(name, scope?)` to inspect an exact removal closure without mutation. Session removal rejects dependent cascades unless `functions.removeSession(name, { cascade: true })` explicitly opts in. Use `functions.promote(name, summary)` to save a session function to the project. Project removal remains blocked when a project or session function depends on the target. Project references remain project-scoped. Session references use effective same-named session overrides. Disabling project functions does not delete existing source files.
 
 ### Manage saved functions
 
@@ -417,10 +417,11 @@ UI methods require a mode that provides a UI.
 - `list()` lists documented project functions.
 - `get(name)` returns project function metadata and source.
 - `remove(name)` removes a project function when no function depends on it.
-- `listAll()` lists effective project and session functions with their scope.
-- `getSaved(name)` returns effective saved-function source and scope.
+- `listAll()` lists effective functions with scope, dependencies, dependents, and override state.
+- `getSaved(name)` returns effective source and dependency metadata.
+- `planRemoval(name, scope?)` returns the exact removal closure and blockers without mutation.
 - `promote(name, summary)` saves a session function to the trusted project.
-- `removeSession(name)` removes a branch-local function and its session dependents.
+- `removeSession(name, options?)` removes a branch-local function; dependent cascades require `{ cascade: true }`.
 
 ### Common behavior
 

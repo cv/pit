@@ -128,7 +128,23 @@ type PitSavedFunctionMetadata = {
   signature: string;
   lines: number;
   bytes: number;
+  directDependencies: string[];
+  directDependents: string[];
+  overridesProject: boolean;
 };
+
+type PitSavedFunctionRemovalPlan = {
+  name: string;
+  scope: "project" | "session";
+  directDependents: string[];
+  transitiveDependents: string[];
+  removalClosure: string[];
+  requiresCascade: boolean;
+  blocked: boolean;
+};
+
+type PitRemoveOptions = { cascade?: boolean };
+type PitRemoveResult = { name: string; removed: string[] };
 
 interface PitWorkspaceCapability {
   read(
@@ -371,9 +387,11 @@ interface PitFunctionsCapability {
 
   getSaved(name: string): Promise<PitSavedFunctionMetadata & { source: string }>;
 
+  planRemoval(name: string, scope?: "project" | "session"): Promise<PitSavedFunctionRemovalPlan>;
+
   promote(name: string, summary: string): Promise<{ name: string; promoted: true }>;
 
-  removeSession(name: string): Promise<{ name: string; removed: string[] }>;
+  removeSession(name: string, options?: PitRemoveOptions): Promise<PitRemoveResult>;
 }
 
 interface PitCapabilities {

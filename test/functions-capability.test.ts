@@ -71,13 +71,36 @@ describe("functions capability", () => {
         }`),
     ).toMatchObject({
       listed: [
-        { name: "capabilityProject", scope: "project", signature: "capabilityProject()" },
-        { name: "capabilitySession", scope: "session", signature: "capabilitySession()" },
-        { name: "removableDependent", scope: "session" },
-        { name: "removableSession", scope: "session" },
+        {
+          name: "capabilityProject",
+          scope: "project",
+          signature: "capabilityProject()",
+          directDependencies: [],
+          directDependents: [],
+          overridesProject: false,
+        },
+        {
+          name: "capabilitySession",
+          scope: "session",
+          directDependencies: [],
+          directDependents: [],
+          overridesProject: false,
+        },
+        {
+          name: "removableDependent",
+          scope: "session",
+          directDependencies: ["removableSession"],
+          directDependents: [],
+        },
+        {
+          name: "removableSession",
+          scope: "session",
+          directDependencies: [],
+          directDependents: ["removableDependent"],
+        },
       ],
-      session: { name: "capabilitySession", scope: "session" },
-      project: { name: "capabilityProject", scope: "project" },
+      session: { name: "capabilitySession", scope: "session", directDependencies: [] },
+      project: { name: "capabilityProject", scope: "project", directDependents: [] },
     });
 
     await expect(
@@ -89,8 +112,42 @@ describe("functions capability", () => {
       readFile(join(cwd, ".pi/pit/functions/capabilitySession.ts"), "utf8"),
     ).resolves.toContain("Promoted through the capability.");
 
+    expect(
+      await value(`async ({ functions }) => ({
+        session: await functions.planRemoval("removableSession"),
+        project: await functions.planRemoval("capabilityProject", "project"),
+      })`),
+    ).toEqual({
+      session: {
+        name: "removableSession",
+        scope: "session",
+        directDependents: ["removableDependent"],
+        transitiveDependents: [],
+        removalClosure: ["removableDependent", "removableSession"],
+        requiresCascade: true,
+        blocked: false,
+      },
+      project: {
+        name: "capabilityProject",
+        scope: "project",
+        directDependents: [],
+        transitiveDependents: [],
+        removalClosure: ["capabilityProject"],
+        requiresCascade: false,
+        blocked: false,
+      },
+    });
     await expect(
-      value(`async ({ functions }) => functions.removeSession("removableSession")`),
+      run(`async ({ functions }) => functions.removeSession("removableSession")`),
+    ).rejects.toThrow("without explicit cascade");
+    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([
+      "removableDependent",
+      "removableSession",
+    ]);
+    await expect(
+      value(
+        `async ({ functions }) => functions.removeSession("removableSession", { cascade: true })`,
+      ),
     ).resolves.toEqual({
       name: "removableSession",
       removed: ["removableDependent", "removableSession"],
@@ -99,6 +156,44 @@ describe("functions capability", () => {
       projectFunctions: ["capabilityProject", "capabilitySession"],
       sessionFunctions: [],
     });
+  }, 15_000);
+
+  it("reports session overrides and blocked project removal plans", async () => {
+    await run(
+      "/** Shared plan helper. @pit project */ async function sharedPlan() { return 'project'; }",
+    );
+    await run("async function sharedPlan() { return 'session'; }");
+    const override = await value(`async ({ functions }) => ({
+      metadata: (await functions.listAll()).find(({ name }) => name === "sharedPlan"),
+      plan: await functions.planRemoval("sharedPlan"),
+    })`);
+    expect(override).toMatchObject({
+      metadata: { scope: "session", overridesProject: true },
+      plan: { scope: "session", blocked: false, removalClosure: ["sharedPlan"] },
+    });
+    await value(`async ({ functions }) => functions.removeSession("sharedPlan")`);
+
+    await run("/** Plan base. @pit project */ async function projectPlanBase() { return 1; }");
+    await run(
+      "/** Plan dependent. @pit project */ async function projectPlanDependent() { return projectPlanBase(); }",
+    );
+    expect(
+      await value(`async ({ functions }) => functions.planRemoval("projectPlanBase", "project")`),
+    ).toEqual({
+      name: "projectPlanBase",
+      scope: "project",
+      directDependents: ["projectPlanDependent"],
+      transitiveDependents: [],
+      removalClosure: ["projectPlanBase"],
+      requiresCascade: false,
+      blocked: true,
+    });
+    await expect(
+      run(`async ({ functions }) => functions.remove("projectPlanBase")`),
+    ).rejects.toThrow("dependent saved functions remain");
+    await expect(
+      value(`async ({ functions }) => functions.get("projectPlanBase")`),
+    ).resolves.toMatchObject({ name: "projectPlanBase" });
   }, 15_000);
 
   it("rejects unavailable and unknown operations", async () => {
@@ -111,6 +206,18 @@ describe("functions capability", () => {
     await expect(
       run(`async ({ functions }) => functions.removeSession("missing")`),
     ).rejects.toThrow("was not found");
+    await expect(
+      run(`async ({ functions }) => (functions as any).planRemoval("missing", "invalid")`),
+    ).rejects.toThrow('function scope must be "project" or "session"');
+    await expect(
+      run(
+        `async ({ functions }) => (functions as any).removeSession("missing", { cascade: "yes" })`,
+      ),
+    ).rejects.toThrow("options.cascade must be a boolean");
+    await expect(
+      run(`async ({ functions }) => (functions as any).removeSession("missing", { extra: true })`),
+    ).rejects.toThrow("unknown fields: extra");
+
     await expect(
       run(`async ({ functions }) => (functions as any).unknown("value")`),
     ).rejects.toThrow("Unknown capability or method: functions.unknown");

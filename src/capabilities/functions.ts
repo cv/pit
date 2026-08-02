@@ -2,7 +2,7 @@ import { defineCapability } from "../capability-core.js";
 
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",
-  promptSummary: "list/get/remove project; listAll/getSaved/promote/removeSession saved",
+  promptSummary: "list/get/remove project; saved list/get/plan/promote/remove",
   methods: {
     list: {
       callDescription: "List project functions",
@@ -28,7 +28,8 @@ export const functionsCapability = defineCapability({
     listAll: {
       callDescription: "List all saved functions",
       declaration: "listAll(): Promise<PitSavedFunctionMetadata[]>;",
-      documentation: "functions.listAll() lists effective project and session functions with scope",
+      documentation:
+        "functions.listAll() lists effective functions with scope, dependencies, dependents, and override state",
       minimumArguments: 0,
       maximumArguments: 0,
     },
@@ -36,9 +37,19 @@ export const functionsCapability = defineCapability({
       callDescription: "Inspect a saved function",
       declaration:
         "getSaved(name: string): Promise<PitSavedFunctionMetadata & { source: string }>;",
-      documentation: "functions.getSaved(name) returns effective saved source and scope",
+      documentation:
+        "functions.getSaved(name) returns effective saved source and dependency metadata",
       minimumArguments: 1,
       maximumArguments: 1,
+    },
+    planRemoval: {
+      callDescription: "Plan saved function removal",
+      declaration:
+        'planRemoval(name: string, scope?: "project" | "session"): Promise<PitSavedFunctionRemovalPlan>;',
+      documentation:
+        "functions.planRemoval(name, scope?) returns the exact closure and blockers without mutation",
+      minimumArguments: 1,
+      maximumArguments: 2,
     },
     promote: {
       callDescription: "Save a session function to the project",
@@ -50,10 +61,12 @@ export const functionsCapability = defineCapability({
     },
     removeSession: {
       callDescription: "Remove a session function",
-      declaration: "removeSession(name: string): Promise<{ name: string; removed: string[] }>;",
-      documentation: "functions.removeSession(name) removes a session function and its dependents",
+      declaration:
+        "removeSession(name: string, options?: PitRemoveOptions): Promise<PitRemoveResult>;",
+      documentation:
+        "functions.removeSession(name, { cascade: true }) explicitly removes a function and its dependents",
       minimumArguments: 1,
-      maximumArguments: 1,
+      maximumArguments: 2,
     },
   },
 });

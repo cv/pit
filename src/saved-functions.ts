@@ -205,9 +205,15 @@ export function reconstructFunctions(
   }
 }
 
+export interface SessionFunctionRemovalPlan {
+  directDependents: string[];
+  transitiveDependents: string[];
+  removalClosure: string[];
+}
+
 export interface FunctionManagerOptions {
   projectFunctions?: FunctionRegistry;
-  planSessionRemoval(name: string): string[];
+  planSessionRemoval(name: string): SessionFunctionRemovalPlan;
   removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
   removeFromProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
@@ -274,16 +280,24 @@ export function registerFunctionManager(
       ctx.ui.notify(`Saved function "${name}" was not found`, "error");
       return false;
     }
-    let namesToDelete: string[];
+    let plan: SessionFunctionRemovalPlan;
     try {
-      namesToDelete = options.planSessionRemoval(name);
+      plan = options.planSessionRemoval(name);
     } catch (error) {
       ctx.ui.notify((error as Error).message, "error");
       return false;
     }
-    const dependents = namesToDelete.filter((candidate) => candidate !== name);
+    const dependents = plan.removalClosure.filter((candidate) => candidate !== name);
+    const dependencyKinds = [
+      plan.directDependents.length > 0 ? `Direct: ${plan.directDependents.join(", ")}` : "",
+      plan.transitiveDependents.length > 0
+        ? `Transitive: ${plan.transitiveDependents.join(", ")}`
+        : "",
+    ].filter(Boolean);
     const dependencyWarning =
-      dependents.length > 0 ? `\n\nAlso delete dependents: ${dependents.join(", ")}` : "";
+      dependents.length > 0
+        ? `\n\nAlso delete dependents: ${dependents.join(", ")}\n${dependencyKinds.join("\n")}`
+        : "";
     const confirmed = await ctx.ui.confirm(
       `Delete ${name}?`,
       `Delete this saved function on the active branch?${dependencyWarning}`,

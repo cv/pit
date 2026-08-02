@@ -120,7 +120,11 @@ describe("function registry handler", () => {
       ["sessionOnly", "async function sessionOnly() { return true; }"],
     ]);
     registerFunctionManager(pi as any, sessionFunctions, {
-      planSessionRemoval: (name) => [name],
+      planSessionRemoval: (name) => ({
+        directDependents: [],
+        transitiveDependents: [],
+        removalClosure: [name],
+      }),
       removeSession: async (name) => {
         sessionFunctions.delete(name);
         return [name];
@@ -140,7 +144,11 @@ describe("function registry handler", () => {
       projectFunctions: new Map([
         ["projectOnly", "/** Project only. @pit project */ async function projectOnly() {}"],
       ]),
-      planSessionRemoval: (name) => [name],
+      planSessionRemoval: (name) => ({
+        directDependents: [],
+        transitiveDependents: [],
+        removalClosure: [name],
+      }),
       removeSession: async (name) => [name],
     });
     const projectCtx = context({ mode: "tui" });
@@ -485,6 +493,7 @@ describe("pit extension", () => {
   it("lists and deletes saved functions through the /functions command", async () => {
     await run("async function baseTask() { return 1; }");
     await run("async function composedTask() { return (await baseTask()) + 1; }");
+    await run("async function transitiveTask() { return (await composedTask()) + 1; }");
     const ctx = context();
 
     await functionsCommand.handler("list", ctx);
@@ -494,7 +503,9 @@ describe("pit extension", () => {
     await functionsCommand.handler("delete baseTask", ctx);
     expect(ctx.ui.confirm).toHaveBeenCalledWith(
       "Delete baseTask?",
-      expect.stringContaining("Also delete dependents: composedTask"),
+      expect.stringMatching(
+        /Also delete dependents: composedTask, transitiveTask\nDirect: composedTask\nTransitive: transitiveTask/,
+      ),
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
@@ -506,6 +517,12 @@ describe("pit extension", () => {
       expect.objectContaining({
         customType: "pit-functions",
         data: { name: "composedTask", deleted: true },
+      }),
+    );
+    expect(branchEntries).toContainEqual(
+      expect.objectContaining({
+        customType: "pit-functions",
+        data: { name: "transitiveTask", deleted: true },
       }),
     );
     expect((await value("async ({ context }) => context.get()")).savedFunctions).toEqual([]);
