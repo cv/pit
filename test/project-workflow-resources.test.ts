@@ -6,6 +6,7 @@ const functionFiles = [
   ["analyzePitSession", ".pi/pit/functions/analyzePitSession.ts"],
   ["validatePit", ".pi/pit/functions/validatePit.ts"],
   ["preparePitDelivery", ".pi/pit/functions/preparePitDelivery.ts"],
+  ["waitForGitHubRun", ".pi/pit/functions/waitForGitHubRun.ts"],
 ] as const;
 
 describe("project agent workflow resources", () => {
