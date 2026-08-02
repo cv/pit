@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { formatSize, highlightCode } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
-import { resolveSavedFunctionReferences, validateTypeScript } from "./sandbox.js";
+import { validateTypeScript } from "./sandbox.js";
 
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
 const MAX_SAVED_FUNCTIONS = 64;
@@ -206,8 +206,9 @@ export function reconstructFunctions(
 }
 
 export interface FunctionManagerOptions {
-  onChange?: () => void;
   projectFunctions?: FunctionRegistry;
+  planSessionRemoval(name: string): string[];
+  removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
   removeFromProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
 }
@@ -240,7 +241,7 @@ function summarizeFunctions(
 export function registerFunctionManager(
   pi: ExtensionAPI,
   savedFunctions: FunctionRegistry,
-  options: FunctionManagerOptions = {},
+  options: FunctionManagerOptions,
 ): void {
   const projectFunctions = options.projectFunctions ?? new Map<string, string>();
   const functionSummary = () => summarizeFunctions(projectFunctions, savedFunctions);
@@ -273,26 +274,14 @@ export function registerFunctionManager(
       ctx.ui.notify(`Saved function "${name}" was not found`, "error");
       return false;
     }
-    const namesToDelete = new Set([name]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const [candidate, source] of savedFunctions) {
-        if (namesToDelete.has(candidate)) {
-          continue;
-        }
-        const dependsOnDeleted = resolveSavedFunctionReferences(source, savedFunctions).some(
-          (reference) => namesToDelete.has(reference.name),
-        );
-        if (dependsOnDeleted) {
-          namesToDelete.add(candidate);
-          changed = true;
-        }
-      }
+    let namesToDelete: string[];
+    try {
+      namesToDelete = options.planSessionRemoval(name);
+    } catch (error) {
+      ctx.ui.notify((error as Error).message, "error");
+      return false;
     }
-    const dependents = [...namesToDelete]
-      .filter((candidate) => candidate !== name)
-      .sort((a, b) => a.localeCompare(b));
+    const dependents = namesToDelete.filter((candidate) => candidate !== name);
     const dependencyWarning =
       dependents.length > 0 ? `\n\nAlso delete dependents: ${dependents.join(", ")}` : "";
     const confirmed = await ctx.ui.confirm(
@@ -302,16 +291,15 @@ export function registerFunctionManager(
     if (!confirmed) {
       return false;
     }
-    for (const deletedName of namesToDelete) {
-      savedFunctions.delete(deletedName);
-      pi.appendEntry(FUNCTION_ENTRY_TYPE, {
-        name: deletedName,
-        deleted: true,
-      } satisfies FunctionEntry);
+    let removed: string[];
+    try {
+      removed = await options.removeSession(name);
+    } catch (error) {
+      ctx.ui.notify((error as Error).message, "error");
+      return false;
     }
-    options.onChange?.();
     ctx.ui.notify(
-      `Deleted saved function${namesToDelete.size === 1 ? "" : "s"}: ${[...namesToDelete].join(", ")}`,
+      `Deleted saved function${removed.length === 1 ? "" : "s"}: ${removed.join(", ")}`,
       "info",
     );
     return true;

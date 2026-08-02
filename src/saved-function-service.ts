@@ -162,35 +162,39 @@ export class SavedFunctionService {
     });
   }
 
-  removeSession(name: string): Promise<string[]> {
+  planSessionRemoval(name: string): string[] {
     if (!this.#state.session.has(name)) {
       throw new Error(`Session function "${name}" was not found`);
     }
-    return this.#commit(() => {
-      const namesToRemove = new Set([name]);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        for (const [candidate, source] of this.#state.session) {
-          if (namesToRemove.has(candidate)) {
-            continue;
-          }
-          const dependsOnRemoved = resolveSavedFunctionReferences(
-            source,
-            this.#state.effective,
-          ).some((reference) => namesToRemove.has(reference.name));
-          if (dependsOnRemoved) {
-            namesToRemove.add(candidate);
-            changed = true;
-          }
+    const namesToRemove = new Set([name]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [candidate, source] of this.#state.session) {
+        if (namesToRemove.has(candidate)) {
+          continue;
+        }
+        const dependsOnRemoved = resolveSavedFunctionReferences(source, this.#state.effective).some(
+          (reference) => namesToRemove.has(reference.name),
+        );
+        if (dependsOnRemoved) {
+          namesToRemove.add(candidate);
+          changed = true;
         }
       }
+    }
+    return [...namesToRemove].sort((a, b) => a.localeCompare(b));
+  }
+
+  removeSession(name: string): Promise<string[]> {
+    return this.#commit(() => {
+      const namesToRemove = this.planSessionRemoval(name);
       for (const removedName of namesToRemove) {
         this.#appendEntry(FUNCTION_ENTRY_TYPE, { name: removedName, deleted: true });
         this.#state.session.delete(removedName);
       }
       reconcileFunctionState(this.#state);
-      return [...namesToRemove].sort((a, b) => a.localeCompare(b));
+      return namesToRemove;
     });
   }
 

@@ -116,10 +116,16 @@ describe("function registry handler", () => {
       },
     };
 
-    registerFunctionManager(
-      pi as any,
-      new Map([["sessionOnly", "async function sessionOnly() { return true; }"]]),
-    );
+    const sessionFunctions = new Map([
+      ["sessionOnly", "async function sessionOnly() { return true; }"],
+    ]);
+    registerFunctionManager(pi as any, sessionFunctions, {
+      planSessionRemoval: (name) => [name],
+      removeSession: async (name) => {
+        sessionFunctions.delete(name);
+        return [name];
+      },
+    });
     const sessionCtx = context({ mode: "tui" });
     sessionCtx.ui.select = vi
       .fn()
@@ -134,6 +140,8 @@ describe("function registry handler", () => {
       projectFunctions: new Map([
         ["projectOnly", "/** Project only. @pit project */ async function projectOnly() {}"],
       ]),
+      planSessionRemoval: (name) => [name],
+      removeSession: async (name) => [name],
     });
     const projectCtx = context({ mode: "tui" });
     projectCtx.ui.select = vi
@@ -463,9 +471,11 @@ describe("pit extension", () => {
       "error",
     );
 
+    const entriesBeforeCancellation = branchEntries.length;
     nonTui.ui.confirm = vi.fn(async () => false);
     await functionsCommand.handler("delete solo", nonTui);
     expect((await value("async ({ context }) => context.get()")).savedFunctions).toEqual(["solo"]);
+    expect(branchEntries).toHaveLength(entriesBeforeCancellation);
     nonTui.ui.confirm = vi.fn(async () => true);
     await functionsCommand.handler("delete solo", nonTui);
     expect((await value("async ({ context }) => context.get()")).savedFunctions).toEqual([]);

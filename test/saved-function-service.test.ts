@@ -2,7 +2,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFunctionState, createFunctionStateCommitQueue } from "../src/function-state.js";
+import {
+  createFunctionState,
+  createFunctionStateCommitQueue,
+  refreshEffectiveFunctions,
+} from "../src/function-state.js";
 import { SavedFunctionService } from "../src/saved-function-service.js";
 import type { FunctionActivity, FunctionEntry } from "../src/saved-functions.js";
 
@@ -155,6 +159,31 @@ describe("SavedFunctionService", () => {
         context: { cwd, isProjectTrusted: () => true },
       }),
     ).resolves.toBe(false);
+  });
+
+  it("plans and serializes dependency-aware session removals", async () => {
+    const { state, entries, service } = fixture();
+    state.session.set("baseHelper", "async function baseHelper() { return 1; }");
+    state.session.set(
+      "dependentHelper",
+      "async function dependentHelper() { return (await baseHelper()) + 1; }",
+    );
+    refreshEffectiveFunctions(state);
+
+    expect(service.planSessionRemoval("baseHelper")).toEqual(["baseHelper", "dependentHelper"]);
+    expect(() => service.planSessionRemoval("missingHelper")).toThrow(
+      'Session function "missingHelper" was not found',
+    );
+
+    const first = service.removeSession("baseHelper");
+    const concurrent = service.removeSession("baseHelper");
+    await expect(first).resolves.toEqual(["baseHelper", "dependentHelper"]);
+    await expect(concurrent).rejects.toThrow('Session function "baseHelper" was not found');
+    expect(state.session).toHaveLength(0);
+    expect(entries.map(({ entry }) => entry)).toEqual([
+      { name: "baseHelper", deleted: true },
+      { name: "dependentHelper", deleted: true },
+    ]);
   });
 
   it("validates save-only requests and ignores anonymous commits", async () => {

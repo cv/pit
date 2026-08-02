@@ -99,9 +99,8 @@ function registerSavedFunctionManager({
 }: FunctionManagerRegistration): void {
   registerFunctionManager(pi, functionState.session, {
     projectFunctions: functionState.project,
-    onChange: () => {
-      reconcileFunctionState(functionState);
-    },
+    planSessionRemoval: (name) => savedFunctionService.planSessionRemoval(name),
+    removeSession: (name) => savedFunctionService.removeSession(name),
     saveToProject: async (name, ctx) => {
       const summary = await ctx.ui.input(
         `Save ${name} to project`,
