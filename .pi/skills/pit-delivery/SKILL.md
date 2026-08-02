@@ -16,34 +16,34 @@ description: Implements and delivers Pit issues with typed tools, bounded valida
 
 ## Validate
 
-Invoke the trusted project function:
+Invoke the trusted project function once:
 
 ```ts
 validatePit({ coverage: true, packageCheck: true })
 ```
 
-It runs check and tests together, then coverage, then package verification. Do not run full tests and coverage concurrently.
+It runs check and tests together, then coverage, then package verification. A failed gate includes a bounded diagnostic tail. Read that output before you rerun a gate. Do not run full tests and coverage concurrently.
 
-Before delivery, invoke:
+Before delivery, inspect Git readiness without repeating validation:
 
 ```ts
-preparePitDelivery({ coverage: true, packageCheck: true })
+preparePitDelivery()
 ```
 
-Review its Git status and diff check. Format only changed files.
+Review its Git status, unstaged diff check, and staged diff check. Format only changed files.
 
 ## Finish an issue
 
 For non-interactive changes:
 
 1. Validate.
-2. Review `git.diff(["--check"])` and `git.status(["--short", "--branch"])`.
+2. Prepare delivery.
 3. Commit with tests and the closing keyword.
 4. Push, verify CI, update the epic, and confirm a clean synchronized worktree.
 
 For TUI, extension, reload, saved-function, sandbox, progress, or renderer behavior:
 
-1. Validate.
+1. Validate and prepare delivery.
 2. Commit and push **without** `Closes #...`.
 3. Ask the user to run `/reload`.
 4. Exercise live partial state and expanded final state interactively.
@@ -52,9 +52,16 @@ For TUI, extension, reload, saved-function, sandbox, progress, or renderer behav
 7. Make the final closing commit only after observed acceptance.
 8. Push, verify CI, update the epic, and confirm a clean synchronized worktree.
 
+Wait for CI with:
+
+```ts
+waitForGitHubRun({ id, repo, raise: true })
+```
+
 ## Failure recovery
 
-- Anchor/revision failure: re-read; do not guess another anchor.
+- Gate failure: read the bounded diagnostic tail before rerunning validation.
+- Anchor or revision failure: re-read; do not guess another anchor.
 - TypeScript tool syntax failure: move content to params and reduce nesting.
 - Two failures of one class: stop varying syntax and split the workflow.
 - Truncated machine output: aggregate in the capability or saved function before parsing it.

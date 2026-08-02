@@ -1,20 +1,19 @@
 /**
- * Validates Pit and reports bounded Git delivery readiness without mutating Git or issues.
+ * Reports bounded Git delivery readiness without rerunning validation.
  * @pit project
  */
-async function preparePitDelivery(
-  { git },
-  input: { coverage?: boolean; packageCheck?: boolean } = {},
-) {
-  const validation = await validatePit(input);
-  const [status, diffCheck] = await Promise.all([
+async function preparePitDelivery({ git }) {
+  const [status, diffCheck, stagedDiffCheck] = await Promise.all([
     git.status(["--short", "--branch"]),
     git.diff(["--check"]),
+    git.diff(["--cached", "--check"]),
   ]);
+  const unstaged = (diffCheck.stdout || diffCheck.stderr).trim();
+  const staged = (stagedDiffCheck.stdout || stagedDiffCheck.stderr).trim();
   return {
-    validation,
     status: status.stdout.trim(),
-    diffCheck: (diffCheck.stdout || diffCheck.stderr).trim(),
-    ready: diffCheck.code === 0,
+    diffCheck: unstaged,
+    stagedDiffCheck: staged,
+    ready: diffCheck.code === 0 && stagedDiffCheck.code === 0,
   };
 }

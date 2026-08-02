@@ -1,18 +1,31 @@
 /**
- * Waits for a GitHub Actions run. Use when waiting for CI.
+ * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
  *
  * @pit project
+ * @param input.attempts - Maximum status checks. The default is 36.
+ * @param input.intervalMs - Delay between checks. The default is 5000 ms.
+ * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
  */
 async function waitForGitHubRun(
-  { gh, shell },
-  input: { id: number; repo: string; attempts?: number },
+  { gh },
+  input: {
+    id: number;
+    repo: string;
+    attempts?: number;
+    intervalMs?: number;
+    raise?: boolean;
+  },
 ) {
-  const attempts = input.attempts ?? 36;
+  const intervalMs = Math.max(1000, Math.min(input.intervalMs ?? 5000, 30000));
+  const requestedAttempts = Math.max(1, Math.min(input.attempts ?? 36, 120));
+  const maximumAttempts = Math.floor(290000 / intervalMs) + 1;
+  const attempts = Math.min(requestedAttempts, maximumAttempts);
+  const raise = input.raise ?? true;
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const result = await gh.runView(input.id, { repo: input.repo });
+    const result = await gh.runView(input.id, { repo: input.repo, raise: true });
     const run = JSON.parse(result.stdout);
     if (run.status === "completed") {
-      return {
+      const summary = {
         attempt,
         status: run.status,
         conclusion: run.conclusion,
@@ -26,8 +39,19 @@ async function waitForGitHubRun(
           }),
         ),
       };
+      if (raise && run.conclusion !== "success") {
+        throw new Error(
+          `GitHub Actions run ${input.id} completed with ${run.conclusion || "no conclusion"}`,
+        );
+      }
+      return summary;
     }
-    await shell.execFile("sleep", ["5"], { raise: true });
+    if (attempt < attempts) {
+      await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+    }
   }
-  return { status: "timed_out", id: input.id };
+  if (raise) {
+    throw new Error(`GitHub Actions run ${input.id} did not complete after ${attempts} checks`);
+  }
+  return { status: "timed_out", id: input.id, attempts };
 }

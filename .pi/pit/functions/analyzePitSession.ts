@@ -37,13 +37,16 @@ for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
     failures.push({ ...call, error: text.split("\n")[0] });
   }
 }
+const gateLabel = /validation|coverage|static checks?|tests?|package|CI run/i;
 const category = (failure) =>
   /Anchor mismatch|anchor references line/i.test(failure.error) ? "anchor" :
   /Revision mismatch/i.test(failure.error) ? "revision" :
   /TypeScript validation failed/i.test(failure.error) ? "typescript" :
+  gateLabel.test(failure.label) && /Command failed|Saved function .* failed/i.test(failure.error) ? "gate" :
   /Command failed/i.test(failure.error) ? "command" : "logic";
 const categories = {};
 for (const failure of failures) categories[category(failure)] = (categories[category(failure)] || 0) + 1;
+const workflowFailures = failures.filter((failure) => category(failure) !== "gate");
 const execFilePrograms = {};
 for (const record of records) {
   for (const match of record.code.matchAll(/shell\.execFile\(\s*["']([^"']+)/g)) {
@@ -51,24 +54,34 @@ for (const record of records) {
   }
 }
 const labels = {};
-for (const failure of failures) labels[failure.label] = (labels[failure.label] || 0) + 1;
+for (const failure of workflowFailures) labels[failure.label] = (labels[failure.label] || 0) + 1;
+const recommendations = [];
+if (categories.gate) recommendations.push("Use the first gate's bounded diagnostics before rerunning validation.");
+if (categories.typescript) recommendations.push("After a TypeScript submission failure, inspect the contract and simplify the next call.");
+if (categories.anchor || categories.revision) recommendations.push("Re-read the file before retrying an anchored mutation.");
+if (Object.values(labels).some((count) => count > 1)) recommendations.push("Split workflows that repeat the same failing label.");
+if (recommendations.length === 0) recommendations.push("No recurring workflow failure needs action.");
 const limit = Number(process.argv[2]);
 console.log(JSON.stringify({
   file: process.argv[1],
   toolCalls: records.length,
   failures: failures.length,
   failureRatePercent: Number((100 * failures.length / Math.max(1, records.length)).toFixed(1)),
+  workflowFailures: workflowFailures.length,
+  workflowFailureRatePercent: Number((100 * workflowFailures.length / Math.max(1, records.length)).toFixed(1)),
+  gateFailures: failures.length - workflowFailures.length,
   categories,
   execFilePrograms,
   shellExecCalls: records.filter((record) => /shell\.exec\(/.test(record.code)).length,
   promiseAllCalls: records.filter((record) => /Promise\.all/.test(record.code)).length,
   workspaceBatchCalls: records.filter((record) => /workspace\.batch\(/.test(record.code)).length,
-  repeatedFailureLabels: Object.entries(labels).sort((a, b) => b[1] - a[1]).slice(0, limit),
+  repeatedWorkflowFailureLabels: Object.entries(labels).sort((a, b) => b[1] - a[1]).slice(0, limit),
   recentFailureExamples: failures.slice(-limit).map((failure) => ({
     category: category(failure),
     label: failure.label,
     error: failure.error,
   })),
+  recommendations,
 }, null, 2));
 `;
   const result = await shell.execFile("node", ["-e", script, file, String(examples)], {
