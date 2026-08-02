@@ -10,23 +10,32 @@ async function inspectPitCoverageGaps(
   input: { files?: string[]; limit?: number } = {},
 ) {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 500));
-  const requested = new Set(input.files ?? []);
-  const [summaryResult, searchResult] = await Promise.all([
+  const requested = [...new Set(input.files ?? [])];
+  const paths =
+    requested.length > 0 ? requested.map((file) => `coverage/${file}.html`) : ["coverage"];
+  const [summaryResult, searchResults] = await Promise.all([
     workspace
       .read("coverage/coverage-summary.json", { format: "raw" })
       .then((result) => JSON.parse(result.content))
       .catch(() => undefined),
-    workspace
-      .search("cbranch-no|cstat-no|fstat-no", {
-        path: "coverage",
-        glob: "**/*.ts.html",
-        regex: true,
-        contextLines: 0,
-        limit,
-      })
-      .catch(() => undefined),
+    Promise.all(
+      paths.map((path) =>
+        workspace
+          .search("cbranch-no|cstat-no|fstat-no", {
+            path,
+            ...(path === "coverage" ? { glob: "**/*.ts.html" } : {}),
+            regex: true,
+            contextLines: 0,
+            limit,
+          })
+          .catch(() => undefined),
+      ),
+    ),
   ]);
-  if (!summaryResult && !searchResult) {
+  const availableSearches = searchResults.filter(
+    (result): result is NonNullable<typeof result> => result !== undefined,
+  );
+  if (!summaryResult && availableSearches.length === 0) {
     return {
       available: false,
       message: "Coverage artifacts are unavailable. Run validatePit({ coverage: true }) first.",
@@ -44,19 +53,18 @@ async function inspectPitCoverageGaps(
     const relative = file.startsWith("coverage/") ? file.slice(9) : file;
     return relative.endsWith(".html") ? relative.slice(0, -5) : relative;
   };
-  const gaps = (searchResult?.matches ?? [])
-    .map((match) => ({
-      file: sourceFile(match.file),
-      coverageFile: match.file,
-      coverageLine: match.line,
-      kind: match.text.includes("cbranch-no")
-        ? "branch"
-        : match.text.includes("fstat-no")
-          ? "function"
-          : "statement",
-      code: decode(match.text),
-    }))
-    .filter((gap) => requested.size === 0 || requested.has(gap.file));
+  const matches = availableSearches.flatMap((result) => result.matches);
+  const gaps = matches.slice(0, limit).map((match) => ({
+    file: sourceFile(match.file),
+    coverageFile: match.file,
+    coverageLine: match.line,
+    kind: match.text.includes("cbranch-no")
+      ? "branch"
+      : match.text.includes("fstat-no")
+        ? "function"
+        : "statement",
+    code: decode(match.text),
+  }));
   const totals = summaryResult?.total;
   return {
     available: true,
@@ -69,6 +77,6 @@ async function inspectPitCoverageGaps(
         }
       : undefined,
     gaps,
-    truncated: Boolean(searchResult?.truncated) || gaps.length >= limit,
+    truncated: availableSearches.some((result) => result.truncated) || matches.length > gaps.length,
   };
 }
