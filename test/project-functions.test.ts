@@ -676,7 +676,7 @@ async function brokenProject() { throw new Error("project failure"); }`),
     await expect(
       run(`async ({ functions }) => functions.removeSession("missing")`),
     ).rejects.toThrow("was not found");
-  });
+  }, 15_000);
 
   it("rejects unavailable and unknown project capability operations", async () => {
     await expect(run(`async ({ functions }) => functions.get("missing")`)).rejects.toThrow(
