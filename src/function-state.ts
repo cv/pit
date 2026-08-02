@@ -10,6 +10,8 @@ export interface FunctionState {
   effective: FunctionRegistry;
   metadata: ProjectFunctionMetadataRegistry;
   candidateMetadata: ProjectFunctionMetadataRegistry;
+  sessionRunCounts: Map<string, number>;
+  promotionSuggested: Set<string>;
 }
 
 export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promise<T>;
@@ -23,6 +25,8 @@ export function createFunctionState(): FunctionState {
     effective: new Map(),
     metadata: new Map(),
     candidateMetadata: new Map(),
+    sessionRunCounts: new Map(),
+    promotionSuggested: new Set(),
   };
 }
 
@@ -36,6 +40,11 @@ export function createFunctionStateCommitQueue(): FunctionStateCommit {
     );
     return result;
   };
+}
+
+export function resetFunctionUsage(state: FunctionState): void {
+  state.sessionRunCounts.clear();
+  state.promotionSuggested.clear();
 }
 
 export function refreshEffectiveFunctions(state: FunctionState): void {

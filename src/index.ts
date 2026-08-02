@@ -12,6 +12,7 @@ import {
   createFunctionStateCommitQueue,
   type FunctionState,
   reconcileFunctionState,
+  resetFunctionUsage,
 } from "./function-state.js";
 import { createCapabilities } from "./host-capabilities.js";
 import {
@@ -86,6 +87,17 @@ export function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>
   return catalog;
 }
 
+export function promotionSuggestionNotice(names: readonly string[]): string {
+  const suggested = [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  const shown = suggested.slice(0, 5);
+  if (shown.length === 0) {
+    return "";
+  }
+  const omitted =
+    suggested.length > shown.length ? `; … ${suggested.length - shown.length} more` : "";
+  return `\n[Promotion suggestion: heavily reused session function${shown.length === 1 ? "" : "s"} ${shown.join(", ")}. Use functions.promote(name, summary) explicitly in an enabled, trusted project${omitted}.]`;
+}
+
 interface FunctionManagerRegistration {
   pi: ExtensionAPI;
   functionState: FunctionState;
@@ -129,18 +141,67 @@ function registerSavedFunctionManager({
   });
 }
 
+function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionState): void {
+  pi.on("session_start", async (_event, ctx) => {
+    resetFunctionUsage(functionState);
+    const config = await loadProjectFunctionConfig(ctx);
+    functionState.projectEnabled = config.enabled;
+    const errors = config.enabled
+      ? await loadProjectFunctions(
+          ctx,
+          functionState.projectCandidates,
+          functionState.candidateMetadata,
+        )
+      : [];
+    if (!config.enabled) {
+      functionState.projectCandidates.clear();
+      functionState.candidateMetadata.clear();
+    }
+    reconstructFunctions(
+      functionState.session,
+      ctx.sessionManager.getBranch(),
+      functionState.projectCandidates,
+      new Map(),
+    );
+    errors.push(...reconcileFunctionState(functionState));
+    if (config.error && ctx.hasUI) {
+      ctx.ui.notify(config.error, "warning");
+    }
+    if (errors.length > 0 && ctx.hasUI) {
+      const shown = errors.slice(0, 3).join("; ");
+      const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
+      ctx.ui.notify(`Some project functions could not be loaded: ${shown}${omitted}`, "warning");
+    }
+    pi.setActiveTools(["typescript"]);
+  });
+  pi.on("session_tree", (_event, ctx) => {
+    resetFunctionUsage(functionState);
+    reconstructFunctions(
+      functionState.session,
+      ctx.sessionManager.getBranch(),
+      functionState.projectCandidates,
+      new Map(),
+    );
+    reconcileFunctionState(functionState);
+  });
+  pi.on("before_agent_start", (event) => {
+    const catalog = projectFunctionCatalog(functionState.metadata, functionState.session);
+    if (catalog) {
+      return { systemPrompt: `${event.systemPrompt}\n\n${catalog}` };
+    }
+  });
+}
+
 export default function pit(pi: ExtensionAPI) {
   registerRuntimeControlCommands(pi);
   registerSessionControlCommands(pi);
   const functionState = createFunctionState();
-
   const commitFunctionState = createFunctionStateCommitQueue();
   const savedFunctionService = new SavedFunctionService({
     state: functionState,
     commit: commitFunctionState,
     appendEntry: (type, entry) => pi.appendEntry(type, entry),
   });
-
   registerSavedFunctionManager({ pi, functionState, savedFunctionService });
 
   pi.registerTool({
@@ -172,6 +233,7 @@ export default function pit(pi: ExtensionAPI) {
     // biome-ignore lint/complexity/useMaxParams: Pi defines the tool execute callback signature.
     async execute(_id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
+      const promotionSuggestions: string[] = [];
       const executionProgress = new ExecutionProgressController(
         update
           ? (snapshot) =>
@@ -212,6 +274,7 @@ export default function pit(pi: ExtensionAPI) {
               functionState,
               commitFunctionState,
               activity: functionActivity,
+              promotionSuggestions,
               ...(onShellProgress ? { onShellProgress } : {}),
             }),
             {
@@ -239,6 +302,7 @@ export default function pit(pi: ExtensionAPI) {
             ? `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}" without executing it${invocationGuidance}]`
             : `\n[Saved ${projectMetadata ? "project " : ""}function "${namedFunction}"${invocationGuidance}]`
           : "";
+        const promotionNotice = promotionSuggestionNotice(promotionSuggestions);
         return {
           content: [
             {
@@ -247,6 +311,7 @@ export default function pit(pi: ExtensionAPI) {
                 output.content +
                 (output.truncated ? "\n[Result truncated]" : "") +
                 savedNotice +
+                promotionNotice +
                 savedFunctionCatalogNotice(functionState.session),
             },
           ],
@@ -264,50 +329,5 @@ export default function pit(pi: ExtensionAPI) {
     },
   });
 
-  pi.on("session_start", async (_event, ctx) => {
-    const config = await loadProjectFunctionConfig(ctx);
-    functionState.projectEnabled = config.enabled;
-    const errors = config.enabled
-      ? await loadProjectFunctions(
-          ctx,
-          functionState.projectCandidates,
-          functionState.candidateMetadata,
-        )
-      : [];
-    if (!config.enabled) {
-      functionState.projectCandidates.clear();
-      functionState.candidateMetadata.clear();
-    }
-    reconstructFunctions(
-      functionState.session,
-      ctx.sessionManager.getBranch(),
-      functionState.projectCandidates,
-      new Map(),
-    );
-    errors.push(...reconcileFunctionState(functionState));
-    if (config.error && ctx.hasUI) {
-      ctx.ui.notify(config.error, "warning");
-    }
-    if (errors.length > 0 && ctx.hasUI) {
-      const shown = errors.slice(0, 3).join("; ");
-      const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
-      ctx.ui.notify(`Some project functions could not be loaded: ${shown}${omitted}`, "warning");
-    }
-    pi.setActiveTools(["typescript"]);
-  });
-  pi.on("session_tree", (_event, ctx) => {
-    reconstructFunctions(
-      functionState.session,
-      ctx.sessionManager.getBranch(),
-      functionState.projectCandidates,
-      new Map(),
-    );
-    reconcileFunctionState(functionState);
-  });
-  pi.on("before_agent_start", (event) => {
-    const catalog = projectFunctionCatalog(functionState.metadata, functionState.session);
-    if (catalog) {
-      return { systemPrompt: `${event.systemPrompt}\n\n${catalog}` };
-    }
-  });
+  registerFunctionLifecycle(pi, functionState);
 }

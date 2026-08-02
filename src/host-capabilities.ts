@@ -74,6 +74,9 @@ async function readHttpBody(
   return { body: Buffer.concat(chunks, bytes).toString("utf8"), truncated };
 }
 
+const PROMOTION_SUGGESTION_RUNS = 5;
+const TEMPORARY_FUNCTION_NAME = /(?:smoke|scratch|temp|tmp|debug|test)/i;
+
 export interface HostCapabilityServices {
   pi: ExtensionAPI;
   ctx: ExtensionContext;
@@ -81,6 +84,7 @@ export interface HostCapabilityServices {
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];
   onShellProgress?: (event: ShellProgressEvent) => void;
+  promotionSuggestions: string[];
 }
 
 interface ProcessCapabilityHandlers {
@@ -155,6 +159,7 @@ export function createCapabilities({
   functionState,
   commitFunctionState,
   activity,
+  promotionSuggestions,
   onShellProgress,
 }: HostCapabilityServices): CapabilityHandler {
   const processHandlers = createProcessCapabilityHandlers({
@@ -266,16 +271,25 @@ export function createCapabilities({
       if (!functionState.effective.has(name)) {
         throw new Error(`Saved function "${name}" is unavailable`);
       }
-      activity.push({
-        action: "run",
+      const scope = functionRunScope(
         name,
-        scope: functionRunScope(
-          name,
-          functionState.project,
-          functionState.session,
-          functionContext?.scope,
-        ),
-      });
+        functionState.project,
+        functionState.session,
+        functionContext?.scope,
+      );
+      activity.push({ action: "run", name, scope });
+      if (
+        scope === "session" &&
+        !functionState.project.has(name) &&
+        !TEMPORARY_FUNCTION_NAME.test(name)
+      ) {
+        const runs = (functionState.sessionRunCounts.get(name) ?? 0) + 1;
+        functionState.sessionRunCounts.set(name, runs);
+        if (runs >= PROMOTION_SUGGESTION_RUNS && !functionState.promotionSuggested.has(name)) {
+          functionState.promotionSuggested.add(name);
+          promotionSuggestions.push(name);
+        }
+      }
       return null;
     }
 

@@ -4,6 +4,7 @@ import {
   createFunctionStateCommitQueue,
   effectiveRegistry,
   refreshEffectiveFunctions,
+  resetFunctionUsage,
 } from "../src/function-state.js";
 
 describe("function state service", () => {
@@ -33,5 +34,16 @@ describe("function state service", () => {
     await expect(first).rejects.toThrow("expected");
     await second;
     expect(order).toEqual(["first:start", "first:end", "second"]);
+  });
+
+  it("resets in-memory usage state for reload and branch navigation", () => {
+    const state = createFunctionState();
+    state.sessionRunCounts.set("reusable", 4);
+    state.promotionSuggested.add("suggested");
+
+    resetFunctionUsage(state);
+
+    expect(state.sessionRunCounts).toHaveLength(0);
+    expect(state.promotionSuggested).toHaveLength(0);
   });
 });

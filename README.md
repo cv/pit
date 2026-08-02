@@ -216,6 +216,7 @@ The effective registry contains project functions and session functions. A sessi
 - 1 MB of combined saved source.
 
 Successful tool results include a compact, compaction-safe catalog of active session-function signatures. Project functions are documented in the system prompt instead of being repeated in every result. Catalogs contain only complete signatures and report omitted entries when they reach the output budget. `context.get().savedFunctions` also lists all effective names.
+Pit tracks only in-memory invocation counts by function name; it does not retain arguments, source, or results as usage telemetry. After five invocations in one loaded branch lifecycle, a non-temporary session function receives one bounded suggestion to use `functions.promote(name, summary)`. Project functions, session overrides, and names that look temporary are excluded. Reload and session-tree navigation reset counts and suggestion state.
 
 ### Share trusted project functions
 

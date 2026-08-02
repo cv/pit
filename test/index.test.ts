@@ -252,6 +252,22 @@ describe("pit extension", () => {
     );
   });
 
+  it("suggests project promotion once after repeated session reuse", async () => {
+    await run("async function reusableWorkflow() { return true; }");
+    for (let index = 0; index < 4; index++) {
+      const result = await run("reusableWorkflow()");
+      expect(result.content[0].text).not.toContain("Promotion suggestion");
+    }
+    const threshold = await run("reusableWorkflow()");
+    expect(threshold.content[0].text).toContain(
+      "Promotion suggestion: heavily reused session function reusableWorkflow",
+    );
+    expect(threshold.content[0].text).toContain("functions.promote(name, summary)");
+    const repeated = await run("reusableWorkflow()");
+    expect(repeated.content[0].text).not.toContain("Promotion suggestion");
+    await value(`async ({ functions }) => functions.removeSession("reusableWorkflow")`);
+  });
+
   it("automatically saves and invokes named functions", async () => {
     const defined = await run(`async function greet(_capabilities, input) {
       return { greeting: "Hello, " + (input?.name ?? "world") + "!" };
