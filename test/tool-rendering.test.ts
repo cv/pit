@@ -327,6 +327,116 @@ describe("tool rendering", () => {
     expect(streaming).toContain("succeeded");
     expect(streaming).toContain("additional capability traces omitted");
 
+    const now = Date.now();
+    const polling = renderToolResult(
+      {
+        content: [{ type: "text", text: "Running TypeScript…" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          traces: Array.from({ length: 30 }, (_, index) => ({
+            id: index + 1,
+            sequence: index + 1,
+            capability: "gh",
+            method: "runView",
+            arguments: [],
+            startedAt: now - (29 - index) * 5000,
+            ...(index < 29 ? { durationMs: 100 } : {}),
+            status: index < 29 ? ("succeeded" as const) : ("running" as const),
+            function: {
+              invocationId: 1,
+              name: "waitForGitHubRun",
+              scope: "project" as const,
+              depth: 1,
+            },
+          })),
+          progress: Array.from({ length: 30 }, (_, index) => ({
+            id: index + 1,
+            command: "gh run view 42",
+            status: index < 29 ? ("done" as const) : ("running" as const),
+            ...(index < 29 ? { code: 0 } : {}),
+            output: index < 29 ? `poll output ${index + 1}` : "",
+          })),
+        },
+      },
+      { expanded: true, isPartial: true },
+    );
+    expect(polling.match(/gh\.runView/g)).toHaveLength(1);
+    expect(polling).toContain("29 succeeded, 1 running over");
+    expect(polling).toContain("[running, 29 done (0)] gh run view 42");
+    expect(polling).not.toContain("poll output");
+
+    const completedPolling = renderToolResult(
+      {
+        content: [{ type: "text", text: "Running TypeScript…" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          traces: [1, 2].map((id) => ({
+            id,
+            sequence: id,
+            capability: "gh",
+            method: "runView",
+            arguments: [],
+            startedAt: id * 1000,
+            durationMs: 100,
+            status: "succeeded" as const,
+          })),
+          progress: [1, 2].map((id) => ({
+            id,
+            command: "gh run view 42",
+            status: "done" as const,
+            code: 0,
+            output: `completed output ${id}`,
+          })),
+        },
+      },
+      { expanded: true, isPartial: true },
+    );
+    expect(completedPolling).toContain("gh.runView");
+    expect(completedPolling).toContain("succeeded ×2 over");
+    expect(completedPolling).toContain("[2 done (0)] gh run view 42");
+    expect(completedPolling).not.toContain("completed output");
+
+    const visibleFailures = renderToolResult(
+      {
+        content: [{ type: "text", text: "Running TypeScript…" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          traces: ["failed", "rejected"].map((status, index) => ({
+            id: index + 1,
+            sequence: index + 1,
+            capability: "gh",
+            method: "runView",
+            arguments: [],
+            startedAt: index,
+            durationMs: 1,
+            status: status as "failed" | "rejected",
+          })),
+          progress: [
+            {
+              id: 1,
+              command: "gh run view 42",
+              status: "done" as const,
+              code: 1,
+              output: "API failed",
+            },
+            { id: 2, command: "watch", status: "running" as const, output: "earlier" },
+            { id: 3, command: "watch", status: "running" as const, output: "latest" },
+          ],
+        },
+      },
+      { expanded: true, isPartial: true },
+    );
+    expect(visibleFailures.match(/gh\.runView/g)).toHaveLength(2);
+    expect(visibleFailures).toContain("failed");
+    expect(visibleFailures).toContain("rejected");
+    expect(visibleFailures).toContain("[done (1)] gh run view 42");
+    expect(visibleFailures).toContain("API failed");
+    expect(visibleFailures).toContain("[2 running] watch");
+    expect(visibleFailures).toContain("latest");
+
     const finalDashboard = renderToolResult(
       {
         content: [{ type: "text", text: "done" }],

@@ -5,7 +5,7 @@ import {
   describeCapabilityCall,
   inferCapabilityCall,
 } from "./capability-presentation.js";
-import type { ExecutionProgressSnapshot } from "./execution-types.js";
+import type { ExecutionProgressSnapshot, ShellProgress } from "./execution-types.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import { renderExecutionDashboard } from "./renderers/execution-dashboard.js";
 import { renderResultValue } from "./renderers/generic.js";
@@ -262,6 +262,62 @@ interface ResultRenderingState {
   structuredResult?: RenderedResultValue;
 }
 
+interface ShellProgressGroup {
+  command: string;
+  entries: [ShellProgress, ...ShellProgress[]];
+}
+
+function failedShellProgress(progress: ShellProgress): boolean {
+  return progress.status === "done" && progress.code !== 0;
+}
+
+function groupAdjacentShellProgress(progress: ShellProgress[]): ShellProgressGroup[] {
+  const groups: ShellProgressGroup[] = [];
+  for (const entry of progress) {
+    const previous = groups.at(-1);
+    const previousEntry = previous?.entries.at(-1);
+    if (
+      previous &&
+      previousEntry &&
+      previous.command === entry.command &&
+      !failedShellProgress(previousEntry) &&
+      !failedShellProgress(entry)
+    ) {
+      previous.entries.push(entry);
+    } else {
+      groups.push({ command: entry.command, entries: [entry] });
+    }
+  }
+  return groups;
+}
+
+function shellProgressState(group: ShellProgressGroup): string {
+  if (group.entries.length === 1) {
+    const entry = group.entries[0];
+    return entry.status === "done" ? `done (${entry.code})` : "running";
+  }
+  const running = group.entries.filter((entry) => entry.status === "running").length;
+  const completedByCode = new Map<number | undefined, number>();
+  for (const entry of group.entries) {
+    if (entry.status === "done") {
+      completedByCode.set(entry.code, (completedByCode.get(entry.code) ?? 0) + 1);
+    }
+  }
+  const states = [
+    ...(running > 0 ? [`${running === 1 ? "" : `${running} `}running`] : []),
+    ...[...completedByCode].map(([code, count]) => `${count} done (${code})`),
+  ];
+  return states.join(", ");
+}
+
+function shellProgressOutput(group: ShellProgressGroup): string {
+  const latest = group.entries[group.entries.length - 1] as ShellProgress;
+  if (group.entries.length === 1 || latest.status === "running") {
+    return latest.output;
+  }
+  return "";
+}
+
 function renderPartialToolResult(input: {
   expanded: boolean;
   details?: TypeScriptDetails;
@@ -275,14 +331,15 @@ function renderPartialToolResult(input: {
   );
   if (input.expanded) {
     text += renderExecutionDashboard(input.details, input.theme);
-    for (const progress of input.details?.progress?.slice(-4) ?? []) {
-      const state = progress.status === "done" ? `done (${progress.code})` : "running";
-      text += `\n${input.theme.fg("accent", `[${state}]`)} ${input.theme.fg("dim", progress.command)}`;
-      if (progress.output) {
-        text += `\n${input.theme.fg("muted", progress.output)}`;
+    const progressGroups = groupAdjacentShellProgress(input.details?.progress ?? []);
+    for (const group of progressGroups.slice(-4)) {
+      text += `\n${input.theme.fg("accent", `[${shellProgressState(group)}]`)} ${input.theme.fg("dim", group.command)}`;
+      const output = shellProgressOutput(group);
+      if (output) {
+        text += `\n${input.theme.fg("muted", output)}`;
       }
     }
-    if (input.details?.progressTruncated) {
+    if (input.details?.progressTruncated || progressGroups.length > 4) {
       text += `\n${input.theme.fg("warning", "… earlier shell calls omitted")}`;
     }
   }
