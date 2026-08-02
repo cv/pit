@@ -62,6 +62,7 @@ describe("project agent workflow resources", () => {
     expect(preparation).not.toContain("validatePit(");
     expect(preparation).toContain('["--cached", "--check"]');
     expect(wait).toContain("setTimeout");
+    expect(wait).toContain("input.initialDelayMs ?? 30000");
     expect(wait).not.toContain("shell.execFile");
     expect(skill).toContain("preparePitDelivery()");
     expect(skill).toContain("waitForGitHubRun({ id, repo, raise: true })");
