@@ -33,7 +33,6 @@ export type ResultRendererKey =
 export interface CapabilityMethodDefinition {
   declaration: string;
   documentation: string;
-  promptSummary?: string;
   callDescription: string;
   resultRenderer?: ResultRendererKey;
   minimumArguments: number;

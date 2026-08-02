@@ -78,6 +78,7 @@ Pit injects only the capabilities that submitted code requests.
 | `http` | Send an HTTP request and receive a bounded response body. |
 | `ui` | Ask for confirmation, text, or a selection, and show notifications. |
 | `context` | Inspect the active Pi and Pit context. |
+| `session` | Inspect session metadata and manage its display name. |
 | `functions` | Inspect and remove trusted project functions. |
 
 See [Capability reference](#capability-reference) for method details.
@@ -381,6 +382,12 @@ UI methods require a mode that provides a UI.
 ### `context`
 
 - `get()` returns the working directory, mode, model, thinking level, session file, and effective, project, and session function names.
+
+### `session`
+
+- `info()` returns the session ID, file, display name, entry counts, leaf ID, and context usage.
+- `getName()` returns the session display name.
+- `setName(name)` sets the session display name.
 
 ### `functions`
 

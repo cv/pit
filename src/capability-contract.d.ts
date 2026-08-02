@@ -281,6 +281,24 @@ interface PitContextCapability {
   }>;
 }
 
+interface PitSessionCapability {
+  info(): Promise<{
+    id: string;
+    file: string | undefined;
+    name: string | undefined;
+    leafId: string | null;
+    entryCount: number;
+    branchEntryCount: number;
+    contextTokens: number | null | undefined;
+    contextWindow: number | undefined;
+    contextPercent: number | null | undefined;
+  }>;
+
+  getName(): Promise<string | undefined>;
+
+  setName(name: string): Promise<{ name: string }>;
+}
+
 interface PitFunctionsCapability {
   list(): Promise<PitProjectFunctionMetadata[]>;
 
@@ -306,6 +324,7 @@ interface PitCapabilities {
   http: PitHttpCapability;
   ui: PitUiCapability;
   context: PitContextCapability;
+  session: PitSessionCapability;
   functions: PitFunctionsCapability;
 }
 

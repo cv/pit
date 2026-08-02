@@ -18,6 +18,7 @@ import { prepareNpmCommand } from "./npm-capability.js";
 import { createProcessRunner, formatProcessCommand } from "./process-runner.js";
 import type { CapabilityHandler } from "./sandbox.js";
 import { type FunctionActivity, functionRunScope } from "./saved-functions.js";
+import { createSessionCapabilityHandler } from "./session-capability-handler.js";
 import { handleWorkspace } from "./workspace.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
@@ -250,6 +251,7 @@ export function createCapabilities({
       commitFunctionState,
       activity,
     }),
+    session: createSessionCapabilityHandler({ pi, ctx }),
   };
 
   return ({ capability, method, args, signal, functionContext }) => {

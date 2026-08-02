@@ -4,6 +4,7 @@ import { ghCapability } from "./capabilities/gh.js";
 import { gitCapability } from "./capabilities/git.js";
 import { httpCapability } from "./capabilities/http.js";
 import { npmCapability } from "./capabilities/npm.js";
+import { sessionCapability } from "./capabilities/session.js";
 import { shellCapability } from "./capabilities/shell.js";
 import { uiCapability } from "./capabilities/ui.js";
 import { workspaceCapability } from "./capabilities/workspace.js";
@@ -131,6 +132,7 @@ export const CAPABILITY_REGISTRY = defineCapabilities({
   http: httpCapability,
   ui: uiCapability,
   context: contextCapability,
+  session: sessionCapability,
   functions: functionsCapability,
 });
 
@@ -183,9 +185,7 @@ export function capabilityDocumentation(): string[] {
       ("documentation" in definition
         ? definition.documentation
         : Object.values(definition.methods)
-            .map((method) =>
-              "promptSummary" in method ? method.promptSummary : method.documentation,
-            )
+            .map((method) => method.documentation)
             .join("; "));
     return `${name}: ${documentation}.`;
   });
