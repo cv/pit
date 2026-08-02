@@ -205,10 +205,15 @@ export function reconstructFunctions(
   }
 }
 
+export interface FunctionManagerOptions {
+  onChange?: () => void;
+  saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
+}
+
 export function registerFunctionManager(
   pi: ExtensionAPI,
   savedFunctions: FunctionRegistry,
-  onChange?: () => void,
+  options: FunctionManagerOptions = {},
 ): void {
   const functionSummary = () =>
     [...savedFunctions.entries()]
@@ -277,7 +282,7 @@ export function registerFunctionManager(
         deleted: true,
       } satisfies FunctionEntry);
     }
-    onChange?.();
+    options.onChange?.();
     ctx.ui.notify(
       `Deleted saved function${namesToDelete.size === 1 ? "" : "s"}: ${[...namesToDelete].join(", ")}`,
       "info",
@@ -315,9 +320,21 @@ export function registerFunctionManager(
       if (!entry) {
         return;
       }
-      const action = await ctx.ui.select(entry.name, ["Inspect source", "Delete", "Close"]);
+      const actions = [
+        "Inspect source",
+        ...(options.saveToProject ? ["Save to project"] : []),
+        "Delete",
+        "Close",
+      ];
+      const action = await ctx.ui.select(entry.name, actions);
       if (action === "Inspect source") {
         await inspectSavedFunction(entry.name, ctx);
+      } else if (action === "Save to project" && options.saveToProject) {
+        try {
+          await options.saveToProject(entry.name, ctx);
+        } catch (error) {
+          ctx.ui.notify((error as Error).message, "error");
+        }
       } else if (action === "Delete") {
         await deleteSavedFunction(entry.name, ctx);
       } else if (action === "Close" || action === undefined) {

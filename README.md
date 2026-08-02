@@ -257,6 +257,8 @@ Run `/functions` without arguments to open the interactive TUI manager. These di
 /functions delete runTests
 ```
 
+In the TUI, select a session function and choose **Save to project**. Enter a short summary. Pit adds the `@pit project` marker, writes the project function, and removes the session definition. This action requires an enabled, trusted project.
+
 `/functions delete` creates a branch-local tombstone. After confirmation, it also deletes session dependents. In contrast, `functions.remove(name)` rejects removal while a project or session dependent remains.
 
 ## Understand execution

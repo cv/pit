@@ -10,6 +10,7 @@ import type { ShellProgressEvent } from "./execution-types.js";
 import {
   createFunctionState,
   createFunctionStateCommitQueue,
+  type FunctionState,
   reconcileFunctionState,
 } from "./function-state.js";
 import { createCapabilities } from "./host-capabilities.js";
@@ -74,6 +75,35 @@ function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): stri
   return `\n[Saved functions: ${catalog}]`;
 }
 
+interface FunctionManagerRegistration {
+  pi: ExtensionAPI;
+  functionState: FunctionState;
+  savedFunctionService: SavedFunctionService;
+}
+
+function registerSavedFunctionManager({
+  pi,
+  functionState,
+  savedFunctionService,
+}: FunctionManagerRegistration): void {
+  registerFunctionManager(pi, functionState.session, {
+    onChange: () => {
+      reconcileFunctionState(functionState);
+    },
+    saveToProject: async (name, ctx) => {
+      const summary = await ctx.ui.input(
+        `Save ${name} to project`,
+        "Short project-function summary",
+      );
+      if (summary === undefined) {
+        return;
+      }
+      await savedFunctionService.promoteToProject({ name, summary, context: ctx });
+      ctx.ui.notify(`Saved function to project: ${name}`, "info");
+    },
+  });
+}
+
 export default function pit(pi: ExtensionAPI) {
   const functionState = createFunctionState();
 
@@ -84,9 +114,7 @@ export default function pit(pi: ExtensionAPI) {
     appendEntry: (type, entry) => pi.appendEntry(type, entry),
   });
 
-  registerFunctionManager(pi, functionState.session, () => {
-    reconcileFunctionState(functionState);
-  });
+  registerSavedFunctionManager({ pi, functionState, savedFunctionService });
 
   pi.registerTool({
     name: "typescript",

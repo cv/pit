@@ -93,6 +93,82 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     expect(await value(`projectGreeting({ name: "Pi" })`)).toEqual({ greeting: "Hello, Pi" });
   });
 
+  it("saves a selected session function to the project", async () => {
+    await run("async function menuProject() { return 'project menu'; }");
+    const ctx = context({ mode: "tui" });
+    ctx.ui.input = vi.fn(async () => "Runs the project menu workflow.");
+    ctx.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("menuProject")),
+      )
+      .mockImplementationOnce(async (_title: string, options: string[]) => {
+        expect(options).toContain("Save to project");
+        return "Save to project";
+      });
+
+    await functionsCommand.handler("", ctx);
+
+    expect(ctx.ui.input).toHaveBeenCalledWith(
+      "Save menuProject to project",
+      "Short project-function summary",
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Saved function to project: menuProject", "info");
+    expect(await readFile(join(cwd, ".pi/pit/functions/menuProject.ts"), "utf8")).toContain(
+      "Runs the project menu workflow.",
+    );
+    expect(branchEntries).toContainEqual(
+      expect.objectContaining({
+        customType: "pit-functions",
+        data: { name: "menuProject", deleted: true },
+      }),
+    );
+    expect(await value("menuProject()")).toBe("project menu");
+    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([]);
+    expect((await value("async ({ context }) => context.get()")).projectFunctions).toEqual([
+      "menuProject",
+    ]);
+  });
+
+  it("handles cancelled and invalid project saves from the function manager", async () => {
+    await run("async function cancelledProject() { return true; }");
+    const cancelled = context({ mode: "tui" });
+    cancelled.ui.input.mockResolvedValueOnce(undefined as never);
+    cancelled.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("cancelledProject")),
+      )
+      .mockResolvedValueOnce("Save to project")
+      .mockResolvedValueOnce(undefined);
+
+    await functionsCommand.handler("", cancelled);
+    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([
+      "cancelledProject",
+    ]);
+
+    await run("((async function wrappedProject() { return true; }))");
+    const invalid = context({ mode: "tui" });
+    invalid.ui.input = vi.fn(async () => "Wrapped project helper.");
+    invalid.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("wrappedProject")),
+      )
+      .mockResolvedValueOnce("Save to project")
+      .mockResolvedValueOnce(undefined);
+
+    await functionsCommand.handler("", invalid);
+    expect(invalid.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("must be a top-level function declaration"),
+      "error",
+    );
+    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([
+      "cancelledProject",
+      "wrappedProject",
+    ]);
+  });
+
   it("reloads project functions that invoke the typed npm capability", async () => {
     const source = `/** Runs project tests. @pit project */
 async function projectTests({ npm }) {

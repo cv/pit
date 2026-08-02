@@ -34,6 +34,12 @@ export interface SavedFunctionPreparationRequest {
   context: SavedFunctionExecutionContext;
 }
 
+export interface ProjectFunctionPromotionRequest {
+  name: string;
+  summary: string;
+  context: SavedFunctionExecutionContext;
+}
+
 export interface PreparedSavedFunctionExecution {
   source: string;
   input?: unknown;
@@ -51,6 +57,14 @@ export interface SavedFunctionServiceDependencies {
   appendEntry(type: string, entry: FunctionEntry): void;
 }
 
+function projectFunctionSource(source: string, summary: string): string {
+  const normalizedSummary = summary.trim().replace(/\s+/g, " ").replaceAll("*/", "* /");
+  if (!normalizedSummary) {
+    throw new Error("Project function summary is required");
+  }
+  return `/**\n * ${normalizedSummary}\n *\n * @pit project\n */\n${source}`;
+}
+
 export class SavedFunctionService {
   readonly #state: FunctionState;
   readonly #commit: FunctionStateCommit;
@@ -60,6 +74,25 @@ export class SavedFunctionService {
     this.#state = dependencies.state;
     this.#commit = dependencies.commit;
     this.#appendEntry = dependencies.appendEntry;
+  }
+
+  async promoteToProject(request: ProjectFunctionPromotionRequest): Promise<void> {
+    const source = this.#state.session.get(request.name);
+    if (source === undefined) {
+      throw new Error(`Saved function "${request.name}" was not found`);
+    }
+    const promotedSource = projectFunctionSource(source, request.summary);
+    if (!getProjectFunctionMetadata(promotedSource)) {
+      throw new Error(
+        `Saved function "${request.name}" must be a top-level function declaration to save it to the project`,
+      );
+    }
+    const prepared = this.prepare({
+      source: promotedSource,
+      saveOnly: true,
+      context: request.context,
+    });
+    await this.commit(prepared, { cwd: request.context.cwd }, []);
   }
 
   prepare(request: SavedFunctionPreparationRequest): PreparedSavedFunctionExecution {

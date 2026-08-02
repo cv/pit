@@ -68,6 +68,66 @@ describe("SavedFunctionService", () => {
     expect(activity[0]).toMatchObject({ name: "projectHelper", scope: "project" });
   });
 
+  it("promotes a session definition to a documented project function", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pit-service-"));
+    directories.push(cwd);
+    const { state, entries, service } = fixture();
+    const source = "async function promotedHelper() { return 3; }";
+    const prepared = service.prepare({
+      source,
+      context: { cwd, isProjectTrusted: () => true },
+    });
+    await service.commit(prepared, { cwd }, []);
+    state.projectEnabled = true;
+
+    await service.promoteToProject({
+      name: "promotedHelper",
+      summary: "  Runs the promoted helper.  ",
+      context: { cwd, isProjectTrusted: () => true },
+    });
+
+    const projectSource = await readFile(
+      join(cwd, ".pi", "pit", "functions", "promotedHelper.ts"),
+      "utf8",
+    );
+    expect(projectSource).toContain("* Runs the promoted helper.");
+    expect(projectSource).toContain("* @pit project");
+    expect(projectSource).toContain(source);
+    expect(state.project.get("promotedHelper")).toBe(projectSource.trimEnd());
+    expect(state.session.has("promotedHelper")).toBe(false);
+    expect(entries.at(-1)?.entry).toEqual({ name: "promotedHelper", deleted: true });
+  });
+
+  it("rejects invalid session-function promotions", async () => {
+    const { state, service } = fixture();
+    state.projectEnabled = true;
+    state.session.set("summaryRequired", "async function summaryRequired() { return true; }");
+    await expect(
+      service.promoteToProject({
+        name: "summaryRequired",
+        summary: "  ",
+        context: { cwd: "/tmp", isProjectTrusted: () => true },
+      }),
+    ).rejects.toThrow("summary is required");
+
+    await expect(
+      service.promoteToProject({
+        name: "missing",
+        summary: "Missing helper.",
+        context: { cwd: "/tmp", isProjectTrusted: () => true },
+      }),
+    ).rejects.toThrow('Saved function "missing" was not found');
+
+    state.session.set("wrapped", "((async function wrapped() { return true; }))");
+    await expect(
+      service.promoteToProject({
+        name: "wrapped",
+        summary: "Wrapped helper.",
+        context: { cwd: "/tmp", isProjectTrusted: () => true },
+      }),
+    ).rejects.toThrow("must be a top-level function declaration");
+  });
+
   it("validates save-only requests and ignores anonymous commits", async () => {
     const { service } = fixture();
     const context = { cwd: "/tmp", isProjectTrusted: () => true };
