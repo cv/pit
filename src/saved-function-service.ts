@@ -14,6 +14,7 @@ import {
   getNamedFunctionName,
   getProjectFunctionMetadata,
   type ProjectFunctionMetadata,
+  resolveSavedFunctionReferences,
   validateTypeScript,
 } from "./sandbox.js";
 import {
@@ -42,6 +43,7 @@ export interface ProjectFunctionPromotionRequest {
   name: string;
   summary: string;
   context: SavedFunctionExecutionContext;
+  activity?: FunctionActivity[];
 }
 
 export interface ProjectFunctionRemovalRequest {
@@ -140,7 +142,7 @@ export class SavedFunctionService {
       saveOnly: true,
       context: request.context,
     });
-    await this.commit(prepared, { cwd: request.context.cwd }, []);
+    await this.commit(prepared, { cwd: request.context.cwd }, request.activity ?? []);
   }
 
   removeFromProject(request: ProjectFunctionRemovalRequest): Promise<boolean> {
@@ -157,6 +159,38 @@ export class SavedFunctionService {
       name: request.name,
       state: this.#state,
       commit: this.#commit,
+    });
+  }
+
+  removeSession(name: string): Promise<string[]> {
+    if (!this.#state.session.has(name)) {
+      throw new Error(`Session function "${name}" was not found`);
+    }
+    return this.#commit(() => {
+      const namesToRemove = new Set([name]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const [candidate, source] of this.#state.session) {
+          if (namesToRemove.has(candidate)) {
+            continue;
+          }
+          const dependsOnRemoved = resolveSavedFunctionReferences(
+            source,
+            this.#state.effective,
+          ).some((reference) => namesToRemove.has(reference.name));
+          if (dependsOnRemoved) {
+            namesToRemove.add(candidate);
+            changed = true;
+          }
+        }
+      }
+      for (const removedName of namesToRemove) {
+        this.#appendEntry(FUNCTION_ENTRY_TYPE, { name: removedName, deleted: true });
+        this.#state.session.delete(removedName);
+      }
+      reconcileFunctionState(this.#state);
+      return [...namesToRemove].sort((a, b) => a.localeCompare(b));
     });
   }
 

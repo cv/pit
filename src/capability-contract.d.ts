@@ -97,6 +97,14 @@ type PitProjectFunctionMetadata = {
   parameters: Array<{ name: string; description?: string }>;
 };
 
+type PitSavedFunctionMetadata = {
+  name: string;
+  scope: "project" | "session";
+  signature: string;
+  lines: number;
+  bytes: number;
+};
+
 interface PitWorkspaceCapability {
   read(
     file: string,
@@ -279,6 +287,14 @@ interface PitFunctionsCapability {
   get(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;
 
   remove(name: string): Promise<{ name: string; removed: boolean }>;
+
+  listAll(): Promise<PitSavedFunctionMetadata[]>;
+
+  getSaved(name: string): Promise<PitSavedFunctionMetadata & { source: string }>;
+
+  promote(name: string, summary: string): Promise<{ name: string; promoted: true }>;
+
+  removeSession(name: string): Promise<{ name: string; removed: string[] }>;
 }
 
 interface PitCapabilities {

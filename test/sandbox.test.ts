@@ -610,7 +610,7 @@ async function linked(_capabilities, input) { return input; }`),
         { timeoutMs: 100 },
       ),
     ).rejects.toThrow("timed out");
-    expect(aborted).toBe(true);
+    await vi.waitFor(() => expect(aborted).toBe(true));
   });
 
   it("reports a child that exits without a result", async () => {

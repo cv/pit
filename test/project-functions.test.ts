@@ -625,6 +625,59 @@ async function brokenProject() { throw new Error("project failure"); }`),
     });
   });
 
+  it("manages effective and session functions through the functions capability", async () => {
+    await run(
+      "/** Capability project. @pit project */ async function capabilityProject() { return 'project'; }",
+    );
+    await run("async function capabilitySession() { return 'session'; }");
+    await run("async function removableSession() { return 1; }");
+    await run("async function removableDependent() { return (await removableSession()) + 1; }");
+
+    expect(
+      await value(`async ({ functions }) => {
+        const listed = await functions.listAll();
+        const session = await functions.getSaved("capabilitySession");
+        const project = await functions.getSaved("capabilityProject");
+        return { listed, session, project };
+      }`),
+    ).toMatchObject({
+      listed: [
+        { name: "capabilityProject", scope: "project", signature: "capabilityProject()" },
+        { name: "capabilitySession", scope: "session", signature: "capabilitySession()" },
+        { name: "removableDependent", scope: "session" },
+        { name: "removableSession", scope: "session" },
+      ],
+      session: { name: "capabilitySession", scope: "session" },
+      project: { name: "capabilityProject", scope: "project" },
+    });
+
+    await expect(
+      value(
+        `async ({ functions }) => functions.promote("capabilitySession", "Promoted through the capability.")`,
+      ),
+    ).resolves.toEqual({ name: "capabilitySession", promoted: true });
+    await expect(
+      readFile(join(cwd, ".pi/pit/functions/capabilitySession.ts"), "utf8"),
+    ).resolves.toContain("Promoted through the capability.");
+
+    await expect(
+      value(`async ({ functions }) => functions.removeSession("removableSession")`),
+    ).resolves.toEqual({
+      name: "removableSession",
+      removed: ["removableDependent", "removableSession"],
+    });
+    expect(await value("async ({ context }) => context.get()")).toMatchObject({
+      projectFunctions: ["capabilityProject", "capabilitySession"],
+      sessionFunctions: [],
+    });
+    await expect(run(`async ({ functions }) => functions.getSaved("missing")`)).rejects.toThrow(
+      "is unavailable",
+    );
+    await expect(
+      run(`async ({ functions }) => functions.removeSession("missing")`),
+    ).rejects.toThrow("was not found");
+  });
+
   it("rejects unavailable and unknown project capability operations", async () => {
     await expect(run(`async ({ functions }) => functions.get("missing")`)).rejects.toThrow(
       "is unavailable",

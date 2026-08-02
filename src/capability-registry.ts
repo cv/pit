@@ -112,6 +112,14 @@ type PitProjectFunctionMetadata = {
   signature: string;
   summary: string;
   parameters: Array<{ name: string; description?: string }>;
+};
+
+type PitSavedFunctionMetadata = {
+  name: string;
+  scope: "project" | "session";
+  signature: string;
+  lines: number;
+  bytes: number;
 };`;
 
 export const CAPABILITY_REGISTRY = defineCapabilities({
