@@ -328,6 +328,12 @@ interface PitSessionCapability {
     tokensBefore: number;
     estimatedTokensAfter: number | undefined;
   }>;
+
+  requestNew(): Promise<{ queued: true; command: string }>;
+
+  requestFork(entryId: string): Promise<{ queued: true; command: string }>;
+
+  requestClone(entryId: string): Promise<{ queued: true; command: string }>;
 }
 
 interface PitCommandsCapability {

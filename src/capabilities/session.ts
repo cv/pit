@@ -2,7 +2,7 @@ import { defineCapability } from "../capability-core.js";
 
 export const sessionCapability = defineCapability({
   interfaceName: "PitSessionCapability",
-  promptSummary: "info/getName/setName/compact",
+  promptSummary: "info/name/compact/new/fork/clone",
   methods: {
     info: {
       callDescription: "Inspect session metadata",
@@ -45,6 +45,27 @@ export const sessionCapability = defineCapability({
       documentation:
         "session.compact(instructions?) awaits manual compaction and returns bounded metadata",
       minimumArguments: 0,
+      maximumArguments: 1,
+    },
+    requestNew: {
+      callDescription: "Request a new session",
+      declaration: "requestNew(): Promise<{ queued: true; command: string }>;",
+      documentation: "session.requestNew() queues a confirmed new-session command",
+      minimumArguments: 0,
+      maximumArguments: 0,
+    },
+    requestFork: {
+      callDescription: "Request a session fork",
+      declaration: "requestFork(entryId: string): Promise<{ queued: true; command: string }>;",
+      documentation: "session.requestFork(entryId) queues a confirmed fork-before command",
+      minimumArguments: 1,
+      maximumArguments: 1,
+    },
+    requestClone: {
+      callDescription: "Request a session clone",
+      declaration: "requestClone(entryId: string): Promise<{ queued: true; command: string }>;",
+      documentation: "session.requestClone(entryId) queues a confirmed clone-through command",
+      minimumArguments: 1,
       maximumArguments: 1,
     },
   },

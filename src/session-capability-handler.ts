@@ -49,5 +49,20 @@ export function createSessionCapabilityHandler({
         });
       });
     }
+    if (method === "requestNew") {
+      const command = "/pit-new-session";
+      pi.sendUserMessage(command, { deliverAs: "followUp" });
+      return { queued: true as const, command };
+    }
+    if (method === "requestFork" || method === "requestClone") {
+      const entryId = string(args[0], "entry id").trim();
+      if (!entryId) {
+        throw new Error("Entry ID must not be empty");
+      }
+      const commandName = method === "requestFork" ? "pit-fork-session" : "pit-clone-session";
+      const command = `/${commandName} ${entryId}`;
+      pi.sendUserMessage(command, { deliverAs: "followUp" });
+      return { queued: true as const, command };
+    }
   };
 }

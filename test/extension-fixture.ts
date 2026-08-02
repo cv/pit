@@ -40,6 +40,8 @@ export let functionsCommand: { handler: (args: string, ctx: any) => Promise<void
 let sessionName: string | undefined;
 let slashCommands: any[] = [];
 let configuredModels: any[] = [];
+const registeredCommands = new Map<string, any>();
+export let sentUserMessages: Array<{ content: string; options: unknown }> = [];
 
 export function context(overrides: Record<string, unknown> = {}) {
   return {
@@ -126,12 +128,18 @@ export function setConfiguredModels(models: any[]): void {
   configuredModels = models;
 }
 
+export function getRegisteredCommand(name: string): any {
+  return registeredCommands.get(name);
+}
+
 export async function setupHarness(): Promise<void> {
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
   branchEntries = [];
   sessionName = undefined;
   slashCommands = [];
   configuredModels = [];
+  registeredCommands.clear();
+  sentUserMessages = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   const pi = {
@@ -139,6 +147,7 @@ export async function setupHarness(): Promise<void> {
       tool = registered;
     }),
     registerCommand: vi.fn((name: string, command: typeof functionsCommand) => {
+      registeredCommands.set(name, command);
       if (name === "functions") {
         functionsCommand = command;
       }
@@ -163,6 +172,9 @@ export async function setupHarness(): Promise<void> {
     getSessionName: vi.fn(() => sessionName),
     getCommands: vi.fn(() => slashCommands),
     setModel: vi.fn(async (model: any) => model.available !== false),
+    sendUserMessage: vi.fn((content: string, options: unknown) => {
+      sentUserMessages.push({ content, options });
+    }),
     setActiveTools,
     exec: execMock,
   };

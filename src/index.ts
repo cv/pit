@@ -26,6 +26,7 @@ import {
   reconstructFunctions,
   registerFunctionManager,
 } from "./saved-functions.js";
+import { registerSessionControlCommands } from "./session-control-commands.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
@@ -120,6 +121,7 @@ function registerSavedFunctionManager({
 }
 
 export default function pit(pi: ExtensionAPI) {
+  registerSessionControlCommands(pi);
   const functionState = createFunctionState();
 
   const commitFunctionState = createFunctionStateCommitQueue();
