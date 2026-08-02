@@ -2,8 +2,7 @@ import { defineCapability } from "../capability-core.js";
 
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",
-  promptSummary:
-    "list/get/remove project functions; listAll/getSaved inspect scopes; promote/removeSession manage session functions",
+  promptSummary: "list/get/remove project; listAll/getSaved/promote/removeSession saved",
   methods: {
     list: {
       callDescription: "List project functions",

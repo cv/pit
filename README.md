@@ -79,6 +79,7 @@ Pit injects only the capabilities that submitted code requests.
 | `ui` | Ask for confirmation, text, or a selection, and show notifications. |
 | `context` | Inspect the active Pi and Pit context. |
 | `session` | Inspect session metadata and manage its display name. |
+| `commands` | List extension, prompt-template, and skill slash commands with provenance. |
 | `functions` | Inspect and remove trusted project functions. |
 
 See [Capability reference](#capability-reference) for method details.
@@ -388,6 +389,10 @@ UI methods require a mode that provides a UI.
 - `info()` returns the session ID, file, display name, entry counts, leaf ID, and context usage.
 - `getName()` returns the session display name.
 - `setName(name)` sets the session display name.
+
+### `commands`
+
+- `list()` returns bounded extension, prompt-template, and skill commands with canonical source information. Built-in interactive commands are not included.
 
 ### `functions`
 

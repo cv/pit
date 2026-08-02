@@ -10,6 +10,7 @@ import {
   stringValue as string,
   stringArrayValue as stringArray,
 } from "./cli.js";
+import { createCommandsCapabilityHandler } from "./commands-capability-handler.js";
 import type { HostShellProgressEvent, ShellProgressEvent } from "./execution-types.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
 import { createFunctionCapabilityHandler } from "./functions-capability-handler.js";
@@ -252,6 +253,7 @@ export function createCapabilities({
       activity,
     }),
     session: createSessionCapabilityHandler({ pi, ctx }),
+    commands: createCommandsCapabilityHandler({ pi }),
   };
 
   return ({ capability, method, args, signal, functionContext }) => {

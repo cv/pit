@@ -1,3 +1,4 @@
+import { commandsCapability } from "./capabilities/commands.js";
 import { contextCapability } from "./capabilities/context.js";
 import { functionsCapability } from "./capabilities/functions.js";
 import { ghCapability } from "./capabilities/gh.js";
@@ -108,6 +109,19 @@ type PitBatchOperation =
     }
   | { kind: "edit"; file: string; changes: PitEditChangeSpec };
 
+type PitSlashCommand = {
+  name: string;
+  description?: string;
+  source: "extension" | "prompt" | "skill";
+  sourceInfo: {
+    path: string;
+    source: string;
+    scope: "user" | "project" | "temporary";
+    origin: "package" | "top-level";
+    baseDir?: string;
+  };
+};
+
 type PitProjectFunctionMetadata = {
   name: string;
   signature: string;
@@ -133,6 +147,7 @@ export const CAPABILITY_REGISTRY = defineCapabilities({
   ui: uiCapability,
   context: contextCapability,
   session: sessionCapability,
+  commands: commandsCapability,
   functions: functionsCapability,
 });
 

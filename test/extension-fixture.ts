@@ -38,6 +38,7 @@ export let execMock: ReturnType<typeof vi.fn>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
 export let functionsCommand: { handler: (args: string, ctx: any) => Promise<void> };
 let sessionName: string | undefined;
+let slashCommands: any[] = [];
 
 export function context(overrides: Record<string, unknown> = {}) {
   return {
@@ -107,10 +108,15 @@ export function setBranchEntries(entries: any[]): void {
   branchEntries = entries;
 }
 
+export function setSlashCommands(commands: any[]): void {
+  slashCommands = commands;
+}
+
 export async function setupHarness(): Promise<void> {
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
   branchEntries = [];
   sessionName = undefined;
+  slashCommands = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   const pi = {
@@ -140,6 +146,7 @@ export async function setupHarness(): Promise<void> {
       sessionName = name;
     }),
     getSessionName: vi.fn(() => sessionName),
+    getCommands: vi.fn(() => slashCommands),
     setActiveTools,
     exec: execMock,
   };

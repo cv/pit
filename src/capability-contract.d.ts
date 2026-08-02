@@ -90,6 +90,19 @@ type PitBatchOperation =
     }
   | { kind: "edit"; file: string; changes: PitEditChangeSpec };
 
+type PitSlashCommand = {
+  name: string;
+  description?: string;
+  source: "extension" | "prompt" | "skill";
+  sourceInfo: {
+    path: string;
+    source: string;
+    scope: "user" | "project" | "temporary";
+    origin: "package" | "top-level";
+    baseDir?: string;
+  };
+};
+
 type PitProjectFunctionMetadata = {
   name: string;
   signature: string;
@@ -299,6 +312,10 @@ interface PitSessionCapability {
   setName(name: string): Promise<{ name: string }>;
 }
 
+interface PitCommandsCapability {
+  list(): Promise<{ commands: PitSlashCommand[]; truncated: boolean }>;
+}
+
 interface PitFunctionsCapability {
   list(): Promise<PitProjectFunctionMetadata[]>;
 
@@ -325,6 +342,7 @@ interface PitCapabilities {
   ui: PitUiCapability;
   context: PitContextCapability;
   session: PitSessionCapability;
+  commands: PitCommandsCapability;
   functions: PitFunctionsCapability;
 }
 

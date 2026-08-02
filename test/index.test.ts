@@ -155,7 +155,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain('kind: "read", file, options?');
     expect(tool.description).toContain("workspace.search(query");
     expect(tool.description).toContain("shell.execFile(program, args");
-    expect(tool.description).toContain("functions: list/get/remove project functions");
+    expect(tool.description).toContain("functions: list/get/remove project;");
     expect(tool.parameters.properties.label.description).toContain("15 words");
     expect(tool.parameters.properties.code.description).toContain("named function definition");
     expect(tool.parameters.properties.code.description).toContain("do not import");
