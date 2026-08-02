@@ -247,9 +247,9 @@ Pit loads project source only after explicit opt-in and Pi's project-trust check
 
 Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` to manage project definitions. Removal fails when a project or session function depends on the target. Project references remain project-scoped. Session references use effective same-named session overrides. Disabling project functions does not delete existing source files.
 
-### Manage session functions
+### Manage saved functions
 
-Run `/functions` without arguments to open the interactive TUI manager. These direct commands are also available:
+Run `/functions` without arguments to open the interactive TUI manager. The manager lists session and project functions with their scope. These direct commands are also available:
 
 ```text
 /functions list
@@ -257,9 +257,11 @@ Run `/functions` without arguments to open the interactive TUI manager. These di
 /functions delete runTests
 ```
 
-In the TUI, select a session function and choose **Save to project**. Enter a short summary. Pit adds the `@pit project` marker, writes the project function, and removes the session definition. This action requires an enabled, trusted project.
+Select a session function to inspect it, save it to the project, or delete it. **Save to project** asks for a short summary, adds the `@pit project` marker, writes the project function, and removes the session definition. This action requires an enabled, trusted project.
 
-`/functions delete` creates a branch-local tombstone. After confirmation, it also deletes session dependents. In contrast, `functions.remove(name)` rejects removal while a project or session dependent remains.
+Select a project function to inspect it or remove it from the project. Project removal fails when a project or session function depends on the target.
+
+`/functions delete` creates a branch-local tombstone. After confirmation, it also deletes session dependents.
 
 ## Understand execution
 

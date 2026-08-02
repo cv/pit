@@ -13,12 +13,11 @@ import {
 } from "./cli.js";
 import type { HostShellProgressEvent, ShellProgressEvent } from "./execution-types.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
-import { reconcileFunctionState } from "./function-state.js";
 import { prepareGhCommand } from "./gh-capability.js";
 import { prepareNpmCommand } from "./npm-capability.js";
 import { createProcessRunner, formatProcessCommand } from "./process-runner.js";
-import { removeProjectFunction, savedFunctionDependents } from "./project-functions.js";
 import type { CapabilityHandler } from "./sandbox.js";
+import { removeProjectFunctionFromState } from "./saved-function-service.js";
 import {
   type FunctionActivity,
   functionRunScope,
@@ -273,33 +272,13 @@ export function createCapabilities({
         return { ...functionState.metadata.get(name as string), source };
       }
       if (method === "remove") {
-        return commitFunctionState(async () => {
-          const functionName = name as string;
-          if (functionState.projectCandidates.has(functionName)) {
-            const dependents = savedFunctionDependents(
-              functionState.projectCandidates,
-              functionState.session,
-              functionState.effective,
-              functionName,
-            );
-            if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
-              const details = [
-                dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",
-                dependents.transitive.length > 0
-                  ? `transitive: ${dependents.transitive.join(", ")}`
-                  : "",
-              ].filter(Boolean);
-              throw new Error(
-                `Cannot remove project function "${name}"; dependent saved functions remain (${details.join("; ")})`,
-              );
-            }
-          }
-          const removed = await removeProjectFunction(ctx.cwd, functionName);
-          functionState.project.delete(functionName);
-          functionState.projectCandidates.delete(functionName);
-          functionState.metadata.delete(functionName);
-          functionState.candidateMetadata.delete(functionName);
-          reconcileFunctionState(functionState);
+        const functionName = name as string;
+        return removeProjectFunctionFromState({
+          cwd: ctx.cwd,
+          name: functionName,
+          state: functionState,
+          commit: commitFunctionState,
+        }).then((removed) => {
           if (removed) {
             activity.push({ action: "remove", name: functionName, scope: "project" });
           }

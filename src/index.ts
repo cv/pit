@@ -87,6 +87,7 @@ function registerSavedFunctionManager({
   savedFunctionService,
 }: FunctionManagerRegistration): void {
   registerFunctionManager(pi, functionState.session, {
+    projectFunctions: functionState.project,
     onChange: () => {
       reconcileFunctionState(functionState);
     },
@@ -100,6 +101,20 @@ function registerSavedFunctionManager({
       }
       await savedFunctionService.promoteToProject({ name, summary, context: ctx });
       ctx.ui.notify(`Saved function to project: ${name}`, "info");
+    },
+    removeFromProject: async (name, ctx) => {
+      const confirmed = await ctx.ui.confirm(
+        `Remove ${name} from project?`,
+        `Delete .pi/pit/functions/${name}.ts?`,
+      );
+      if (!confirmed) {
+        return;
+      }
+      const removed = await savedFunctionService.removeFromProject({ name, context: ctx });
+      ctx.ui.notify(
+        removed ? `Removed project function: ${name}` : `Project function file was absent: ${name}`,
+        removed ? "info" : "warning",
+      );
     },
   });
 }

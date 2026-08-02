@@ -130,6 +130,122 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     ]);
   });
 
+  it("lists, inspects, and removes project functions from the manager", async () => {
+    await run(
+      "/** Managed project helper. @pit project */ async function managedProject() { return true; }",
+    );
+    const listed = context();
+    await functionsCommand.handler("list", listed);
+    expect(listed.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("managedProject [project]"),
+      "info",
+    );
+
+    const ctx = context({ mode: "tui" });
+    ctx.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("managedProject [project]")),
+      )
+      .mockImplementationOnce(async (_title: string, options: string[]) => {
+        expect(options).toEqual(["Inspect source", "Remove from project", "Close"]);
+        return "Inspect source";
+      })
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("managedProject [project]")),
+      )
+      .mockResolvedValueOnce("Remove from project");
+
+    await functionsCommand.handler("", ctx);
+
+    expect(ctx.ui.custom).toHaveBeenCalledTimes(1);
+    expect(ctx.ui.confirm).toHaveBeenCalledWith(
+      "Remove managedProject from project?",
+      "Delete .pi/pit/functions/managedProject.ts?",
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Removed project function: managedProject", "info");
+    await expect(
+      readFile(join(cwd, ".pi/pit/functions/managedProject.ts"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await value("async ({ context }) => context.get()")).projectFunctions).toEqual([]);
+  });
+
+  it("labels session overrides and directly inspects project functions", async () => {
+    await run(
+      "/** Scoped project helper. @pit project */ async function scopedProject() { return 'project'; }",
+    );
+    await run("async function scopedProject() { return 'session'; }");
+    const listed = context();
+    await functionsCommand.handler("list", listed);
+    expect(listed.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("scopedProject [session override]"),
+      "info",
+    );
+
+    await run(
+      "/** Direct inspection helper. @pit project */ async function directProject() { return true; }",
+    );
+    const inspected = context({ mode: "tui" });
+    await functionsCommand.handler("show directProject", inspected);
+    expect(inspected.ui.custom).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles cancelled, absent, and blocked project removals", async () => {
+    await run(
+      "/** Removal menu helper. @pit project */ async function removalMenu() { return true; }",
+    );
+    const cancelled = context({ mode: "tui" });
+    cancelled.ui.confirm.mockResolvedValueOnce(false);
+    cancelled.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("removalMenu [project]")),
+      )
+      .mockResolvedValueOnce("Remove from project")
+      .mockResolvedValueOnce(undefined);
+
+    await functionsCommand.handler("", cancelled);
+    expect((await value("async ({ context }) => context.get()")).projectFunctions).toEqual([
+      "removalMenu",
+    ]);
+
+    await rm(join(cwd, ".pi/pit/functions/removalMenu.ts"));
+    const absent = context({ mode: "tui" });
+    absent.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("removalMenu [project]")),
+      )
+      .mockResolvedValueOnce("Remove from project");
+
+    await functionsCommand.handler("", absent);
+    expect(absent.ui.notify).toHaveBeenCalledWith(
+      "Project function file was absent: removalMenu",
+      "warning",
+    );
+
+    await run(
+      "/** Removal base. @pit project */ async function removalMenuBase() { return true; }",
+    );
+    await run(
+      "/** Removal dependent. @pit project */ async function removalMenuDependent() { return removalMenuBase(); }",
+    );
+    const blocked = context({ mode: "tui" });
+    blocked.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) =>
+        options.find((option) => option.startsWith("removalMenuBase [project]")),
+      )
+      .mockResolvedValueOnce("Remove from project")
+      .mockResolvedValueOnce(undefined);
+
+    await functionsCommand.handler("", blocked);
+    expect(blocked.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("dependent saved functions remain"),
+      "error",
+    );
+  });
+
   it("handles cancelled and invalid project saves from the function manager", async () => {
     await run("async function cancelledProject() { return true; }");
     const cancelled = context({ mode: "tui" });

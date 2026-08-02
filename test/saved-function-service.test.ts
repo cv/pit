@@ -128,6 +128,35 @@ describe("SavedFunctionService", () => {
     ).rejects.toThrow("must be a top-level function declaration");
   });
 
+  it("requires trust and opt-in for project removal", async () => {
+    const { state, service } = fixture();
+    state.projectEnabled = true;
+    expect(() =>
+      service.removeFromProject({
+        name: "helper",
+        context: { cwd: "/tmp", isProjectTrusted: () => false },
+      }),
+    ).toThrow("require a trusted project");
+
+    state.projectEnabled = false;
+    expect(() =>
+      service.removeFromProject({
+        name: "helper",
+        context: { cwd: "/tmp", isProjectTrusted: () => true },
+      }),
+    ).toThrow("Project functions are disabled");
+
+    const cwd = await mkdtemp(join(tmpdir(), "pit-service-"));
+    directories.push(cwd);
+    state.projectEnabled = true;
+    await expect(
+      service.removeFromProject({
+        name: "alreadyAbsent",
+        context: { cwd, isProjectTrusted: () => true },
+      }),
+    ).resolves.toBe(false);
+  });
+
   it("validates save-only requests and ignores anonymous commits", async () => {
     const { service } = fixture();
     const context = { cwd: "/tmp", isProjectTrusted: () => true };

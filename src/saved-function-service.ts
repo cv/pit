@@ -5,7 +5,11 @@ import {
   type FunctionStateCommit,
   reconcileFunctionState,
 } from "./function-state.js";
-import { saveProjectFunction } from "./project-functions.js";
+import {
+  removeProjectFunction,
+  savedFunctionDependents,
+  saveProjectFunction,
+} from "./project-functions.js";
 import {
   getNamedFunctionName,
   getProjectFunctionMetadata,
@@ -40,6 +44,18 @@ export interface ProjectFunctionPromotionRequest {
   context: SavedFunctionExecutionContext;
 }
 
+export interface ProjectFunctionRemovalRequest {
+  name: string;
+  context: SavedFunctionExecutionContext;
+}
+
+export interface ProjectFunctionStateRemovalRequest {
+  cwd: string;
+  name: string;
+  state: FunctionState;
+  commit: FunctionStateCommit;
+}
+
 export interface PreparedSavedFunctionExecution {
   source: string;
   input?: unknown;
@@ -63,6 +79,38 @@ function projectFunctionSource(source: string, summary: string): string {
     throw new Error("Project function summary is required");
   }
   return `/**\n * ${normalizedSummary}\n *\n * @pit project\n */\n${source}`;
+}
+
+export function removeProjectFunctionFromState(
+  request: ProjectFunctionStateRemovalRequest,
+): Promise<boolean> {
+  const { cwd, name, state, commit } = request;
+  return commit(async () => {
+    if (state.projectCandidates.has(name)) {
+      const dependents = savedFunctionDependents(
+        state.projectCandidates,
+        state.session,
+        state.effective,
+        name,
+      );
+      if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
+        const details = [
+          dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",
+          dependents.transitive.length > 0 ? `transitive: ${dependents.transitive.join(", ")}` : "",
+        ].filter(Boolean);
+        throw new Error(
+          `Cannot remove project function "${name}"; dependent saved functions remain (${details.join("; ")})`,
+        );
+      }
+    }
+    const removed = await removeProjectFunction(cwd, name);
+    state.project.delete(name);
+    state.projectCandidates.delete(name);
+    state.metadata.delete(name);
+    state.candidateMetadata.delete(name);
+    reconcileFunctionState(state);
+    return removed;
+  });
 }
 
 export class SavedFunctionService {
@@ -93,6 +141,23 @@ export class SavedFunctionService {
       context: request.context,
     });
     await this.commit(prepared, { cwd: request.context.cwd }, []);
+  }
+
+  removeFromProject(request: ProjectFunctionRemovalRequest): Promise<boolean> {
+    if (!request.context.isProjectTrusted()) {
+      throw new Error("Project functions require a trusted project");
+    }
+    if (!this.#state.projectEnabled) {
+      throw new Error(
+        `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
+      );
+    }
+    return removeProjectFunctionFromState({
+      cwd: request.context.cwd,
+      name: request.name,
+      state: this.#state,
+      commit: this.#commit,
+    });
   }
 
   prepare(request: SavedFunctionPreparationRequest): PreparedSavedFunctionExecution {

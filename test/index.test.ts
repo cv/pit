@@ -13,6 +13,7 @@ import {
   reconstructFunctions,
   validateRegistryCapacity,
 } from "../src/index.js";
+import { registerFunctionManager } from "../src/saved-functions.js";
 import {
   branchEntries,
   cleanupHarness,
@@ -85,6 +86,45 @@ describe("function registry handler", () => {
       { type: "custom", customType: "pit-functions", data: { name: "remaining", source } },
     ]);
     expect([...functions.keys()]).toEqual(["remaining"]);
+  });
+
+  it("supports function managers without optional project callbacks", async () => {
+    let command: { handler: (args: string, ctx: any) => Promise<void> } | undefined;
+    const pi = {
+      appendEntry: vi.fn(),
+      registerCommand: (_name: string, registered: typeof command) => {
+        command = registered;
+      },
+    };
+
+    registerFunctionManager(
+      pi as any,
+      new Map([["sessionOnly", "async function sessionOnly() { return true; }"]]),
+    );
+    const sessionCtx = context({ mode: "tui" });
+    sessionCtx.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) => options[0])
+      .mockImplementationOnce(async (_title: string, options: string[]) => {
+        expect(options).toEqual(["Inspect source", "Delete", "Close"]);
+        return "Close";
+      });
+    await command?.handler("", sessionCtx);
+
+    registerFunctionManager(pi as any, new Map(), {
+      projectFunctions: new Map([
+        ["projectOnly", "/** Project only. @pit project */ async function projectOnly() {}"],
+      ]),
+    });
+    const projectCtx = context({ mode: "tui" });
+    projectCtx.ui.select = vi
+      .fn()
+      .mockImplementationOnce(async (_title: string, options: string[]) => options[0])
+      .mockImplementationOnce(async (_title: string, options: string[]) => {
+        expect(options).toEqual(["Inspect source", "Close"]);
+        return "Close";
+      });
+    await command?.handler("", projectCtx);
   });
 });
 
@@ -423,7 +463,7 @@ describe("pit extension", () => {
   it("handles empty, missing, non-TUI, and cancelled function management", async () => {
     const nonTui = context();
     await functionsCommand.handler("", nonTui);
-    expect(nonTui.ui.notify).toHaveBeenCalledWith("No saved functions on this branch", "info");
+    expect(nonTui.ui.notify).toHaveBeenCalledWith("No saved functions", "info");
     await functionsCommand.handler("show missing", nonTui);
     expect(nonTui.ui.notify).toHaveBeenCalledWith(
       `Saved function "missing" was not found`,
@@ -432,7 +472,7 @@ describe("pit extension", () => {
 
     const tui = context({ mode: "tui" });
     await functionsCommand.handler("", tui);
-    expect(tui.ui.notify).toHaveBeenCalledWith("No saved functions on this branch", "info");
+    expect(tui.ui.notify).toHaveBeenCalledWith("No saved functions", "info");
 
     await run("async function solo() { return true; }");
     await functionsCommand.handler("show solo", nonTui);

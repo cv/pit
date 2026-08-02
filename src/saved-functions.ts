@@ -207,7 +207,34 @@ export function reconstructFunctions(
 
 export interface FunctionManagerOptions {
   onChange?: () => void;
+  projectFunctions?: FunctionRegistry;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
+  removeFromProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
+}
+
+function summarizeFunctions(
+  projectFunctions: ReadonlyMap<string, string>,
+  savedFunctions: ReadonlyMap<string, string>,
+) {
+  const effective = new Map(projectFunctions);
+  for (const [name, source] of savedFunctions) {
+    effective.set(name, source);
+  }
+  return [...effective.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, source]) => {
+      const scope: "session" | "project" = savedFunctions.has(name) ? "session" : "project";
+      const scopeLabel =
+        scope === "session" && projectFunctions.has(name) ? "session override" : scope;
+      return {
+        name,
+        source,
+        scope,
+        scopeLabel,
+        lines: source.split("\n").length,
+        bytes: Buffer.byteLength(source),
+      };
+    });
 }
 
 export function registerFunctionManager(
@@ -215,18 +242,18 @@ export function registerFunctionManager(
   savedFunctions: FunctionRegistry,
   options: FunctionManagerOptions = {},
 ): void {
-  const functionSummary = () =>
-    [...savedFunctions.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, source]) => ({
-        name,
-        source,
-        lines: source.split("\n").length,
-        bytes: Buffer.byteLength(source),
-      }));
+  const projectFunctions = options.projectFunctions ?? new Map<string, string>();
+  const functionSummary = () => summarizeFunctions(projectFunctions, savedFunctions);
 
-  const inspectSavedFunction = async (name: string, ctx: ExtensionContext): Promise<void> => {
-    const source = savedFunctions.get(name);
+  const inspectSavedFunction = async (
+    name: string,
+    ctx: ExtensionContext,
+    scope?: "project" | "session",
+  ): Promise<void> => {
+    const source =
+      scope === "project"
+        ? projectFunctions.get(name)
+        : (savedFunctions.get(name) ?? projectFunctions.get(name));
     if (source === undefined) {
       ctx.ui.notify(`Saved function "${name}" was not found`, "error");
       return;
@@ -295,21 +322,66 @@ export function registerFunctionManager(
     const message =
       entries.length > 0
         ? entries
-            .map((entry) => `${entry.name} — ${entry.lines} lines, ${formatSize(entry.bytes)}`)
+            .map(
+              (entry) =>
+                `${entry.name} [${entry.scopeLabel}] — ${entry.lines} lines, ${formatSize(entry.bytes)}`,
+            )
             .join("\n")
-        : "No saved functions on this branch";
+        : "No saved functions";
     ctx.ui.notify(message, "info");
+  };
+
+  const handleFunctionAction = async (
+    entry: ReturnType<typeof functionSummary>[number],
+    ctx: ExtensionContext,
+  ): Promise<boolean> => {
+    const actions =
+      entry.scope === "session"
+        ? [
+            "Inspect source",
+            ...(options.saveToProject ? ["Save to project"] : []),
+            "Delete",
+            "Close",
+          ]
+        : [
+            "Inspect source",
+            ...(options.removeFromProject ? ["Remove from project"] : []),
+            "Close",
+          ];
+    const action = await ctx.ui.select(entry.name, actions);
+    if (action === "Close" || action === undefined) {
+      return true;
+    }
+    if (action === "Inspect source") {
+      await inspectSavedFunction(entry.name, ctx, entry.scope);
+    } else if (action === "Save to project" && options.saveToProject) {
+      try {
+        await options.saveToProject(entry.name, ctx);
+      } catch (error) {
+        ctx.ui.notify((error as Error).message, "error");
+      }
+    } else if (action === "Remove from project" && options.removeFromProject) {
+      try {
+        await options.removeFromProject(entry.name, ctx);
+      } catch (error) {
+        ctx.ui.notify((error as Error).message, "error");
+      }
+    } else if (action === "Delete") {
+      await deleteSavedFunction(entry.name, ctx);
+    }
+    return false;
   };
 
   const interactiveFunctionManager = async (ctx: ExtensionContext): Promise<void> => {
     for (;;) {
       const entries = functionSummary();
       if (entries.length === 0) {
-        ctx.ui.notify("No saved functions on this branch", "info");
+        ctx.ui.notify("No saved functions", "info");
         return;
       }
       const labels = entries.map(
-        (summary) => `${summary.name} — ${summary.lines} lines, ${formatSize(summary.bytes)}`,
+        (summary) =>
+          `${summary.name} [${summary.scopeLabel}] — ${summary.lines} lines, ${formatSize(summary.bytes)}`,
       );
       const selected = await ctx.ui.select("Saved functions", labels);
       if (selected === undefined) {
@@ -320,31 +392,14 @@ export function registerFunctionManager(
       if (!entry) {
         return;
       }
-      const actions = [
-        "Inspect source",
-        ...(options.saveToProject ? ["Save to project"] : []),
-        "Delete",
-        "Close",
-      ];
-      const action = await ctx.ui.select(entry.name, actions);
-      if (action === "Inspect source") {
-        await inspectSavedFunction(entry.name, ctx);
-      } else if (action === "Save to project" && options.saveToProject) {
-        try {
-          await options.saveToProject(entry.name, ctx);
-        } catch (error) {
-          ctx.ui.notify((error as Error).message, "error");
-        }
-      } else if (action === "Delete") {
-        await deleteSavedFunction(entry.name, ctx);
-      } else if (action === "Close" || action === undefined) {
+      if (await handleFunctionAction(entry, ctx)) {
         return;
       }
     }
   };
 
   pi.registerCommand("functions", {
-    description: "List, inspect, or delete saved TypeScript functions",
+    description: "List and manage saved TypeScript functions",
     handler: async (args, ctx) => {
       const [action = "", name] = args.trim().split(COMMAND_ARGUMENTS_PATTERN, 2);
       if (!action) {
