@@ -33,8 +33,14 @@ for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
   if (message.role !== "toolResult") continue;
   const call = calls.get(message.toolCallId);
   const text = (message.content || []).map((part) => part.text || "").join("\n");
+  const structured = message.details && message.details.failure;
   if (call && (message.isError || /^(Error:|TypeScript validation failed:|Command failed)/.test(text))) {
-    failures.push({ ...call, error: text.split("\n")[0] });
+    failures.push({
+      ...call,
+      error: structured && structured.rootError || text.split("\n")[0],
+      functionPath: structured && structured.functionPath || [],
+      failureKind: structured && structured.kind,
+    });
   }
 }
 const gateLabel = /validation|coverage|static checks?|tests?|package|CI run/i;
@@ -80,6 +86,8 @@ console.log(JSON.stringify({
     category: category(failure),
     label: failure.label,
     error: failure.error,
+    functionPath: failure.functionPath,
+    failureKind: failure.failureKind,
   })),
   recommendations,
 }, null, 2));

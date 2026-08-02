@@ -468,6 +468,30 @@ describe("tool rendering", () => {
     expect(expandedError.split("\n")[0]?.trim()).toBe("");
     expect(expandedError.split("\n")[1]).toContain("✗ Failed");
     expect(expandedError).not.toContain("Compile renderer");
+
+    const structuredError = renderToolResult(
+      {
+        content: [{ type: "text", text: "wrapped" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          failure: {
+            functionPath: ["outer", "inner"],
+            rootError: "boom",
+            kind: "user",
+          },
+          traces: [],
+          functions: [{ action: "run", name: "outer", scope: "session" }],
+        },
+      },
+      { expanded: true, isPartial: false },
+      { isError: true, args: { code: "outer()" } },
+    );
+    expect(structuredError).toContain("Function path");
+    expect(structuredError).toContain("outer → inner");
+    expect(structuredError).toContain("Execution");
+    expect(structuredError).toContain("boom");
+    expect(structuredError).not.toContain("wrapped");
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");

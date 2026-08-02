@@ -29,6 +29,7 @@ import {
   setBranchEntries,
   setupHarness,
   tool,
+  toolResult,
   value,
 } from "./extension-fixture.js";
 
@@ -635,5 +636,44 @@ describe("pit extension", () => {
     await expect(
       run(`async (capabilities) => (capabilities as any).__pit.savedFunctionRun("missing")`),
     ).rejects.toThrow('Saved function "missing" is unavailable');
+  });
+  it("preserves structured context for failed saved functions", async () => {
+    await run(`async function failureLeaf(_capabilities, input: { fail?: boolean } = {}) {
+      if (input.fail) throw new Error("boom");
+      return true;
+    }`);
+    await run(`async function failureOuter(_capabilities, input: { fail?: boolean } = {}) {
+      return failureLeaf(input);
+    }`);
+
+    await expect(
+      tool.execute(
+        "failure-id",
+        { code: "failureOuter({ fail: true })" },
+        undefined,
+        undefined,
+        context(),
+      ),
+    ).rejects.toThrow("boom");
+    const enriched = await toolResult({
+      toolName: "typescript",
+      toolCallId: "failure-id",
+      isError: true,
+      content: [{ type: "text", text: "wrapped" }],
+    });
+    expect(enriched.content).toEqual([{ type: "text", text: "boom" }]);
+    expect(enriched.details.failure).toEqual({
+      functionPath: ["failureOuter", "failureLeaf"],
+      rootError: "boom",
+      kind: "user",
+    });
+    expect(enriched.details.functions).toEqual([
+      { action: "run", name: "failureOuter", scope: "session" },
+      { action: "run", name: "failureLeaf", scope: "session" },
+    ]);
+    expect(enriched.details.traces.length).toBeGreaterThan(0);
+
+    await value(`async ({ functions }) => functions.removeSession("failureOuter")`);
+    await value(`async ({ functions }) => functions.removeSession("failureLeaf")`);
   });
 });

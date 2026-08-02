@@ -39,6 +39,11 @@ import {
   SAVE_ONLY_DESCRIPTION,
 } from "./tool-metadata.js";
 import {
+  captureTypeScriptFailure,
+  registerTypeScriptFailureEnrichment,
+  type TypeScriptFailureDetails,
+} from "./typescript-failure-context.js";
+import {
   renderTypeScriptToolCall,
   renderTypeScriptToolResult,
 } from "./typescript-tool-renderer.js";
@@ -196,6 +201,7 @@ export default function pit(pi: ExtensionAPI) {
   registerRuntimeControlCommands(pi);
   registerSessionControlCommands(pi);
   const functionState = createFunctionState();
+  const pendingFailures = new Map<string, TypeScriptFailureDetails>();
   const commitFunctionState = createFunctionStateCommitQueue();
   const savedFunctionService = new SavedFunctionService({
     state: functionState,
@@ -231,7 +237,7 @@ export default function pit(pi: ExtensionAPI) {
       return renderTypeScriptToolResult(result, options, theme, context);
     },
     // biome-ignore lint/complexity/useMaxParams: Pi defines the tool execute callback signature.
-    async execute(_id, params, signal, update, ctx) {
+    async execute(id, params, signal, update, ctx) {
       const functionActivity: FunctionActivity[] = [];
       const promotionSuggestions: string[] = [];
       const executionProgress = new ExecutionProgressController(
@@ -322,6 +328,12 @@ export default function pit(pi: ExtensionAPI) {
             ...executionProgress.snapshot(),
           },
         };
+      } catch (error) {
+        pendingFailures.set(
+          id,
+          captureTypeScriptFailure(error, functionActivity, executionProgress.snapshot()),
+        );
+        throw error;
       } finally {
         executionProgress.flush();
         executionProgress.dispose();
@@ -329,5 +341,6 @@ export default function pit(pi: ExtensionAPI) {
     },
   });
 
+  registerTypeScriptFailureEnrichment(pi, pendingFailures);
   registerFunctionLifecycle(pi, functionState);
 }

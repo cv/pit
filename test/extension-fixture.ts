@@ -33,6 +33,7 @@ export let tool: RegisteredTool;
 export let sessionStart: (...args: any[]) => void;
 export let sessionTree: (...args: any[]) => void;
 export let beforeAgentStart: (...args: any[]) => any;
+export let toolResult: (...args: any[]) => any;
 export let branchEntries: any[];
 export let execMock: ReturnType<typeof vi.fn>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
@@ -163,6 +164,9 @@ export async function setupHarness(): Promise<void> {
       }
       if (event === "before_agent_start") {
         beforeAgentStart = callback;
+      }
+      if (event === "tool_result") {
+        toolResult = callback;
       }
     }),
     appendEntry: vi.fn((customType: string, data: unknown) => {

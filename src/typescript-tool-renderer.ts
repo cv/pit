@@ -13,6 +13,7 @@ import type { RenderedResultValue } from "./result-renderer-types.js";
 import { getNamedFunctionName, resolveSavedFunctionReferences } from "./sandbox.js";
 import type { FunctionActivity, FunctionRegistry } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
+import type { StructuredTypeScriptFailure } from "./typescript-failure-context.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const SPINNER_INTERVAL_MS = 200;
@@ -21,6 +22,7 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
   value: unknown;
   truncated: boolean;
   functions?: FunctionActivity[];
+  failure?: StructuredTypeScriptFailure;
 }
 
 function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | undefined {
@@ -289,18 +291,28 @@ function renderPartialToolResult(input: {
 
 function renderToolError(input: {
   expanded: boolean;
+  details?: TypeScriptDetails;
   fallback: string;
   duration: string;
   theme: RenderTheme;
 }) {
-  const message = input.fallback || "TypeScript execution failed";
-  return new Text(
-    `${input.expanded ? "\n" : ""}${input.theme.bold(
-      input.theme.fg("error", "✗ Failed") + input.theme.fg("dim", ` (${input.duration})`),
-    )}\n${input.theme.fg("error", message)}`,
-    0,
-    0,
-  );
+  const message =
+    input.details?.failure?.rootError || input.fallback || "TypeScript execution failed";
+  let text = `${input.expanded ? "\n" : ""}${input.theme.bold(
+    input.theme.fg("error", "✗ Failed") + input.theme.fg("dim", ` (${input.duration})`),
+  )}`;
+  if (input.expanded) {
+    const path = input.details?.failure ? input.details.failure.functionPath : [];
+    if (path.length > 0) {
+      text += `\n${input.theme.fg("toolTitle", "Function path")}\n${input.theme.fg("muted", path.join(" → "))}`;
+    }
+    const dashboard = renderExecutionDashboard(input.details, input.theme);
+    if (dashboard) {
+      text += `\n${input.theme.fg("toolTitle", "Execution")}${dashboard}`;
+    }
+  }
+  text += `\n${input.theme.fg("error", message)}`;
+  return new Text(text, 0, 0);
 }
 
 function renderStructuredToolValue(input: {
@@ -416,6 +428,7 @@ export function renderTypeScriptToolResult(
   if (context.isError) {
     return renderToolError({
       expanded: options.expanded,
+      ...(details ? { details } : {}),
       fallback,
       duration: execution.duration,
       theme,
