@@ -19,6 +19,7 @@ import {
   loadProjectFunctions,
   projectFunctionCatalog,
 } from "./project-functions.js";
+import { registerRuntimeControlCommands } from "./runtime-control-commands.js";
 import { getSavedFunctionCallSignature, runInSandbox } from "./sandbox.js";
 import { SavedFunctionService } from "./saved-function-service.js";
 import {
@@ -121,6 +122,7 @@ function registerSavedFunctionManager({
 }
 
 export default function pit(pi: ExtensionAPI) {
+  registerRuntimeControlCommands(pi);
   registerSessionControlCommands(pi);
   const functionState = createFunctionState();
 

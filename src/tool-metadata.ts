@@ -5,7 +5,7 @@ export const PROMPT_SNIPPET =
   "Run sandboxed TypeScript with batched and parallel host capabilities plus reusable functions";
 
 export const PROMPT_GUIDELINES = [
-  "Use typescript for all workspace, Git, shell, HTTP, UI, and context operations.",
+  "Use typescript for host operations.",
   "In typescript, prefer git.status/diff/log/add/commit/show/push/tag for those Git subcommands; use shell.execFile only for other Git subcommands.",
   "In typescript, prefer npm.run/test/install/audit/outdated/pack and gh issue/pr/run/release methods for supported workflows; use shell.execFile only for unsupported commands.",
   "In typescript, code is type-checked. Before fanning out an unfamiliar capability, validate one minimal call. After two failures of the same class, stop varying syntax: inspect contract/state, reduce to a minimal probe, and choose a simpler API if available.",

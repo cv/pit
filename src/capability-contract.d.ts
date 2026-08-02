@@ -352,6 +352,14 @@ interface PitModelsCapability {
   set(provider: string, id: string): Promise<{ provider: string; id: string; changed: boolean }>;
 }
 
+interface PitRuntimeCapability {
+  status(): Promise<{ mode: string; idle: boolean; pendingMessages: boolean }>;
+
+  requestReload(): Promise<{ queued: true; command: string }>;
+
+  requestShutdown(): Promise<{ queued: true; command: string }>;
+}
+
 interface PitFunctionsCapability {
   list(): Promise<PitProjectFunctionMetadata[]>;
 
@@ -380,6 +388,7 @@ interface PitCapabilities {
   session: PitSessionCapability;
   commands: PitCommandsCapability;
   models: PitModelsCapability;
+  runtime: PitRuntimeCapability;
   functions: PitFunctionsCapability;
 }
 

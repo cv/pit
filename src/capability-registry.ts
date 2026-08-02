@@ -6,6 +6,7 @@ import { gitCapability } from "./capabilities/git.js";
 import { httpCapability } from "./capabilities/http.js";
 import { modelsCapability } from "./capabilities/models.js";
 import { npmCapability } from "./capabilities/npm.js";
+import { runtimeCapability } from "./capabilities/runtime.js";
 import { sessionCapability } from "./capabilities/session.js";
 import { shellCapability } from "./capabilities/shell.js";
 import { uiCapability } from "./capabilities/ui.js";
@@ -162,6 +163,7 @@ export const CAPABILITY_REGISTRY = defineCapabilities({
   session: sessionCapability,
   commands: commandsCapability,
   models: modelsCapability,
+  runtime: runtimeCapability,
   functions: functionsCapability,
 });
 

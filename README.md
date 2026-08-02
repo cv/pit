@@ -81,6 +81,7 @@ Pit injects only the capabilities that submitted code requests.
 | `session` | Inspect session metadata and manage its display name. |
 | `commands` | List extension, prompt-template, and skill slash commands with provenance. |
 | `models` | List configured models, inspect the current model, and select a model. |
+| `runtime` | Inspect runtime state and request confirmed reload or shutdown. |
 | `functions` | Inspect and remove trusted project functions. |
 
 See [Capability reference](#capability-reference) for method details.
@@ -404,6 +405,12 @@ UI methods require a mode that provides a UI.
 - `current()` returns bounded metadata for the active model.
 - `list(options?)` returns bounded model metadata; available models are the default.
 - `set(provider, id)` selects an explicit configured model and fails when credentials are unavailable.
+
+### `runtime`
+
+- `status()` reports mode, idle state, and whether messages are queued.
+- `requestReload()` queues a confirmed runtime reload as a follow-up command.
+- `requestShutdown()` queues a confirmed graceful shutdown as a follow-up command. Reload and shutdown never occur inside the active tool call.
 
 ### `functions`
 

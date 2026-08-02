@@ -51,6 +51,8 @@ export function context(overrides: Record<string, unknown> = {}) {
     thinkingLevel: "medium",
     hasUI: true,
     isProjectTrusted: () => true,
+    isIdle: () => true,
+    hasPendingMessages: () => false,
     getContextUsage: () => ({ tokens: 1234, contextWindow: 200000, percent: 0.617 }),
     modelRegistry: {
       refresh: vi.fn(async () => undefined),

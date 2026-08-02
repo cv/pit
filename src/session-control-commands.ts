@@ -1,16 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-
-async function confirmReplacement(
-  ctx: ExtensionCommandContext,
-  title: string,
-  message: string,
-): Promise<boolean> {
-  const confirmed = await ctx.ui.confirm(title, message);
-  if (confirmed) {
-    await ctx.waitForIdle();
-  }
-  return confirmed;
-}
+import { confirmAndWaitForIdle } from "./control-command-utils.js";
 
 async function forkSession(
   ctx: ExtensionCommandContext,
@@ -23,7 +12,7 @@ async function forkSession(
     return;
   }
   if (
-    !(await confirmReplacement(
+    !(await confirmAndWaitForIdle(
       ctx,
       `${action} from ${entryId}?`,
       `${action} the session at this entry and replace the active session?`,
@@ -39,7 +28,7 @@ export function registerSessionControlCommands(pi: ExtensionAPI): void {
     description: "Start a confirmed new session",
     handler: async (_args, ctx) => {
       if (
-        !(await confirmReplacement(
+        !(await confirmAndWaitForIdle(
           ctx,
           "Start a new session?",
           "Replace the active session with a new session?",
