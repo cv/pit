@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url";
 import { transform } from "esbuild";
 import * as ts from "typescript";
 import { SANDBOX_GLOBALS } from "./sandbox-contract.js";
+import {
+  clearSavedFunctionDependencyGraphCache,
+  getSavedFunctionDependencyGraphCacheStats,
+  resolveSavedFunctionReferences,
+} from "./saved-function-graph.js";
 
 const SIGNATURE_WHITESPACE = /\s+/g;
 const JSDOC_PARAGRAPH_SEPARATOR = /\r?\n\s*\r?\n/;
@@ -36,6 +41,7 @@ function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
 export function clearSandboxCaches(): void {
   validationCache.clear();
   compilationCache.clear();
+  clearSavedFunctionDependencyGraphCache();
   validationCacheHits = 0;
   compilationCacheHits = 0;
 }
@@ -46,6 +52,7 @@ export function getSandboxCacheStats() {
     compilationEntries: compilationCache.size,
     validationHits: validationCacheHits,
     compilationHits: compilationCacheHits,
+    ...getSavedFunctionDependencyGraphCacheStats(),
   };
 }
 
@@ -86,120 +93,6 @@ function submissionExpression(source: string): ts.Expression | undefined {
     expression = expression.expression;
   }
   return expression;
-}
-
-function referencedNames(source: string, candidates: ReadonlySet<string>): Set<string> {
-  if (candidates.size === 0) {
-    return new Set();
-  }
-  const contractFile = "/pit/reference-contract.d.ts";
-  const sourceFile = "/pit/references.ts";
-  const declarations = [...candidates]
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => `declare const ${name}: (...args: unknown[]) => unknown;`)
-    .join("\n");
-  const wrapped = `function __pit_reference_scope() {\n${source}\n}`;
-  const options: ts.CompilerOptions = {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    noLib: true,
-    noResolve: true,
-    skipLibCheck: true,
-  };
-  const baseHost = ts.createCompilerHost(options, true);
-  const sources = new Map([
-    [contractFile, declarations],
-    [sourceFile, wrapped],
-  ]);
-  const host: ts.CompilerHost = {
-    ...baseHost,
-    fileExists: (fileName) => sources.has(fileName),
-    getSourceFile: (fileName, languageVersion) =>
-      // biome-ignore lint/style/noNonNullAssertion: the program requests only generated root files.
-      ts.createSourceFile(fileName, sources.get(fileName)!, languageVersion, true),
-  };
-  const program = ts.createProgram([contractFile, sourceFile], options, host);
-  const checker = program.getTypeChecker();
-  // biome-ignore lint/style/noNonNullAssertion: both generated files are program roots.
-  const contract = program.getSourceFile(contractFile)!;
-  // biome-ignore lint/style/noNonNullAssertion: both generated files are program roots.
-  const submitted = program.getSourceFile(sourceFile)!;
-
-  const namesBySymbol = new Map<ts.Symbol, string>();
-  for (const statement of contract.statements) {
-    const declaration = (statement as ts.VariableStatement).declarationList.declarations[0];
-    // biome-ignore lint/style/noNonNullAssertion: every generated statement has one identifier declaration.
-    const identifier = declaration!.name as ts.Identifier;
-    // biome-ignore lint/style/noNonNullAssertion: generated ambient declarations always bind a symbol.
-    namesBySymbol.set(checker.getSymbolAtLocation(identifier)!, identifier.text);
-  }
-
-  const references = new Set<string>();
-  const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node)) {
-      let ancestor: ts.Node | undefined = node;
-      let typeOnly = false;
-      while (ancestor && ancestor !== submitted) {
-        if (ts.isTypeNode(ancestor)) {
-          typeOnly = true;
-          break;
-        }
-        ancestor = ancestor.parent;
-      }
-      if (!typeOnly) {
-        const symbol = checker.getSymbolAtLocation(node);
-        const name = symbol ? namesBySymbol.get(symbol) : undefined;
-        if (name) {
-          references.add(name);
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(submitted);
-  return references;
-}
-
-export interface SavedFunctionReference {
-  name: string;
-  source: string;
-  direct: boolean;
-}
-
-export function resolveSavedFunctionReferences(
-  source: string,
-  savedFunctions: ReadonlyMap<string, string>,
-): SavedFunctionReference[] {
-  const names = new Set(savedFunctions.keys());
-  const direct = referencedNames(source, names);
-  const resolved = new Map<string, SavedFunctionReference>();
-  const visiting = new Set<string>();
-  const visit = (name: string, isDirect: boolean): void => {
-    const savedSource = savedFunctions.get(name);
-    if (savedSource === undefined || visiting.has(name)) {
-      return;
-    }
-    const existing = resolved.get(name);
-    if (existing) {
-      if (isDirect) {
-        existing.direct = true;
-      }
-      return;
-    }
-    visiting.add(name);
-    const dependencies = [...referencedNames(savedSource, names)]
-      .filter((dependency) => dependency !== name)
-      .sort((a, b) => a.localeCompare(b));
-    for (const dependency of dependencies) {
-      visit(dependency, false);
-    }
-    visiting.delete(name);
-    resolved.set(name, { name, source: savedSource, direct: isDirect });
-  };
-  for (const name of [...direct].sort((a, b) => a.localeCompare(b))) {
-    visit(name, true);
-  }
-  return [...resolved.values()];
 }
 
 function isProgramExpression(source: string): boolean {

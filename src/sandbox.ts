@@ -9,11 +9,7 @@ import {
 } from "./capability-trace.js";
 import { compileSandboxSource } from "./sandbox-program.js";
 
-export type {
-  ProjectFunctionMetadata,
-  ProjectFunctionParameter,
-  SavedFunctionReference,
-} from "./sandbox-program.js";
+export type { ProjectFunctionMetadata, ProjectFunctionParameter } from "./sandbox-program.js";
 export {
   clearSandboxCaches,
   formatDiagnostic,
@@ -21,9 +17,14 @@ export {
   getProjectFunctionMetadata,
   getSandboxCacheStats,
   getSavedFunctionCallSignature,
-  resolveSavedFunctionReferences,
   validateTypeScript,
 } from "./sandbox-program.js";
+export type { SavedFunctionReference } from "./saved-function-graph.js";
+export {
+  getSavedFunctionDependencyGraph,
+  resolveSavedFunctionReferences,
+  SavedFunctionDependencyGraph,
+} from "./saved-function-graph.js";
 
 export interface SandboxOptions {
   memoryLimitMb?: number;

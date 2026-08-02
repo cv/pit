@@ -9,8 +9,8 @@ import {
 import {
   getProjectFunctionMetadata,
   getSavedFunctionCallSignature,
+  getSavedFunctionDependencyGraph,
   type ProjectFunctionMetadata,
-  resolveSavedFunctionReferences,
   validateTypeScript,
 } from "./sandbox.js";
 import {
@@ -188,13 +188,11 @@ export async function loadProjectFunctions(
   }
 
   const sources = new Map([...candidates].map(([name, value]) => [name, value.source]));
+  const sourceGraph = getSavedFunctionDependencyGraph(sources);
   for (const [name, value] of candidates) {
     try {
       const dependencies = new Map(
-        resolveSavedFunctionReferences(value.source, sources).map((reference) => [
-          reference.name,
-          reference.source,
-        ]),
+        sourceGraph.resolve(value.source).map((reference) => [reference.name, reference.source]),
       );
       dependencies.set(name, value.source);
       validateTypeScript(value.source, dependencies);
@@ -247,19 +245,20 @@ export function savedFunctionDependents(
     });
   }
 
+  const projectGraph = getSavedFunctionDependencyGraph(projectCandidates);
+  const effectiveGraph = getSavedFunctionDependencyGraph(effective);
+
   const dependencies = new Map<string, Set<string>>();
   for (const [functionKey, candidate] of functions) {
-    const registry = candidate.scope === "project" ? projectCandidates : effective;
-    const references = resolveSavedFunctionReferences(candidate.source, registry).filter(
-      (reference) => reference.direct,
-    );
+    const graph = candidate.scope === "project" ? projectGraph : effectiveGraph;
+    const references = graph.directDependencies(candidate.name);
     dependencies.set(
       functionKey,
       new Set(
         references.map((reference) =>
-          candidate.scope === "session" && session.has(reference.name)
-            ? key("session", reference.name)
-            : key("project", reference.name),
+          candidate.scope === "session" && session.has(reference)
+            ? key("session", reference)
+            : key("project", reference),
         ),
       ),
     );
@@ -315,10 +314,21 @@ export function reconcileProjectFunctionsForSession({
   metadata,
 }: ProjectFunctionReconciliation): string[] {
   const sessionCandidates = new Map(session);
+  const candidateGraph = getSavedFunctionDependencyGraph(candidates);
+  const availableCandidates = new Map([...candidates, ...sessionCandidates]);
+  const availableGraph = getSavedFunctionDependencyGraph(availableCandidates);
   session.clear();
   registry.clear();
   metadata.clear();
   const errors: string[] = [];
+
+  const requiredProjectSource = (name: string): string => {
+    const source = candidates.get(name);
+    if (source === undefined) {
+      throw new Error(`required project function "${name}" is unavailable`);
+    }
+    return source;
+  };
 
   const projectClosure = (
     roots: readonly string[],
@@ -332,18 +342,12 @@ export function reconcileProjectFunctionsForSession({
       if ((!force && sessionFunctions.has(name)) || registry.has(name) || selected.has(name)) {
         return;
       }
-      const source = candidates.get(name);
-      if (source === undefined) {
-        throw new Error(`required project function "${name}" is unavailable`);
-      }
+      requiredProjectSource(name);
       if (visiting.has(name)) {
         return;
       }
       visiting.add(name);
-      const references = resolveSavedFunctionReferences(source, candidates)
-        .filter((reference) => reference.direct)
-        .map((reference) => reference.name)
-        .sort((a, b) => a.localeCompare(b));
+      const references = candidateGraph.directDependencies(name);
       for (const dependency of references) {
         visit(dependency, false);
       }
@@ -363,14 +367,14 @@ export function reconcileProjectFunctionsForSession({
   ): FunctionRegistry => {
     const project = new Map(registry);
     for (const name of additions) {
-      project.set(name, candidates.get(name) as string);
+      project.set(name, requiredProjectSource(name));
     }
     return new Map([...project, ...sessionFunctions]);
   };
 
   const commitProjects = (names: readonly string[]): void => {
     for (const name of names) {
-      registry.set(name, candidates.get(name) as string);
+      registry.set(name, requiredProjectSource(name));
       const parsed = candidateMetadata.get(name);
       if (parsed) {
         metadata.set(name, parsed);
@@ -382,15 +386,9 @@ export function reconcileProjectFunctionsForSession({
     try {
       const proposedSession = new Map(session);
       proposedSession.set(name, source);
-      const availableCandidates = new Map([...candidates, ...sessionCandidates]);
-      const roots = resolveSavedFunctionReferences(source, availableCandidates)
-        .filter(
-          (reference) =>
-            reference.direct &&
-            !proposedSession.has(reference.name) &&
-            candidates.has(reference.name),
-        )
-        .map((reference) => reference.name);
+      const roots = availableGraph
+        .directReferences(source)
+        .filter((reference) => !proposedSession.has(reference) && candidates.has(reference));
       const additions = projectClosure(roots, proposedSession);
       const effective = proposedEffective(additions, proposedSession);
       validateEffectiveRegistryCapacity(effective);

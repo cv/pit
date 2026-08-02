@@ -9,6 +9,7 @@ import {
   getProjectFunctionMetadata,
   getSandboxCacheStats,
   getSavedFunctionCallSignature,
+  getSavedFunctionDependencyGraph,
   parseFunctionExecutionContext,
   resolveSavedFunctionReferences,
   runInSandbox,
@@ -175,15 +176,51 @@ describe("saved function references", () => {
       { name: "base", source: saved.get("base"), direct: true },
       { name: "composed", source: saved.get("composed"), direct: true },
     ]);
+
+    const directPromotion = new Map([
+      ["aComposed", "async function aComposed() { return zBase(); }"],
+      ["zBase", "async function zBase() { return 1; }"],
+    ]);
+    expect(resolveSavedFunctionReferences("aComposed() + zBase()", directPromotion)).toEqual([
+      { name: "zBase", source: directPromotion.get("zBase"), direct: true },
+      { name: "aComposed", source: directPromotion.get("aComposed"), direct: true },
+    ]);
   });
 
-  it("handles cyclic saved references without duplication", () => {
+  it("reports direct and transitive reverse dependencies", () => {
+    const graph = getSavedFunctionDependencyGraph(
+      new Map([
+        ["base", "async function base() { return 1; }"],
+        ["middle", "async function middle() { return base(); }"],
+        ["sibling", "async function sibling() { return base(); }"],
+        ["leafA", "async function leafA() { return middle(); }"],
+        ["leafB", "async function leafB() { return middle(); }"],
+      ]),
+    );
+
+    expect(graph.directDependencies("missing")).toEqual([]);
+    expect(graph.dependents("base")).toEqual({
+      direct: ["middle", "sibling"],
+      transitive: ["leafA", "leafB"],
+    });
+    expect(graph.cycles()).toEqual([]);
+  });
+
+  it("handles and orders cyclic saved references without duplication", () => {
     const saved = new Map([
       ["first", "async function first() { return second(); }"],
       ["second", "async function second() { return first(); }"],
+      ["alpha", "async function alpha() { return beta(); }"],
+      ["beta", "async function beta() { return alpha(); }"],
     ]);
-    const references = resolveSavedFunctionReferences("first()", saved);
+    const graph = getSavedFunctionDependencyGraph(saved);
+    const references = graph.resolve("first()");
     expect(references.map((reference) => reference.name).sort()).toEqual(["first", "second"]);
+    expect(graph.cycles()).toEqual([
+      ["alpha", "beta"],
+      ["first", "second"],
+    ]);
+    expect(graph.dependents("first")).toEqual({ direct: ["second"], transitive: [] });
   });
 });
 
@@ -205,6 +242,10 @@ describe("sandbox caches", () => {
       compilationEntries: 1,
       validationHits: 4,
       compilationHits: 1,
+      dependencyGraphEntries: 1,
+      dependencyGraphHits: 1,
+      dependencyReferenceEntries: 0,
+      dependencyReferenceHits: 0,
     });
     clearSandboxCaches();
     expect(getSandboxCacheStats()).toEqual({
@@ -212,7 +253,39 @@ describe("sandbox caches", () => {
       compilationEntries: 0,
       validationHits: 0,
       compilationHits: 0,
+      dependencyGraphEntries: 0,
+      dependencyGraphHits: 0,
+      dependencyReferenceEntries: 0,
+      dependencyReferenceHits: 0,
     });
+  });
+
+  it("reuses dependency graphs and invalidates changed registries", () => {
+    clearSandboxCaches();
+    const saved = new Map([
+      ["base", "async function base() { return 1; }"],
+      ["composed", "async function composed() { return base() + 1; }"],
+    ]);
+    const initial = getSavedFunctionDependencyGraph(saved);
+    expect(initial.resolve("composed()").map(({ name }) => name)).toEqual(["base", "composed"]);
+
+    const reloaded = getSavedFunctionDependencyGraph(new Map(saved));
+    expect(reloaded).toBe(initial);
+    expect(reloaded.resolve("composed()").map(({ name }) => name)).toEqual(["base", "composed"]);
+
+    saved.set("composed", "async function composed() { return 2; }");
+    const replaced = getSavedFunctionDependencyGraph(saved);
+    expect(replaced).not.toBe(initial);
+    expect(replaced.resolve("composed()").map(({ name }) => name)).toEqual(["composed"]);
+
+    saved.delete("base");
+    expect(getSavedFunctionDependencyGraph(saved)).not.toBe(replaced);
+    expect(getSandboxCacheStats()).toMatchObject({
+      dependencyGraphEntries: 3,
+      dependencyGraphHits: 1,
+      dependencyReferenceHits: expect.any(Number),
+    });
+    expect(getSandboxCacheStats().dependencyReferenceHits).toBeGreaterThan(0);
   });
 });
 

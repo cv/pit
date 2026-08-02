@@ -13,8 +13,8 @@ import {
 import {
   getNamedFunctionName,
   getProjectFunctionMetadata,
+  getSavedFunctionDependencyGraph,
   type ProjectFunctionMetadata,
-  resolveSavedFunctionReferences,
   validateTypeScript,
 } from "./sandbox.js";
 import {
@@ -166,24 +166,10 @@ export class SavedFunctionService {
     if (!this.#state.session.has(name)) {
       throw new Error(`Session function "${name}" was not found`);
     }
-    const namesToRemove = new Set([name]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const [candidate, source] of this.#state.session) {
-        if (namesToRemove.has(candidate)) {
-          continue;
-        }
-        const dependsOnRemoved = resolveSavedFunctionReferences(source, this.#state.effective).some(
-          (reference) => namesToRemove.has(reference.name),
-        );
-        if (dependsOnRemoved) {
-          namesToRemove.add(candidate);
-          changed = true;
-        }
-      }
-    }
-    return [...namesToRemove].sort((a, b) => a.localeCompare(b));
+    const dependents = getSavedFunctionDependencyGraph(this.#state.effective).dependents(name);
+    return [name, ...dependents.direct, ...dependents.transitive]
+      .filter((candidate) => this.#state.session.has(candidate))
+      .sort((a, b) => a.localeCompare(b));
   }
 
   removeSession(name: string): Promise<string[]> {
