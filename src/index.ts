@@ -91,7 +91,7 @@ export function formatPitSkillsForPrompt(skills: readonly PitPromptSkill[]): str
   const lines = [
     "The following skills provide specialized instructions for specific tasks.",
     "Use the typescript tool's workspace.read capability to load the complete skill file when the task matches its description. Always read skill files in full.",
-    "When a skill file references a relative path, resolve it against the skill directory (the parent of SKILL.md) and pass that absolute path to workspace.read or the relevant Pit capability.",
+    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and pass that absolute path to workspace.read or the relevant Pit capability.",
     "",
     "<available_skills>",
   ];
@@ -230,8 +230,13 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
     reconcileFunctionState(functionState);
   });
   pi.on("before_agent_start", (event) => {
+    const promptAlreadyHasSkills =
+      event.systemPromptOptions?.selectedTools?.includes("read") ||
+      event.systemPrompt.includes("<available_skills>");
     const additions = [
-      formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []),
+      promptAlreadyHasSkills
+        ? ""
+        : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []),
       projectFunctionCatalog(functionState.metadata, functionState.session),
     ].filter(Boolean);
     if (additions.length > 0) {

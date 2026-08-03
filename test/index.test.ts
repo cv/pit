@@ -178,9 +178,9 @@ describe("Pit skill prompt", () => {
   it("advertises model-invokable skills with Pit file-loading guidance", () => {
     const prompt = formatPitSkillsForPrompt([
       {
-        name: "review<&",
-        description: 'Review "changes" & report',
-        filePath: "/tmp/review/SKILL.md",
+        name: "review<&>'",
+        description: 'Review "changes" & report\nnext >',
+        filePath: "/tmp/<review>&\"'/skill.md",
       },
       {
         name: "manual-only",
@@ -192,12 +192,66 @@ describe("Pit skill prompt", () => {
 
     expect(prompt).toContain("typescript tool's workspace.read capability");
     expect(prompt).toContain("load the complete skill file");
-    expect(prompt).toContain("<name>review&lt;&amp;</name>");
-    expect(prompt).toContain("<description>Review &quot;changes&quot; &amp; report</description>");
-    expect(prompt).toContain("<location>/tmp/review/SKILL.md</location>");
+
+    expect(prompt).toContain("parent of SKILL.md / dirname of the path");
+    expect(prompt).toContain("<name>review&lt;&amp;&gt;&apos;</name>");
+    expect(prompt).toContain(
+      "<description>Review &quot;changes&quot; &amp; report\nnext &gt;</description>",
+    );
+    expect(prompt).toContain("<location>/tmp/&lt;review&gt;&amp;&quot;&apos;/skill.md</location>");
     expect(prompt).not.toContain("manual-only");
+    expect(formatPitSkillsForPrompt([])).toBe("");
+    expect(
+      formatPitSkillsForPrompt([
+        {
+          name: "manual-only",
+          description: "Manual",
+          filePath: "/tmp/manual.md",
+          disableModelInvocation: true,
+        },
+      ]),
+    ).toBe("");
   });
 
+  it("does not duplicate a native or previously injected skill catalog", () => {
+    const skill = {
+      name: "delivery",
+      description: "Deliver completed changes",
+      filePath: "/skills/delivery/SKILL.md",
+    };
+
+    expect(
+      beforeAgentStart({
+        systemPrompt: "base prompt\n\n<available_skills>native</available_skills>",
+        systemPromptOptions: { selectedTools: ["typescript", "read"], skills: [skill] },
+      }),
+    ).toBeUndefined();
+    expect(
+      beforeAgentStart({
+        systemPrompt: "custom prompt\n\n<available_skills>custom</available_skills>",
+        systemPromptOptions: { selectedTools: ["typescript"], skills: [skill] },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("uses the current loaded catalog after a resource refresh", () => {
+    const first = beforeAgentStart({
+      systemPrompt: "base prompt",
+      systemPromptOptions: {
+        skills: [{ name: "old-skill", description: "Old", filePath: "/skills/old.md" }],
+      },
+    });
+    const refreshed = beforeAgentStart({
+      systemPrompt: "base prompt",
+      systemPromptOptions: {
+        skills: [{ name: "new-skill", description: "New", filePath: "/skills/new.md" }],
+      },
+    });
+
+    expect(first.systemPrompt).toContain("<name>old-skill</name>");
+    expect(refreshed.systemPrompt).not.toContain("old-skill");
+    expect(refreshed.systemPrompt).toContain("<name>new-skill</name>");
+  });
   it("injects Pi's loaded skill catalog into Pit's system prompt", () => {
     const result = beforeAgentStart({
       systemPrompt: "base prompt",
