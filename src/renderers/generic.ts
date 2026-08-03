@@ -1,3 +1,4 @@
+import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { type CapabilityCall, capabilityResultRenderer } from "../capability-presentation.js";
 import { renderGhResult } from "../gh-result-renderer.js";
 import { GIT_RESULT_RENDERERS } from "../git-result-renderers.js";
@@ -123,14 +124,17 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
 
 function renderMultilineText(
   value: unknown,
-  _context: RenderContext,
+  context: RenderContext,
 ): RenderedResultValue | undefined {
   if (typeof value !== "string" || !(value.includes("\n") || value.includes("\r"))) {
     return;
   }
-  const lines = sanitizeTerminalText(value.replace(/\r\n?/g, "\n")).split("\n");
+  const source = sanitizeTerminalText(value.replace(/\r\n?/g, "\n"));
+  const lines = context.syntaxLanguage
+    ? highlightCode(source, context.syntaxLanguage)
+    : source.split("\n");
   return {
-    kind: "text",
+    kind: context.syntaxLanguage ?? "text",
     lines,
     summary: plural(lines.length, "line"),
     detailLines: lines,
@@ -155,6 +159,25 @@ function safeSectionLabel(value: string): string {
   return sanitizeTerminalText(value).replace(/\s+/g, " ").trim() || "(unnamed)";
 }
 
+const MARKDOWN_FIELDS = new Set(["markdown", "md"]);
+const MARKDOWN_FILE_PATTERN = /\.(?:md|markdown)$/i;
+
+function markdownRecordLanguage(value: JsonRecord): "markdown" | undefined {
+  if (value.format === "markdown") {
+    return "markdown";
+  }
+  if (typeof value.file === "string" && MARKDOWN_FILE_PATTERN.test(value.file)) {
+    return "markdown";
+  }
+}
+
+function fieldSyntaxLanguage(
+  key: string,
+  recordLanguage: RenderContext["syntaxLanguage"],
+): RenderContext["syntaxLanguage"] {
+  return MARKDOWN_FIELDS.has(key.toLowerCase()) ? "markdown" : recordLanguage;
+}
+
 function renderCompound(value: unknown, context: RenderContext): RenderedResultValue | undefined {
   if (!isRecord(value) || context.depth >= MAX_RECURSIVE_DEPTH || context.seen.has(value)) {
     return;
@@ -163,8 +186,14 @@ function renderCompound(value: unknown, context: RenderContext): RenderedResultV
 
   const recognized: Array<[string, RenderedResultValue]> = [];
   const remaining: JsonRecord = {};
+  const recordLanguage = markdownRecordLanguage(value) ?? context.syntaxLanguage;
   for (const [key, entry] of Object.entries(value)) {
-    const rendered = renderKnownValue(entry, { ...context, depth: context.depth + 1 });
+    const syntaxLanguage = fieldSyntaxLanguage(key, recordLanguage);
+    const rendered = renderKnownValue(entry, {
+      ...context,
+      depth: context.depth + 1,
+      ...(syntaxLanguage ? { syntaxLanguage } : {}),
+    });
     if (rendered) {
       recognized.push([key, rendered]);
     } else {

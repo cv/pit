@@ -280,6 +280,23 @@ describe("result renderers", () => {
     expect(render("first\rsecond")).toContain("\nfirst\nsecond");
     expect(render({ "\u001b": "first\nsecond" })).toContain("(unnamed) (text, 2 lines)");
 
+    const markdownSource = "# Heading\n- **bold** item";
+    const highlightedMarkdown = highlightCode(markdownSource, "markdown");
+    const markdownValues: Array<[unknown, string]> = [
+      [{ markdown: markdownSource }, "markdown (markdown, 2 lines)"],
+      [{ md: [markdownSource] }, "[0] (markdown, 2 lines)"],
+      [{ format: "markdown", content: markdownSource }, "content (markdown, 2 lines)"],
+      [{ file: "README.md", output: markdownSource }, "output (markdown, 2 lines)"],
+      [{ file: "GUIDE.markdown", text: markdownSource }, "text (markdown, 2 lines)"],
+    ];
+    for (const [value, description] of markdownValues) {
+      const output = render(value);
+      expect(output).toContain(description);
+      for (const line of highlightedMarkdown) {
+        expect(output).toContain(line);
+      }
+    }
+
     const ordinary = render(["one", "two"]);
     expect(ordinary).toContain('"one"');
     expect(ordinary).not.toContain("[0] (json)");

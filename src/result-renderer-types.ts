@@ -11,6 +11,7 @@ export interface RenderContext {
   theme: ResultTheme;
   seen: WeakSet<object>;
   depth: number;
+  syntaxLanguage?: "markdown";
   /** The first statically identifiable capability call in submitted source. */
   capabilityCall?: CapabilityCall;
 }
