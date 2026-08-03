@@ -37,7 +37,7 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Node 22.19 or newer. It uses the Node permission model and the current Pi extension API.
+Pit requires Node 22.19 or newer and Pi 0.80.10 or newer. It uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
 
 Pit is a private Git-based Pi package. You need repository access and configured GitHub SSH credentials.
 

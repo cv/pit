@@ -85,8 +85,25 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       "@pit project",
     );
 
-    expect(beforeAgentStart({ systemPrompt: "base" }, context()).systemPrompt).toContain(
-      "projectGreeting(input?: { name?: string })",
+    const promptWithResources = beforeAgentStart(
+      {
+        systemPrompt: "base",
+        systemPromptOptions: {
+          skills: [
+            {
+              name: "delivery",
+              description: "Deliver changes",
+              filePath: "/skills/delivery/SKILL.md",
+            },
+          ],
+        },
+      },
+      context(),
+    ).systemPrompt;
+    expect(promptWithResources).toContain("projectGreeting(input?: { name?: string })");
+    expect(promptWithResources).toContain("<name>delivery</name>");
+    expect(promptWithResources.indexOf("<available_skills>")).toBeLessThan(
+      promptWithResources.indexOf("Project TypeScript functions"),
     );
 
     setBranchEntries([]);
