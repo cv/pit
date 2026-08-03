@@ -44,19 +44,19 @@ Pit is a private Git-based Pi package. You need repository access and configured
 Install the pinned release globally:
 
 ```sh
-pi install git:git@github.com:cv/pit.git@v0.9.2
+pi install git:git@github.com:cv/pit.git@v0.9.3
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.9.2
+pi install -l git:git@github.com:cv/pit.git@v0.9.3
 ```
 
 Use the pinned release one time without a settings change:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.9.2
+pi -e git:git@github.com:cv/pit.git@v0.9.3
 ```
 
 Pit replaces the active coding tool set with `typescript` when the session starts.
