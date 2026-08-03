@@ -334,6 +334,30 @@ describe("result renderers", () => {
         "content (bash, 2 lines)",
         "export READY=1\necho $READY",
       ],
+      [
+        { diff: "@@ -1 +1 @@\n-old value\n+new value" },
+        "diff",
+        "diff (diff, 3 lines)",
+        "@@ -1 +1 @@\n-old value\n+new value",
+      ],
+      [
+        { file: "changes.patch", content: "--- a/file\n+++ b/file\n+added" },
+        "diff",
+        "content (diff, 3 lines)",
+        "--- a/file\n+++ b/file\n+added",
+      ],
+      [
+        { format: "diff", output: "@@ -1 +1 @@\n-before\n+after" },
+        "diff",
+        "output (diff, 3 lines)",
+        "@@ -1 +1 @@\n-before\n+after",
+      ],
+      [
+        { file: "config.toml", content: '[package]\nname = "pit"' },
+        "toml",
+        "content (toml, 2 lines)",
+        '[package]\nname = "pit"',
+      ],
     ];
     for (const [value, language, description, source] of syntaxValues) {
       const output = render(value);

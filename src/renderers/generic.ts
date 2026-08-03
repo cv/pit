@@ -161,11 +161,21 @@ function safeSectionLabel(value: string): string {
   return sanitizeTerminalText(value).replace(/\s+/g, " ").trim() || "(unnamed)";
 }
 
-const MARKDOWN_FIELDS = new Set(["markdown", "md"]);
+const FIELD_LANGUAGES = new Map([
+  ["diff", "diff"],
+  ["markdown", "markdown"],
+  ["md", "markdown"],
+  ["patch", "diff"],
+]);
+const NON_SYNTAX_FORMATS = new Set(["hashed", "raw"]);
+
 function recordSyntaxLanguage(value: JsonRecord): string | undefined {
   for (const key of ["language", "lang", "format"] as const) {
     const hint = value[key];
     if (typeof hint === "string") {
+      if (key === "format" && NON_SYNTAX_FORMATS.has(hint.toLowerCase())) {
+        continue;
+      }
       const language = syntaxLanguageForHint(hint);
       if (language) {
         return language;
@@ -182,7 +192,7 @@ function fieldSyntaxLanguage(
   key: string,
   recordLanguage: RenderContext["syntaxLanguage"],
 ): RenderContext["syntaxLanguage"] {
-  return MARKDOWN_FIELDS.has(key.toLowerCase()) ? "markdown" : recordLanguage;
+  return FIELD_LANGUAGES.get(key.toLowerCase()) ?? recordLanguage;
 }
 
 function renderCompound(value: unknown, context: RenderContext): RenderedResultValue | undefined {
