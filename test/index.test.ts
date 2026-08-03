@@ -8,14 +8,13 @@ import {
 } from "../src/capability-registry.js";
 import {
   CAPABILITY_METHODS,
-  display,
   effectiveRegistry,
-  formatPitSkillsForPrompt,
   reconstructFunctions,
-  savedFunctionCatalogNotice,
   validateRegistryCapacity,
 } from "../src/index.js";
 import { registerFunctionManager } from "../src/saved-function-manager.js";
+import { formatPitSkillsForPrompt } from "../src/skill-prompt.js";
+import { display, savedFunctionCatalogNotice } from "../src/typescript-tool.js";
 import {
   beforeAgentStart,
   branchEntries,
