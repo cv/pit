@@ -36,7 +36,7 @@ describe("result renderers", () => {
       code: 0,
       truncated: false,
     });
-    expect(coloredShell).toContain("\u001b[32msuccess\u001b[0m");
+    expect(coloredShell).toContain("\u001b[32msuccess\u001b[22;23;24;25;27;28;29;39m");
     expect(coloredShell).not.toContain("\u001b[2J");
 
     const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
@@ -248,7 +248,7 @@ describe("result renderers", () => {
 
     const direct = render("first\r\nsecond\n\u001b[31mthird\u001b[0m\u001b[2J");
     expect(direct).toContain("Returned 3 lines (3 lines, 0.0s)");
-    expect(direct).toContain("\nfirst\nsecond\n\u001b[31mthird\u001b[0m");
+    expect(direct).toContain("\nfirst\nsecond\n\u001b[31mthird\u001b[22;23;24;25;27;28;29;39m");
     expect(direct).not.toContain("\u001b[2J");
     expect(direct).not.toContain("first\\r\\nsecond");
 

@@ -1,5 +1,6 @@
 const ESCAPE = "\u001b";
 const STRING_CONTROL_INTRODUCERS = new Set(["]", "P", "X", "^", "_"]);
+const SGR_RESET_WITHOUT_BACKGROUND = "\u001b[22;23;24;25;27;28;29;39m";
 
 export interface TerminalSanitizationOptions {
   preserveSgr?: boolean;
@@ -36,6 +37,16 @@ function isSgrParameters(value: string): boolean {
   return true;
 }
 
+function preservedSgr(parameters: string): string {
+  if (parameters === "" || parameters === "0") {
+    return SGR_RESET_WITHOUT_BACKGROUND;
+  }
+  if (parameters.startsWith("0;")) {
+    return `${SGR_RESET_WITHOUT_BACKGROUND}${ESCAPE}[${parameters.slice(2)}m`;
+  }
+  return `${ESCAPE}[${parameters}m`;
+}
+
 export function sanitizeTerminalText(
   value: string,
   options: TerminalSanitizationOptions = {},
@@ -55,7 +66,7 @@ export function sanitizeTerminalText(
           value[end] === "m" &&
           isSgrParameters(value.slice(index + 2, end))
         ) {
-          sanitized += value.slice(index, end + 1);
+          sanitized += preservedSgr(value.slice(index + 2, end));
         }
         index = end + 1;
         continue;
