@@ -1,8 +1,10 @@
 import { type ExtensionAPI, truncateHead } from "@earendil-works/pi-coding-agent";
 import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import type { FunctionActivity } from "./saved-functions.js";
+import { sanitizeTerminalText } from "./text-sanitization.js";
 
 const MAX_FAILURE_BYTES = 8_000;
+const MAX_FAILURE_LINES = 24;
 const MAX_FUNCTION_PATH = 32;
 const SAVED_FAILURE_PREFIX = /^Saved function "([^"]+)" failed: /;
 const CANCELLED_FAILURE = /abort|cancel/i;
@@ -42,7 +44,7 @@ export function structureTypeScriptFailure(
   activity: readonly FunctionActivity[],
 ): StructuredTypeScriptFailure {
   let rootError = error instanceof Error ? error.message : String(error);
-  rootError = rootError.replace(ERROR_PREFIX, "");
+  rootError = sanitizeTerminalText(rootError).replace(ERROR_PREFIX, "");
   const stackStart = rootError.search(STACK_TRACE);
   if (stackStart >= 0) {
     rootError = rootError.slice(0, stackStart);
@@ -64,7 +66,10 @@ export function structureTypeScriptFailure(
       }
     }
   }
-  rootError = truncateHead(rootError, { maxBytes: MAX_FAILURE_BYTES, maxLines: 80 }).content;
+  rootError = truncateHead(rootError, {
+    maxBytes: MAX_FAILURE_BYTES,
+    maxLines: MAX_FAILURE_LINES,
+  }).content;
   return {
     functionPath: functionPath.slice(0, MAX_FUNCTION_PATH),
     rootError,

@@ -46,6 +46,54 @@ export interface CapabilityRequest {
 
 export type CapabilityHandler = (request: CapabilityRequest) => unknown | Promise<unknown>;
 
+export interface SandboxWireError {
+  name?: string;
+  message: string;
+  frames?: string[];
+  truncated?: true;
+}
+
+export class SandboxRemoteError extends Error {
+  declare readonly remoteName: string;
+  declare readonly remoteFrames: readonly string[];
+  declare readonly remoteTruncated: boolean;
+
+  constructor(error: SandboxWireError) {
+    super(error.message);
+    this.name = "SandboxRemoteError";
+    Object.defineProperties(this, {
+      remoteName: { value: error.name ?? "Error", enumerable: false },
+      remoteFrames: { value: Object.freeze([...(error.frames ?? [])]), enumerable: false },
+      remoteTruncated: { value: error.truncated === true, enumerable: false },
+    });
+  }
+}
+
+export function sandboxFatalError(value: unknown): Error {
+  if (typeof value === "string") {
+    return new Error(value);
+  }
+  if (!(value && typeof value === "object" && !Array.isArray(value))) {
+    return new Error("TypeScript sandbox failed");
+  }
+  const error = value as Record<string, unknown>;
+  if (typeof error.message !== "string") {
+    return new Error("TypeScript sandbox failed");
+  }
+  return new SandboxRemoteError({
+    message: error.message,
+    ...(typeof error.name === "string" ? { name: error.name } : {}),
+    ...(Array.isArray(error.frames)
+      ? {
+          frames: error.frames
+            .filter((frame): frame is string => typeof frame === "string")
+            .slice(0, 20),
+        }
+      : {}),
+    ...(error.truncated === true ? { truncated: true } : {}),
+  });
+}
+
 interface WireMessage {
   token?: string;
   type?: string;
@@ -55,7 +103,7 @@ interface WireMessage {
   args?: unknown[];
   functionContext?: FunctionExecutionContext;
   value?: unknown;
-  error?: string;
+  error?: string | SandboxWireError;
   input?: unknown;
 }
 
@@ -323,7 +371,7 @@ export async function runInSandbox(
           return finishAfterCalls(undefined, message.value);
         }
         if (message.type === "fatal") {
-          return finishAfterCalls(new Error(message.error));
+          return finishAfterCalls(sandboxFatalError(message.error));
         }
         if (isCapabilityCallMessage(message)) {
           handleCapabilityCall(message);

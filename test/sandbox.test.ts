@@ -13,6 +13,8 @@ import {
   parseFunctionExecutionContext,
   resolveSavedFunctionReferences,
   runInSandbox,
+  SandboxRemoteError,
+  sandboxFatalError,
   validateTypeScript,
 } from "../src/sandbox.js";
 
@@ -504,6 +506,61 @@ describe("runInSandbox", () => {
     await expect(runInSandbox("first()", handler, { savedFunctions: recursive })).rejects.toThrow(
       "Saved function call depth exceeded 32",
     );
+  });
+
+  it("returns bounded structured remote diagnostics without enumerable stack frames", async () => {
+    let failure: unknown;
+    try {
+      await runInSandbox(
+        `() => {
+          const error = new Error("remote boom");
+          error.stack = "Error: remote boom\\n" + Array.from(
+            { length: 40 },
+            (_, index) => "    at frame" + index + " (/private/path/" + index + ".js:1:1)",
+          ).join("\\n");
+          throw error;
+        }`,
+        async () => null,
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(SandboxRemoteError);
+    const remote = failure as SandboxRemoteError;
+    expect(remote.message).toBe("remote boom");
+    expect(remote.remoteName).toBe("Error");
+    expect(remote.remoteFrames).toHaveLength(20);
+    expect(remote.remoteTruncated).toBe(true);
+    expect(JSON.stringify(remote)).not.toContain("private/path");
+
+    try {
+      await runInSandbox(`() => { throw new Error("x".repeat(20_000)); }`, async () => null);
+    } catch (error) {
+      const bounded = error as SandboxRemoteError;
+      expect(Buffer.byteLength(bounded.message)).toBeLessThanOrEqual(8_000);
+      expect(bounded.remoteTruncated).toBe(true);
+    }
+  });
+
+  it("accepts legacy and defensive sandbox fatal error shapes", () => {
+    expect(sandboxFatalError("legacy failure").message).toBe("legacy failure");
+    expect(sandboxFatalError(undefined).message).toBe("TypeScript sandbox failed");
+    expect(sandboxFatalError({ name: "Error" }).message).toBe("TypeScript sandbox failed");
+
+    const minimal = sandboxFatalError({ message: "minimal" }) as SandboxRemoteError;
+    expect(minimal.remoteName).toBe("Error");
+    expect(minimal.remoteFrames).toEqual([]);
+    expect(minimal.remoteTruncated).toBe(false);
+
+    const structured = sandboxFatalError({
+      name: "TypeError",
+      message: "structured",
+      frames: ["    at one", 42, "    at two"],
+      truncated: true,
+    }) as SandboxRemoteError;
+    expect(structured.remoteName).toBe("TypeError");
+    expect(structured.remoteFrames).toEqual(["    at one", "    at two"]);
+    expect(structured.remoteTruncated).toBe(true);
   });
 
   it("detects named top-level function expressions", () => {

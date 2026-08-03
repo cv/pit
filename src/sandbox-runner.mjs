@@ -10,6 +10,57 @@ const idleWaiters = new Set();
 const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
 const MAX_CONCURRENT_CALLS = 64;
 const MAX_CALLS = 2048;
+const MAX_FATAL_MESSAGE_BYTES = 8_000;
+const MAX_FATAL_STACK_FRAMES = 20;
+const MAX_FATAL_FRAME_BYTES = 1_000;
+const STACK_LINES = /\r?\n/;
+const STACK_FRAME = /^\s*at /;
+
+function boundedText(value, maximumBytes) {
+  const text = String(value);
+  if (Buffer.byteLength(text) <= maximumBytes) {
+    return { text, truncated: false };
+  }
+  const suffix = "…";
+  const budget = maximumBytes - Buffer.byteLength(suffix);
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (Buffer.byteLength(text.slice(0, middle)) <= budget) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return { text: `${text.slice(0, low)}${suffix}`, truncated: true };
+}
+
+function serializeError(error) {
+  const message = boundedText(
+    error instanceof Error ? error.message : String(error),
+    MAX_FATAL_MESSAGE_BYTES,
+  );
+  const rawFrames =
+    error instanceof Error && typeof error.stack === "string"
+      ? error.stack
+          .split(STACK_LINES)
+          .slice(1)
+          .filter((line) => STACK_FRAME.test(line))
+      : [];
+  let truncated = message.truncated || rawFrames.length > MAX_FATAL_STACK_FRAMES;
+  const frames = rawFrames.slice(0, MAX_FATAL_STACK_FRAMES).map((frame) => {
+    const bounded = boundedText(frame, MAX_FATAL_FRAME_BYTES);
+    truncated ||= bounded.truncated;
+    return bounded.text;
+  });
+  return {
+    name: boundedText(error instanceof Error ? error.name : "Error", 100).text,
+    message: message.text,
+    ...(frames.length > 0 ? { frames } : {}),
+    ...(truncated ? { truncated: true } : {}),
+  };
+}
 let nextId = 1;
 let callCount = 0;
 let token;
@@ -147,9 +198,9 @@ async function start(source, input) {
     finishing = true;
     try {
       await waitForPendingCalls();
-      send({ type: "fatal", error: error?.stack || String(error) });
+      send({ type: "fatal", error: serializeError(error) });
     } catch (fatalError) {
-      send({ type: "fatal", error: fatalError?.stack || String(fatalError) });
+      send({ type: "fatal", error: serializeError(fatalError) });
     }
   }
 }
@@ -159,7 +210,7 @@ function failProtocol(message) {
   process.stdin.pause();
   if (token) {
     try {
-      send({ type: "fatal", error: message });
+      send({ type: "fatal", error: serializeError(new Error(message)) });
     } catch {
       process.exit(1);
     }

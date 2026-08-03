@@ -14,6 +14,7 @@ import { getNamedFunctionName, resolveSavedFunctionReferences } from "./sandbox.
 import type { FunctionActivity, FunctionRegistry } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "./typescript-failure-context.js";
+import { displayedFailure, displayedFunctionPath } from "./typescript-failure-presentation.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const SPINNER_INTERVAL_MS = 200;
@@ -353,15 +354,16 @@ function renderToolError(input: {
   duration: string;
   theme: RenderTheme;
 }) {
-  const message =
+  const rawMessage =
     input.details?.failure?.rootError || input.fallback || "TypeScript execution failed";
+  const message = displayedFailure(rawMessage, input.expanded);
   let text = `${input.expanded ? "\n" : ""}${input.theme.bold(
     input.theme.fg("error", "✗ Failed") + input.theme.fg("dim", ` (${input.duration})`),
   )}`;
   if (input.expanded) {
     const path = input.details?.failure ? input.details.failure.functionPath : [];
     if (path.length > 0) {
-      text += `\n${input.theme.fg("toolTitle", "Function path")}\n${input.theme.fg("muted", path.join(" → "))}`;
+      text += `\n${input.theme.fg("toolTitle", "Function path")}\n${input.theme.fg("muted", displayedFunctionPath(path))}`;
     }
     const dashboard = renderExecutionDashboard(input.details, input.theme);
     if (dashboard) {

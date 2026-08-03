@@ -602,6 +602,45 @@ describe("tool rendering", () => {
     expect(structuredError).toContain("Execution");
     expect(structuredError).toContain("boom");
     expect(structuredError).not.toContain("wrapped");
+
+    const longFailure = Array.from({ length: 20 }, (_, index) => `failure line ${index}`).join(
+      "\n",
+    );
+    const longPath = Array.from({ length: 12 }, (_, index) => `function${index}`);
+    const compactFailure = renderToolResult(
+      {
+        content: [{ type: "text", text: longFailure }],
+        details: {
+          value: undefined,
+          truncated: false,
+          failure: { functionPath: longPath, rootError: longFailure, kind: "user" },
+        },
+      },
+      { expanded: false, isPartial: false },
+      { isError: true },
+    );
+    expect(compactFailure).toContain("failure line 0 …");
+    expect(compactFailure).not.toContain("failure line 1");
+
+    const expandedFailure = renderToolResult(
+      {
+        content: [{ type: "text", text: longFailure }],
+        details: {
+          value: undefined,
+          truncated: false,
+          failure: { functionPath: longPath, rootError: longFailure, kind: "user" },
+        },
+      },
+      { expanded: true, isPartial: false },
+      { isError: true },
+    );
+    expect(expandedFailure).toContain("function0 → function1 → function2 → function3");
+    expect(expandedFailure).toContain("… 4 omitted");
+    expect(expandedFailure).toContain("function8 → function9 → function10 → function11");
+    expect(expandedFailure).toContain("failure line 11");
+    expect(expandedFailure).not.toContain("failure line 12");
+    expect(expandedFailure).toContain("additional diagnostic lines omitted");
+
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
     ).toContain("TypeScript execution failed");
