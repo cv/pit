@@ -1,3 +1,5 @@
+import { sanitizeTerminalText } from "./text-sanitization.js";
+
 export interface ProcessResult {
   stdout: string;
   stderr: string;
@@ -61,7 +63,7 @@ export function parseProcessResult(value: unknown): ProcessResult | undefined {
 }
 
 export function nonemptyLines(value: string): string[] {
-  return value
+  return sanitizeTerminalText(value, { preserveSgr: true })
     .split("\n")
     .map((line) => line.trimEnd())
     .filter(Boolean);

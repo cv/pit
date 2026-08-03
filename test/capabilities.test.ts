@@ -112,9 +112,9 @@ describe("host capabilities", () => {
     expect(updates.length).toBeGreaterThanOrEqual(2);
     const progress = updates.at(-1).details.progress[0];
     expect(progress).toMatchObject({ status: "done", code: 0 });
-    expect(progress.output).toContain("[31mvisible\nnext");
+    expect(progress.output).toContain("\u001b[31mvisible\nnext");
     expect(progress.output).toContain("warning");
-    expect(progress.output).not.toContain(String.fromCharCode(27));
+    expect(progress.output).toContain(String.fromCharCode(27));
     expect(progress.output).not.toContain(String.fromCharCode(7));
     const shellUpdates: any[] = [];
     const shellResult = await tool.execute(

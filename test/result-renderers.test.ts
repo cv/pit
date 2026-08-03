@@ -30,6 +30,16 @@ describe("result renderers", () => {
     expect(shellOutput).toContain("tests passed");
     expect(shellOutput).toContain("stderr");
     expect(shellOutput).toContain("warning");
+    const coloredShell = renderValue({
+      stdout: "\u001b[32msuccess\u001b[0m\u001b[2J",
+      stderr: "",
+      code: 0,
+      truncated: false,
+    });
+    expect(coloredShell).toContain(
+      "\u001b[32msuccess\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m",
+    );
+    expect(coloredShell).not.toContain("\u001b[2J");
 
     const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
     expect(gitOutput).toContain("git status exit 0");
@@ -217,6 +227,161 @@ describe("result renderers", () => {
     const recursiveOutput = renderValue(recursive);
     expect(recursiveOutput).toContain("status");
     expect(recursiveOutput).toContain("[object Object]");
+  });
+
+  it("renders multiline strings as safe, readable recursive sections", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    const render = (value: unknown) =>
+      (
+        tool
+          .renderResult?.(
+            {
+              content: [{ type: "text", text: display(value) }],
+              details: { value, truncated: false },
+            },
+            { expanded: true, isPartial: false },
+            theme,
+            { isError: false },
+          )
+          .render(160) ?? []
+      )
+        .map((line) => line.trimEnd())
+        .join("\n");
+
+    const direct = render("first\r\nsecond\n\u001b[31mthird\u001b[0m\u001b[2J");
+    expect(direct).toContain("Returned 3 lines (3 lines, 0.0s)");
+    expect(direct).toContain(
+      "\nfirst\nsecond\n\u001b[31mthird\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m",
+    );
+    expect(direct).not.toContain("\u001b[2J");
+    expect(direct).not.toContain("first\\r\\nsecond");
+
+    const compound = render({ status: "failed", output: "first line\nsecond line", code: 1 });
+    expect(compound).toContain("output (text, 2 lines)");
+    expect(compound).toContain("\n  first line\n  second line");
+    expect(compound).toContain("other");
+    expect(compound).toContain('"status": "failed"');
+    expect(compound).toContain('"code": 1');
+    expect(compound).not.toContain('"output":');
+
+    const nested = render({
+      rows: [{ id: 1, output: "alpha\nbeta" }, "plain", { id: 2, output: "gamma\ndelta" }],
+    });
+    expect(nested).toContain("rows (array, 3 items)");
+    expect(nested).toContain("[0] (compound, 1 section)");
+    expect(nested).toContain("[1] (json)");
+    expect(nested).toContain("[2] (compound, 1 section)");
+    expect(nested).toContain("output (text, 2 lines)");
+    expect(nested).toContain('"id": 1');
+    expect(nested).toContain('"id": 2');
+
+    const nestedRead = render({
+      items: [
+        {
+          file: "README.md",
+          format: "hashed",
+          content: "1:abc|heading",
+          revision: "rev-array",
+          lines: 1,
+        },
+      ],
+    });
+    expect(nestedRead).toContain("items (array, 1 item)");
+    expect(nestedRead).toContain("1:abc|heading");
+
+    expect(render("first\rsecond")).toContain("\nfirst\nsecond");
+    expect(render({ "\u001b": "first\nsecond" })).toContain("(unnamed) (text, 2 lines)");
+
+    const markdownSource = "# Heading\n- **bold** item";
+    const highlightedMarkdown = highlightCode(markdownSource, "markdown");
+    const markdownValues: Array<[unknown, string]> = [
+      [{ markdown: markdownSource }, "markdown (markdown, 2 lines)"],
+      [{ md: [markdownSource] }, "[0] (markdown, 2 lines)"],
+      [{ format: "markdown", content: markdownSource }, "content (markdown, 2 lines)"],
+      [{ file: "README.md", output: markdownSource }, "output (markdown, 2 lines)"],
+      [{ file: "GUIDE.markdown", text: markdownSource }, "text (markdown, 2 lines)"],
+    ];
+    for (const [value, description] of markdownValues) {
+      const output = render(value);
+      expect(output).toContain(description);
+      for (const line of highlightedMarkdown) {
+        expect(output).toContain(line);
+      }
+    }
+
+    const syntaxValues: Array<[unknown, string, string, string]> = [
+      [
+        { file: "src/example.ts", output: "const answer = 42;\nconsole.log(answer);" },
+        "typescript",
+        "output (typescript, 2 lines)",
+        "const answer = 42;\nconsole.log(answer);",
+      ],
+      [
+        { format: "py", content: "def answer():\n    return 42" },
+        "python",
+        "content (python, 2 lines)",
+        "def answer():\n    return 42",
+      ],
+      [
+        { language: "json", body: '{\n  "ok": true\n}' },
+        "json",
+        "body (json, 3 lines)",
+        '{\n  "ok": true\n}',
+      ],
+      [
+        { format: "raw", file: "main.go", content: "package main\nfunc main() {}" },
+        "go",
+        "content (go, 2 lines)",
+        "package main\nfunc main() {}",
+      ],
+      [
+        { lang: "shell", script: "echo hello\nprintf '%s\\n' done" },
+        "bash",
+        "script (bash, 2 lines)",
+        "echo hello\nprintf '%s\\n' done",
+      ],
+      [
+        { file: "setup.zsh", content: "export READY=1\necho $READY" },
+        "bash",
+        "content (bash, 2 lines)",
+        "export READY=1\necho $READY",
+      ],
+      [
+        { diff: "@@ -1 +1 @@\n-old value\n+new value" },
+        "diff",
+        "diff (diff, 3 lines)",
+        "@@ -1 +1 @@\n-old value\n+new value",
+      ],
+      [
+        { file: "changes.patch", content: "--- a/file\n+++ b/file\n+added" },
+        "diff",
+        "content (diff, 3 lines)",
+        "--- a/file\n+++ b/file\n+added",
+      ],
+      [
+        { format: "diff", output: "@@ -1 +1 @@\n-before\n+after" },
+        "diff",
+        "output (diff, 3 lines)",
+        "@@ -1 +1 @@\n-before\n+after",
+      ],
+      [
+        { file: "config.toml", content: '[package]\nname = "pit"' },
+        "toml",
+        "content (toml, 2 lines)",
+        '[package]\nname = "pit"',
+      ],
+    ];
+    for (const [value, language, description, source] of syntaxValues) {
+      const output = render(value);
+      expect(output).toContain(description);
+      for (const line of highlightCode(source, language)) {
+        expect(output).toContain(line);
+      }
+    }
+
+    const ordinary = render(["one", "two"]);
+    expect(ordinary).toContain('"one"');
+    expect(ordinary).not.toContain("[0] (json)");
   });
 
   it("dims hashed read prefixes and hangs wrapped content under the text column", () => {
