@@ -395,9 +395,6 @@ UI methods require a mode that provides a UI.
 - `getName()` returns the session display name.
 - `setName(name)` sets the session display name.
 - `compact(instructions?)` awaits manual compaction and returns bounded cut-point and token metadata without returning the generated summary.
-- `requestNew()` queues a confirmed new-session command as a follow-up.
-- `requestFork(entryId)` queues a confirmed fork-before command as a follow-up.
-- `requestClone(entryId)` queues a confirmed clone-through command as a follow-up. Session replacement never occurs inside the active tool call.
 
 ### `commands`
 
@@ -412,8 +409,6 @@ UI methods require a mode that provides a UI.
 ### `runtime`
 
 - `status()` reports mode, idle state, and whether messages are queued.
-- `requestReload()` queues a confirmed runtime reload as a follow-up command.
-- `requestShutdown()` queues a confirmed graceful shutdown as a follow-up command. Reload and shutdown never occur inside the active tool call.
 
 ### `functions`
 

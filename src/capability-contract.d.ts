@@ -344,12 +344,6 @@ interface PitSessionCapability {
     tokensBefore: number;
     estimatedTokensAfter: number | undefined;
   }>;
-
-  requestNew(): Promise<{ queued: true; command: string }>;
-
-  requestFork(entryId: string): Promise<{ queued: true; command: string }>;
-
-  requestClone(entryId: string): Promise<{ queued: true; command: string }>;
 }
 
 interface PitCommandsCapability {
@@ -370,10 +364,6 @@ interface PitModelsCapability {
 
 interface PitRuntimeCapability {
   status(): Promise<{ mode: string; idle: boolean; pendingMessages: boolean }>;
-
-  requestReload(): Promise<{ queued: true; command: string }>;
-
-  requestShutdown(): Promise<{ queued: true; command: string }>;
 }
 
 interface PitFunctionsCapability {

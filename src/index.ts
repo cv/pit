@@ -20,7 +20,6 @@ import {
   loadProjectFunctions,
   projectFunctionCatalog,
 } from "./project-functions.js";
-import { registerRuntimeControlCommands } from "./runtime-control-commands.js";
 import { getSavedFunctionCallSignature, runInSandbox } from "./sandbox.js";
 import { SavedFunctionService } from "./saved-function-service.js";
 import {
@@ -28,7 +27,6 @@ import {
   reconstructFunctions,
   registerFunctionManager,
 } from "./saved-functions.js";
-import { registerSessionControlCommands } from "./session-control-commands.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,
@@ -246,8 +244,6 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
 }
 
 export default function pit(pi: ExtensionAPI) {
-  registerRuntimeControlCommands(pi);
-  registerSessionControlCommands(pi);
   const functionState = createFunctionState();
   const pendingFailures = new Map<string, TypeScriptFailureDetails>();
   const commitFunctionState = createFunctionStateCommitQueue();
