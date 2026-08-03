@@ -45,6 +45,25 @@ describe("terminal text sanitization", () => {
     );
   });
 
+  it("strips 8-bit C1 controls and their control-string payloads", () => {
+    const unsafe = [
+      "before",
+      "\u009d0;title\u009c",
+      "osc-safe",
+      "\u009d1;title\u0007",
+      "\u0090dcs-payload\u009c",
+      "\u0098sos-payload\u009c",
+      "\u009epm-payload\u009c",
+      "\u009fapc-payload\u009c",
+      "\u0085\u009c",
+      "after",
+    ].join("");
+    expect(sanitizeTerminalText(unsafe, { preserveSgr: true })).toBe("beforeosc-safeafter");
+    expect(sanitizeTerminalText("unterminated\u009dtitle", { preserveSgr: true })).toBe(
+      "unterminated",
+    );
+  });
+
   it("normalizes line endings and removes ordinary control characters", () => {
     expect(sanitizeTerminalText("one\r\ntwo\rthree\n\tfour\u0000\u007f")).toBe(
       "one\ntwo\nthree\n\tfour",

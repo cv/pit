@@ -1,6 +1,7 @@
 const ESCAPE = "\u001b";
 const STRING_CONTROL_INTRODUCERS = new Set(["]", "P", "X", "^", "_"]);
 const SGR_RESET_WITHOUT_BACKGROUND = "\u001b[22;23;24;25;27;28;29;39m";
+const C1_STRING_CONTROL_INTRODUCERS = new Set([0x90, 0x98, 0x9d, 0x9e, 0x9f]);
 
 export interface TerminalSanitizationOptions {
   preserveSgr?: boolean;
@@ -23,6 +24,9 @@ function controlStringEnd(value: string, start: number): number {
     }
     if (value[index] === ESCAPE && value[index + 1] === "\\") {
       return index + 2;
+    }
+    if (value.charCodeAt(index) === 0x9c) {
+      return index + 1;
     }
   }
   return value.length;
@@ -80,6 +84,14 @@ export function sanitizeTerminalText(
     }
     if (code === 0x9b) {
       index = csiEnd(value, index + 1) + 1;
+      continue;
+    }
+    if (C1_STRING_CONTROL_INTRODUCERS.has(code)) {
+      index = controlStringEnd(value, index + 1);
+      continue;
+    }
+    if (code >= 0x80 && code <= 0x9f) {
+      index++;
       continue;
     }
     if (character === "\r") {
