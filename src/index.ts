@@ -21,12 +21,9 @@ import {
   projectFunctionCatalog,
 } from "./project-functions.js";
 import { getSavedFunctionCallSignature, runInSandbox } from "./sandbox.js";
+import { registerFunctionManager } from "./saved-function-manager.js";
 import { SavedFunctionService } from "./saved-function-service.js";
-import {
-  type FunctionActivity,
-  reconstructFunctions,
-  registerFunctionManager,
-} from "./saved-functions.js";
+import { type FunctionActivity, reconstructFunctions } from "./saved-functions.js";
 import {
   CODE_DESCRIPTION,
   createToolDescription,

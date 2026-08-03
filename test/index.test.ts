@@ -15,7 +15,7 @@ import {
   savedFunctionCatalogNotice,
   validateRegistryCapacity,
 } from "../src/index.js";
-import { registerFunctionManager } from "../src/saved-functions.js";
+import { registerFunctionManager } from "../src/saved-function-manager.js";
 import {
   beforeAgentStart,
   branchEntries,
