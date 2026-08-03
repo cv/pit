@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
-import { validateToolArguments } from "@earendil-works/pi-ai";
 import {
   AgentSession,
   type AgentToolResult,
@@ -27,8 +26,40 @@ type CapturedPrototype = typeof AgentSession.prototype & {
   [SESSION_CAPTURE]?: CaptureState;
 };
 
-type ValidationTool = Parameters<typeof validateToolArguments>[0];
-type ValidationToolCall = Parameters<typeof validateToolArguments>[1];
+interface ValidationTool {
+  name: string;
+  parameters: Record<PropertyKey, unknown>;
+}
+
+interface ValidationToolCall {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: unknown;
+}
+
+type ToolValidator = (tool: ValidationTool, toolCall: ValidationToolCall) => unknown;
+
+let validatorPromise: Promise<ToolValidator> | undefined;
+
+function toolValidator(): Promise<ToolValidator> {
+  validatorPromise ??= (async () => {
+    const packageName = "@earendil-works/pi-ai";
+    try {
+      const module = await import(packageName);
+      return module.validateToolArguments as ToolValidator;
+    } catch {
+      const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+      const bundledValidation = new URL(
+        "../node_modules/@earendil-works/pi-ai/dist/utils/validation.js",
+        codingAgentEntry,
+      );
+      const module = await import(bundledValidation.href);
+      return module.validateToolArguments as ToolValidator;
+    }
+  })();
+  return validatorPromise;
+}
 type ExecutableTool = ValidationTool & {
   prepareArguments?: (args: unknown) => unknown;
   execute(
@@ -135,6 +166,7 @@ async function dispatchToolCall(input: {
       name,
       arguments: preparedArgs,
     };
+    const validateToolArguments = await toolValidator();
     validatedArgs = validateToolArguments(tool, validationCall) as Record<string, unknown>;
   } catch (error) {
     return await finish(
