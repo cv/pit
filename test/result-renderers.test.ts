@@ -272,6 +272,36 @@ describe("result renderers", () => {
     );
   });
 
+  it("right-aligns hashed read prefixes to the largest line number", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    const value = {
+      file: "README.md",
+      format: "hashed",
+      content: "1:aaaaa|one\n23:bbbbb|twenty-three\n123:ccccc|one hundred twenty-three",
+      revision: "rev-aligned",
+      lines: 3,
+      totalLines: 123,
+    };
+    const component = tool.renderResult?.(
+      {
+        content: [{ type: "text", text: display(value) }],
+        details: { value, truncated: false },
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      { isError: false },
+    );
+    const rendered = component?.render(120) ?? [];
+
+    expect(rendered.find((line) => line.includes("1:aaaaa|"))?.trimEnd()).toBe("  1:aaaaa|one");
+    expect(rendered.find((line) => line.includes("23:bbbbb|"))?.trimEnd()).toBe(
+      " 23:bbbbb|twenty-three",
+    );
+    expect(rendered.find((line) => line.includes("123:ccccc|"))?.trimEnd()).toBe(
+      "123:ccccc|one hundred twenty-three",
+    );
+  });
+
   it("syntax highlights hashed contents independently from their line prefixes", () => {
     const theme = {
       fg: (color: string, text: string) =>

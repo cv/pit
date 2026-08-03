@@ -75,12 +75,20 @@ export function renderHashedFile(
   content: string,
   file: string,
   theme: ResultTheme,
+  maxLineNumber: number,
 ): { lines: string[]; hangingIndents: Record<number, number> } {
+  const lineNumberWidth = String(maxLineNumber).length;
   const parsed = content.split("\n").map((line) => {
     const match = line.match(HASHED_LINE_PATTERN);
-    return match
-      ? { prefix: match[1] as string, content: match[2] as string }
-      : { prefix: undefined, content: line };
+    if (!match) {
+      return { prefix: undefined, content: line };
+    }
+    const prefix = match[1] as string;
+    const separator = prefix.indexOf(":");
+    return {
+      prefix: `${prefix.slice(0, separator).padStart(lineNumberWidth)}${prefix.slice(separator)}`,
+      content: match[2] as string,
+    };
   });
   const highlighted = highlightCode(
     parsed.map((line) => line.content).join("\n"),
