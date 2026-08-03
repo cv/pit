@@ -10,12 +10,14 @@ import {
   CAPABILITY_METHODS,
   display,
   effectiveRegistry,
+  formatPitSkillsForPrompt,
   reconstructFunctions,
   savedFunctionCatalogNotice,
   validateRegistryCapacity,
 } from "../src/index.js";
 import { registerFunctionManager } from "../src/saved-functions.js";
 import {
+  beforeAgentStart,
   branchEntries,
   cleanupHarness,
   context,
@@ -169,6 +171,51 @@ describe("display", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(display(circular)).toBe("[object Object]");
+  });
+});
+
+describe("Pit skill prompt", () => {
+  it("advertises model-invokable skills with Pit file-loading guidance", () => {
+    const prompt = formatPitSkillsForPrompt([
+      {
+        name: "review<&",
+        description: 'Review "changes" & report',
+        filePath: "/tmp/review/SKILL.md",
+      },
+      {
+        name: "manual-only",
+        description: "Only available through its command",
+        filePath: "/tmp/manual/SKILL.md",
+        disableModelInvocation: true,
+      },
+    ]);
+
+    expect(prompt).toContain("typescript tool's workspace.read capability");
+    expect(prompt).toContain("load the complete skill file");
+    expect(prompt).toContain("<name>review&lt;&amp;</name>");
+    expect(prompt).toContain("<description>Review &quot;changes&quot; &amp; report</description>");
+    expect(prompt).toContain("<location>/tmp/review/SKILL.md</location>");
+    expect(prompt).not.toContain("manual-only");
+  });
+
+  it("injects Pi's loaded skill catalog into Pit's system prompt", () => {
+    const result = beforeAgentStart({
+      systemPrompt: "base prompt",
+      systemPromptOptions: {
+        skills: [
+          {
+            name: "delivery",
+            description: "Deliver completed changes",
+            filePath: "/skills/delivery/SKILL.md",
+          },
+        ],
+      },
+    });
+
+    expect(result.systemPrompt).toContain("base prompt");
+    expect(result.systemPrompt).toContain("<available_skills>");
+    expect(result.systemPrompt).toContain("<name>delivery</name>");
+    expect(result.systemPrompt).toContain("<location>/skills/delivery/SKILL.md</location>");
   });
 });
 
