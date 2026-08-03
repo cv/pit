@@ -17,11 +17,13 @@ import { createFunctionCapabilityHandler } from "./functions-capability-handler.
 import { prepareGhCommand } from "./gh-capability.js";
 import { createModelsCapabilityHandler } from "./models-capability-handler.js";
 import { prepareNpmCommand } from "./npm-capability.js";
+import type { PiToolBridge } from "./pi-tool-bridge.js";
 import { createProcessRunner, formatProcessCommand } from "./process-runner.js";
 import { createRuntimeCapabilityHandler } from "./runtime-capability-handler.js";
 import type { CapabilityHandler } from "./sandbox.js";
 import { type FunctionActivity, functionRunScope } from "./saved-functions.js";
 import { createSessionCapabilityHandler } from "./session-capability-handler.js";
+import { createToolsCapabilityHandler } from "./tools-capability-handler.js";
 import { handleWorkspace } from "./workspace.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
@@ -84,6 +86,7 @@ export interface HostCapabilityServices {
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];
   onShellProgress?: (event: ShellProgressEvent) => void;
+  toolBridge: PiToolBridge;
   promotionSuggestions: string[];
 }
 
@@ -160,6 +163,7 @@ export function createCapabilities({
   commitFunctionState,
   activity,
   promotionSuggestions,
+  toolBridge,
   onShellProgress,
 }: HostCapabilityServices): CapabilityHandler {
   const processHandlers = createProcessCapabilityHandlers({
@@ -263,6 +267,7 @@ export function createCapabilities({
     commands: createCommandsCapabilityHandler({ pi }),
     models: createModelsCapabilityHandler({ pi, ctx }),
     runtime: createRuntimeCapabilityHandler({ pi, ctx }),
+    tools: createToolsCapabilityHandler(toolBridge),
   };
 
   return ({ capability, method, args, signal, functionContext }) => {
