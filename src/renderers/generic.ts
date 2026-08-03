@@ -9,6 +9,7 @@ import type {
   ResultTheme,
   ValueRenderer,
 } from "../result-renderer-types.js";
+import { sanitizeTerminalText } from "../text-sanitization.js";
 import { renderHttp } from "./http.js";
 import { renderShell } from "./process.js";
 import {
@@ -120,6 +121,22 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
   return { kind: "batch", lines, summary, detailLines: lines.slice(1) };
 }
 
+function renderMultilineText(
+  value: unknown,
+  _context: RenderContext,
+): RenderedResultValue | undefined {
+  if (typeof value !== "string" || !(value.includes("\n") || value.includes("\r"))) {
+    return;
+  }
+  const lines = sanitizeTerminalText(value.replace(/\r\n?/g, "\n")).split("\n");
+  return {
+    kind: "text",
+    lines,
+    summary: plural(lines.length, "line"),
+    detailLines: lines,
+  };
+}
+
 const VALUE_RENDERERS: ValueRenderer[] = [
   renderShell,
   renderRead,
@@ -130,7 +147,13 @@ const VALUE_RENDERERS: ValueRenderer[] = [
   renderBatch,
   renderStat,
   renderWorkspaceList,
+  renderMultilineText,
+  renderArrayCompound,
 ];
+
+function safeSectionLabel(value: string): string {
+  return sanitizeTerminalText(value).replace(/\s+/g, " ").trim() || "(unnamed)";
+}
 
 function renderCompound(value: unknown, context: RenderContext): RenderedResultValue | undefined {
   if (!isRecord(value) || context.depth >= MAX_RECURSIVE_DEPTH || context.seen.has(value)) {
@@ -162,7 +185,7 @@ function renderCompound(value: unknown, context: RenderContext): RenderedResultV
     const detailLines = rendered.detailLines ?? rendered.lines;
     const detailStart = lines.length + 1;
     lines.push(
-      `${context.theme.fg("accent", context.theme.bold(key))} ${context.theme.fg("dim", `(${description})`)}`,
+      `${context.theme.fg("accent", context.theme.bold(safeSectionLabel(key)))} ${context.theme.fg("dim", `(${description})`)}`,
       ...indent(detailLines),
     );
     const detailHangingIndents = rendered.detailHangingIndents ?? rendered.hangingIndents ?? {};
@@ -183,6 +206,50 @@ function renderCompound(value: unknown, context: RenderContext): RenderedResultV
     kind: "compound",
     lines,
     summary: plural(recognized.length, "section"),
+    detailLines: lines,
+    hangingIndents,
+    detailHangingIndents: hangingIndents,
+  };
+}
+
+function renderArrayCompound(
+  value: unknown,
+  context: RenderContext,
+): RenderedResultValue | undefined {
+  if (!Array.isArray(value) || context.depth >= MAX_RECURSIVE_DEPTH || context.seen.has(value)) {
+    return;
+  }
+  context.seen.add(value);
+  const renderedEntries = value.map((entry) =>
+    renderKnownValue(entry, { ...context, depth: context.depth + 1 }),
+  );
+  if (!renderedEntries.some((entry) => entry !== undefined)) {
+    return;
+  }
+
+  const lines: string[] = [];
+  const hangingIndents: Record<number, number> = {};
+  for (const [index, entry] of value.entries()) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    const rendered = renderedEntries[index] ?? { kind: "json", lines: renderJson(entry) };
+    const description = [rendered.kind, rendered.summary].filter(Boolean).join(", ");
+    const detailLines = rendered.detailLines ?? rendered.lines;
+    const detailStart = lines.length + 1;
+    lines.push(
+      `${context.theme.fg("accent", context.theme.bold(`[${index}]`))} ${context.theme.fg("dim", `(${description})`)}`,
+      ...indent(detailLines),
+    );
+    const detailHangingIndents = rendered.detailHangingIndents ?? rendered.hangingIndents ?? {};
+    for (const [lineIndex, width] of Object.entries(detailHangingIndents)) {
+      hangingIndents[detailStart + Number(lineIndex)] = width + 2;
+    }
+  }
+  return {
+    kind: "array",
+    lines,
+    summary: plural(value.length, "item"),
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,

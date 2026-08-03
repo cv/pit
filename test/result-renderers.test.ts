@@ -219,6 +219,72 @@ describe("result renderers", () => {
     expect(recursiveOutput).toContain("[object Object]");
   });
 
+  it("renders multiline strings as safe, readable recursive sections", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    const render = (value: unknown) =>
+      (
+        tool
+          .renderResult?.(
+            {
+              content: [{ type: "text", text: display(value) }],
+              details: { value, truncated: false },
+            },
+            { expanded: true, isPartial: false },
+            theme,
+            { isError: false },
+          )
+          .render(160) ?? []
+      )
+        .map((line) => line.trimEnd())
+        .join("\n");
+
+    const direct = render("first\r\nsecond\n\u001b[31mthird");
+    expect(direct).toContain("Returned 3 lines (3 lines, 0.0s)");
+    expect(direct).toContain("\nfirst\nsecond\n[31mthird");
+    expect(direct).not.toContain("\u001b");
+    expect(direct).not.toContain("first\\r\\nsecond");
+
+    const compound = render({ status: "failed", output: "first line\nsecond line", code: 1 });
+    expect(compound).toContain("output (text, 2 lines)");
+    expect(compound).toContain("\n  first line\n  second line");
+    expect(compound).toContain("other");
+    expect(compound).toContain('"status": "failed"');
+    expect(compound).toContain('"code": 1');
+    expect(compound).not.toContain('"output":');
+
+    const nested = render({
+      rows: [{ id: 1, output: "alpha\nbeta" }, "plain", { id: 2, output: "gamma\ndelta" }],
+    });
+    expect(nested).toContain("rows (array, 3 items)");
+    expect(nested).toContain("[0] (compound, 1 section)");
+    expect(nested).toContain("[1] (json)");
+    expect(nested).toContain("[2] (compound, 1 section)");
+    expect(nested).toContain("output (text, 2 lines)");
+    expect(nested).toContain('"id": 1');
+    expect(nested).toContain('"id": 2');
+
+    const nestedRead = render({
+      items: [
+        {
+          file: "README.md",
+          format: "hashed",
+          content: "1:abc|heading",
+          revision: "rev-array",
+          lines: 1,
+        },
+      ],
+    });
+    expect(nestedRead).toContain("items (array, 1 item)");
+    expect(nestedRead).toContain("1:abc|heading");
+
+    expect(render("first\rsecond")).toContain("\nfirst\nsecond");
+    expect(render({ "\u001b": "first\nsecond" })).toContain("(unnamed) (text, 2 lines)");
+
+    const ordinary = render(["one", "two"]);
+    expect(ordinary).toContain('"one"');
+    expect(ordinary).not.toContain("[0] (json)");
+  });
+
   it("dims hashed read prefixes and hangs wrapped content under the text column", () => {
     const theme = {
       fg: (color: string, text: string) =>
