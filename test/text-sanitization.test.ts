@@ -37,6 +37,42 @@ describe("terminal text sanitization", () => {
     expect(RESET_WITHOUT_BACKGROUND).toContain(";59;");
   });
 
+  it("strips output backgrounds while preserving foreground colors and text styles", () => {
+    const sanitized = sanitizeTerminalText(
+      [
+        "\u001b[1;31;41mbasic\u001b[0mnormal",
+        " \u001b[100mbright\u001b[49mplain",
+        " \u001b[38;5;41;48;5;52mindexed",
+        " \u001b[38;2;40;100;47;48;2;4;5;6mrgb",
+        " \u001b[38:2:7:8:9;48:2:10:11:12mcolon",
+        " \u001b[58;5;41;48;5;52munderline",
+      ].join(""),
+      { preserveSgr: true },
+    );
+    expect(sanitized).toBe(
+      `\u001b[1;31mbasic${RESET_WITHOUT_BACKGROUND}normal brightplain \u001b[38;5;41mindexed \u001b[38;2;40;100;47mrgb \u001b[38:2:7:8:9mcolon \u001b[58;5;41munderline`,
+    );
+    expect(sanitized).not.toContain("\u001b[41m");
+    expect(sanitized).not.toContain("\u001b[100m");
+    expect(sanitized).not.toContain(";48;");
+    expect(sanitized).not.toContain(";48:");
+    expect(sanitized).not.toContain("\u001b[49m");
+  });
+
+  it("drops malformed background forms without leaking their parameters", () => {
+    const sanitized = sanitizeTerminalText(
+      [
+        "\u001b[48msolo",
+        " \u001b[48;3;1munknown",
+        " \u001b[48;5mshort",
+        " \u001b[48;2;;1;2;3;31mred",
+        " \u001b[31 minvalid",
+      ].join(""),
+      { preserveSgr: true },
+    );
+    expect(sanitized).toBe("solo unknown short \u001b[31mred invalid");
+  });
+
   it("strips cursor, screen, OSC, control-string, malformed, and C1 sequences", () => {
     const unsafe = [
       "before",

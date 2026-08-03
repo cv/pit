@@ -41,6 +41,48 @@ function isSgrParameters(value: string): boolean {
   return true;
 }
 
+function sgrCode(parameter: string): number {
+  const colon = parameter.indexOf(":");
+  return Number(colon === -1 ? parameter : parameter.slice(0, colon));
+}
+
+function extendedColorTailLength(parts: string[], index: number): number | undefined {
+  const mode = sgrCode(parts[index + 1] ?? "");
+  const length = mode === 5 ? 2 : mode === 2 ? (parts[index + 2] === "" ? 5 : 4) : 0;
+  return length > 0 && index + length < parts.length ? length : undefined;
+}
+
+function withoutBackgroundSgr(parameters: string): string | undefined {
+  const parts = parameters.split(";");
+  const kept: string[] = [];
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index] as string;
+    const code = sgrCode(part);
+    if (code === 38 || code === 48 || code === 58) {
+      if (part.includes(":")) {
+        if (code !== 48) {
+          kept.push(part);
+        }
+        continue;
+      }
+      const consumed = extendedColorTailLength(parts, index);
+      if (consumed === undefined) {
+        return;
+      }
+      if (code !== 48) {
+        kept.push(...parts.slice(index, index + consumed + 1));
+      }
+      index += consumed;
+      continue;
+    }
+    if ((code >= 40 && code <= 47) || code === 49 || (code >= 100 && code <= 107)) {
+      continue;
+    }
+    kept.push(part);
+  }
+  return kept.length > 0 ? kept.join(";") : undefined;
+}
+
 function preservedSgr(parameters: string): string {
   if (parameters === "" || parameters === "0") {
     return SGR_RESET_WITHOUT_BACKGROUND;
@@ -70,7 +112,10 @@ export function sanitizeTerminalText(
           value[end] === "m" &&
           isSgrParameters(value.slice(index + 2, end))
         ) {
-          sanitized += preservedSgr(value.slice(index + 2, end));
+          const parameters = withoutBackgroundSgr(value.slice(index + 2, end));
+          if (parameters !== undefined) {
+            sanitized += preservedSgr(parameters);
+          }
         }
         index = end + 1;
         continue;
