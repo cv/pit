@@ -297,6 +297,52 @@ describe("result renderers", () => {
       }
     }
 
+    const syntaxValues: Array<[unknown, string, string, string]> = [
+      [
+        { file: "src/example.ts", output: "const answer = 42;\nconsole.log(answer);" },
+        "typescript",
+        "output (typescript, 2 lines)",
+        "const answer = 42;\nconsole.log(answer);",
+      ],
+      [
+        { format: "py", content: "def answer():\n    return 42" },
+        "python",
+        "content (python, 2 lines)",
+        "def answer():\n    return 42",
+      ],
+      [
+        { language: "json", body: '{\n  "ok": true\n}' },
+        "json",
+        "body (json, 3 lines)",
+        '{\n  "ok": true\n}',
+      ],
+      [
+        { format: "raw", file: "main.go", content: "package main\nfunc main() {}" },
+        "go",
+        "content (go, 2 lines)",
+        "package main\nfunc main() {}",
+      ],
+      [
+        { lang: "shell", script: "echo hello\nprintf '%s\\n' done" },
+        "bash",
+        "script (bash, 2 lines)",
+        "echo hello\nprintf '%s\\n' done",
+      ],
+      [
+        { file: "setup.zsh", content: "export READY=1\necho $READY" },
+        "bash",
+        "content (bash, 2 lines)",
+        "export READY=1\necho $READY",
+      ],
+    ];
+    for (const [value, language, description, source] of syntaxValues) {
+      const output = render(value);
+      expect(output).toContain(description);
+      for (const line of highlightCode(source, language)) {
+        expect(output).toContain(line);
+      }
+    }
+
     const ordinary = render(["one", "two"]);
     expect(ordinary).toContain('"one"');
     expect(ordinary).not.toContain("[0] (json)");

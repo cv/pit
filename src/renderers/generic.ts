@@ -18,9 +18,11 @@ import {
   indent,
   isRecord,
   type JsonRecord,
+  languageForFile,
   MAX_RECURSIVE_DEPTH,
   plural,
   renderJson,
+  syntaxLanguageForHint,
 } from "./shared.js";
 import {
   renderEdit,
@@ -160,14 +162,19 @@ function safeSectionLabel(value: string): string {
 }
 
 const MARKDOWN_FIELDS = new Set(["markdown", "md"]);
-const MARKDOWN_FILE_PATTERN = /\.(?:md|markdown)$/i;
-
-function markdownRecordLanguage(value: JsonRecord): "markdown" | undefined {
-  if (value.format === "markdown") {
-    return "markdown";
+function recordSyntaxLanguage(value: JsonRecord): string | undefined {
+  for (const key of ["language", "lang", "format"] as const) {
+    const hint = value[key];
+    if (typeof hint === "string") {
+      const language = syntaxLanguageForHint(hint);
+      if (language) {
+        return language;
+      }
+    }
   }
-  if (typeof value.file === "string" && MARKDOWN_FILE_PATTERN.test(value.file)) {
-    return "markdown";
+  if (typeof value.file === "string") {
+    const language = languageForFile(value.file);
+    return language === "text" ? undefined : language;
   }
 }
 
@@ -186,7 +193,7 @@ function renderCompound(value: unknown, context: RenderContext): RenderedResultV
 
   const recognized: Array<[string, RenderedResultValue]> = [];
   const remaining: JsonRecord = {};
-  const recordLanguage = markdownRecordLanguage(value) ?? context.syntaxLanguage;
+  const recordLanguage = recordSyntaxLanguage(value) ?? context.syntaxLanguage;
   for (const [key, entry] of Object.entries(value)) {
     const syntaxLanguage = fieldSyntaxLanguage(key, recordLanguage);
     const rendered = renderKnownValue(entry, {
