@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeTerminalText } from "../src/text-sanitization.js";
 
-const RESET_WITHOUT_BACKGROUND = "\u001b[22;23;24;25;27;28;29;39m";
+const RESET_WITHOUT_BACKGROUND = "\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m";
 
 describe("terminal text sanitization", () => {
   it("preserves only valid SGR styling when requested", () => {
@@ -23,6 +23,18 @@ describe("terminal text sanitization", () => {
     );
     expect(sanitized).not.toContain("\u001b[0m");
     expect(sanitized).not.toContain("\u001b[49m");
+  });
+
+  it("fully resets accepted extended text attributes without resetting the background", () => {
+    const sanitized = sanitizeTerminalText(
+      "\u001b[53moverlined\u001b[0mnormal \u001b[58;2;1;2;3mcolored underline\u001b[mnormal",
+      { preserveSgr: true },
+    );
+    expect(sanitized).toBe(
+      `\u001b[53moverlined${RESET_WITHOUT_BACKGROUND}normal \u001b[58;2;1;2;3mcolored underline${RESET_WITHOUT_BACKGROUND}normal`,
+    );
+    expect(RESET_WITHOUT_BACKGROUND).toContain(";55;");
+    expect(RESET_WITHOUT_BACKGROUND).toContain(";59;");
   });
 
   it("strips cursor, screen, OSC, control-string, malformed, and C1 sequences", () => {

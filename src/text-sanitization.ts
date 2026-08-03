@@ -1,6 +1,6 @@
 const ESCAPE = "\u001b";
 const STRING_CONTROL_INTRODUCERS = new Set(["]", "P", "X", "^", "_"]);
-const SGR_RESET_WITHOUT_BACKGROUND = "\u001b[22;23;24;25;27;28;29;39m";
+const SGR_RESET_WITHOUT_BACKGROUND = "\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m";
 const C1_STRING_CONTROL_INTRODUCERS = new Set([0x90, 0x98, 0x9d, 0x9e, 0x9f]);
 
 export interface TerminalSanitizationOptions {

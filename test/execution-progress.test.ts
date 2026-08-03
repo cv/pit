@@ -124,7 +124,7 @@ describe("ExecutionProgressController", () => {
     expect(c.snapshot().progress?.[0]).toMatchObject({
       status: "done",
       code: 0,
-      output: "\u001b[32mok\u001b[22;23;24;25;27;28;29;39m",
+      output: "\u001b[32mok\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m",
     });
   });
 
