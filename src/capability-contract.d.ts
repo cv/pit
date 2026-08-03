@@ -121,12 +121,22 @@ type PitToolMetadata = {
 };
 
 type PitToolCallResult = {
+  toolCallId: string;
   content: PitJsonValue[];
   details?: PitJsonValue;
   usage?: PitJsonValue;
   addedToolNames?: string[];
   terminate?: boolean;
   isError: boolean;
+  errorKind?:
+    | "not_found"
+    | "inactive"
+    | "validation"
+    | "blocked"
+    | "aborted"
+    | "execution"
+    | "hook"
+    | "recursion";
 };
 
 type PitModelMetadata = {
@@ -404,12 +414,16 @@ interface PitRuntimeCapability {
 
 interface PitToolsCapability {
   list(options?: {
-    activeOnly?: boolean;
+    scope?: "active" | "registered";
     query?: string;
     limit?: number;
   }): Promise<{ tools: PitToolMetadata[]; truncated: boolean }>;
 
-  call(name: string, args: { [key: string]: PitJsonValue | undefined }): Promise<PitToolCallResult>;
+  call(
+    name: string,
+    args: { [key: string]: PitJsonValue | undefined },
+    options?: { scope?: "active" | "registered" },
+  ): Promise<PitToolCallResult>;
 }
 
 interface PitFunctionsCapability {

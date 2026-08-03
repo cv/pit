@@ -21,8 +21,7 @@ describe("host capability router", () => {
       functionState,
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
-      toolBridge: {} as any,
-
+      toolApi: {} as any,
       promotionSuggestions: [],
     });
     expect(
@@ -48,8 +47,7 @@ describe("host capability router", () => {
       functionState: createFunctionState(),
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
-      toolBridge: {} as any,
-
+      toolApi: {} as any,
       promotionSuggestions: [],
     });
     expect(() =>
@@ -83,8 +81,7 @@ describe("host capability router", () => {
       functionState,
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
-      toolBridge: {} as any,
-
+      toolApi: {} as any,
       promotionSuggestions,
     });
     const run = (name: string) =>

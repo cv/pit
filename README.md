@@ -80,8 +80,7 @@ Pit injects only the capabilities that submitted code requests.
 | `context` | Inspect the active Pi and Pit context. |
 | `session` | Inspect session metadata and manage its display name. |
 | `commands` | List extension, prompt-template, and skill slash commands with provenance. |
-| `tools` | Discover and call configured Pi tools, including tools registered by other extensions. |
-
+| `tools` | Discover and execute Pi tools through an experimental upstream-shaped API. |
 | `models` | List configured models, inspect the current model, and select a model. |
 | `runtime` | Inspect runtime state and request confirmed reload or shutdown. |
 | `functions` | Inspect and remove trusted project functions. |
@@ -407,12 +406,10 @@ UI methods require a mode that provides a UI.
 
 ### `tools` (experimental)
 
-- `list(options?)` returns bounded configured-tool metadata, parameter schemas, provenance, and active state.
-- `call(name, args)` invokes a configured built-in, SDK, or extension tool even when Pit has hidden it from the model's active tool list. Calls use Pi's wrapped live tool registry, argument validation, cancellation signal, `tool_call`/`tool_result` hooks, and tool execution lifecycle events.
+- `list(options?)` returns bounded tool metadata from Pi's public metadata APIs. Scope defaults to `"active"`; pass `{ scope: "registered" }` to intentionally include inactive configured tools.
+- `call(name, args, options?)` executes a built-in, SDK, or extension tool. Scope defaults to `"active"`; invoking a tool hidden from the model requires the explicit `{ scope: "registered" }` opt-in. Results include a tool-call ID, `isError`, and a structured error kind. Cancellation and bounded nested progress propagate into the outer TypeScript execution.
 
-The bridge captures Pi's live `AgentSession` and uses its internal wrapped-tool registry. This keeps the experimental boundary small and close to a prospective Pi core dispatcher, but it depends on Pi internals and may require updates when Pi changes its session lifecycle. Calling `typescript` recursively is rejected.
-
-
+Pit-facing code depends only on the prospective `PiToolExecutionApi` contract in `src/pi-tool-api.ts`: `listTools()` and `executeTool()` with scope, signal, and update options. The unsupported `AgentSession` capture, private registry access, and temporary dispatch implementation are isolated in `src/experimental-pi-tool-adapter.ts`. If Pi adds the official API, that adapter can be deleted and replaced at the single construction point. The adapter remains experimental: its direct lifecycle emission cannot update Pi's canonical Agent state or reproduce native batch scheduling. Calling `typescript` recursively is rejected.
 ### `models`
 
 - `current()` returns bounded metadata for the active model.

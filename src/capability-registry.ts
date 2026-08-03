@@ -143,12 +143,22 @@ type PitToolMetadata = {
 };
 
 type PitToolCallResult = {
+  toolCallId: string;
   content: PitJsonValue[];
   details?: PitJsonValue;
   usage?: PitJsonValue;
   addedToolNames?: string[];
   terminate?: boolean;
   isError: boolean;
+  errorKind?:
+    | "not_found"
+    | "inactive"
+    | "validation"
+    | "blocked"
+    | "aborted"
+    | "execution"
+    | "hook"
+    | "recursion";
 };
 
 type PitModelMetadata = {

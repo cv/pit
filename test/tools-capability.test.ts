@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PiToolBridge } from "../src/pi-tool-bridge.js";
+import type { PiToolExecutionApi } from "../src/pi-tool-api.js";
 import { createToolsCapabilityHandler } from "../src/tools-capability-handler.js";
 
 const sourceInfo = {
@@ -9,71 +9,149 @@ const sourceInfo = {
   origin: "top-level" as const,
 };
 
-function bridge(): PiToolBridge {
+function toolApi(): PiToolExecutionApi {
+  const tools = [
+    {
+      name: "alpha",
+      description: "First extension tool",
+      parameters: { type: "object" },
+      active: false,
+      sourceInfo,
+    },
+    {
+      name: "beta",
+      description: "Second extension tool",
+      parameters: { type: "object" },
+      active: true,
+      sourceInfo,
+      promptGuidelines: ["Use beta"],
+    },
+  ];
   return {
-    list: () => [
-      {
-        name: "alpha",
-        description: "First extension tool",
-        parameters: { type: "object" },
-        active: false,
-        sourceInfo,
-      },
-      {
-        name: "beta",
-        description: "Second extension tool",
-        parameters: { type: "object" },
-        active: true,
-        sourceInfo,
-        promptGuidelines: ["Use beta"],
-      },
-    ],
-    call: vi.fn(async () => ({
-      content: [{ type: "text" as const, text: "called" }],
-      details: {},
-      isError: false,
-    })),
+    listTools: vi.fn(({ scope = "active" } = {}) =>
+      tools.filter((tool) => scope === "registered" || tool.active),
+    ),
+    executeTool: vi.fn(async (_name, _args, options) => {
+      await options?.onUpdate?.(
+        { content: [{ type: "text", text: "partial" }], details: {} },
+        { toolCallId: "call-1" },
+      );
+      return {
+        toolCallId: "call-1",
+        content: [{ type: "text" as const, text: "called" }],
+        details: {},
+        isError: false,
+      };
+    }),
   };
 }
 
 describe("tools capability", () => {
-  it("filters and bounds tool metadata", async () => {
-    const handler = createToolsCapabilityHandler(bridge());
+  it("filters and bounds registered tool metadata", async () => {
+    const api = toolApi();
+    const handler = createToolsCapabilityHandler(api);
     await expect(
       handler(
         "list",
-        [{ activeOnly: true, query: "beta", limit: 1 }],
+        [{ scope: "registered", query: "beta", limit: 1 }],
         new AbortController().signal,
       ),
     ).resolves.toEqual({
       tools: [expect.objectContaining({ name: "beta", active: true })],
       truncated: false,
     });
+    expect(api.listTools).toHaveBeenCalledWith({ scope: "registered" });
   });
 
-  it("uses list defaults and preserves optional prompt guidance", async () => {
-    const handler = createToolsCapabilityHandler(bridge());
+  it("defaults listing to active tools and preserves prompt guidance", async () => {
+    const handler = createToolsCapabilityHandler(toolApi());
     await expect(handler("list", [], new AbortController().signal)).resolves.toMatchObject({
+      tools: [{ name: "beta", active: true, promptGuidelines: ["Use beta"] }],
+      truncated: false,
+    });
+    await expect(
+      handler("list", [{ scope: "registered" }], new AbortController().signal),
+    ).resolves.toMatchObject({
       tools: [
         { name: "alpha", active: false },
         { name: "beta", active: true, promptGuidelines: ["Use beta"] },
       ],
-      truncated: false,
     });
   });
 
-  it("calls tools with object arguments and forwards cancellation", async () => {
-    const toolBridge = bridge();
-    const handler = createToolsCapabilityHandler(toolBridge);
+  it("forwards scope, cancellation, updates, and completion", async () => {
+    const api = toolApi();
+    const progress = vi.fn();
+    const handler = createToolsCapabilityHandler(api, progress);
     const signal = new AbortController().signal;
-    await expect(handler("call", ["beta", { value: 1 }], signal)).resolves.toMatchObject({
+    await expect(
+      handler("call", ["beta", { value: 1 }, { scope: "registered" }], signal),
+    ).resolves.toMatchObject({ isError: false, toolCallId: "call-1" });
+    expect(api.executeTool).toHaveBeenCalledWith(
+      "beta",
+      { value: 1 },
+      expect.objectContaining({ scope: "registered", signal, onUpdate: expect.any(Function) }),
+    );
+    expect(progress).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: "update", name: "beta", toolCallId: "call-1" }),
+    );
+    expect(progress).toHaveBeenLastCalledWith({
+      phase: "end",
+      name: "beta",
+      toolCallId: "call-1",
       isError: false,
     });
-    expect(toolBridge.call).toHaveBeenCalledWith("beta", { value: 1 }, signal);
   });
 
-  it("rejects recursion and invalid arguments", async () => {
-    const handler = createToolsCapabilityHandler(bridge());
+  it("projects optional tool result fields and normalizes absent content", async () => {
+    const api = toolApi();
+    vi.mocked(api.executeTool).mockResolvedValueOnce({
+      toolCallId: "call-error",
+      content: undefined as any,
+      details: undefined as any,
+      usage: { tokens: 3 } as any,
+      addedToolNames: ["dynamic"],
+      terminate: true,
+      isError: true,
+      errorKind: "execution",
+    });
+    const handler = createToolsCapabilityHandler(api);
+    await expect(handler("call", ["beta", {}], new AbortController().signal)).resolves.toEqual({
+      toolCallId: "call-error",
+      content: [],
+      usage: { tokens: 3 },
+      addedToolNames: ["dynamic"],
+      terminate: true,
+      isError: true,
+      errorKind: "execution",
+    });
+  });
+
+  it("rejects non-JSON extension result details at the Pit boundary", async () => {
+    const api = toolApi();
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    vi.mocked(api.executeTool).mockResolvedValueOnce({
+      toolCallId: "call-cyclic",
+      content: [],
+      details: cyclic,
+      isError: false,
+    });
+    const progress = vi.fn();
+    const handler = createToolsCapabilityHandler(api, progress);
+    await expect(handler("call", ["beta", {}], new AbortController().signal)).rejects.toThrow(
+      "tool result details is not JSON-safe",
+    );
+    expect(progress).toHaveBeenLastCalledWith({
+      phase: "end",
+      name: "beta",
+      toolCallId: "call-cyclic",
+      isError: true,
+    });
+  });
+
+  it("rejects direct recursion and invalid arguments", async () => {
+    const handler = createToolsCapabilityHandler(toolApi());
     await expect(handler("call", ["typescript", {}], new AbortController().signal)).rejects.toThrow(
       "cannot call itself",
     );
@@ -81,7 +159,7 @@ describe("tools capability", () => {
       "tool arguments must be an object",
     );
     await expect(
-      handler("list", [{ activeOnly: "yes" }], new AbortController().signal),
-    ).rejects.toThrow("options.activeOnly must be a boolean");
+      handler("list", [{ scope: "everything" }], new AbortController().signal),
+    ).rejects.toThrow('options.scope must be "active" or "registered"');
   });
 });

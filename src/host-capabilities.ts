@@ -11,13 +11,17 @@ import {
   stringArrayValue as stringArray,
 } from "./cli.js";
 import { createCommandsCapabilityHandler } from "./commands-capability-handler.js";
-import type { HostShellProgressEvent, ShellProgressEvent } from "./execution-types.js";
+import type {
+  HostShellProgressEvent,
+  ShellProgressEvent,
+  ToolProgressEvent,
+} from "./execution-types.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
 import { createFunctionCapabilityHandler } from "./functions-capability-handler.js";
 import { prepareGhCommand } from "./gh-capability.js";
 import { createModelsCapabilityHandler } from "./models-capability-handler.js";
 import { prepareNpmCommand } from "./npm-capability.js";
-import type { PiToolBridge } from "./pi-tool-bridge.js";
+import type { PiToolExecutionApi } from "./pi-tool-api.js";
 import { createProcessRunner, formatProcessCommand } from "./process-runner.js";
 import { createRuntimeCapabilityHandler } from "./runtime-capability-handler.js";
 import type { CapabilityHandler } from "./sandbox.js";
@@ -86,7 +90,8 @@ export interface HostCapabilityServices {
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];
   onShellProgress?: (event: ShellProgressEvent) => void;
-  toolBridge: PiToolBridge;
+  onToolProgress?: (event: ToolProgressEvent) => void;
+  toolApi: PiToolExecutionApi;
   promotionSuggestions: string[];
 }
 
@@ -163,8 +168,9 @@ export function createCapabilities({
   commitFunctionState,
   activity,
   promotionSuggestions,
-  toolBridge,
+  toolApi,
   onShellProgress,
+  onToolProgress,
 }: HostCapabilityServices): CapabilityHandler {
   const processHandlers = createProcessCapabilityHandlers({
     pi,
@@ -267,7 +273,7 @@ export function createCapabilities({
     commands: createCommandsCapabilityHandler({ pi }),
     models: createModelsCapabilityHandler({ pi, ctx }),
     runtime: createRuntimeCapabilityHandler({ pi, ctx }),
-    tools: createToolsCapabilityHandler(toolBridge),
+    tools: createToolsCapabilityHandler(toolApi, onToolProgress),
   };
 
   return ({ capability, method, args, signal, functionContext }) => {

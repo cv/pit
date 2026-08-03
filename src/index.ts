@@ -6,7 +6,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { ExecutionProgressController } from "./execution-progress.js";
-import type { ShellProgressEvent } from "./execution-types.js";
+import type { ShellProgressEvent, ToolProgressEvent } from "./execution-types.js";
+import { installExperimentalPiToolApi } from "./experimental-pi-tool-adapter.js";
 import {
   createFunctionState,
   createFunctionStateCommitQueue,
@@ -15,7 +16,6 @@ import {
   resetFunctionUsage,
 } from "./function-state.js";
 import { createCapabilities } from "./host-capabilities.js";
-import { installPiToolBridge } from "./pi-tool-bridge.js";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
@@ -102,6 +102,22 @@ export function promotionSuggestionNotice(names: readonly string[]): string {
   const omitted =
     suggested.length > shown.length ? `; … ${suggested.length - shown.length} more` : "";
   return `\n[Promotion suggestion: heavily reused session function${shown.length === 1 ? "" : "s"} ${shown.join(", ")}. Use functions.promote(name, summary) explicitly in an enabled, trusted project${omitted}.]`;
+}
+
+function progressServices(
+  enabled: boolean,
+  executionProgress: ExecutionProgressController,
+): {
+  onShellProgress?: (event: ShellProgressEvent) => void;
+  onToolProgress?: (event: ToolProgressEvent) => void;
+} {
+  if (!enabled) {
+    return {};
+  }
+  return {
+    onShellProgress: (event) => executionProgress.recordShell(event),
+    onToolProgress: (event) => executionProgress.recordTool(event),
+  };
 }
 
 interface FunctionManagerRegistration {
@@ -199,7 +215,7 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
 }
 
 export default function pit(pi: ExtensionAPI) {
-  const toolBridge = installPiToolBridge();
+  const toolApi = installExperimentalPiToolApi(pi);
   registerRuntimeControlCommands(pi);
   registerSessionControlCommands(pi);
   const functionState = createFunctionState();
@@ -256,9 +272,7 @@ export default function pit(pi: ExtensionAPI) {
               })
           : undefined,
       );
-      const onShellProgress = update
-        ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
-        : undefined;
+      const progress = progressServices(update !== undefined, executionProgress);
       try {
         const preparedFunction = savedFunctionService.prepare({
           source: params.code,
@@ -282,9 +296,9 @@ export default function pit(pi: ExtensionAPI) {
               functionState,
               commitFunctionState,
               activity: functionActivity,
-              toolBridge,
+              toolApi,
               promotionSuggestions,
-              ...(onShellProgress ? { onShellProgress } : {}),
+              ...progress,
             }),
             {
               ...(signal ? { signal } : {}),

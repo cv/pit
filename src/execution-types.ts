@@ -1,3 +1,4 @@
+import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { CapabilityTrace } from "./capability-trace.js";
 
 export type HostShellProgressEvent =
@@ -15,10 +16,30 @@ export interface ShellProgress {
   code?: number;
 }
 
+export type ToolProgressEvent =
+  | {
+      phase: "update";
+      name: string;
+      toolCallId: string;
+      update: AgentToolResult<unknown>;
+    }
+  | { phase: "end"; name: string; toolCallId: string; isError: boolean };
+
+export interface ToolProgress {
+  toolCallId: string;
+  name: string;
+  status: "running" | "done";
+  updates: number;
+  output: string;
+  isError?: boolean;
+}
+
 export interface ExecutionProgressSnapshot {
   progress?: ShellProgress[];
+  toolProgress?: ToolProgress[];
   traces?: CapabilityTrace[];
   progressTruncated?: true;
+  toolProgressTruncated?: true;
   tracesTruncated?: true;
 }
 

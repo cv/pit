@@ -1,7 +1,10 @@
 import { AgentSession, type AgentToolResult, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
-import { createPiToolBridge, installPiToolBridge } from "../src/pi-tool-bridge.js";
+import {
+  createExperimentalPiToolApi,
+  installExperimentalPiToolApi,
+} from "../src/experimental-pi-tool-adapter.js";
 
 const sourceInfo = {
   path: "/extension.ts",
@@ -54,20 +57,31 @@ function createHarness(
     sourceInfo,
     promptGuidelines: ["Use echo for numeric values"],
   };
+  const pi = {
+    getActiveTools: () => options.active ?? [],
+    getAllTools: () => [metadata],
+  };
   const session = {
     extensionRunner: runner,
-    getActiveToolNames: () => options.active ?? [],
-    getAllTools: () => [metadata],
     _toolRegistry: new Map([["echo", tool]]),
   } as unknown as AgentSession;
-  return { bridge: createPiToolBridge(() => session), emit, emitToolCall, emitToolResult, tool };
+  return {
+    api: createExperimentalPiToolApi(pi, () => session),
+    pi,
+    session,
+    emit,
+    emitToolCall,
+    emitToolResult,
+    tool,
+  };
 }
 
-describe("Pi tool bridge", () => {
-  it("lists live registry metadata with active state", () => {
-    const { bridge } = createHarness({ active: ["echo"] });
-    expect(bridge.list()).toEqual([
-      expect.objectContaining({ name: "echo", active: true, sourceInfo }),
+describe("experimental Pi tool API adapter", () => {
+  it("uses public Pi metadata APIs and enforces explicit scope", () => {
+    const { api } = createHarness({ active: [] });
+    expect(api.listTools()).toEqual([]);
+    expect(api.listTools({ scope: "registered" })).toEqual([
+      expect.objectContaining({ name: "echo", active: false, sourceInfo }),
     ]);
   });
 
@@ -76,14 +90,22 @@ describe("Pi tool bridge", () => {
       content: [{ type: "text" as const, text: "transformed" }],
       details: { transformed: true },
     };
-    const harness = createHarness({ after });
-    const result = await harness.bridge.call("echo", { value: "7" });
+    const harness = createHarness({ after, active: ["echo"] });
+    const onUpdate = vi.fn();
+    const result = await harness.api.executeTool("echo", { value: "7" }, { onUpdate });
 
     expect(result).toMatchObject({
+      toolCallId: expect.stringMatching(/^pit:/),
       content: [{ type: "text", text: "transformed" }],
       details: { transformed: true },
       isError: false,
     });
+    expect(onUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.arrayContaining([expect.objectContaining({ text: "partial" })]),
+      }),
+      { toolCallId: result.toolCallId },
+    );
     expect(harness.emitToolCall).toHaveBeenCalledWith(
       expect.objectContaining({ toolName: "echo", input: { value: 7 } }),
     );
@@ -97,17 +119,25 @@ describe("Pi tool bridge", () => {
     ]);
   });
 
-  it("returns core-style error results for blocking, validation, execution, and missing tools", async () => {
-    const blocked = createHarness({ before: { block: true, reason: "not allowed" } });
-    await expect(blocked.bridge.call("echo", { value: 1 })).resolves.toMatchObject({
-      content: [{ text: "not allowed" }],
+  it("returns structured errors for inactive, missing, blocked, invalid, and failing tools", async () => {
+    const inactive = createHarness();
+    await expect(inactive.api.executeTool("echo", { value: 1 })).resolves.toMatchObject({
       isError: true,
+      errorKind: "inactive",
     });
+    await expect(
+      inactive.api.executeTool("missing", {}, { scope: "registered" }),
+    ).resolves.toMatchObject({ isError: true, errorKind: "not_found" });
+
+    const blocked = createHarness({ before: { block: true, reason: "not allowed" } });
+    await expect(
+      blocked.api.executeTool("echo", { value: 1 }, { scope: "registered" }),
+    ).resolves.toMatchObject({ content: [{ text: "not allowed" }], errorKind: "blocked" });
 
     const invalid = createHarness();
-    await expect(invalid.bridge.call("echo", { value: "not-a-number" })).resolves.toMatchObject({
-      isError: true,
-    });
+    await expect(
+      invalid.api.executeTool("echo", { value: "not-a-number" }, { scope: "registered" }),
+    ).resolves.toMatchObject({ isError: true, errorKind: "validation" });
 
     const throwing = createHarness({
       tool: {
@@ -118,14 +148,9 @@ describe("Pi tool bridge", () => {
         }),
       },
     });
-    await expect(throwing.bridge.call("echo", { value: 1 })).resolves.toMatchObject({
-      content: [{ text: "broken tool" }],
-      isError: true,
-    });
-    await expect(throwing.bridge.call("missing", {})).resolves.toMatchObject({
-      content: [{ text: "Tool missing not found" }],
-      isError: true,
-    });
+    await expect(
+      throwing.api.executeTool("echo", { value: 1 }, { scope: "registered" }),
+    ).resolves.toMatchObject({ content: [{ text: "broken tool" }], errorKind: "execution" });
   });
 
   it("propagates cancellation before execution", async () => {
@@ -139,12 +164,19 @@ describe("Pi tool bridge", () => {
     });
     const controller = new AbortController();
     controller.abort();
-    const result = await harness.bridge.call("echo", { value: 1 }, controller.signal);
-    expect(result).toMatchObject({ content: [{ text: "Operation aborted" }], isError: true });
+    const result = await harness.api.executeTool(
+      "echo",
+      { value: 1 },
+      { scope: "registered", signal: controller.signal },
+    );
+    expect(result).toMatchObject({
+      content: [{ text: "Operation aborted" }],
+      errorKind: "aborted",
+    });
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("preserves core argument preparation and result fallback semantics", async () => {
+  it("preserves argument preparation and result fallback semantics", async () => {
     let lateUpdate: ((partial: AgentToolResult<unknown>) => void) | undefined;
     const execute = vi.fn(
       async (
@@ -178,7 +210,11 @@ describe("Pi tool bridge", () => {
       after: { isError: true },
     });
 
-    const result = await harness.bridge.call("echo", { ignored: true });
+    const result = await harness.api.executeTool(
+      "echo",
+      { ignored: true },
+      { scope: "registered" },
+    );
     lateUpdate?.({ content: [], details: {} });
     expect(execute).toHaveBeenCalledWith(
       expect.stringMatching(/^pit:/),
@@ -194,29 +230,131 @@ describe("Pi tool bridge", () => {
     });
   });
 
-  it("matches core fallback behavior for absent handlers and failing result hooks", async () => {
+  it("matches fallback behavior for absent handlers and failing result hooks", async () => {
     const blocked = createHarness({ before: { block: true } });
-    await expect(blocked.bridge.call("echo", { value: 1 })).resolves.toMatchObject({
-      content: [{ text: "Tool execution was blocked" }],
-      isError: true,
-    });
+    await expect(
+      blocked.api.executeTool("echo", { value: 1 }, { scope: "registered" }),
+    ).resolves.toMatchObject({ content: [{ text: "Tool execution was blocked" }] });
 
     const noHooks = createHarness({ handlers: false });
     const controller = new AbortController();
     controller.abort();
     await expect(
-      noHooks.bridge.call("echo", { value: 1 }, controller.signal),
-    ).resolves.toMatchObject({
-      content: [{ text: "Operation aborted" }],
-      isError: true,
-    });
+      noHooks.api.executeTool(
+        "echo",
+        { value: 1 },
+        { scope: "registered", signal: controller.signal },
+      ),
+    ).resolves.toMatchObject({ errorKind: "aborted" });
 
     const failedAfter = createHarness();
     failedAfter.emitToolResult.mockRejectedValueOnce("result hook failed");
-    await expect(failedAfter.bridge.call("echo", { value: 1 })).resolves.toMatchObject({
-      content: [{ text: "result hook failed" }],
-      isError: true,
+    await expect(
+      failedAfter.api.executeTool("echo", { value: 1 }, { scope: "registered" }),
+    ).resolves.toMatchObject({ content: [{ text: "result hook failed" }], errorKind: "hook" });
+  });
+
+  it("rejects recursive execution and stale private registry entries", async () => {
+    const recursive = createHarness();
+    let nestedResult: Awaited<ReturnType<typeof recursive.api.executeTool>> | undefined;
+    await recursive.api.executeTool(
+      "echo",
+      { value: 1 },
+      {
+        scope: "registered",
+        onUpdate: async () => {
+          nestedResult = await recursive.api.executeTool(
+            "echo",
+            { value: 2 },
+            { scope: "registered" },
+          );
+        },
+      },
+    );
+    expect(nestedResult).toMatchObject({ isError: true, errorKind: "recursion" });
+
+    const stale = createHarness();
+    (stale.session as any)._toolRegistry.clear();
+    await expect(stale.api.executeTool("echo", {}, { scope: "registered" })).resolves.toMatchObject(
+      { isError: true, errorKind: "not_found" },
+    );
+  });
+
+  it("normalizes absent tool content at the API boundary", async () => {
+    const harness = createHarness({
+      tool: {
+        name: "echo",
+        parameters: Type.Object({}),
+        execute: vi.fn(async () => ({ details: {} })),
+      },
     });
+    await expect(
+      harness.api.executeTool("echo", {}, { scope: "registered" }),
+    ).resolves.toMatchObject({ content: [], isError: false });
+  });
+
+  it("validates scope at the stable API boundary", async () => {
+    const { api } = createHarness();
+    expect(() => api.listTools({ scope: "invalid" as any })).toThrow(
+      'Tool scope must be "active" or "registered"',
+    );
+    await expect(api.executeTool("echo", {}, { scope: "invalid" as any })).rejects.toThrow(
+      'Tool scope must be "active" or "registered"',
+    );
+  });
+
+  it("isolates synchronous and asynchronous update observer failures", async () => {
+    const harness = createHarness();
+    await expect(
+      harness.api.executeTool(
+        "echo",
+        { value: 1 },
+        {
+          scope: "registered",
+          onUpdate: () => {
+            throw new Error("sync observer failure");
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ isError: false });
+    await expect(
+      harness.api.executeTool(
+        "echo",
+        { value: 2 },
+        {
+          scope: "registered",
+          onUpdate: async () => {
+            throw new Error("async observer failure");
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ isError: false });
+    expect(
+      harness.emit.mock.calls.filter(([event]) => event.type === "tool_execution_end"),
+    ).toHaveLength(2);
+  });
+
+  it("classifies before-hook failures and cancellation during execution", async () => {
+    const failedHook = createHarness();
+    failedHook.emitToolCall.mockRejectedValueOnce("hook failed");
+    await expect(
+      failedHook.api.executeTool("echo", { value: 1 }, { scope: "registered" }),
+    ).resolves.toMatchObject({ errorKind: "hook", content: [{ text: "hook failed" }] });
+
+    const controller = new AbortController();
+    const cancelled = createHarness({
+      tool: {
+        name: "echo",
+        parameters: Type.Object({}),
+        execute: vi.fn(async () => {
+          controller.abort();
+          throw new Error("cancelled by tool");
+        }),
+      },
+    });
+    await expect(
+      cancelled.api.executeTool("echo", {}, { scope: "registered", signal: controller.signal }),
+    ).resolves.toMatchObject({ errorKind: "aborted", content: [{ text: "Operation aborted" }] });
   });
 
   it("captures a live AgentSession through binding or the next prompt", async () => {
@@ -228,33 +366,59 @@ describe("Pi tool bridge", () => {
     prototype.bindExtensions = bound;
     prototype.prompt = prompted;
     try {
-      const bridge = installPiToolBridge();
+      const metadata: ToolInfo = {
+        name: "captured",
+        description: "Captured tool",
+        parameters: Type.Object({}),
+        sourceInfo,
+      };
+      const api = installExperimentalPiToolApi({
+        getActiveTools: () => ["captured"],
+        getAllTools: () => [metadata],
+      } as any);
       const session = {
-        getActiveToolNames: () => ["captured"],
-        getAllTools: () => [
-          {
-            name: "captured",
-            description: "Captured tool",
-            parameters: Type.Object({}),
-            sourceInfo,
-          },
-        ],
+        extensionRunner: {
+          emit: vi.fn(),
+          hasHandlers: () => false,
+        },
+        _toolRegistry: new Map([
+          [
+            "captured",
+            {
+              name: "captured",
+              parameters: Type.Object({}),
+              execute: vi.fn(async () => ({ content: [], details: {} })),
+            },
+          ],
+        ]),
       } as unknown as AgentSession;
       await prototype.prompt.call(session, "capture me");
       expect(prompted).toHaveBeenCalledWith("capture me", undefined);
-      expect(bridge.list()).toEqual([expect.objectContaining({ name: "captured", active: true })]);
+      expect(api.listTools()).toEqual([
+        expect.objectContaining({ name: "captured", active: true }),
+      ]);
+      await expect(api.executeTool("captured", {})).resolves.toMatchObject({ isError: false });
 
       await prototype.bindExtensions.call(session, {});
       expect(bound).toHaveBeenCalled();
-      expect(installPiToolBridge().list()).toHaveLength(1);
     } finally {
       prototype.bindExtensions = originalBindExtensions;
       prototype.prompt = originalPrompt;
     }
   });
 
-  it("fails clearly before a live session is captured", () => {
-    const bridge = createPiToolBridge(() => undefined);
-    expect(() => bridge.list()).toThrow("before the agent session is bound");
+  it("lists through public APIs before session capture but rejects execution clearly", async () => {
+    const metadata: ToolInfo = {
+      name: "echo",
+      description: "Echo",
+      parameters: Type.Object({}),
+      sourceInfo,
+    };
+    const api = createExperimentalPiToolApi(
+      { getActiveTools: () => ["echo"], getAllTools: () => [metadata] },
+      () => undefined,
+    );
+    expect(api.listTools()).toHaveLength(1);
+    await expect(api.executeTool("echo", {})).rejects.toThrow("before the agent session is bound");
   });
 });

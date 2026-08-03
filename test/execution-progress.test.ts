@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   startCapabilityTrace as createCapabilityTrace,
@@ -79,6 +80,7 @@ describe("ExecutionProgressController", () => {
     c.flush();
     c.recordTrace(startCapabilityTrace(3, 3, "context", "get", []));
     c.recordShell({ id: 1, command: "late", phase: "start" });
+    c.recordTool({ phase: "end", name: "late", toolCallId: "late", isError: false });
     vi.runAllTimers();
     expect(listener).toHaveBeenCalledTimes(1);
     expect(c.snapshot().traces).toHaveLength(2);
@@ -116,6 +118,84 @@ describe("ExecutionProgressController", () => {
       output: "",
     });
     expect(c.snapshot().progress?.[0]).toMatchObject({ status: "done", code: 0, output: "ok" });
+  });
+
+  it("projects nested tool updates into bounded progress", () => {
+    const c = new ExecutionProgressController();
+    c.recordTool({
+      phase: "update",
+      name: "extension_tool",
+      toolCallId: "tool-1",
+      update: {
+        content: [{ type: "text", text: "working" }],
+        details: {},
+      },
+    });
+    c.recordTool({
+      phase: "end",
+      name: "extension_tool",
+      toolCallId: "tool-1",
+      isError: false,
+    });
+    expect(c.snapshot().toolProgress).toEqual([
+      {
+        toolCallId: "tool-1",
+        name: "extension_tool",
+        status: "done",
+        updates: 1,
+        output: "working",
+        isError: false,
+      },
+    ]);
+  });
+
+  it("bounds completed tools and ignores non-text updates", () => {
+    const c = new ExecutionProgressController();
+    c.recordTool({
+      phase: "update",
+      name: "images",
+      toolCallId: "image-tool",
+      update: {} as AgentToolResult<unknown>,
+    });
+    c.recordTool({
+      phase: "update",
+      name: "images",
+      toolCallId: "image-tool",
+      update: {
+        content: [{ type: "image", data: "data", mimeType: "image/png" }],
+        details: {},
+      },
+    });
+    c.recordTool({
+      phase: "update",
+      name: "images",
+      toolCallId: "image-tool",
+      update: { content: [{ type: "text", text: "first" }], details: {} },
+    });
+    c.recordTool({
+      phase: "update",
+      name: "images",
+      toolCallId: "image-tool",
+      update: { content: [{ type: "text", text: "second" }], details: {} },
+    });
+    c.recordTool({
+      phase: "end",
+      name: "images",
+      toolCallId: "image-tool",
+      isError: false,
+    });
+    for (let id = 1; id <= 32; id++) {
+      c.recordTool({
+        phase: "end",
+        name: `tool-${id}`,
+        toolCallId: `tool-${id}`,
+        isError: false,
+      });
+    }
+    const snapshot = c.snapshot();
+    expect(snapshot.toolProgressTruncated).toBe(true);
+    expect(snapshot.toolProgress).toHaveLength(32);
+    expect(snapshot.toolProgress?.some((entry) => entry.toolCallId === "image-tool")).toBe(false);
   });
 
   it("does not depend on TUI renderer modules", () => {

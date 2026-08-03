@@ -5,21 +5,32 @@ import type {
   ExecutionProgressSnapshot,
   ShellProgress,
   ShellProgressEvent,
+  ToolProgress,
+  ToolProgressEvent,
 } from "./execution-types.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
 
 const UPDATE_INTERVAL_MS = 200;
 const MAX_COMPLETED_SHELL_CALLS = 32;
+const MAX_COMPLETED_TOOL_CALLS = 32;
+
+function updateText(event: Extract<ToolProgressEvent, { phase: "update" }>): string {
+  return (event.update.content ?? [])
+    .flatMap((entry) => (entry.type === "text" ? [entry.text] : []))
+    .join("\n");
+}
 
 export class ExecutionProgressController {
   readonly #traces = new CapabilityTraceCollector();
   readonly #shell = new Map<number, ShellProgress>();
+  readonly #tools = new Map<string, ToolProgress>();
   readonly #listener: ExecutionProgressListener | undefined;
   #lastEmitAt: number | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #dirty: boolean = false;
   #disposed: boolean = false;
   #progressTruncated: boolean = false;
+  #toolProgressTruncated: boolean = false;
 
   constructor(listener?: ExecutionProgressListener) {
     this.#listener = listener;
@@ -60,13 +71,48 @@ export class ExecutionProgressController {
     this.#schedule();
   }
 
+  recordTool(event: ToolProgressEvent): void {
+    if (this.#disposed) {
+      return;
+    }
+    const current = this.#tools.get(event.toolCallId) ?? {
+      toolCallId: event.toolCallId,
+      name: event.name,
+      status: "running" as const,
+      updates: 0,
+      output: "",
+    };
+    if (event.phase === "update") {
+      current.updates += 1;
+      const text = updateText(event);
+      if (text) {
+        current.output = truncateTail(
+          current.output + (current.output ? "\n" : "") + sanitizeTerminalText(text),
+          { maxBytes: 4000, maxLines: 8 },
+        ).content;
+      }
+    } else {
+      current.status = "done";
+      current.isError = event.isError;
+    }
+    this.#tools.set(event.toolCallId, current);
+    if (event.phase === "end") {
+      this.#pruneCompletedToolCalls();
+    }
+    this.#schedule();
+  }
+
   snapshot(): ExecutionProgressSnapshot {
     const trace = this.#traces.snapshot();
     return {
       ...(this.#shell.size
         ? { progress: [...this.#shell.values()].map((entry) => ({ ...entry })) }
         : {}),
+      ...(this.#tools.size
+        ? { toolProgress: [...this.#tools.values()].map((entry) => ({ ...entry })) }
+        : {}),
       ...(this.#progressTruncated ? { progressTruncated: true as const } : {}),
+      ...(this.#toolProgressTruncated ? { toolProgressTruncated: true as const } : {}),
       ...(trace.traces.length ? { traces: trace.traces } : {}),
       ...(trace.truncated ? { tracesTruncated: true as const } : {}),
     };
@@ -92,7 +138,6 @@ export class ExecutionProgressController {
     }
     this.#dirty = true;
     const now = Date.now();
-    // The first change emits immediately; burst changes share one trailing update.
     if (this.#lastEmitAt === undefined || now - this.#lastEmitAt >= UPDATE_INTERVAL_MS) {
       this.#clearTimer();
       this.#emitNow();
@@ -130,12 +175,24 @@ export class ExecutionProgressController {
     if (completed <= MAX_COMPLETED_SHELL_CALLS) {
       return;
     }
-    // Pruning follows every end event, so an over-limit map contains a completed entry.
     const [oldestCompletedId] = [...this.#shell].find(([, entry]) => entry.status === "done") as [
       number,
       ShellProgress,
     ];
     this.#shell.delete(oldestCompletedId);
     this.#progressTruncated = true;
+  }
+
+  #pruneCompletedToolCalls(): void {
+    const completed = [...this.#tools.values()].filter((entry) => entry.status === "done").length;
+    if (completed <= MAX_COMPLETED_TOOL_CALLS) {
+      return;
+    }
+    const [oldestCompletedId] = [...this.#tools].find(([, entry]) => entry.status === "done") as [
+      string,
+      ToolProgress,
+    ];
+    this.#tools.delete(oldestCompletedId);
+    this.#toolProgressTruncated = true;
   }
 }
