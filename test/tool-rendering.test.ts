@@ -263,7 +263,9 @@ describe("tool rendering", () => {
       { expanded: true, isPartial: true },
     );
     expect(partial).toContain("⠋ Running... (0.0s)");
+  });
 
+  it("renders live shell and capability progress", () => {
     const streaming = renderToolResult(
       {
         content: [{ type: "text", text: "Running TypeScript…" }],
@@ -326,7 +328,9 @@ describe("tool rendering", () => {
     expect(streaming).toContain("git.status");
     expect(streaming).toContain("succeeded");
     expect(streaming).toContain("additional capability traces omitted");
+  });
 
+  it("aggregates repeated polling and preserves failures", () => {
     const now = Date.now();
     const polling = renderToolResult(
       {
@@ -436,7 +440,9 @@ describe("tool rendering", () => {
     expect(visibleFailures).toContain("API failed");
     expect(visibleFailures).toContain("[2 running] watch");
     expect(visibleFailures).toContain("latest");
+  });
 
+  it("renders nested final execution dashboards", () => {
     const finalDashboard = renderToolResult(
       {
         content: [{ type: "text", text: "done" }],
@@ -516,7 +522,9 @@ describe("tool rendering", () => {
     expect(outerIndex).toBeGreaterThan(-1);
     expect(childIndex).toBeGreaterThan(outerIndex);
     expect(shellIndex).toBeGreaterThan(childIndex);
+  });
 
+  it("renders semantic warnings and unusual values", () => {
     const warningResult = renderToolResult(
       {
         content: [],
@@ -560,7 +568,9 @@ describe("tool rendering", () => {
       { expanded: true, isPartial: false },
     );
     expect(expandedCircular).toContain("[object Object]");
+  });
 
+  it("renders concise and bounded failures", () => {
     const error = renderToolResult(
       { content: [{ type: "text", text: "bad code" }] },
       { expanded: false, isPartial: false },

@@ -6,24 +6,24 @@ import { cleanupHarness, setupHarness, tool } from "./extension-fixture.js";
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-describe("result renderers", () => {
-  it("renders common capability result shapes and compound values", () => {
-    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
-    const renderValue = (resultValue: unknown, source?: string) =>
-      tool
-        .renderResult?.(
-          {
-            content: [{ type: "text", text: display(resultValue) }],
-            details: { value: resultValue, truncated: false },
-          },
-          { expanded: true, isPartial: false },
-          theme,
-          { isError: false, ...(source ? { args: { code: source } } : {}) },
-        )
-        .render(240)
-        .join("\n") ?? "";
+const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+const shell = { stdout: "tests passed", stderr: "warning", code: 0, truncated: false };
+const renderValue = (resultValue: unknown, source?: string) =>
+  tool
+    .renderResult?.(
+      {
+        content: [{ type: "text", text: display(resultValue) }],
+        details: { value: resultValue, truncated: false },
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      { isError: false, ...(source ? { args: { code: source } } : {}) },
+    )
+    .render(240)
+    .join("\n") ?? "";
 
-    const shell = { stdout: "tests passed", stderr: "warning", code: 0, truncated: false };
+describe("result renderers", () => {
+  it("renders shell and Git process results", () => {
     const shellOutput = renderValue(shell);
     expect(shellOutput).toContain("shell exit 0");
     expect(shellOutput).toContain("stdout");
@@ -44,7 +44,9 @@ describe("result renderers", () => {
     const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
     expect(gitOutput).toContain("git status exit 0");
     expect(gitOutput).toContain("Git status, 1 line");
+  });
 
+  it("renders workspace read, search, edit, list, and glob results", () => {
     const readOutput = renderValue({
       file: "src/example.ts",
       format: "raw",
@@ -103,7 +105,9 @@ describe("result renderers", () => {
     });
     expect(globOutput).toContain("glob (2 entries, truncated)");
     expect(globOutput).toContain("src/workspace.ts");
+  });
 
+  it("renders HTTP, batch, and compound results", () => {
     const httpOutput = renderValue({
       status: 200,
       ok: true,
@@ -142,7 +146,9 @@ describe("result renderers", () => {
     expect(compoundOutput).toContain("sources (glob, 2 entries)");
     expect(compoundOutput).toContain("other");
     expect(compoundOutput).toContain('"note": "kept as JSON"');
+  });
 
+  it("renders fallback and edge-case result shapes", () => {
     const falsePositive = renderValue({ ...shell, extra: true });
     expect(falsePositive).not.toContain("shell exit 0");
     expect(falsePositive).toContain('"stdout": "tests passed"');
@@ -291,6 +297,26 @@ describe("result renderers", () => {
 
     expect(render("first\rsecond")).toContain("\nfirst\nsecond");
     expect(render({ "\u001b": "first\nsecond" })).toContain("(unnamed) (text, 2 lines)");
+  });
+
+  it("syntax highlights multiline sections from semantic hints", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+    const render = (value: unknown) =>
+      (
+        tool
+          .renderResult?.(
+            {
+              content: [{ type: "text", text: display(value) }],
+              details: { value, truncated: false },
+            },
+            { expanded: true, isPartial: false },
+            theme,
+            { isError: false },
+          )
+          .render(160) ?? []
+      )
+        .map((line) => line.trimEnd())
+        .join("\n");
 
     const markdownSource = "# Heading\n- **bold** item";
     const highlightedMarkdown = highlightCode(markdownSource, "markdown");

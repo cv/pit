@@ -19,6 +19,7 @@
     "biome:check": "biome check . --error-on-warnings --diagnostic-level=warn",
     "biome:fix": "biome check --write .",
     "format": "biome format --write .",
+    "quality:audit": "node scripts/audit-code-size.mjs",
     "package:check": "node scripts/verify-package.mjs"
   },
   "pi": {
