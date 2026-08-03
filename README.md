@@ -80,8 +80,6 @@ Pit injects only the capabilities that submitted code requests.
 | `context` | Inspect the active Pi and Pit context. |
 | `session` | Inspect session metadata and manage its display name. |
 | `commands` | List extension, prompt-template, and skill slash commands with provenance. |
-| `tools` | Discover and call configured Pi tools, including tools registered by other extensions. |
-
 | `models` | List configured models, inspect the current model, and select a model. |
 | `runtime` | Inspect runtime state and request confirmed reload or shutdown. |
 | `functions` | Inspect and remove trusted project functions. |
@@ -315,7 +313,7 @@ Submitted TypeScript runs in a new Node process with these restrictions:
 
 Filesystem, command, HTTP, and UI effects are available only through RPC capabilities. Calls and protocol frames have size and concurrency limits. Timeout and cancellation signals propagate to cooperative host operations.
 
-The sandbox restricts direct access. It does not make host capabilities harmless. The `git` and `shell` capabilities run commands with the permissions of the Pi process. Git hooks and Git network operations can have external effects. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach. The experimental `tools` capability can execute configured Pi extension tools with the permissions and side effects those tools normally have.
+The sandbox restricts direct access. It does not make host capabilities harmless. The `git` and `shell` capabilities run commands with the permissions of the Pi process. Git hooks and Git network operations can have external effects. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach.
 
 Capability destructuring makes intent visible. It is not an approval boundary. Review generated calls before execution when an operation can affect sensitive data or systems.
 
@@ -404,14 +402,6 @@ UI methods require a mode that provides a UI.
 ### `commands`
 
 - `list()` returns bounded extension, prompt-template, and skill commands with canonical source information. Built-in interactive commands are not included.
-
-### `tools` (experimental)
-
-- `list(options?)` returns bounded configured-tool metadata, parameter schemas, provenance, and active state.
-- `call(name, args)` invokes a configured built-in, SDK, or extension tool even when Pit has hidden it from the model's active tool list. Calls use Pi's wrapped live tool registry, argument validation, cancellation signal, `tool_call`/`tool_result` hooks, and tool execution lifecycle events.
-
-The bridge captures Pi's live `AgentSession` and uses its internal wrapped-tool registry. This keeps the experimental boundary small and close to a prospective Pi core dispatcher, but it depends on Pi internals and may require updates when Pi changes its session lifecycle. Calling `typescript` recursively is rejected.
-
 
 ### `models`
 

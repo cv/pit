@@ -15,7 +15,6 @@ import {
   resetFunctionUsage,
 } from "./function-state.js";
 import { createCapabilities } from "./host-capabilities.js";
-import { installPiToolBridge } from "./pi-tool-bridge.js";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
@@ -199,7 +198,6 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
 }
 
 export default function pit(pi: ExtensionAPI) {
-  const toolBridge = installPiToolBridge();
   registerRuntimeControlCommands(pi);
   registerSessionControlCommands(pi);
   const functionState = createFunctionState();
@@ -282,7 +280,6 @@ export default function pit(pi: ExtensionAPI) {
               functionState,
               commitFunctionState,
               activity: functionActivity,
-              toolBridge,
               promotionSuggestions,
               ...(onShellProgress ? { onShellProgress } : {}),
             }),

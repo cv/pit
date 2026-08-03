@@ -9,7 +9,6 @@ import { npmCapability } from "./capabilities/npm.js";
 import { runtimeCapability } from "./capabilities/runtime.js";
 import { sessionCapability } from "./capabilities/session.js";
 import { shellCapability } from "./capabilities/shell.js";
-import { toolsCapability } from "./capabilities/tools.js";
 import { uiCapability } from "./capabilities/ui.js";
 import { workspaceCapability } from "./capabilities/workspace.js";
 import {
@@ -125,32 +124,6 @@ type PitSlashCommand = {
   };
 };
 
-type PitToolSourceInfo = {
-  path: string;
-  source: string;
-  scope: "user" | "project" | "temporary";
-  origin: "package" | "top-level";
-  baseDir?: string;
-};
-
-type PitToolMetadata = {
-  name: string;
-  description: string;
-  parameters: PitJsonValue;
-  promptGuidelines?: string[];
-  active: boolean;
-  sourceInfo: PitToolSourceInfo;
-};
-
-type PitToolCallResult = {
-  content: PitJsonValue[];
-  details?: PitJsonValue;
-  usage?: PitJsonValue;
-  addedToolNames?: string[];
-  terminate?: boolean;
-  isError: boolean;
-};
-
 type PitModelMetadata = {
   provider: string;
   id: string;
@@ -207,7 +180,6 @@ export const CAPABILITY_REGISTRY = defineCapabilities({
   commands: commandsCapability,
   models: modelsCapability,
   runtime: runtimeCapability,
-  tools: toolsCapability,
   functions: functionsCapability,
 });
 

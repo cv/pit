@@ -103,32 +103,6 @@ type PitSlashCommand = {
   };
 };
 
-type PitToolSourceInfo = {
-  path: string;
-  source: string;
-  scope: "user" | "project" | "temporary";
-  origin: "package" | "top-level";
-  baseDir?: string;
-};
-
-type PitToolMetadata = {
-  name: string;
-  description: string;
-  parameters: PitJsonValue;
-  promptGuidelines?: string[];
-  active: boolean;
-  sourceInfo: PitToolSourceInfo;
-};
-
-type PitToolCallResult = {
-  content: PitJsonValue[];
-  details?: PitJsonValue;
-  usage?: PitJsonValue;
-  addedToolNames?: string[];
-  terminate?: boolean;
-  isError: boolean;
-};
-
 type PitModelMetadata = {
   provider: string;
   id: string;
@@ -402,16 +376,6 @@ interface PitRuntimeCapability {
   requestShutdown(): Promise<{ queued: true; command: string }>;
 }
 
-interface PitToolsCapability {
-  list(options?: {
-    activeOnly?: boolean;
-    query?: string;
-    limit?: number;
-  }): Promise<{ tools: PitToolMetadata[]; truncated: boolean }>;
-
-  call(name: string, args: { [key: string]: PitJsonValue | undefined }): Promise<PitToolCallResult>;
-}
-
 interface PitFunctionsCapability {
   list(): Promise<PitProjectFunctionMetadata[]>;
 
@@ -443,7 +407,6 @@ interface PitCapabilities {
   commands: PitCommandsCapability;
   models: PitModelsCapability;
   runtime: PitRuntimeCapability;
-  tools: PitToolsCapability;
   functions: PitFunctionsCapability;
 }
 
