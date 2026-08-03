@@ -45,7 +45,7 @@ export function renderRead(
     if (value.format === "raw") {
       contentLines = highlightCode(value.content, languageForFile(value.file));
     } else {
-      const rendered = renderHashedFile(value.content, value.file, theme);
+      const rendered = renderHashedFile(value.content, value.file, theme, total);
       contentLines = rendered.lines;
       Object.assign(detailHangingIndents, rendered.hangingIndents);
     }
