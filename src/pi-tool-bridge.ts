@@ -6,6 +6,7 @@ const SESSION_CAPTURE = Symbol.for("@pit/pi-tool-session-capture");
 
 interface CaptureState {
   current?: AgentSession;
+  promptPatched?: boolean;
 }
 
 type CapturedPrototype = typeof AgentSession.prototype & {
@@ -228,5 +229,13 @@ export function installPiToolBridge(): PiToolBridge {
     };
   }
   const captureState = state;
+  if (!captureState.promptPatched) {
+    captureState.promptPatched = true;
+    const originalPrompt = prototype.prompt;
+    prototype.prompt = async function (text, options): Promise<void> {
+      captureState.current = this;
+      await originalPrompt.call(this, text, options);
+    };
+  }
   return createPiToolBridge(() => captureState.current);
 }

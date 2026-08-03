@@ -219,11 +219,14 @@ describe("Pi tool bridge", () => {
     });
   });
 
-  it("captures a bound AgentSession through the minimal prototype boundary", async () => {
+  it("captures a live AgentSession through binding or the next prompt", async () => {
     const prototype = AgentSession.prototype;
-    const original = prototype.bindExtensions;
+    const originalBindExtensions = prototype.bindExtensions;
+    const originalPrompt = prototype.prompt;
     const bound = vi.fn(async () => undefined);
+    const prompted = vi.fn(async () => undefined);
     prototype.bindExtensions = bound;
+    prototype.prompt = prompted;
     try {
       const bridge = installPiToolBridge();
       const session = {
@@ -237,12 +240,16 @@ describe("Pi tool bridge", () => {
           },
         ],
       } as unknown as AgentSession;
+      await prototype.prompt.call(session, "capture me");
+      expect(prompted).toHaveBeenCalledWith("capture me", undefined);
+      expect(bridge.list()).toEqual([expect.objectContaining({ name: "captured", active: true })]);
+
       await prototype.bindExtensions.call(session, {});
       expect(bound).toHaveBeenCalled();
-      expect(bridge.list()).toEqual([expect.objectContaining({ name: "captured", active: true })]);
       expect(installPiToolBridge().list()).toHaveLength(1);
     } finally {
-      prototype.bindExtensions = original;
+      prototype.bindExtensions = originalBindExtensions;
+      prototype.prompt = originalPrompt;
     }
   });
 
