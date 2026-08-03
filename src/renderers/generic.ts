@@ -131,10 +131,11 @@ function renderMultilineText(
   if (typeof value !== "string" || !(value.includes("\n") || value.includes("\r"))) {
     return;
   }
-  const source = sanitizeTerminalText(value.replace(/\r\n?/g, "\n"));
-  const lines = context.syntaxLanguage
-    ? highlightCode(source, context.syntaxLanguage)
-    : source.split("\n");
+  const source = sanitizeTerminalText(value.replace(/\r\n?/g, "\n"), { preserveSgr: true });
+  const lines =
+    context.syntaxLanguage && !source.includes("\u001b[")
+      ? highlightCode(source, context.syntaxLanguage)
+      : source.split("\n");
   return {
     kind: context.syntaxLanguage ?? "text",
     lines,

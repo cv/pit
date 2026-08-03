@@ -30,6 +30,14 @@ describe("result renderers", () => {
     expect(shellOutput).toContain("tests passed");
     expect(shellOutput).toContain("stderr");
     expect(shellOutput).toContain("warning");
+    const coloredShell = renderValue({
+      stdout: "\u001b[32msuccess\u001b[0m\u001b[2J",
+      stderr: "",
+      code: 0,
+      truncated: false,
+    });
+    expect(coloredShell).toContain("\u001b[32msuccess\u001b[0m");
+    expect(coloredShell).not.toContain("\u001b[2J");
 
     const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
     expect(gitOutput).toContain("git status exit 0");
@@ -238,10 +246,10 @@ describe("result renderers", () => {
         .map((line) => line.trimEnd())
         .join("\n");
 
-    const direct = render("first\r\nsecond\n\u001b[31mthird");
+    const direct = render("first\r\nsecond\n\u001b[31mthird\u001b[0m\u001b[2J");
     expect(direct).toContain("Returned 3 lines (3 lines, 0.0s)");
-    expect(direct).toContain("\nfirst\nsecond\n[31mthird");
-    expect(direct).not.toContain("\u001b");
+    expect(direct).toContain("\nfirst\nsecond\n\u001b[31mthird\u001b[0m");
+    expect(direct).not.toContain("\u001b[2J");
     expect(direct).not.toContain("first\\r\\nsecond");
 
     const compound = render({ status: "failed", output: "first line\nsecond line", code: 1 });

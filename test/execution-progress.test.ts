@@ -107,7 +107,13 @@ describe("ExecutionProgressController", () => {
     const c = new ExecutionProgressController(listener);
     c.recordShell({ id: 1, command: "git status", phase: "start" });
     const earlier = c.snapshot();
-    c.recordShell({ id: 1, command: "git status", phase: "output", stream: "stdout", chunk: "ok" });
+    c.recordShell({
+      id: 1,
+      command: "git status",
+      phase: "output",
+      stream: "stdout",
+      chunk: "\u001b[32mok\u001b[0m\u001b[2J",
+    });
     c.recordShell({ id: 1, command: "git status", phase: "end", code: 0 });
     expect(earlier.progress?.[0]).toEqual({
       id: 1,
@@ -115,7 +121,11 @@ describe("ExecutionProgressController", () => {
       status: "running",
       output: "",
     });
-    expect(c.snapshot().progress?.[0]).toMatchObject({ status: "done", code: 0, output: "ok" });
+    expect(c.snapshot().progress?.[0]).toMatchObject({
+      status: "done",
+      code: 0,
+      output: "\u001b[32mok\u001b[0m",
+    });
   });
 
   it("does not depend on TUI renderer modules", () => {

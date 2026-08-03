@@ -1,4 +1,5 @@
 import type { RenderContext, RenderedResultValue } from "../result-renderer-types.js";
+import { sanitizeTerminalText } from "../text-sanitization.js";
 import { hasOnlyKeys, isRecord } from "./shared.js";
 
 export function renderShell(
@@ -16,18 +17,21 @@ export function renderShell(
     return undefined;
   }
 
+  const stdout = sanitizeTerminalText(value.stdout, { preserveSgr: true });
+  const stderr = sanitizeTerminalText(value.stderr, { preserveSgr: true });
+
   const statusColor = value.code === 0 ? "success" : "error";
   const suffix = value.truncated ? theme.fg("warning", ", truncated") : "";
   const lines = [
     `${theme.fg("toolTitle", theme.bold("shell"))} ${theme.fg(statusColor, `exit ${value.code}`)}${suffix}`,
   ];
-  if (value.stdout) {
-    lines.push(theme.fg("accent", "stdout"), ...value.stdout.split("\n"));
+  if (stdout) {
+    lines.push(theme.fg("accent", "stdout"), ...stdout.split("\n"));
   }
-  if (value.stderr) {
-    lines.push(theme.fg("warning", "stderr"), ...value.stderr.split("\n"));
+  if (stderr) {
+    lines.push(theme.fg("warning", "stderr"), ...stderr.split("\n"));
   }
-  if (!value.stdout && !value.stderr) {
+  if (!stdout && !stderr) {
     lines.push(theme.fg("dim", "(no output)"));
   }
   return {

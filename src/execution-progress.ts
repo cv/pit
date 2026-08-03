@@ -44,10 +44,10 @@ export class ExecutionProgressController {
       output: "",
     };
     if (event.phase === "output") {
-      current.output = truncateTail(current.output + sanitizeTerminalText(event.chunk), {
-        maxBytes: 4000,
-        maxLines: 8,
-      }).content;
+      current.output = truncateTail(
+        current.output + sanitizeTerminalText(event.chunk, { preserveSgr: true }),
+        { maxBytes: 4000, maxLines: 8 },
+      ).content;
     }
     if (event.phase === "end") {
       current.status = "done";
