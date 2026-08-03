@@ -1,14 +1,18 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import {
-  type CapabilityTrace,
-  type FunctionExecutionContext,
-  finishCapabilityTrace,
-  startCapabilityTrace,
-} from "./capability-trace.js";
+import type { CapabilityTrace, FunctionExecutionContext } from "./capability-trace.js";
+import { CapabilityDispatcher, type CapabilityHandler } from "./sandbox-capability-dispatcher.js";
+import { SandboxLifecycle } from "./sandbox-lifecycle.js";
 import { compileSandboxSource } from "./sandbox-program.js";
+import {
+  isCapabilityCallMessage,
+  type SandboxWireError,
+  WireFrameDecoder,
+  type WireMessage,
+} from "./sandbox-wire.js";
 
+export type { CapabilityHandler, CapabilityRequest } from "./sandbox-capability-dispatcher.js";
 export type { ProjectFunctionMetadata, ProjectFunctionParameter } from "./sandbox-program.js";
 export {
   clearSandboxCaches,
@@ -34,23 +38,6 @@ export interface SandboxOptions {
   savedFunctionScopes?: ReadonlyMap<string, "project" | "session">;
   input?: unknown;
   onCapabilityTrace?: (trace: CapabilityTrace) => void;
-}
-
-export interface CapabilityRequest {
-  capability: string;
-  method: string;
-  args: unknown[];
-  signal: AbortSignal;
-  functionContext?: FunctionExecutionContext;
-}
-
-export type CapabilityHandler = (request: CapabilityRequest) => unknown | Promise<unknown>;
-
-export interface SandboxWireError {
-  name?: string;
-  message: string;
-  frames?: string[];
-  truncated?: true;
 }
 
 export class SandboxRemoteError extends Error {
@@ -92,32 +79,6 @@ export function sandboxFatalError(value: unknown): Error {
       : {}),
     ...(error.truncated === true ? { truncated: true } : {}),
   });
-}
-
-interface WireMessage {
-  token?: string;
-  type?: string;
-  id?: number;
-  capability?: string;
-  method?: string;
-  args?: unknown[];
-  functionContext?: FunctionExecutionContext;
-  value?: unknown;
-  error?: string | SandboxWireError;
-  input?: unknown;
-}
-
-type CapabilityCallMessage = WireMessage &
-  Required<Pick<WireMessage, "id" | "capability" | "method" | "args">>;
-
-function isCapabilityCallMessage(message: WireMessage): message is CapabilityCallMessage {
-  return (
-    message.type === "call" &&
-    typeof message.id === "number" &&
-    typeof message.capability === "string" &&
-    typeof message.method === "string" &&
-    Array.isArray(message.args)
-  );
 }
 
 export function parseFunctionExecutionContext(
@@ -200,73 +161,19 @@ export async function runInSandbox(
   const { timeoutMs, compiled, token, child } = await prepareSandboxRun(source, options);
 
   return await new Promise<unknown>((resolve, reject) => {
-    let settled = false;
-    let callCount = 0;
-    let activeCalls = 0;
-    let stdout = "";
     let stderr = "";
-    const inFlight = new Set<Promise<void>>();
-    const capabilityController = new AbortController();
-    const capabilitySignal = options.signal
-      ? AbortSignal.any([options.signal, capabilityController.signal])
-      : capabilityController.signal;
-    const reportCapabilityTrace = (trace: CapabilityTrace) => {
-      try {
-        options.onCapabilityTrace?.(trace);
-      } catch {
-        // Tracing is observational and must not affect capability execution.
-      }
-    };
-    const finish = (error?: Error, value?: unknown) => {
-      /* v8 ignore next -- only asynchronous child-process races call finish twice. */
-      if (settled) {
-        return;
-      }
-      settled = true;
-      capabilityController.abort();
-      clearTimeout(timer);
-      options.signal?.removeEventListener("abort", onAbort);
-      child.kill("SIGKILL");
-      if (error) {
-        reject(error);
-      } else {
-        resolve(value);
-      }
-    };
-    const finishAfterCalls = (error: Error | undefined, value?: unknown) => {
-      void Promise.allSettled([...inFlight]).then(() => finish(error, value));
-    };
-    const onAbort = () => finish(new Error("TypeScript execution cancelled"));
-    const timer = setTimeout(
-      () => finish(new Error(`TypeScript execution timed out after ${timeoutMs}ms`)),
+    const lifecycle = new SandboxLifecycle({
+      child,
       timeoutMs,
-    );
-    timer.unref?.();
-    options.signal?.addEventListener("abort", onAbort, { once: true });
-    if (options.signal?.aborted) {
-      return onAbort();
+      ...(options.signal ? { signal: options.signal } : {}),
+      resolve,
+      reject,
+    });
+    if (lifecycle.settled) {
+      return;
     }
-
-    /* v8 ignore next -- an EPIPE race is platform-dependent and handled defensively. */
-    child.stdin.on("error", (error) => {
-      if (!settled) {
-        finish(error);
-      }
-    });
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
-      stderr = (stderr + chunk).slice(-8192);
-    });
-    child.on("error", (error) => finish(error));
-    child.on("exit", (code, signal) => {
-      if (!settled) {
-        const detail = stderr.trim() || `exit ${code ?? signal}`;
-        finish(new Error(`TypeScript sandbox stopped: ${detail}`));
-      }
-    });
-
     const send = (message: WireMessage): boolean => {
-      if (settled || !child.stdin.writable) {
+      if (lifecycle.settled || !child.stdin.writable) {
         return false;
       }
       const frame = `${JSON.stringify({ ...message, token })}\n`;
@@ -276,116 +183,65 @@ export async function runInSandbox(
       child.stdin.write(frame);
       return true;
     };
+    const dispatcher = new CapabilityDispatcher({
+      handler,
+      signal: lifecycle.capabilitySignal,
+      maximumCalls: MAX_CAPABILITY_CALLS,
+      maximumConcurrentCalls: MAX_CONCURRENT_CAPABILITY_CALLS,
+      send,
+      parseFunctionContext: parseFunctionExecutionContext,
+      ...(options.onCapabilityTrace ? { onTrace: options.onCapabilityTrace } : {}),
+    });
 
-    const handleCapabilityCall = (message: CapabilityCallMessage): void => {
-      const { id, capability, method, args } = message;
-      callCount++;
-      const functionContext = parseFunctionExecutionContext(message.functionContext);
-      const trace = startCapabilityTrace({
-        id,
-        sequence: callCount,
-        capability,
-        method,
-        args,
-        startedAt: Date.now(),
-        ...(functionContext ? { functionContext } : {}),
-      });
-      reportCapabilityTrace(trace);
-      const finishTrace = (status: "succeeded" | "failed" | "rejected") => {
-        reportCapabilityTrace(finishCapabilityTrace(trace, status));
-      };
-      if (callCount > MAX_CAPABILITY_CALLS) {
-        send({ type: "response", id, error: `RPC call limit exceeded (${MAX_CAPABILITY_CALLS})` });
-        finishTrace("rejected");
-        return;
+    /* v8 ignore next -- an EPIPE race is platform-dependent and handled defensively. */
+    child.stdin.on("error", (error) => {
+      if (!lifecycle.settled) {
+        lifecycle.finish(error);
       }
-      if (activeCalls >= MAX_CONCURRENT_CAPABILITY_CALLS) {
-        send({
-          type: "response",
-          id,
-          error: `Concurrent RPC call limit exceeded (${MAX_CONCURRENT_CAPABILITY_CALLS})`,
-        });
-        finishTrace("rejected");
-        return;
+    });
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderr = (stderr + chunk).slice(-8192);
+    });
+    child.on("error", (error) => lifecycle.finish(error));
+    child.on("exit", (code, signal) => {
+      if (!lifecycle.settled) {
+        const detail = stderr.trim() || `exit ${code ?? signal}`;
+        lifecycle.finish(new Error(`TypeScript sandbox stopped: ${detail}`));
       }
-      activeCalls++;
-      let task: Promise<void>;
-      task = Promise.resolve()
-        .then(() =>
-          handler({
-            capability,
-            method,
-            args,
-            signal: capabilitySignal,
-            ...(trace.function ? { functionContext: trace.function } : {}),
-          }),
-        )
-        .then(
-          (value) => {
-            if (send({ type: "response", id, value })) {
-              finishTrace("succeeded");
-            } else {
-              send({ type: "response", id, error: "Capability response exceeds RPC limit" });
-              finishTrace("failed");
-            }
-          },
-          (error) => {
-            send({
-              type: "response",
-              id,
-              error: error instanceof Error ? error.message : String(error),
-            });
-            finishTrace("failed");
-          },
-        )
-        .finally(() => {
-          activeCalls--;
-          inFlight.delete(task);
-        });
-      inFlight.add(task);
-    };
+    });
 
+    const decoder = new WireFrameDecoder(MAX_PROTOCOL_FRAME_BYTES);
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-      for (;;) {
-        const newline = stdout.indexOf("\n");
-        if (newline < 0) {
-          break;
-        }
-        const line = stdout.slice(0, newline);
-        stdout = stdout.slice(newline + 1);
-        if (Buffer.byteLength(line) > MAX_PROTOCOL_FRAME_BYTES) {
-          return finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
-        }
-        let message: WireMessage;
-        try {
-          message = JSON.parse(line) as WireMessage;
-        } catch {
-          continue; // Ignore untrusted writes to stdout.
-        }
+      let messages: WireMessage[];
+      try {
+        messages = decoder.push(chunk);
+      } catch (error) {
+        lifecycle.finish(error as Error);
+        return;
+      }
+      for (const message of messages) {
         if (message.token !== token) {
           continue;
         }
         if (message.type === "result") {
-          return finishAfterCalls(undefined, message.value);
+          lifecycle.finishAfter(dispatcher.pending(), undefined, message.value);
+          return;
         }
         if (message.type === "fatal") {
-          return finishAfterCalls(sandboxFatalError(message.error));
+          lifecycle.finishAfter(dispatcher.pending(), sandboxFatalError(message.error));
+          return;
         }
         if (isCapabilityCallMessage(message)) {
-          handleCapabilityCall(message);
+          dispatcher.handle(message);
         }
-      }
-      /* v8 ignore next -- oversized newline-terminated frames are rejected above. */
-      if (Buffer.byteLength(stdout) > MAX_PROTOCOL_FRAME_BYTES) {
-        finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
       }
     });
 
     /* v8 ignore next -- validated source and registry limits keep start frames below the cap. */
     if (!send({ type: "start", value: compiled, input: options.input })) {
-      finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
+      lifecycle.finish(new Error(`RPC frame exceeds ${MAX_PROTOCOL_FRAME_BYTES} bytes`));
     }
   });
 }
