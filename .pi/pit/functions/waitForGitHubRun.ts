@@ -2,9 +2,9 @@
  * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
  *
  * @pit project
- * @param input.attempts - Maximum status checks. The default is 48.
- * @param input.intervalMs - Delay between checks. The default is 5000 ms.
- * @param input.initialDelayMs - Delay before the first check. The default is 30000 ms.
+ * @param input.attempts - Maximum status checks. The default is 12.
+ * @param input.intervalMs - Delay between checks. The default is 15000 ms.
+ * @param input.initialDelayMs - Delay before the first check. The default is 120000 ms.
  * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
  */
 async function waitForGitHubRun(
@@ -18,10 +18,10 @@ async function waitForGitHubRun(
     raise?: boolean;
   },
 ) {
-  const intervalMs = Math.max(1000, Math.min(input.intervalMs ?? 5000, 30000));
-  const initialDelayMs = Math.max(0, Math.min(input.initialDelayMs ?? 30000, 120000));
-  const requestedAttempts = Math.max(1, Math.min(input.attempts ?? 48, 120));
-  const pollingBudgetMs = Math.max(0, 270000 - initialDelayMs);
+  const intervalMs = Math.max(1000, Math.min(input.intervalMs ?? 15000, 30000));
+  const initialDelayMs = Math.max(0, Math.min(input.initialDelayMs ?? 120000, 120000));
+  const requestedAttempts = Math.max(1, Math.min(input.attempts ?? 12, 120));
+  const pollingBudgetMs = Math.max(0, 285000 - initialDelayMs);
   const maximumAttempts = Math.floor(pollingBudgetMs / intervalMs) + 1;
   const attempts = Math.min(requestedAttempts, maximumAttempts);
   const raise = input.raise ?? true;

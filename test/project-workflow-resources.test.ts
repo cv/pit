@@ -5,8 +5,12 @@ import { getProjectFunctionMetadata, validateTypeScript } from "../src/sandbox.j
 const functionFiles = [
   ["analyzePitSession", ".pi/pit/functions/analyzePitSession.ts"],
   ["analyzePitSessions", ".pi/pit/functions/analyzePitSessions.ts"],
+  ["auditPitCodeQuality", ".pi/pit/functions/auditPitCodeQuality.ts"],
   ["formatPitChanges", ".pi/pit/functions/formatPitChanges.ts"],
+  ["findGitHubRunForCommit", ".pi/pit/functions/findGitHubRunForCommit.ts"],
   ["inspectPitCoverageGaps", ".pi/pit/functions/inspectPitCoverageGaps.ts"],
+  ["inspectGitHubPullRequest", ".pi/pit/functions/inspectGitHubPullRequest.ts"],
+  ["managePullRequestWorktree", ".pi/pit/functions/managePullRequestWorktree.ts"],
   ["preparePitDelivery", ".pi/pit/functions/preparePitDelivery.ts"],
   ["reviewPitChanges", ".pi/pit/functions/reviewPitChanges.ts"],
   ["runPitTargetedTests", ".pi/pit/functions/runPitTargetedTests.ts"],
@@ -62,7 +66,7 @@ describe("project agent workflow resources", () => {
     expect(preparation).not.toContain("validatePit(");
     expect(preparation).toContain('["--cached", "--check"]');
     expect(wait).toContain("setTimeout");
-    expect(wait).toContain("input.initialDelayMs ?? 30000");
+    expect(wait).toContain("input.initialDelayMs ?? 120000");
     expect(wait).not.toContain("shell.execFile");
     expect(skill).toContain("preparePitDelivery()");
     expect(skill).toContain("waitForGitHubRun({ id, repo, raise: true })");
