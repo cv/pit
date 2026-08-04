@@ -128,12 +128,13 @@ describe("ExecutionProgressController", () => {
     });
   });
 
-  it("does not depend on TUI renderer modules", () => {
-    for (const file of ["execution-progress.ts", "execution-types.ts"]) {
+  it.each(["execution-progress.ts", "execution-types.ts"])(
+    "keeps %s independent from TUI renderer modules",
+    (file) => {
       const source = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
       expect(source).not.toMatch(/from ["'][^"']*renderer/);
-    }
-  });
+    },
+  );
 
   it("records snapshots without a listener", () => {
     const c = new ExecutionProgressController();

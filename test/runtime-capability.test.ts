@@ -13,15 +13,13 @@ describe("runtime capability", () => {
     });
   });
 
-  it("does not register unsupported model-triggered control commands", () => {
-    for (const name of [
-      "pit-reload-runtime",
-      "pit-shutdown",
-      "pit-new-session",
-      "pit-fork-session",
-      "pit-clone-session",
-    ]) {
-      expect(getRegisteredCommand(name)).toBeUndefined();
-    }
+  it.each([
+    "pit-reload-runtime",
+    "pit-shutdown",
+    "pit-new-session",
+    "pit-fork-session",
+    "pit-clone-session",
+  ])("does not register unsupported command %s", (name) => {
+    expect(getRegisteredCommand(name)).toBeUndefined();
   });
 });
