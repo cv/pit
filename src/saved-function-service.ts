@@ -5,11 +5,8 @@ import {
   type FunctionStateCommit,
   reconcileFunctionState,
 } from "./function-state.js";
-import {
-  removeProjectFunction,
-  savedFunctionDependents,
-  saveProjectFunction,
-} from "./project-functions.js";
+import { removeProjectFunction, saveProjectFunction } from "./project-function-storage.js";
+import { savedFunctionDependents } from "./project-functions.js";
 import {
   getNamedFunctionName,
   getProjectFunctionMetadata,

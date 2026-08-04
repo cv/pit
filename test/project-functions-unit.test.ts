@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
+  removeProjectFunction,
+  saveProjectFunction,
+} from "../src/project-function-storage.js";
+import {
   projectFunctionCatalog,
   reconcileProjectFunctionsForSession as reconcileProjectFunctionState,
-  removeProjectFunction,
   savedFunctionDependents,
-  saveProjectFunction,
 } from "../src/project-functions.js";
 import { getProjectFunctionMetadata } from "../src/sandbox.js";
 import { functionRunScope, functionScopeRegistry } from "../src/saved-functions.js";

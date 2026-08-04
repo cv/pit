@@ -33,10 +33,8 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./typescript-failure-context.js";
-import {
-  renderTypeScriptToolCall,
-  renderTypeScriptToolResult,
-} from "./typescript-tool-renderer.js";
+import { renderTypeScriptToolCall } from "./typescript-tool-call-renderer.js";
+import { renderTypeScriptToolResult } from "./typescript-tool-renderer.js";
 
 export function display(value: unknown): string {
   if (typeof value === "string") {

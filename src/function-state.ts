@@ -1,4 +1,4 @@
-import type { ProjectFunctionMetadataRegistry } from "./project-functions.js";
+import type { ProjectFunctionMetadataRegistry } from "./project-function-storage.js";
 import { reconcileProjectFunctionsForSession } from "./project-functions.js";
 import type { FunctionRegistry } from "./saved-functions.js";
 

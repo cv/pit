@@ -1,11 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { FunctionState } from "./function-state.js";
 import { reconcileFunctionState, resetFunctionUsage } from "./function-state.js";
-import {
-  loadProjectFunctionConfig,
-  loadProjectFunctions,
-  projectFunctionCatalog,
-} from "./project-functions.js";
+import { loadProjectFunctionConfig, loadProjectFunctions } from "./project-function-storage.js";
+import { projectFunctionCatalog } from "./project-functions.js";
 import { registerFunctionManager } from "./saved-function-manager.js";
 import type { SavedFunctionService } from "./saved-function-service.js";
 import { reconstructFunctions } from "./saved-functions.js";

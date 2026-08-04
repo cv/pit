@@ -21,8 +21,8 @@ const projectFunctionTestHooks = vi.hoisted(() => ({
   beforeRemove: undefined as (() => Promise<void>) | undefined,
 }));
 
-vi.mock("../src/project-functions.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/project-functions.js")>();
+vi.mock("../src/project-function-storage.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/project-function-storage.js")>();
   return {
     ...actual,
     async removeProjectFunction(cwd: string, name: string): Promise<boolean> {
