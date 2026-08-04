@@ -157,6 +157,38 @@ describe("host capabilities", () => {
     ).rejects.toThrow(/Command failed with exit code 9: git "push"[\s\S]*failed/);
   });
 
+  it("executes typed GitHub filters and selected JSON fields", async () => {
+    execMock.mockResolvedValueOnce({ stdout: "[]", stderr: "", code: 0 });
+
+    const response = await value(`async ({ gh }) => gh.prList({
+      repo: "NVIDIA/NemoClaw",
+      author: "@me",
+      state: "open",
+      limit: 100,
+      json: ["number", "title", "url", "isDraft", "author"],
+    })`);
+
+    expect(response).toMatchObject({ stdout: "[]", code: 0 });
+    expect(execMock).toHaveBeenCalledWith(
+      "gh",
+      [
+        "pr",
+        "list",
+        "--repo",
+        "NVIDIA/NemoClaw",
+        "--state",
+        "open",
+        "--limit",
+        "100",
+        "--author",
+        "@me",
+        "--json",
+        "number,title,url,isDraft,author",
+      ],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
   it("executes allowlisted Git subcommands without shell interpolation", async () => {
     const results = await value(`async ({ git }) => [
       await git.status(["--short"], { cwd: ".", timeoutMs: 5000, raise: true }),

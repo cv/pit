@@ -363,7 +363,7 @@ Use `shell.execFile("npm", ...)` for unsupported npm commands. npm lifecycle scr
 - `releaseView(tag?, options?)` and `releaseCreate(tag, input)` inspect and create releases.
 - `api(endpoint, args?, options?)` is a bounded, argument-safe escape hatch.
 
-List and view methods request structured JSON internally. Applicable methods accept `repo` in their options or input. Use `shell.execFile("gh", ...)` for unsupported GitHub CLI commands.
+List and view methods return structured JSON and accept `json` to select fields. List methods expose common typed filters, while supported workflows accept argument-safe `args` for other CLI options. Applicable methods also accept `repo`; use `shell.execFile("gh", ...)` only for unsupported GitHub CLI commands.
 
 ### `shell`
 

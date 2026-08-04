@@ -6,45 +6,128 @@ export interface PreparedGhCommand {
   args: string[];
   options: Record<string, unknown>;
 }
+
+const commandOptionKeys = [
+  "repo",
+  "args",
+  "json",
+  "state",
+  "limit",
+  "author",
+  "assignee",
+  "labels",
+  "search",
+  "base",
+  "head",
+  "draft",
+  "branch",
+  "commit",
+  "event",
+  "status",
+  "user",
+  "workflow",
+  "title",
+  "body",
+];
+
 function number(value: unknown, label: string): number {
   if (!Number.isInteger(value)) {
     throw new TypeError(`${label} must be an integer`);
   }
   return value as number;
 }
-function options(value: unknown, special: string[] = []) {
+
+function options(value: unknown) {
   if (value === undefined) {
     return {};
   }
   const copy = { ...object(value) };
-  for (const key of ["repo", "state", "limit", "title", "body", ...special]) {
+  for (const key of commandOptionKeys) {
     delete copy[key];
   }
   return copy;
 }
+
 function repo(raw: Record<string, unknown>): string[] {
-  return typeof raw.repo === "string" ? ["--repo", raw.repo] : [];
+  return raw.repo === undefined ? [] : ["--repo", text(raw.repo, "options.repo")];
 }
+
+function extraArgs(raw: Record<string, unknown>): string[] {
+  return raw.args === undefined ? [] : list(raw.args, "options.args");
+}
+
 function limit(raw: Record<string, unknown>): string[] {
   return raw.limit === undefined ? [] : ["--limit", String(number(raw.limit, "options.limit"))];
 }
-function state(raw: Record<string, unknown>): string[] {
-  return raw.state === undefined ? [] : ["--state", text(raw.state, "options.state")];
+
+function flag(raw: Record<string, unknown>, key: string, cliFlag = key): string[] {
+  return raw[key] === undefined ? [] : [`--${cliFlag}`, text(raw[key], `options.${key}`)];
 }
+
+function repeatedFlag(raw: Record<string, unknown>, key: string, cliFlag = key): string[] {
+  if (raw[key] === undefined) {
+    return [];
+  }
+  return list(raw[key], `options.${key}`).flatMap((value) => [`--${cliFlag}`, value]);
+}
+
+function booleanFlag(raw: Record<string, unknown>, key: string): string[] {
+  if (raw[key] === undefined) {
+    return [];
+  }
+  if (typeof raw[key] !== "boolean") {
+    throw new TypeError(`options.${key} must be a boolean`);
+  }
+  return raw[key] ? [`--${key}`] : [];
+}
+
+function json(raw: Record<string, unknown>, defaults: string): string[] {
+  if (raw.json === undefined) {
+    return ["--json", defaults];
+  }
+  const fields = list(raw.json, "options.json");
+  if (fields.length === 0) {
+    throw new TypeError("options.json must contain at least one field");
+  }
+  return ["--json", fields.join(",")];
+}
+
+function commonListFilters(raw: Record<string, unknown>): string[] {
+  return [
+    ...flag(raw, "author"),
+    ...flag(raw, "assignee"),
+    ...repeatedFlag(raw, "labels", "label"),
+    ...flag(raw, "search"),
+  ];
+}
+
 const issueFields = "number,title,state,url,labels";
 const prFields =
   "number,title,state,url,headRefName,baseRefName,mergeable,reviewDecision,statusCheckRollup";
 const runFields = "databaseId,status,conclusion,url,name,headSha";
+const releaseFields = "tagName,name,url,isDraft,isPrerelease,publishedAt";
+
+function prepareIssueList(raw: Record<string, unknown>): PreparedGhCommand {
+  return {
+    args: [
+      "issue",
+      "list",
+      ...repo(raw),
+      ...flag(raw, "state"),
+      ...limit(raw),
+      ...commonListFilters(raw),
+      ...extraArgs(raw),
+      ...json(raw, issueFields),
+    ],
+    options: options(raw),
+  };
+}
+
 export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhCommand {
   const raw = (index: number) => (args[index] === undefined ? {} : object(args[index]));
   switch (method) {
-    case "issueList": {
-      const o = raw(0);
-      return {
-        args: ["issue", "list", ...repo(o), ...state(o), ...limit(o), "--json", issueFields],
-        options: options(o),
-      };
-    }
+    case "issueList":
+      return prepareIssueList(raw(0));
     case "issueView": {
       const o = raw(1);
       return {
@@ -53,8 +136,8 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "view",
           String(number(args[0], "number")),
           ...repo(o),
-          "--json",
-          `${issueFields},body,comments`,
+          ...extraArgs(o),
+          ...json(o, `${issueFields},body,comments`),
         ],
         options: options(o),
       };
@@ -69,6 +152,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "--title",
           text(o.title, "input.title"),
           ...(typeof o.body === "string" ? ["--body", o.body] : []),
+          ...extraArgs(o),
         ],
         options: options(o),
       };
@@ -83,6 +167,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           ...repo(o),
           "--body",
           text(args[1], "body"),
+          ...extraArgs(o),
         ],
         options: options(o),
       };
@@ -90,14 +175,26 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
     case "issueClose": {
       const o = raw(1);
       return {
-        args: ["issue", "close", String(number(args[0], "number")), ...repo(o)],
+        args: ["issue", "close", String(number(args[0], "number")), ...repo(o), ...extraArgs(o)],
         options: options(o),
       };
     }
     case "prList": {
       const o = raw(0);
       return {
-        args: ["pr", "list", ...repo(o), ...state(o), ...limit(o), "--json", prFields],
+        args: [
+          "pr",
+          "list",
+          ...repo(o),
+          ...flag(o, "state"),
+          ...limit(o),
+          ...commonListFilters(o),
+          ...flag(o, "base"),
+          ...flag(o, "head"),
+          ...booleanFlag(o, "draft"),
+          ...extraArgs(o),
+          ...json(o, prFields),
+        ],
         options: options(o),
       };
     }
@@ -109,8 +206,8 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "view",
           String(number(args[0], "number")),
           ...repo(o),
-          "--json",
-          `${prFields},body,comments,reviews`,
+          ...extraArgs(o),
+          ...json(o, `${prFields},body,comments,reviews`),
         ],
         options: options(o),
       };
@@ -118,7 +215,20 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
     case "runList": {
       const o = raw(0);
       return {
-        args: ["run", "list", ...repo(o), ...limit(o), "--json", runFields],
+        args: [
+          "run",
+          "list",
+          ...repo(o),
+          ...limit(o),
+          ...flag(o, "branch"),
+          ...flag(o, "commit"),
+          ...flag(o, "event"),
+          ...flag(o, "status"),
+          ...flag(o, "user"),
+          ...flag(o, "workflow"),
+          ...extraArgs(o),
+          ...json(o, runFields),
+        ],
         options: options(o),
       };
     }
@@ -130,8 +240,8 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "view",
           String(number(args[0], "id")),
           ...repo(o),
-          "--json",
-          `${runFields},jobs`,
+          ...extraArgs(o),
+          ...json(o, `${runFields},jobs`),
         ],
         options: options(o),
       };
@@ -144,8 +254,8 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "view",
           ...(args[0] === undefined || args[0] === null ? [] : [text(args[0], "tag")]),
           ...repo(o),
-          "--json",
-          "tagName,name,url,isDraft,isPrerelease,publishedAt",
+          ...extraArgs(o),
+          ...json(o, releaseFields),
         ],
         options: options(o),
       };
@@ -161,6 +271,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
           "--title",
           text(o.title, "input.title"),
           ...(typeof o.body === "string" ? ["--notes", o.body] : []),
+          ...extraArgs(o),
         ],
         options: options(o),
       };

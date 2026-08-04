@@ -38,8 +38,31 @@ type PitNpmPackOptions = PitProcessOptions & {
   dryRun?: boolean;
 };
 
-type PitGhOptions = PitProcessOptions & { repo?: string };
-type PitGhListOptions = PitGhOptions & { state?: "open" | "closed" | "all"; limit?: number };
+type PitGhOptions = PitProcessOptions & { repo?: string; args?: string[] };
+type PitGhJsonOptions = PitGhOptions & { json?: string[] };
+type PitGhListOptions = PitGhJsonOptions & {
+  state?: "open" | "closed" | "all";
+  limit?: number;
+  author?: string;
+  assignee?: string;
+  labels?: string[];
+  search?: string;
+};
+type PitGhPrListOptions = Omit<PitGhListOptions, "state"> & {
+  state?: "open" | "closed" | "merged" | "all";
+  base?: string;
+  head?: string;
+  draft?: boolean;
+};
+type PitGhRunListOptions = PitGhJsonOptions & {
+  limit?: number;
+  branch?: string;
+  commit?: string;
+  event?: string;
+  status?: string;
+  user?: string;
+  workflow?: string;
+};
 type PitGhCreateOptions = PitGhOptions & { title: string; body?: string };
 
 type PitReadFormat = "hashed" | "raw";
@@ -251,7 +274,7 @@ interface PitNpmCapability {
 interface PitGhCapability {
   issueList(options?: PitGhListOptions): Promise<PitProcessResult>;
 
-  issueView(number: number, options?: PitGhOptions): Promise<PitProcessResult>;
+  issueView(number: number, options?: PitGhJsonOptions): Promise<PitProcessResult>;
 
   issueCreate(input: PitGhCreateOptions): Promise<PitProcessResult>;
 
@@ -259,15 +282,15 @@ interface PitGhCapability {
 
   issueClose(number: number, options?: PitGhOptions): Promise<PitProcessResult>;
 
-  prList(options?: PitGhListOptions): Promise<PitProcessResult>;
+  prList(options?: PitGhPrListOptions): Promise<PitProcessResult>;
 
-  prView(number: number, options?: PitGhOptions): Promise<PitProcessResult>;
+  prView(number: number, options?: PitGhJsonOptions): Promise<PitProcessResult>;
 
-  runList(options?: PitGhOptions & { limit?: number }): Promise<PitProcessResult>;
+  runList(options?: PitGhRunListOptions): Promise<PitProcessResult>;
 
-  runView(id: number, options?: PitGhOptions): Promise<PitProcessResult>;
+  runView(id: number, options?: PitGhJsonOptions): Promise<PitProcessResult>;
 
-  releaseView(tag?: string, options?: PitGhOptions): Promise<PitProcessResult>;
+  releaseView(tag?: string, options?: PitGhJsonOptions): Promise<PitProcessResult>;
 
   releaseCreate(tag: string, input: PitGhCreateOptions): Promise<PitProcessResult>;
 
