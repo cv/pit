@@ -1,13 +1,6 @@
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  truncateHead,
-  withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
+import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import fg from "fast-glob";
 import { fileRevision, prepareEdit } from "./hashline.js";
 import {
@@ -17,137 +10,10 @@ import {
   string,
   workspaceResultPath,
 } from "./workspace-paths.js";
+import { readWorkspace } from "./workspace-read.js";
 import { searchWorkspace } from "./workspace-search.js";
 
 const MAX_GLOB_RESULTS = 10_000;
-
-async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
-  const path = resolveWorkspacePath(cwd, args[0]);
-  const options = args[1] === undefined ? {} : object(args[1], "options");
-  const format = options.format ?? "hashed";
-  if (format !== "hashed" && format !== "raw") {
-    throw new Error('options.format must be "hashed" or "raw"');
-  }
-  const offset = Number(options.offset ?? 1);
-  const limit = Number(options.limit ?? DEFAULT_MAX_LINES);
-  if (!Number.isInteger(offset) || offset < 1 || !Number.isInteger(limit) || limit < 1) {
-    throw new Error("offset and limit must be positive integers");
-  }
-
-  const selectionEnd = offset + limit - 1;
-  const maxCaptureCharacters = DEFAULT_MAX_BYTES + 1;
-  const selectedHashes: string[] = [];
-  let selected = "";
-  let selectionTruncated = false;
-  let currentLine = 1;
-  let totalLines = 1;
-  let lineHasher = createHash("sha256");
-  const revisionHasher = createHash("sha256");
-  let pendingCarriageReturn = false;
-  const selectedLine = () => currentLine >= offset && currentLine <= selectionEnd;
-  const appendSelected = (value: string): void => {
-    if (!value) {
-      return;
-    }
-    const remaining = maxCaptureCharacters - selected.length;
-    if (remaining <= 0) {
-      selectionTruncated = true;
-      return;
-    }
-    selected += value.slice(0, remaining);
-    selectionTruncated ||= value.length > remaining;
-  };
-  const hashSegment = (segment: string): void => {
-    /* v8 ignore next 4 -- only a stream chunk boundary immediately after CR reaches this path. */
-    if (pendingCarriageReturn) {
-      lineHasher.update("\r");
-      pendingCarriageReturn = false;
-    }
-    if (segment.endsWith("\r")) {
-      lineHasher.update(segment.slice(0, -1));
-      pendingCarriageReturn = true;
-    } else {
-      lineHasher.update(segment);
-    }
-  };
-  const finishLine = (hasNewline: boolean): void => {
-    if (pendingCarriageReturn) {
-      if (!hasNewline) {
-        lineHasher.update("\r");
-      }
-      pendingCarriageReturn = false;
-    }
-    if (selectedLine()) {
-      selectedHashes.push(lineHasher.digest("base64url").slice(0, 5));
-    } else {
-      lineHasher.digest();
-    }
-    lineHasher = createHash("sha256");
-  };
-
-  const stream = createReadStream(path, { encoding: "utf8", signal });
-  for await (const rawChunk of stream) {
-    const chunk = String(rawChunk);
-    revisionHasher.update(chunk);
-    let start = 0;
-    for (;;) {
-      const newline = chunk.indexOf("\n", start);
-      if (newline < 0) {
-        const segment = chunk.slice(start);
-        hashSegment(segment);
-        if (selectedLine()) {
-          appendSelected(segment);
-        }
-        break;
-      }
-      const segment = chunk.slice(start, newline);
-      hashSegment(segment);
-      if (selectedLine()) {
-        appendSelected(segment);
-        if (currentLine < selectionEnd) {
-          appendSelected("\n");
-        }
-      }
-      finishLine(true);
-      totalLines++;
-      currentLine++;
-      start = newline + 1;
-    }
-  }
-  finishLine(false);
-
-  let content = selected;
-  if (format === "hashed") {
-    const selectedLines = selectedHashes.length === 0 ? [] : selected.split("\n");
-    content = selectedLines
-      .slice(0, selectedHashes.length)
-      .map((line, index) => {
-        const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
-        // biome-ignore lint/style/noNonNullAssertion: selected lines are capped to available hashes.
-        return `${offset + index}:${selectedHashes[index]!}|${normalized}`;
-      })
-      .join("\n");
-  }
-  const result = truncateHead(content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: limit });
-  let returnedLines =
-    result.content === "" ? (selectedHashes.length > 0 ? 1 : 0) : Math.max(1, result.outputLines);
-  if (format === "raw" && result.content.endsWith("\n")) {
-    returnedLines++;
-  }
-  const hasMore = selectionEnd < totalLines;
-  const truncated = result.truncated || selectionTruncated;
-  return {
-    file: workspaceResultPath(cwd, path),
-    format,
-    content: result.content,
-    revision: revisionHasher.digest("base64url").slice(0, 12),
-    ...(offset === 1 ? {} : { offset }),
-    lines: returnedLines,
-    ...(totalLines === returnedLines ? {} : { totalLines }),
-    ...(hasMore ? { hasMore: true as const } : {}),
-    ...(truncated ? { truncated: true as const } : {}),
-  };
-}
 
 function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
