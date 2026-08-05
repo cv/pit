@@ -88,4 +88,17 @@ describe("project agent workflow resources", () => {
     expect(skill).toContain("without** `Closes #...`");
     expect(await readFile("AGENTS.md", "utf8")).toContain("immediately preceding");
   });
+
+  it("packages the pit-reflect prompt for saved-function improvement", async () => {
+    const [prompt, manifest] = await Promise.all([
+      readFile("prompts/pit-reflect.md", "utf8"),
+      readFile("package.json", "utf8").then((contents) => JSON.parse(contents)),
+    ]);
+    expect(prompt).toContain("description: Reflect on session work");
+    expect(prompt).toContain("functions.listAll()");
+    expect(prompt).toContain("functions.getSaved(name)");
+    expect(prompt).toContain("functions.promote(name, summary)");
+    expect(prompt).toContain("If no function change is justified");
+    expect(manifest.files).toContain("prompts");
+  });
 });

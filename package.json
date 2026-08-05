@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "src",
+    "prompts",
     "README.md",
     "LICENSE"
   ],

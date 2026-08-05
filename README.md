@@ -268,6 +268,10 @@ Select a project function to inspect it or remove it from the project. Project r
 
 `/functions delete` creates a branch-local tombstone. After confirmation, it also deletes session dependents.
 
+### Reflect on reusable work
+
+Pit packages a `/pit-reflect [focus]` prompt template. It reviews work completed in the current session, compares recurring workflows with the effective saved-function registry, and makes only high-confidence additions or improvements. It prefers extending or composing existing functions, keeps unproven helpers session-scoped, and reports when no new function is justified.
+
 ## Understand execution
 
 Pit completes these steps for each call:

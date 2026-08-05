@@ -9,6 +9,7 @@ const requiredRuntimeFiles = [
   "src/sandbox.ts",
   "src/sandbox-runner.mjs",
   "src/capability-contract.d.ts",
+  "prompts/pit-reflect.md",
 ];
 
 function fail(message) {
@@ -17,6 +18,10 @@ function fail(message) {
 
 if (!Array.isArray(packageJson.pi?.extensions) || packageJson.pi.extensions.length === 0) {
   fail("package.json must declare at least one pi.extensions entry");
+}
+
+if (!packageJson.files?.includes("prompts")) {
+  fail("package.json files must include the prompts directory");
 }
 
 const declaredExtensions = packageJson.pi.extensions.map((entry) => {
