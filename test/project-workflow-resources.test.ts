@@ -49,6 +49,9 @@ describe("project agent workflow resources", () => {
     expect(format).toContain("anchorsInvalidated");
     expect(skill).toContain("runPitTargetedTests");
     expect(skill).toContain("formatPitChanges()");
+    expect(skill).toContain("auditPitCodeQuality");
+    expect(skill).toContain("inspectGitHubPullRequest");
+    expect(skill).toContain("managePullRequestWorktree");
   });
 
   it("uses bounded and non-duplicative delivery workflows", async () => {
@@ -69,7 +72,9 @@ describe("project agent workflow resources", () => {
     expect(wait).toContain("input.initialDelayMs ?? 120000");
     expect(wait).not.toContain("shell.execFile");
     expect(skill).toContain("preparePitDelivery()");
+    expect(skill).toContain("findGitHubRunForCommit({ repo, sha })");
     expect(skill).toContain("waitForGitHubRun({ id, repo, raise: true })");
+    expect(skill).toContain("Trusted project functions own repeatable execution");
   });
 
   it("enables project functions and provides the delivery skill", async () => {
