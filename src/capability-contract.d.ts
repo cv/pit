@@ -145,26 +145,31 @@ type PitProjectFunctionMetadata = {
   parameters: Array<{ name: string; description?: string }>;
 };
 
+type PitFunctionScope = "global" | "project" | "session";
+
 type PitSavedFunctionMetadata = {
   name: string;
-  scope: "project" | "session";
+  scope: PitFunctionScope;
   signature: string;
   lines: number;
   bytes: number;
   directDependencies: string[];
   directDependents: string[];
   overridesProject: boolean;
+  overridesGlobal: boolean;
 };
 
 type PitSavedFunctionRemovalPlan = {
   name: string;
-  scope: "project" | "session";
+  scope: PitFunctionScope;
   directDependents: string[];
   transitiveDependents: string[];
   removalClosure: string[];
   requiresCascade: boolean;
   blocked: boolean;
 };
+
+type PitPromotionOptions = { to?: "global" | "project" };
 
 type PitRemoveOptions = { cascade?: boolean };
 type PitRemoveResult = { name: string; removed: string[] };
@@ -339,8 +344,10 @@ interface PitContextCapability {
     thinkingLevel: string;
     sessionFile: string | undefined;
     savedFunctions: string[];
+    globalFunctions: string[];
     projectFunctions: string[];
     sessionFunctions: string[];
+    globalFunctionsEnabled: boolean;
     projectFunctionsEnabled: boolean;
   }>;
 }
@@ -396,13 +403,26 @@ interface PitFunctionsCapability {
 
   remove(name: string): Promise<{ name: string; removed: boolean }>;
 
+  listGlobal(): Promise<PitProjectFunctionMetadata[]>;
+
+  getGlobal(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;
+
+  removeGlobal(name: string): Promise<{ name: string; removed: boolean }>;
+
   listAll(): Promise<PitSavedFunctionMetadata[]>;
 
-  getSaved(name: string): Promise<PitSavedFunctionMetadata & { source: string }>;
+  getSaved(
+    name: string,
+    scope?: PitFunctionScope,
+  ): Promise<PitSavedFunctionMetadata & { source: string }>;
 
-  planRemoval(name: string, scope?: "project" | "session"): Promise<PitSavedFunctionRemovalPlan>;
+  planRemoval(name: string, scope?: PitFunctionScope): Promise<PitSavedFunctionRemovalPlan>;
 
-  promote(name: string, summary: string): Promise<{ name: string; promoted: true }>;
+  promote(
+    name: string,
+    summary: string,
+    options?: PitPromotionOptions,
+  ): Promise<{ name: string; promoted: true; scope: "global" | "project" }>;
 
   removeSession(name: string, options?: PitRemoveOptions): Promise<PitRemoveResult>;
 }

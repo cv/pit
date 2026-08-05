@@ -30,26 +30,43 @@ const RESERVED_FUNCTION_NAMES = new Set([
 ]);
 
 export type FunctionRegistry = Map<string, string>;
+export type FunctionScope = "global" | "project" | "session";
 
 export function functionScopeRegistry(
   effective: ReadonlyMap<string, string>,
+  global: ReadonlyMap<string, string>,
+  project: ReadonlyMap<string, string>,
   session: ReadonlyMap<string, string>,
-): Map<string, "project" | "session"> {
+): Map<string, FunctionScope> {
   return new Map(
-    [...effective.keys()].map((name) => [name, session.has(name) ? "session" : "project"] as const),
+    [...effective.keys()].map((name) => {
+      const scope: FunctionScope = session.has(name)
+        ? "session"
+        : project.has(name)
+          ? "project"
+          : global.has(name)
+            ? "global"
+            : "session";
+      return [name, scope];
+    }),
   );
+}
+
+export interface FunctionScopeRegistries {
+  global: ReadonlyMap<string, string>;
+  project: ReadonlyMap<string, string>;
+  session: ReadonlyMap<string, string>;
 }
 
 export function functionRunScope(
   name: string,
-  project: ReadonlyMap<string, string>,
-  session: ReadonlyMap<string, string>,
-  attributedScope?: "project" | "session",
-): "project" | "session" {
-  if (attributedScope) {
-    return attributedScope;
-  }
-  return project.has(name) && !session.has(name) ? "project" : "session";
+  registries: FunctionScopeRegistries,
+  attributedScope?: FunctionScope,
+): FunctionScope {
+  if (attributedScope) return attributedScope;
+  if (registries.session.has(name)) return "session";
+  if (registries.project.has(name)) return "project";
+  return registries.global.has(name) ? "global" : "session";
 }
 export const FUNCTION_ENTRY_TYPE = "pit-functions";
 export type FunctionEntry =
@@ -59,7 +76,7 @@ export interface FunctionActivity {
   action: "set" | "run" | "remove";
   name: string;
   replaced?: boolean;
-  scope?: "project" | "session";
+  scope?: FunctionScope;
 }
 export function validateSavedFunctionSource(source: string): void {
   if (Buffer.byteLength(source) > MAX_SAVED_FUNCTION_BYTES) {

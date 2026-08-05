@@ -6,10 +6,12 @@ import {
   type FunctionStateCommit,
   reconcileFunctionState,
 } from "./function-state.js";
+import { removeGlobalFunction, saveGlobalFunction } from "./global-function-storage.js";
 import { removeProjectFunction, saveProjectFunction } from "./project-function-storage.js";
 import { savedFunctionDependents } from "./project-functions.js";
 import {
   getNamedFunctionName,
+  getGlobalFunctionMetadata,
   getProjectFunctionMetadata,
   getSavedFunctionDependencyGraph,
   type ProjectFunctionMetadata,
@@ -20,6 +22,7 @@ import {
   type FunctionActivity,
   type FunctionEntry,
   type FunctionRegistry,
+  type FunctionScope,
   functionScopeRegistry,
   validateRegistryCapacity,
   validateSavedFunctionName,
@@ -44,6 +47,8 @@ export interface ProjectFunctionPromotionRequest {
   activity?: FunctionActivity[];
 }
 
+export interface GlobalFunctionPromotionRequest extends ProjectFunctionPromotionRequest {}
+
 export interface ProjectFunctionRemovalRequest {
   name: string;
   context: SavedFunctionExecutionContext;
@@ -62,7 +67,10 @@ export interface PreparedSavedFunctionExecution {
   name?: string;
   projectMetadata?: ProjectFunctionMetadata;
   registry: FunctionRegistry;
-  scopes: Map<string, "project" | "session">;
+  scopes: Map<string, FunctionScope>;
+  globalFunctions: FunctionRegistry;
+  projectFunctions: FunctionRegistry;
+  sessionFunctions: FunctionRegistry;
   candidateProject?: FunctionRegistry;
   candidateSession?: FunctionRegistry;
 }
@@ -75,7 +83,7 @@ export interface SavedFunctionServiceDependencies {
 
 export interface SavedFunctionRemovalPlan {
   name: string;
-  scope: "project" | "session";
+  scope: FunctionScope;
   directDependents: string[];
   transitiveDependents: string[];
   removalClosure: string[];
@@ -87,12 +95,20 @@ export interface SessionFunctionRemovalOptions {
   cascade?: boolean;
 }
 
-function projectFunctionSource(source: string, summary: string): string {
+function persistentFunctionSource(
+  source: string,
+  summary: string,
+  scope: "global" | "project",
+): string {
   const normalizedSummary = summary.trim().replace(/\s+/g, " ").replaceAll("*/", "* /");
   if (!normalizedSummary) {
-    throw new Error("Project function summary is required");
+    throw new Error(`${scope === "global" ? "Global" : "Project"} function summary is required`);
   }
-  return `/**\n * ${normalizedSummary}\n *\n * @pit project\n */\n${source}`;
+  return `/**\n * ${normalizedSummary}\n *\n * @pit ${scope}\n */\n${source}`;
+}
+
+function projectFunctionSource(source: string, summary: string): string {
+  return persistentFunctionSource(source, summary, "project");
 }
 
 export function removeProjectFunctionFromState(
@@ -174,14 +190,82 @@ export class SavedFunctionService {
     });
   }
 
-  planRemoval(name: string, requestedScope?: "project" | "session"): SavedFunctionRemovalPlan {
+  async promoteToGlobal(request: GlobalFunctionPromotionRequest): Promise<void> {
+    if (!this.#state.globalEnabled) {
+      throw new Error("Global functions are disabled. Enable them in ~/.pi/agent/pit.json");
+    }
+    const source = this.#state.session.get(request.name);
+    if (source === undefined) {
+      throw new Error(`Session function "${request.name}" was not found`);
+    }
+    const promotedSource = persistentFunctionSource(source, request.summary, "global");
+    const metadata = getGlobalFunctionMetadata(promotedSource);
+    if (!metadata) {
+      throw new Error(
+        `Saved function "${request.name}" must be a top-level function declaration to save it globally`,
+      );
+    }
+    const graph = getSavedFunctionDependencyGraph(this.#state.effective);
+    const blockers = graph
+      .directDependencies(request.name)
+      .filter((dependency) => dependency !== request.name && !this.#state.global.has(dependency));
+    if (blockers.length > 0) {
+      throw new Error(
+        `Cannot promote "${request.name}" globally; non-global dependencies remain: ${blockers.join(", ")}`,
+      );
+    }
+    await this.#commit(async () => {
+      const currentGlobal = new Map(this.#state.global);
+      currentGlobal.set(request.name, promotedSource);
+      validateRegistryCapacity(this.#state.effective, request.name, promotedSource);
+      validateTypeScript(promotedSource, currentGlobal);
+      const currentSession = new Map(this.#state.session);
+      currentSession.delete(request.name);
+      validateTypeScript(
+        promotedSource,
+        effectiveRegistry(this.#state.project, currentSession, currentGlobal),
+      );
+      const replaced = this.#state.global.has(request.name);
+      await saveGlobalFunction(request.name, promotedSource, this.#state.global);
+      this.#state.global.set(request.name, promotedSource);
+      this.#state.globalMetadata.set(request.name, metadata);
+      this.#appendEntry(FUNCTION_ENTRY_TYPE, { name: request.name, deleted: true });
+      this.#state.session.delete(request.name);
+      reconcileFunctionState(this.#state);
+      request.activity?.push({ action: "set", name: request.name, replaced, scope: "global" });
+    });
+  }
+
+  removeFromGlobal(name: string): Promise<boolean> {
+    if (!this.#state.globalEnabled) {
+      throw new Error("Global functions are disabled. Enable them in ~/.pi/agent/pit.json");
+    }
+    return this.#commit(async () => {
+      const plan = this.planRemoval(name, "global");
+      if (plan.blocked) {
+        const dependents = [...plan.directDependents, ...plan.transitiveDependents];
+        throw new Error(
+          `Cannot remove global function "${name}"; dependent saved functions remain: ${dependents.join(", ")}`,
+        );
+      }
+      const removed = await removeGlobalFunction(name);
+      this.#state.global.delete(name);
+      this.#state.globalMetadata.delete(name);
+      reconcileFunctionState(this.#state);
+      return removed;
+    });
+  }
+
+  planRemoval(name: string, requestedScope?: FunctionScope): SavedFunctionRemovalPlan {
     const scope =
       requestedScope ??
       (this.#state.session.has(name)
         ? "session"
         : this.#state.projectCandidates.has(name)
           ? "project"
-          : undefined);
+          : this.#state.global.has(name)
+            ? "global"
+            : undefined);
     if (scope === undefined) {
       throw new Error(`Saved function "${name}" was not found`);
     }
@@ -208,6 +292,36 @@ export class SavedFunctionService {
         blocked: false,
       };
     }
+    if (scope === "global") {
+      if (!this.#state.global.has(name)) {
+        throw new Error(`Global function "${name}" was not found`);
+      }
+      const globalDependents = getSavedFunctionDependencyGraph(this.#state.global).dependents(name);
+      const effectiveDependents =
+        this.#state.effective.get(name) === this.#state.global.get(name)
+          ? getSavedFunctionDependencyGraph(this.#state.effective).dependents(name)
+          : { direct: [], transitive: [] };
+      const directDependents = [
+        ...new Set([...globalDependents.direct, ...effectiveDependents.direct]),
+      ]
+        .filter((candidate) => candidate !== name)
+        .sort((a, b) => a.localeCompare(b));
+      const transitiveDependents = [
+        ...new Set([...globalDependents.transitive, ...effectiveDependents.transitive]),
+      ]
+        .filter((candidate) => candidate !== name && !directDependents.includes(candidate))
+        .sort((a, b) => a.localeCompare(b));
+      return {
+        name,
+        scope,
+        directDependents,
+        transitiveDependents,
+        removalClosure: [name],
+        requiresCascade: false,
+        blocked: directDependents.length > 0 || transitiveDependents.length > 0,
+      };
+    }
+
     if (!this.#state.projectCandidates.has(name)) {
       throw new Error(`Project function "${name}" was not found`);
     }
@@ -277,20 +391,29 @@ export class SavedFunctionService {
         validateRegistryCapacity(this.#state.effective, name, request.source);
         candidateProject = new Map(this.#state.project);
         candidateProject.set(name, request.source);
-        validateTypeScript(request.source, candidateProject, request.input);
+        validateTypeScript(
+          request.source,
+          new Map([...this.#state.global, ...candidateProject]),
+          request.input,
+        );
         candidateSession = new Map(this.#state.session);
         candidateSession.delete(name);
-        registry = effectiveRegistry(candidateProject, candidateSession);
+        registry = effectiveRegistry(candidateProject, candidateSession, this.#state.global);
         validateTypeScript(request.source, registry, request.input);
       } else {
         validateRegistryCapacity(this.#state.effective, name, request.source);
         candidateSession = new Map(this.#state.session);
         candidateSession.set(name, request.source);
-        registry = effectiveRegistry(this.#state.project, candidateSession);
+        registry = effectiveRegistry(this.#state.project, candidateSession, this.#state.global);
         validateTypeScript(request.source, registry, request.input);
       }
     }
-    const scopes = functionScopeRegistry(registry, candidateSession ?? this.#state.session);
+    const scopes = functionScopeRegistry(
+      registry,
+      this.#state.global,
+      candidateProject ?? this.#state.project,
+      candidateSession ?? this.#state.session,
+    );
     return {
       source: request.source,
       ...(request.input === undefined ? {} : { input: request.input }),
@@ -298,6 +421,9 @@ export class SavedFunctionService {
       ...(projectMetadata ? { projectMetadata } : {}),
       registry,
       scopes,
+      globalFunctions: this.#state.global,
+      projectFunctions: candidateProject ?? this.#state.project,
+      sessionFunctions: candidateSession ?? this.#state.session,
       ...(candidateProject ? { candidateProject } : {}),
       ...(candidateSession ? { candidateSession } : {}),
     };
@@ -317,13 +443,20 @@ export class SavedFunctionService {
         validateRegistryCapacity(this.#state.effective, name, source);
         const currentProject = new Map(this.#state.project);
         currentProject.set(name, source);
-        validateTypeScript(source, currentProject, input);
+        validateTypeScript(source, new Map([...this.#state.global, ...currentProject]), input);
         const currentSession = new Map(this.#state.session);
         currentSession.delete(name);
-        validateTypeScript(source, effectiveRegistry(currentProject, currentSession), input);
+        validateTypeScript(
+          source,
+          effectiveRegistry(currentProject, currentSession, this.#state.global),
+          input,
+        );
 
         const replaced = this.#state.project.has(name);
-        await saveProjectFunction(context.cwd, name, source, this.#state.projectCandidates);
+        await saveProjectFunction(context.cwd, name, source, {
+          registry: this.#state.projectCandidates,
+          global: this.#state.global,
+        });
         this.#state.project.set(name, source);
         this.#state.metadata.set(name, projectMetadata);
         this.#state.candidateMetadata.set(name, projectMetadata);
@@ -341,7 +474,11 @@ export class SavedFunctionService {
       validateRegistryCapacity(this.#state.effective, name, source);
       const currentSession = new Map(this.#state.session);
       currentSession.set(name, source);
-      validateTypeScript(source, effectiveRegistry(this.#state.project, currentSession), input);
+      validateTypeScript(
+        source,
+        effectiveRegistry(this.#state.project, currentSession, this.#state.global),
+        input,
+      );
       const replaced = this.#state.session.has(name);
       this.#appendEntry(FUNCTION_ENTRY_TYPE, { name, source });
       this.#state.session.set(name, source);

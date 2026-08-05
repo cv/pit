@@ -68,8 +68,10 @@ export function context(overrides: Record<string, unknown> = {}) {
     scopedModels: [],
     ui: {
       confirm: vi.fn(async () => true),
-      input: vi.fn(async () => "typed"),
-      select: vi.fn(async () => "b"),
+      input: vi.fn(
+        async (_title: string, _placeholder?: string): Promise<string | undefined> => "typed",
+      ),
+      select: vi.fn(async (_title: string, _options: string[]): Promise<string | undefined> => "b"),
       notify: vi.fn(),
       custom: vi.fn(async () => undefined),
     },
@@ -139,6 +141,7 @@ export function getRegisteredCommand(name: string): any {
 
 export async function setupHarness(): Promise<void> {
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
+  vi.stubEnv("PI_CODING_AGENT_DIR", join(cwd, "agent"));
   branchEntries = [];
   sessionName = undefined;
   slashCommands = [];

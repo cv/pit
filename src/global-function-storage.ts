@@ -2,14 +2,10 @@ import type { Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import {
-  CONFIG_DIR_NAME,
-  type ExtensionContext,
-  withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
+import { getAgentDir, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 
 import {
-  getProjectFunctionMetadata,
+  getGlobalFunctionMetadata,
   getSavedFunctionDependencyGraph,
   type ProjectFunctionMetadata,
   validateTypeScript,
@@ -17,45 +13,40 @@ import {
 import {
   type FunctionRegistry,
   validateSavedFunctionName,
+  validateRegistryCapacity,
   validateSavedFunctionSource,
 } from "./saved-functions.js";
 
-const PROJECT_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
+const GLOBAL_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
 
-export type ProjectFunctionMetadataRegistry = Map<string, ProjectFunctionMetadata>;
+export type GlobalFunctionMetadataRegistry = Map<string, ProjectFunctionMetadata>;
 
-export interface ProjectFunctionConfig {
+export interface GlobalFunctionConfig {
   enabled: boolean;
-  globalEnabled?: boolean;
   error?: string;
 }
 
-function directory(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, ...PROJECT_FUNCTION_DIRECTORY);
+export function globalFunctionDirectory(): string {
+  return join(getAgentDir(), ...GLOBAL_FUNCTION_DIRECTORY);
 }
 
-function configPath(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, "pit.json");
+export function globalFunctionConfigPath(): string {
+  return join(getAgentDir(), "pit.json");
 }
 
-function pathFor(cwd: string, name: string): string {
+function pathFor(name: string): string {
   validateSavedFunctionName(name);
-  return join(directory(cwd), `${name}.ts`);
+  return join(globalFunctionDirectory(), `${name}.ts`);
 }
 
 function errorCode(error: unknown): string | undefined {
   return (error as { code?: string }).code;
 }
 
-export async function loadProjectFunctionConfig(
-  ctx: ExtensionContext,
-): Promise<ProjectFunctionConfig> {
-  if (!ctx.isProjectTrusted()) {
-    return { enabled: false };
-  }
+export async function loadGlobalFunctionConfig(): Promise<GlobalFunctionConfig> {
   let source: string;
   try {
-    source = await readFile(configPath(ctx.cwd), "utf8");
+    source = await readFile(globalFunctionConfigPath(), "utf8");
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       return { enabled: false };
@@ -67,52 +58,42 @@ export async function loadProjectFunctionConfig(
     if (!(config && typeof config === "object" && !Array.isArray(config))) {
       throw new Error("configuration must be a JSON object");
     }
-    const values = config as Record<string, unknown>;
-    const enabledSection = (key: "globalFunctions" | "projectFunctions"): boolean | undefined => {
-      const section = values[key];
-      if (section === undefined) {
-        return;
-      }
-      if (!(section && typeof section === "object" && !Array.isArray(section))) {
-        throw new Error(`${key} must be an object`);
-      }
-      const enabled = (section as Record<string, unknown>).enabled;
-      if (enabled === undefined) {
-        return;
-      }
-      if (typeof enabled !== "boolean") {
-        throw new Error(`${key}.enabled must be a boolean`);
-      }
-      return enabled;
-    };
-    const projectEnabled = enabledSection("projectFunctions") ?? false;
-    const globalEnabled = enabledSection("globalFunctions");
-    return {
-      enabled: projectEnabled,
-      ...(globalEnabled === undefined ? {} : { globalEnabled }),
-    };
+    const globalFunctions = (config as Record<string, unknown>).globalFunctions;
+    if (globalFunctions === undefined) {
+      return { enabled: false };
+    }
+    if (
+      !(globalFunctions && typeof globalFunctions === "object" && !Array.isArray(globalFunctions))
+    ) {
+      throw new Error("globalFunctions must be an object");
+    }
+    const enabled = (globalFunctions as Record<string, unknown>).enabled;
+    if (enabled === undefined) {
+      return { enabled: false };
+    }
+    if (typeof enabled !== "boolean") {
+      throw new Error("globalFunctions.enabled must be a boolean");
+    }
+    return { enabled };
   } catch (error) {
     return {
       enabled: false,
-      error: `Invalid ${CONFIG_DIR_NAME}/pit.json: ${(error as Error).message}`,
+      error: `Invalid ${globalFunctionConfigPath()}: ${(error as Error).message}`,
     };
   }
 }
 
-export async function saveProjectFunction(
-  cwd: string,
+export async function saveGlobalFunction(
   name: string,
   source: string,
-  storage: FunctionRegistry | { registry: FunctionRegistry; global: ReadonlyMap<string, string> },
+  registry: FunctionRegistry,
 ): Promise<boolean> {
-  const registry = storage instanceof Map ? storage : storage.registry;
-  const global = storage instanceof Map ? new Map<string, string>() : storage.global;
-  validateSavedFunctionSource(source);
+  validateRegistryCapacity(registry, name, source);
   const candidates = new Map(registry);
   candidates.set(name, source);
-  validateTypeScript(source, new Map([...global, ...candidates]));
+  validateTypeScript(source, candidates);
   const replaced = registry.has(name);
-  const path = pathFor(cwd, name);
+  const path = pathFor(name);
   await withFileMutationQueue(path, async () => {
     await mkdir(dirname(path), { recursive: true });
     const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
@@ -132,8 +113,8 @@ export async function saveProjectFunction(
   return replaced;
 }
 
-export function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
-  const path = pathFor(cwd, name);
+export function removeGlobalFunction(name: string): Promise<boolean> {
+  const path = pathFor(name);
   return withFileMutationQueue(path, async () => {
     try {
       await rm(path);
@@ -147,21 +128,15 @@ export function removeProjectFunction(cwd: string, name: string): Promise<boolea
   });
 }
 
-export async function loadProjectFunctions(
-  ctx: ExtensionContext,
+export async function loadGlobalFunctions(
   registry: FunctionRegistry,
-  metadata: ProjectFunctionMetadataRegistry,
-  global: ReadonlyMap<string, string> = new Map(),
+  metadata: GlobalFunctionMetadataRegistry,
 ): Promise<string[]> {
   registry.clear();
   metadata.clear();
-  if (!ctx.isProjectTrusted()) {
-    return [];
-  }
-
   let entries: Dirent[];
   try {
-    entries = await readdir(directory(ctx.cwd), { withFileTypes: true });
+    entries = await readdir(globalFunctionDirectory(), { withFileTypes: true });
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       return [];
@@ -176,10 +151,10 @@ export async function loadProjectFunctions(
       continue;
     }
     try {
-      const source = await readFile(join(directory(ctx.cwd), entry.name), "utf8");
-      const parsed = getProjectFunctionMetadata(source);
+      const source = await readFile(join(globalFunctionDirectory(), entry.name), "utf8");
+      const parsed = getGlobalFunctionMetadata(source);
       if (!parsed) {
-        throw new Error("missing @pit project JSDoc marker");
+        throw new Error("missing @pit global JSDoc marker");
       }
       validateSavedFunctionName(parsed.name);
       if (entry.name !== `${parsed.name}.ts`) {
@@ -192,18 +167,16 @@ export async function loadProjectFunctions(
     }
   }
 
-  const sources = new Map([
-    ...global,
-    ...[...candidates].map(([name, value]) => [name, value.source] as const),
-  ]);
-  const sourceGraph = getSavedFunctionDependencyGraph(sources);
+  const sources = new Map([...candidates].map(([name, value]) => [name, value.source]));
+  const graph = getSavedFunctionDependencyGraph(sources);
   for (const [name, value] of candidates) {
     try {
       const dependencies = new Map(
-        sourceGraph.resolve(value.source).map((reference) => [reference.name, reference.source]),
+        graph.resolve(value.source).map((reference) => [reference.name, reference.source]),
       );
       dependencies.set(name, value.source);
       validateTypeScript(value.source, dependencies);
+      validateRegistryCapacity(registry, name, value.source);
       registry.set(name, value.source);
       metadata.set(name, value.metadata);
     } catch (error) {
@@ -215,7 +188,7 @@ export async function loadProjectFunctions(
     removedInvalidDependency = false;
     for (const [name, source] of registry) {
       try {
-        validateTypeScript(source, new Map([...global, ...registry]));
+        validateTypeScript(source, registry);
       } catch (error) {
         registry.delete(name);
         metadata.delete(name);
@@ -224,6 +197,5 @@ export async function loadProjectFunctions(
       }
     }
   }
-
   return errors;
 }

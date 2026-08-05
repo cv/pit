@@ -1,3 +1,5 @@
+import type { FunctionScope } from "./saved-functions.js";
+
 export type CapabilityTraceStatus = "running" | "succeeded" | "failed" | "rejected";
 
 export interface CapabilityArgumentSummary {
@@ -9,7 +11,7 @@ export interface FunctionExecutionContext {
   invocationId: number;
   parentInvocationId?: number;
   name: string;
-  scope: "project" | "session";
+  scope: FunctionScope;
   depth: number;
 }
 

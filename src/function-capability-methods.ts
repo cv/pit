@@ -9,7 +9,7 @@ import { recordValue as record, stringValue as string } from "./cli.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
 import { getSavedFunctionCallSignature, getSavedFunctionDependencyGraph } from "./sandbox.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./saved-function-service.js";
-import type { FunctionActivity } from "./saved-functions.js";
+import type { FunctionActivity, FunctionScope } from "./saved-functions.js";
 import { validateSavedFunctionName } from "./saved-functions.js";
 
 type FunctionMethod = (typeof CAPABILITY_METHODS)["functions"][number];
@@ -29,10 +29,10 @@ function requiredName(args: unknown[]): string {
   return name;
 }
 
-function removalScope(value: unknown): "project" | "session" | undefined {
+function functionScope(value: unknown): FunctionScope | undefined {
   const scope = value === undefined ? undefined : string(value, "function scope");
-  if (scope !== undefined && scope !== "project" && scope !== "session") {
-    throw new Error('function scope must be "project" or "session"');
+  if (scope !== undefined && scope !== "global" && scope !== "project" && scope !== "session") {
+    throw new Error('function scope must be "global", "project", or "session"');
   }
   return scope;
 }
@@ -52,15 +52,60 @@ function removalCascade(value: unknown): boolean {
   return options.cascade === true;
 }
 
-function savedMetadata(
-  functionState: FunctionState,
-  service: SavedFunctionService,
+function promotionTarget(value: unknown): "global" | "project" {
+  if (value === undefined) {
+    return "project";
+  }
+  const options = record(value, "promotion options");
+  const unknown = Object.keys(options).filter((key) => key !== "to");
+  if (unknown.length > 0) {
+    throw new Error(`promotion options contain unknown fields: ${unknown.join(", ")}`);
+  }
+  const target = options.to === undefined ? "project" : string(options.to, "promotion options.to");
+  if (target !== "global" && target !== "project") {
+    throw new Error('promotion options.to must be "global" or "project"');
+  }
+  return target;
+}
+
+function sourceForScope(
+  state: FunctionState,
   name: string,
-  source: string,
-) {
-  const scope = functionState.session.has(name) ? ("session" as const) : ("project" as const);
+  scope: FunctionScope,
+): string | undefined {
+  return scope === "session"
+    ? state.session.get(name)
+    : scope === "project"
+      ? state.project.get(name)
+      : state.global.get(name);
+}
+
+function effectiveScope(state: FunctionState, name: string): FunctionScope {
+  return state.session.has(name) ? "session" : state.project.has(name) ? "project" : "global";
+}
+
+interface SavedMetadataInput {
+  functionState: FunctionState;
+  service: SavedFunctionService;
+  name: string;
+  source: string;
+  requestedScope?: FunctionScope;
+}
+
+function savedMetadata({
+  functionState,
+  service,
+  name,
+  source,
+  requestedScope,
+}: SavedMetadataInput) {
+  const scope = requestedScope ?? effectiveScope(functionState, name);
   const graph = getSavedFunctionDependencyGraph(
-    scope === "session" ? functionState.effective : functionState.project,
+    scope === "session"
+      ? functionState.effective
+      : scope === "project"
+        ? new Map([...functionState.global, ...functionState.project])
+        : functionState.global,
   );
   const plan = service.planRemoval(name, scope);
   return {
@@ -73,6 +118,7 @@ function savedMetadata(
     directDependencies: [...graph.directDependencies(name)],
     directDependents: plan.directDependents,
     overridesProject: scope === "session" && functionState.project.has(name),
+    overridesGlobal: (scope === "session" || scope === "project") && functionState.global.has(name),
   };
 }
 
@@ -96,6 +142,11 @@ export function createFunctionCapabilityMethods({
       throw new Error(
         `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
       );
+    }
+  };
+  const requireGlobalAccess = (): void => {
+    if (!functionState.globalEnabled) {
+      throw new Error("Global functions are disabled. Enable them in ~/.pi/agent/pit.json");
     }
   };
 
@@ -128,26 +179,82 @@ export function createFunctionCapabilityMethods({
         return { name, removed };
       });
     },
+    listGlobal: () => {
+      requireGlobalAccess();
+      return [...functionState.globalMetadata.values()].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+    },
+    getGlobal: (args) => {
+      requireGlobalAccess();
+      const name = requiredName(args);
+      const source = functionState.global.get(name);
+      if (!source) {
+        throw new Error(`Global function "${name}" is unavailable`);
+      }
+      return { ...functionState.globalMetadata.get(name), source };
+    },
+    removeGlobal: async (args) => {
+      requireGlobalAccess();
+      const name = requiredName(args);
+      if (!ctx.hasUI) {
+        throw new Error("Global function removal requires interactive confirmation");
+      }
+      const confirmed = await ctx.ui.confirm(
+        `Remove global function ${name}?`,
+        `Delete ~/.pi/agent/pit/functions/${name}.ts for every project?`,
+      );
+      if (!confirmed) {
+        throw new Error("Global function removal was cancelled");
+      }
+      const removed = await service.removeFromGlobal(name);
+      if (removed) {
+        activity.push({ action: "remove", name, scope: "global" });
+      }
+      return { name, removed };
+    },
     listAll: () =>
       [...functionState.effective.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, source]) => savedMetadata(functionState, service, name, source)),
+        .map(([name, source]) => savedMetadata({ functionState, service, name, source })),
     getSaved: (args) => {
       const name = requiredName(args);
-      const source = functionState.effective.get(name);
+      const requestedScope = functionScope(args[1]);
+      const scope = requestedScope ?? effectiveScope(functionState, name);
+      const source = sourceForScope(functionState, name, scope);
       if (!source) {
-        throw new Error(`Saved function "${name}" is unavailable`);
+        throw new Error(
+          `${requestedScope ? `${scope[0]?.toUpperCase()}${scope.slice(1)} ` : ""}saved function "${name}" is unavailable`,
+        );
       }
-      return { ...savedMetadata(functionState, service, name, source), source };
+      return {
+        ...savedMetadata({ functionState, service, name, source, requestedScope: scope }),
+        source,
+      };
     },
-    planRemoval: (args) => service.planRemoval(requiredName(args), removalScope(args[1])),
-    promote: (args) => {
-      requireProjectAccess();
+    planRemoval: (args) => service.planRemoval(requiredName(args), functionScope(args[1])),
+    promote: async (args) => {
       const name = requiredName(args);
       const summary = string(args[1], "summary");
-      return service
-        .promoteToProject({ name, summary, context: ctx, activity })
-        .then(() => ({ name, promoted: true as const }));
+      const target = promotionTarget(args[2]);
+      if (target === "project") {
+        requireProjectAccess();
+        await service.promoteToProject({ name, summary, context: ctx, activity });
+      } else {
+        requireGlobalAccess();
+        if (!ctx.hasUI) {
+          throw new Error("Global function promotion requires interactive confirmation");
+        }
+        const confirmed = await ctx.ui.confirm(
+          `Save ${name} globally?`,
+          `Make ${name} available in every Pit project under ~/.pi/agent/pit/functions?`,
+        );
+        if (!confirmed) {
+          throw new Error("Global function promotion was cancelled");
+        }
+        await service.promoteToGlobal({ name, summary, context: ctx, activity });
+      }
+      return { name, promoted: true as const, scope: target };
     },
     removeSession: (args) => {
       const name = requiredName(args);

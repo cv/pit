@@ -10,6 +10,8 @@ import {
   getSavedFunctionDependencyGraphCacheStats,
   resolveSavedFunctionReferences,
 } from "./saved-function-graph.js";
+import type { FunctionScope } from "./saved-functions.js";
+import { scopedRuntimeProgram, type ScopedFunctionRegistries } from "./scoped-function-runtime.js";
 
 const SIGNATURE_WHITESPACE = /\s+/g;
 const JSDOC_PARAGRAPH_SEPARATOR = /\r?\n\s*\r?\n/;
@@ -152,10 +154,12 @@ function functionCallSignature(
   return `${name}(input${optional}: ${type})`;
 }
 
-/** Extract and validate an immediately attached `@pit project` JSDoc marker. */
-export function getProjectFunctionMetadata(source: string): ProjectFunctionMetadata | undefined {
+function getPersistentFunctionMetadata(
+  source: string,
+  expectedScope: "global" | "project",
+): ProjectFunctionMetadata | undefined {
   const file = ts.createSourceFile(
-    "/pit/project-function.ts",
+    `/pit/${expectedScope}-function.ts`,
     source,
     ts.ScriptTarget.ES2022,
     true,
@@ -174,8 +178,10 @@ export function getProjectFunctionMetadata(source: string): ProjectFunctionMetad
     return;
   }
   const scope = jsDocText(pitTags.at(-1)?.comment).trim();
-  if (scope !== "project") {
-    throw new Error(`@pit scope must have value "project"; received ${JSON.stringify(scope)}`);
+  if (scope !== expectedScope) {
+    throw new Error(
+      `@pit scope must have value ${JSON.stringify(expectedScope)}; received ${JSON.stringify(scope)}`,
+    );
   }
 
   const docs = (declaration as ts.FunctionDeclaration & { jsDoc: ts.JSDoc[] }).jsDoc;
@@ -184,7 +190,9 @@ export function getProjectFunctionMetadata(source: string): ProjectFunctionMetad
       .map((doc) => jsDocText(doc.comment).trim().split(JSDOC_PARAGRAPH_SEPARATOR, 1)[0] as string)
       .find(Boolean) ?? "";
   if (!summary) {
-    throw new Error("project functions require a JSDoc summary before @pit project");
+    throw new Error(
+      `${expectedScope} functions require a JSDoc summary before @pit ${expectedScope}`,
+    );
   }
 
   const parameters = ts
@@ -204,6 +212,16 @@ export function getProjectFunctionMetadata(source: string): ProjectFunctionMetad
     summary,
     parameters,
   };
+}
+
+/** Extract and validate an immediately attached `@pit project` JSDoc marker. */
+export function getProjectFunctionMetadata(source: string): ProjectFunctionMetadata | undefined {
+  return getPersistentFunctionMetadata(source, "project");
+}
+
+/** Extract and validate an immediately attached `@pit global` JSDoc marker. */
+export function getGlobalFunctionMetadata(source: string): ProjectFunctionMetadata | undefined {
+  return getPersistentFunctionMetadata(source, "global");
 }
 
 export function getSavedFunctionCallSignature(source: string): string | undefined {
@@ -347,25 +365,6 @@ export function validateTypeScript(
   cacheSet(validationCache, cacheKey, null);
 }
 
-function runtimeProgram(
-  source: string,
-  savedFunctions: ReadonlyMap<string, string>,
-  savedFunctionScopes: ReadonlyMap<string, "project" | "session">,
-): string {
-  const entries = savedEntries(savedFunctions);
-  const raw = entries.map(
-    ([, savedSource], index) => `const __pit_saved_${index} = (${savedSource});`,
-  );
-  const bound = entries.map(([name], index) => {
-    const scope = savedFunctionScopes.get(name) ?? "session";
-    return `const ${name} = async (__pit_input) => __pit_run_saved(${JSON.stringify(name)}, ${JSON.stringify(scope)}, async () => { await __pit_capabilities.__pit.savedFunctionRun(${JSON.stringify(name)}); try { return await __pit_saved_${index}(__pit_capabilities, __pit_input); } catch (__pit_error) { throw new Error(${JSON.stringify(`Saved function "${name}" failed: `)} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error }); } });`;
-  });
-  const invocation = isProgramExpression(source)
-    ? `const __pit_submission = (${source}); return await __pit_submission(__pit_capabilities, __pit_input);`
-    : `return await (${source});`;
-  return `async (__pit_capabilities, __pit_input, __pit_run_saved) => { ${raw.join("\n")} ${bound.join("\n")} ${invocation} }`;
-}
-
 async function compileTypeScript(source: string): Promise<string> {
   const cached = compilationCache.get(source);
   if (cached) {
@@ -388,7 +387,10 @@ async function compileTypeScript(source: string): Promise<string> {
 
 export interface SandboxProgramOptions {
   savedFunctions?: ReadonlyMap<string, string>;
-  savedFunctionScopes?: ReadonlyMap<string, "project" | "session">;
+  savedFunctionScopes?: ReadonlyMap<string, FunctionScope>;
+  globalFunctions?: ReadonlyMap<string, string>;
+  projectFunctions?: ReadonlyMap<string, string>;
+  sessionFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
 }
 
@@ -397,12 +399,36 @@ export async function compileSandboxSource(
   options: SandboxProgramOptions,
 ): Promise<string> {
   const savedFunctions = options.savedFunctions ?? new Map<string, string>();
+  const scopes = options.savedFunctionScopes ?? new Map<string, FunctionScope>();
   const referenced = resolveSavedFunctionReferences(source, savedFunctions);
   const injectedFunctions = new Map(
     referenced.map((reference) => [reference.name, reference.source]),
   );
   validateTypeScript(source, injectedFunctions, options.input, savedFunctions.keys());
+  const explicitRegistries =
+    options.globalFunctions || options.projectFunctions || options.sessionFunctions;
+  const registries: ScopedFunctionRegistries = explicitRegistries
+    ? {
+        global: options.globalFunctions ?? new Map(),
+        project: options.projectFunctions ?? new Map(),
+        session: options.sessionFunctions ?? new Map(),
+      }
+    : {
+        global: new Map([...savedFunctions].filter(([name]) => scopes.get(name) === "global")),
+        project: new Map([...savedFunctions].filter(([name]) => scopes.get(name) === "project")),
+        session: new Map(
+          [...savedFunctions].filter(
+            ([name]) => scopes.get(name) !== "global" && scopes.get(name) !== "project",
+          ),
+        ),
+      };
   return await compileTypeScript(
-    runtimeProgram(source, injectedFunctions, options.savedFunctionScopes ?? new Map()),
+    scopedRuntimeProgram({
+      source,
+      programExpression: isProgramExpression(source),
+      effective: savedFunctions,
+      scopes,
+      registries,
+    }),
   );
 }

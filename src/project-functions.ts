@@ -89,6 +89,7 @@ export function savedFunctionDependents(
 }
 
 export interface ProjectFunctionReconciliation {
+  global: ReadonlyMap<string, string>;
   candidates: ReadonlyMap<string, string>;
   candidateMetadata: ReadonlyMap<string, ProjectFunctionMetadata>;
   session: FunctionRegistry;
@@ -97,6 +98,7 @@ export interface ProjectFunctionReconciliation {
 }
 
 export function reconcileProjectFunctionsForSession({
+  global,
   candidates,
   candidateMetadata,
   session,
@@ -104,8 +106,8 @@ export function reconcileProjectFunctionsForSession({
   metadata,
 }: ProjectFunctionReconciliation): string[] {
   const sessionCandidates = new Map(session);
-  const candidateGraph = getSavedFunctionDependencyGraph(candidates);
-  const availableCandidates = new Map([...candidates, ...sessionCandidates]);
+  const candidateGraph = getSavedFunctionDependencyGraph(new Map([...global, ...candidates]));
+  const availableCandidates = new Map([...global, ...candidates, ...sessionCandidates]);
   const availableGraph = getSavedFunctionDependencyGraph(availableCandidates);
   session.clear();
   registry.clear();
@@ -139,7 +141,9 @@ export function reconcileProjectFunctionsForSession({
       visiting.add(name);
       const references = candidateGraph.directDependencies(name);
       for (const dependency of references) {
-        visit(dependency, false);
+        if (candidates.has(dependency)) {
+          visit(dependency, false);
+        }
       }
       visiting.delete(name);
       selected.add(name);
@@ -159,7 +163,7 @@ export function reconcileProjectFunctionsForSession({
     for (const name of additions) {
       project.set(name, requiredProjectSource(name));
     }
-    return new Map([...project, ...sessionFunctions]);
+    return new Map([...global, ...project, ...sessionFunctions]);
   };
 
   const commitProjects = (names: readonly string[]): void => {
@@ -205,22 +209,24 @@ export function reconcileProjectFunctionsForSession({
   return errors;
 }
 
-export function projectFunctionCatalog(
+function persistentFunctionCatalog(
   metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
-  sessionFunctions: ReadonlyMap<string, string> = new Map(),
+  sessionFunctions: ReadonlyMap<string, string>,
+  scope: "global" | "project",
 ): string {
   if (metadata.size === 0) {
     return "";
   }
+  const title = scope === "global" ? "Global" : "Project";
   const lines = [
-    "## Project TypeScript functions",
+    `## ${title} TypeScript functions`,
     "",
-    "These project-persisted functions are available as lexical bindings in the typescript tool:",
+    `These ${scope}-persisted functions are available as lexical bindings in the typescript tool:`,
   ];
   const entries = [...metadata.values()].sort((a, b) => a.name.localeCompare(b.name));
   let shown = 0;
   for (const entry of entries) {
-    /* v8 ignore next -- defensive bound for unusually large project catalogs */
+    /* v8 ignore next -- defensive bound for unusually large persistent catalogs */
     if (shown >= MAX_PROJECT_FUNCTIONS) {
       break;
     }
@@ -229,7 +235,7 @@ export function projectFunctionCatalog(
       ? getSavedFunctionCallSignature(sessionFunctions.get(entry.name) ?? "")
       : entry.signature;
     const addition = isSessionOverride
-      ? [`- ${effectiveSignature ?? entry.name} — Session override of project function.`]
+      ? [`- ${effectiveSignature ?? entry.name} — Session override of ${scope} function.`]
       : [`- ${entry.signature} — ${entry.summary.replace(/\s+/g, " ").trim()}`];
     const parameters = isSessionOverride ? [] : entry.parameters;
     for (const parameter of parameters) {
@@ -245,10 +251,29 @@ export function projectFunctionCatalog(
     shown++;
   }
   if (shown < entries.length) {
+    const method = scope === "global" ? "listGlobal" : "list";
     lines.push(
-      `- … ${entries.length - shown} more; use functions.list() for the complete catalog.`,
+      `- … ${entries.length - shown} more; use functions.${method}() for the complete catalog.`,
     );
   }
   lines.push("", "Invoke them directly, for example: runTests({ coverage: true }).");
   return lines.join("\n");
+}
+
+export function projectFunctionCatalog(
+  metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  sessionFunctions: ReadonlyMap<string, string> = new Map(),
+): string {
+  return persistentFunctionCatalog(metadata, sessionFunctions, "project");
+}
+
+export function globalFunctionCatalog(
+  metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  projectFunctions: ReadonlyMap<string, string>,
+  sessionFunctions: ReadonlyMap<string, string>,
+): string {
+  const effectiveMetadata = new Map(
+    [...metadata].filter(([name]) => !projectFunctions.has(name) && !sessionFunctions.has(name)),
+  );
+  return persistentFunctionCatalog(effectiveMetadata, new Map(), "global");
 }

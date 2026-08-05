@@ -166,26 +166,31 @@ type PitProjectFunctionMetadata = {
   parameters: Array<{ name: string; description?: string }>;
 };
 
+type PitFunctionScope = "global" | "project" | "session";
+
 type PitSavedFunctionMetadata = {
   name: string;
-  scope: "project" | "session";
+  scope: PitFunctionScope;
   signature: string;
   lines: number;
   bytes: number;
   directDependencies: string[];
   directDependents: string[];
   overridesProject: boolean;
+  overridesGlobal: boolean;
 };
 
 type PitSavedFunctionRemovalPlan = {
   name: string;
-  scope: "project" | "session";
+  scope: PitFunctionScope;
   directDependents: string[];
   transitiveDependents: string[];
   removalClosure: string[];
   requiresCascade: boolean;
   blocked: boolean;
 };
+
+type PitPromotionOptions = { to?: "global" | "project" };
 
 type PitRemoveOptions = { cascade?: boolean };
 type PitRemoveResult = { name: string; removed: string[] };`;

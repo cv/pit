@@ -2,11 +2,14 @@ import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-c
 import { formatSize, highlightCode } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 
-import type { FunctionRegistry, SessionFunctionRemovalPlan } from "./saved-functions.js";
+import type {
+  FunctionRegistry,
+  FunctionScope,
+  SessionFunctionRemovalPlan,
+} from "./saved-functions.js";
 
 const COMMAND_ARGUMENTS_PATTERN = /\s+/;
 
-type FunctionScope = "project" | "session";
 interface FunctionSummary {
   name: string;
   source: string;
@@ -17,11 +20,14 @@ interface FunctionSummary {
 }
 
 export interface FunctionManagerOptions {
+  globalFunctions?: FunctionRegistry;
   projectFunctions?: FunctionRegistry;
   planSessionRemoval(name: string): SessionFunctionRemovalPlan;
   removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
+  saveToGlobal?: (name: string, ctx: ExtensionContext) => Promise<void>;
   removeFromProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
+  removeFromGlobal?: (name: string, ctx: ExtensionContext) => Promise<void>;
 }
 
 class SavedFunctionViewer {
@@ -67,12 +73,14 @@ class SavedFunctionViewer {
 }
 
 class SavedFunctionManager {
+  readonly #globalFunctions: FunctionRegistry;
   readonly #projectFunctions: FunctionRegistry;
 
   constructor(
     private readonly savedFunctions: FunctionRegistry,
     private readonly options: FunctionManagerOptions,
   ) {
+    this.#globalFunctions = options.globalFunctions ?? new Map<string, string>();
     this.#projectFunctions = options.projectFunctions ?? new Map<string, string>();
   }
 
@@ -84,20 +92,30 @@ class SavedFunctionManager {
   }
 
   private summaries(): FunctionSummary[] {
-    const effective = new Map(this.#projectFunctions);
+    const effective = new Map(this.#globalFunctions);
+    for (const [name, source] of this.#projectFunctions) {
+      effective.set(name, source);
+    }
     for (const [name, source] of this.savedFunctions) {
       effective.set(name, source);
     }
     return [...effective.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, source]) => {
-        const scope: FunctionScope = this.savedFunctions.has(name) ? "session" : "project";
+        const scope: FunctionScope = this.savedFunctions.has(name)
+          ? "session"
+          : this.#projectFunctions.has(name)
+            ? "project"
+            : "global";
+        const overridesLower =
+          scope === "session"
+            ? this.#projectFunctions.has(name) || this.#globalFunctions.has(name)
+            : scope === "project" && this.#globalFunctions.has(name);
         return {
           name,
           source,
           scope,
-          scopeLabel:
-            scope === "session" && this.#projectFunctions.has(name) ? "session override" : scope,
+          scopeLabel: overridesLower ? `${scope} override` : scope,
           lines: source.split("\n").length,
           bytes: Buffer.byteLength(source),
         };
@@ -106,9 +124,13 @@ class SavedFunctionManager {
 
   private async inspect(name: string, ctx: ExtensionContext, scope?: FunctionScope): Promise<void> {
     const source =
-      scope === "project"
-        ? this.#projectFunctions.get(name)
-        : (this.savedFunctions.get(name) ?? this.#projectFunctions.get(name));
+      scope === "global"
+        ? this.#globalFunctions.get(name)
+        : scope === "project"
+          ? this.#projectFunctions.get(name)
+          : (this.savedFunctions.get(name) ??
+            this.#projectFunctions.get(name) ??
+            this.#globalFunctions.get(name));
     if (source === undefined) {
       ctx.ui.notify(`Saved function "${name}" was not found`, "error");
       return;
@@ -182,18 +204,27 @@ class SavedFunctionManager {
   }
 
   private actions(entry: FunctionSummary): string[] {
-    return entry.scope === "session"
-      ? [
-          "Inspect source",
-          ...(this.options.saveToProject ? ["Save to project"] : []),
-          "Delete",
-          "Close",
-        ]
-      : [
-          "Inspect source",
-          ...(this.options.removeFromProject ? ["Remove from project"] : []),
-          "Close",
-        ];
+    if (entry.scope === "session") {
+      return [
+        "Inspect source",
+        ...(this.options.saveToProject ? ["Save to project"] : []),
+        ...(this.options.saveToGlobal ? ["Save globally"] : []),
+        "Delete",
+        "Close",
+      ];
+    }
+    if (entry.scope === "project") {
+      return [
+        "Inspect source",
+        ...(this.options.removeFromProject ? ["Remove from project"] : []),
+        "Close",
+      ];
+    }
+    return [
+      "Inspect source",
+      ...(this.options.removeFromGlobal ? ["Remove globally"] : []),
+      "Close",
+    ];
   }
 
   private async handleAction(entry: FunctionSummary, ctx: ExtensionContext): Promise<boolean> {
@@ -205,8 +236,12 @@ class SavedFunctionManager {
       await this.inspect(entry.name, ctx, entry.scope);
     } else if (action === "Save to project" && this.options.saveToProject) {
       await this.runProjectAction(() => this.options.saveToProject?.(entry.name, ctx), ctx);
+    } else if (action === "Save globally" && this.options.saveToGlobal) {
+      await this.runProjectAction(() => this.options.saveToGlobal?.(entry.name, ctx), ctx);
     } else if (action === "Remove from project" && this.options.removeFromProject) {
       await this.runProjectAction(() => this.options.removeFromProject?.(entry.name, ctx), ctx);
+    } else if (action === "Remove globally" && this.options.removeFromGlobal) {
+      await this.runProjectAction(() => this.options.removeFromGlobal?.(entry.name, ctx), ctx);
     } else if (action === "Delete") {
       await this.delete(entry.name, ctx);
     }

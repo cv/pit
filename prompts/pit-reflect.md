@@ -20,6 +20,7 @@ Work through this process:
 6. Implement only high-confidence improvements now:
    - keep unproven helpers session-scoped;
    - use `functions.promote(name, summary)` only for stable, project-specific workflows in an enabled, trusted project;
+   - use `functions.promote(name, summary, { to: "global" })` only for stable, project-independent workflows after explicit user confirmation;
    - update a project function only when project persistence is clearly intentional;
    - use `saveOnly: true` when validation should not trigger external effects;
    - otherwise execute a representative low-risk case before retaining the function.

@@ -249,8 +249,10 @@ export function createCapabilities({
       thinkingLevel: ctx.thinkingLevel,
       sessionFile: ctx.sessionManager.getSessionFile(),
       savedFunctions: [...functionState.effective.keys()].sort(),
+      globalFunctions: [...functionState.global.keys()].sort(),
       projectFunctions: [...functionState.project.keys()].sort(),
       sessionFunctions: [...functionState.session.keys()].sort(),
+      globalFunctionsEnabled: functionState.globalEnabled,
       projectFunctionsEnabled: functionState.projectEnabled,
     }),
     functions: createFunctionCapabilityHandler({
@@ -274,14 +276,18 @@ export function createCapabilities({
       }
       const scope = functionRunScope(
         name,
-        functionState.project,
-        functionState.session,
+        {
+          global: functionState.global,
+          project: functionState.project,
+          session: functionState.session,
+        },
         functionContext?.scope,
       );
       activity.push({ action: "run", name, scope });
       if (
         scope === "session" &&
         !functionState.project.has(name) &&
+        !functionState.global.has(name) &&
         !TEMPORARY_FUNCTION_NAME.test(name)
       ) {
         const runs = (functionState.sessionRunCounts.get(name) ?? 0) + 1;

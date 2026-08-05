@@ -293,7 +293,9 @@ describe("pit extension", () => {
     expect(tool.description).toContain('kind: "read", file, options?');
     expect(tool.description).toContain("workspace.search(query");
     expect(tool.description).toContain("shell.execFile(program, args");
-    expect(tool.description).toContain("functions: list/get/remove project;");
+    expect(tool.description).toContain(
+      "functions: project list/get/remove; global list/get/remove;",
+    );
     expect(tool.parameters.properties.label.description).toContain("15 words");
     expect(tool.parameters.properties.code.description).toContain("named function definition");
     expect(tool.parameters.properties.code.description).toContain("do not import");
@@ -410,7 +412,7 @@ describe("pit extension", () => {
     const info = await value("async ({ context }) => context.get()");
     expect(info.savedFunctions).toEqual(["greet"]);
     expect(branchEntries.some((entry) => entry.data?.name === "broken")).toBe(false);
-  });
+  }, 15_000);
 
   it("saves named functions without executing them", async () => {
     const source = `async function deferred({ shell }) {

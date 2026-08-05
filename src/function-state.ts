@@ -1,13 +1,17 @@
+import type { GlobalFunctionMetadataRegistry } from "./global-function-storage.js";
 import type { ProjectFunctionMetadataRegistry } from "./project-function-storage.js";
 import { reconcileProjectFunctionsForSession } from "./project-functions.js";
 import type { FunctionRegistry } from "./saved-functions.js";
 
 export interface FunctionState {
+  globalEnabled: boolean;
   projectEnabled: boolean;
+  global: FunctionRegistry;
   project: FunctionRegistry;
   projectCandidates: FunctionRegistry;
   session: FunctionRegistry;
   effective: FunctionRegistry;
+  globalMetadata: GlobalFunctionMetadataRegistry;
   metadata: ProjectFunctionMetadataRegistry;
   candidateMetadata: ProjectFunctionMetadataRegistry;
   sessionRunCounts: Map<string, number>;
@@ -18,11 +22,14 @@ export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promis
 
 export function createFunctionState(): FunctionState {
   return {
+    globalEnabled: false,
     projectEnabled: false,
+    global: new Map(),
     project: new Map(),
     projectCandidates: new Map(),
     session: new Map(),
     effective: new Map(),
+    globalMetadata: new Map(),
     metadata: new Map(),
     candidateMetadata: new Map(),
     sessionRunCounts: new Map(),
@@ -49,6 +56,9 @@ export function resetFunctionUsage(state: FunctionState): void {
 
 export function refreshEffectiveFunctions(state: FunctionState): void {
   state.effective.clear();
+  for (const [name, source] of state.global) {
+    state.effective.set(name, source);
+  }
   for (const [name, source] of state.project) {
     state.effective.set(name, source);
   }
@@ -59,6 +69,7 @@ export function refreshEffectiveFunctions(state: FunctionState): void {
 
 export function reconcileFunctionState(state: FunctionState): string[] {
   const errors = reconcileProjectFunctionsForSession({
+    global: state.global,
     candidates: state.projectCandidates,
     candidateMetadata: state.candidateMetadata,
     session: state.session,
@@ -72,6 +83,7 @@ export function reconcileFunctionState(state: FunctionState): string[] {
 export function effectiveRegistry(
   project: ReadonlyMap<string, string>,
   session: ReadonlyMap<string, string>,
+  global: ReadonlyMap<string, string> = new Map(),
 ): FunctionRegistry {
-  return new Map([...project, ...session]);
+  return new Map([...global, ...project, ...session]);
 }

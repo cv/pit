@@ -11,6 +11,7 @@ import {
   saveProjectFunction,
 } from "../src/project-function-storage.js";
 import {
+  globalFunctionCatalog,
   projectFunctionCatalog,
   reconcileProjectFunctionsForSession as reconcileProjectFunctionState,
   savedFunctionDependents,
@@ -31,6 +32,7 @@ function reconcileProjectFunctionsForSession(
   activeMetadata: Parameters<typeof reconcileProjectFunctionState>[0]["metadata"],
 ) {
   return reconcileProjectFunctionState({
+    global: new Map(),
     candidates,
     candidateMetadata,
     session,
@@ -39,26 +41,49 @@ function reconcileProjectFunctionsForSession(
   });
 }
 
-it("maps effective function scopes with session override precedence", () => {
+it("maps effective function scopes with override precedence", () => {
   const scopes = functionScopeRegistry(
     new Map([
+      ["globalOnly", "source"],
       ["projectOnly", "source"],
       ["overridden", "session source"],
+      ["unattributed", "source"],
     ]),
+    new Map([["globalOnly", "source"]]),
+    new Map([["projectOnly", "source"]]),
     new Map([["overridden", "session source"]]),
   );
   expect([...scopes]).toEqual([
+    ["globalOnly", "global"],
     ["projectOnly", "project"],
     ["overridden", "session"],
+    ["unattributed", "session"],
   ]);
 });
 
 it("prefers attributed function scope and resolves registry fallbacks", () => {
+  const global = new Map([["globalOnly", "source"]]);
   const project = new Map([["projectOnly", "source"]]);
   const session = new Map([["sessionOnly", "source"]]);
-  expect(functionRunScope("projectOnly", project, session)).toBe("project");
-  expect(functionRunScope("sessionOnly", project, session)).toBe("session");
-  expect(functionRunScope("projectOnly", project, session, "session")).toBe("session");
+  const registries = { global, project, session };
+  expect(functionRunScope("globalOnly", registries)).toBe("global");
+  expect(functionRunScope("projectOnly", registries)).toBe("project");
+  expect(functionRunScope("sessionOnly", registries)).toBe("session");
+  expect(functionRunScope("missing", registries)).toBe("session");
+  expect(functionRunScope("projectOnly", registries, "session")).toBe("session");
+});
+
+it("orders multiple transitive project dependents", () => {
+  const project = new Map([
+    ["base", "async function base() { return 1; }"],
+    ["direct", "async function direct() { return base(); }"],
+    ["transitiveB", "async function transitiveB() { return direct(); }"],
+    ["transitiveA", "async function transitiveA() { return direct(); }"],
+  ]);
+  expect(savedFunctionDependents(project, new Map(), project, "base")).toEqual({
+    direct: ["direct"],
+    transitive: ["transitiveA", "transitiveB"],
+  });
 });
 
 function sizedProjectFunction(name: string, bytes: number): string {
@@ -558,5 +583,12 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     const missingOverrideCatalog = projectFunctionCatalog(docs, missingOverrideSource);
     expect(missingOverrideCatalog).toContain("- alpha — Session override of project function.");
     expect(missingOverrideCatalog).not.toContain("alpha(");
+
+    const globalCatalog = globalFunctionCatalog(docs, new Map(), new Map());
+    expect(globalCatalog).toContain("## Global TypeScript functions");
+    expect(globalCatalog).toContain("1 more; use functions.listGlobal()");
+    expect(globalFunctionCatalog(docs, new Map([["alpha", "project"]]), new Map())).not.toContain(
+      "alpha(input",
+    );
   });
 });

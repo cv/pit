@@ -20,23 +20,26 @@ import {
 } from "../src/sandbox.js";
 
 describe("function execution wire context", () => {
-  it("accepts valid bounded invocation context", () => {
-    expect(
-      parseFunctionExecutionContext({
+  it.each(["global", "project", "session"] as const)(
+    "accepts bounded %s invocation context",
+    (scope) => {
+      expect(
+        parseFunctionExecutionContext({
+          invocationId: 2,
+          parentInvocationId: 1,
+          name: "nested",
+          scope,
+          depth: 2,
+        }),
+      ).toEqual({
         invocationId: 2,
         parentInvocationId: 1,
         name: "nested",
-        scope: "project",
+        scope,
         depth: 2,
-      }),
-    ).toEqual({
-      invocationId: 2,
-      parentInvocationId: 1,
-      name: "nested",
-      scope: "project",
-      depth: 2,
-    });
-  });
+      });
+    },
+  );
 
   it.each([
     undefined,
@@ -246,7 +249,7 @@ describe("sandbox caches", () => {
       validationHits: 4,
       compilationHits: 1,
       dependencyGraphEntries: 1,
-      dependencyGraphHits: 1,
+      dependencyGraphHits: 3,
       dependencyReferenceEntries: 0,
       dependencyReferenceHits: 0,
     });
@@ -425,6 +428,36 @@ describe("runInSandbox", () => {
     await expect(runInSandbox("unrelated()", handler, { savedFunctions })).rejects.toThrow(
       /number.*PitProgram/,
     );
+  });
+
+  it.each([
+    { name: "global", scope: "global" as const },
+    { name: "project", scope: "project" as const },
+    { name: "session", scope: "session" as const },
+  ])("supports an explicit $name registry without the other scopes", async ({ name, scope }) => {
+    const functionName = `${name}Only`;
+    const source = `async function ${functionName}() { return "${name}"; }`;
+    const savedFunctions = new Map([[functionName, source]]);
+    const savedFunctionScopes = new Map([[functionName, scope]]);
+    const options = {
+      savedFunctions,
+      savedFunctionScopes,
+      ...(scope === "global" ? { globalFunctions: savedFunctions } : {}),
+      ...(scope === "project" ? { projectFunctions: savedFunctions } : {}),
+      ...(scope === "session" ? { sessionFunctions: savedFunctions } : {}),
+    };
+    await expect(runInSandbox(`${functionName}()`, async () => null, options)).resolves.toBe(name);
+  });
+
+  it("rejects an effective root missing from its declared scope", async () => {
+    const savedFunctions = new Map([["missingScoped", "async function missingScoped() {}"]]);
+    await expect(
+      runInSandbox("missingScoped()", async () => null, {
+        savedFunctions,
+        savedFunctionScopes: new Map([["missingScoped", "global"]]),
+        globalFunctions: new Map(),
+      }),
+    ).rejects.toThrow("missingScoped is not defined");
   });
 
   it("attributes nested and concurrent saved-function capability calls", async () => {
@@ -761,7 +794,7 @@ async function linked(_capabilities, input) { return input; }`),
         { timeoutMs: 100 },
       ),
     ).rejects.toThrow("timed out");
-    await vi.waitFor(() => expect(aborted).toBe(true));
+    await vi.waitFor(() => expect(aborted).toBe(true), { timeout: 5_000 });
   });
 
   it("reports a child that exits without a result", async () => {

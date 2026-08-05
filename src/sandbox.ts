@@ -12,6 +12,7 @@ import {
   WireFrameDecoder,
   type WireMessage,
 } from "./sandbox-wire.js";
+import type { FunctionScope } from "./saved-functions.js";
 
 export type { CapabilityHandler, CapabilityRequest } from "./sandbox-capability-dispatcher.js";
 export type { ProjectFunctionMetadata, ProjectFunctionParameter } from "./sandbox-program.js";
@@ -19,6 +20,7 @@ export {
   clearSandboxCaches,
   formatDiagnostic,
   getNamedFunctionName,
+  getGlobalFunctionMetadata,
   getProjectFunctionMetadata,
   getSandboxCacheStats,
   getSavedFunctionCallSignature,
@@ -36,7 +38,10 @@ export interface SandboxOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   savedFunctions?: ReadonlyMap<string, string>;
-  savedFunctionScopes?: ReadonlyMap<string, "project" | "session">;
+  savedFunctionScopes?: ReadonlyMap<string, FunctionScope>;
+  globalFunctions?: ReadonlyMap<string, string>;
+  projectFunctions?: ReadonlyMap<string, string>;
+  sessionFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
   onCapabilityTrace?: (trace: CapabilityTrace) => void;
 }
@@ -96,7 +101,7 @@ export function parseFunctionExecutionContext(
       typeof context.name === "string" &&
       context.name.length > 0
     ) ||
-    (context.scope !== "project" && context.scope !== "session") ||
+    (context.scope !== "global" && context.scope !== "project" && context.scope !== "session") ||
     !(
       Number.isSafeInteger(context.depth) &&
       Number(context.depth) >= 1 &&
@@ -129,6 +134,9 @@ async function prepareSandboxRun(source: string, options: SandboxOptions) {
   const compiled = await compileSandboxSource(source, {
     ...(options.savedFunctions ? { savedFunctions: options.savedFunctions } : {}),
     ...(options.savedFunctionScopes ? { savedFunctionScopes: options.savedFunctionScopes } : {}),
+    ...(options.globalFunctions ? { globalFunctions: options.globalFunctions } : {}),
+    ...(options.projectFunctions ? { projectFunctions: options.projectFunctions } : {}),
+    ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
     ...(options.input === undefined ? {} : { input: options.input }),
   });
   const token = randomBytes(24).toString("base64url");

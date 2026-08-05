@@ -109,7 +109,7 @@ describe("functions capability", () => {
       value(
         `async ({ functions }) => functions.promote("capabilitySession", "Promoted through the capability.")`,
       ),
-    ).resolves.toEqual({ name: "capabilitySession", promoted: true });
+    ).resolves.toEqual({ name: "capabilitySession", promoted: true, scope: "project" });
     await expect(
       readFile(join(cwd, ".pi/pit/functions/capabilitySession.ts"), "utf8"),
     ).resolves.toContain("Promoted through the capability.");
@@ -202,6 +202,9 @@ describe("functions capability", () => {
     await expect(run(`async ({ functions }) => functions.get("missing")`)).rejects.toThrow(
       "is unavailable",
     );
+    await expect(
+      run(`async ({ functions }) => functions.promote("missingDefault", "Summary", {})`),
+    ).rejects.toThrow("was not found");
     await expect(run(`async ({ functions }) => functions.getSaved("missing")`)).rejects.toThrow(
       "is unavailable",
     );
@@ -210,7 +213,7 @@ describe("functions capability", () => {
     ).rejects.toThrow("was not found");
     await expect(
       run(`async ({ functions }) => (functions as any).planRemoval("missing", "invalid")`),
-    ).rejects.toThrow('function scope must be "project" or "session"');
+    ).rejects.toThrow('function scope must be "global", "project", or "session"');
     await expect(
       run(
         `async ({ functions }) => (functions as any).removeSession("missing", { cascade: "yes" })`,
