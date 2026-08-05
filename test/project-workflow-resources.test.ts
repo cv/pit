@@ -101,5 +101,7 @@ describe("project agent workflow resources", () => {
     expect(prompt).toContain("If no function change is justified");
     expect(manifest.files).toContain("prompts");
     expect(manifest.pi.prompts).toContain("./prompts");
+    const projectSettings = JSON.parse(await readFile(".pi/settings.json", "utf8"));
+    expect(projectSettings.prompts).toContain("../prompts");
   });
 });
