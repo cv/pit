@@ -7,7 +7,7 @@ import {
 } from "./cli.js";
 import type { RenderedResultValue, ValueRenderer } from "./result-renderer-types.js";
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape prefix is intentional.
+// oxlint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 const TEST_COUNT_PATTERN = /Tests\s+(\d+)\s+passed/i;
 const INSTALL_SUMMARY_PATTERN = /^(added|removed|changed|up to date|audited)\b/i;

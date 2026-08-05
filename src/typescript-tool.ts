@@ -9,6 +9,7 @@ import {
   truncateHead,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
 import { ExecutionProgressController } from "./execution-progress.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "./execution-types.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
@@ -33,6 +34,7 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./typescript-failure-context.js";
+import { formatTypeScriptSource } from "./typescript-source-formatter.js";
 import { renderTypeScriptToolCall } from "./typescript-tool-call-renderer.js";
 import { renderTypeScriptToolResult } from "./typescript-tool-renderer.js";
 
@@ -160,7 +162,7 @@ async function executeSandboxValue({
     ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
     : undefined;
   return await runInSandbox(
-    request.params.code,
+    preparedFunction.source,
     createCapabilities({
       pi: request.pi,
       ctx: request.ctx,
@@ -230,8 +232,9 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const promotionSuggestions: string[] = [];
   const executionProgress = createExecutionProgress(request.update, functionActivity);
   try {
+    const source = await formatTypeScriptSource(request.params.code);
     const preparedFunction = request.savedFunctionService.prepare({
-      source: request.params.code,
+      source,
       ...(request.params.params === undefined ? {} : { input: request.params.params }),
       ...(request.params.saveOnly ? { saveOnly: true } : {}),
       context: request.ctx,
@@ -295,7 +298,6 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     renderResult(result, options, theme, context) {
       return renderTypeScriptToolResult(result, options, theme, context);
     },
-    // biome-ignore lint/complexity/useMaxParams: Pi defines the tool execute callback signature.
     execute(id, params, signal, update, ctx) {
       return executeTypeScriptTool({
         ...services,

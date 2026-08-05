@@ -70,9 +70,7 @@ export const renderGhResult: ValueRenderer = (value, context: RenderContext) => 
   }
   const stderr = nonemptyLines(result.stderr);
   const domainOutcome = hasFailedDomainItem(parsed) ? "warning" : undefined;
-  const status = semanticOutcome(result, {
-    ...(domainOutcome ? { domainOutcome } : {}),
-  });
+  const status = semanticOutcome(result, domainOutcome ? { domainOutcome } : {});
   const lines = [
     `${context.theme.fg("toolTitle", context.theme.bold("gh"))} ${context.theme.fg(status, `exit ${result.code}`)}${result.truncated ? context.theme.fg("warning", ", truncated") : ""}`,
     ...output,

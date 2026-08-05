@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+
 import {
   type CompilerHost,
   type CompilerOptions,
@@ -26,7 +27,6 @@ function cacheSet<T>(cache: Map<string, T>, key: string, value: T, limit: number
   cache.delete(key);
   cache.set(key, value);
   if (cache.size > limit) {
-    // biome-ignore lint/style/noNonNullAssertion: a non-empty oversized map always has an oldest key.
     cache.delete(cache.keys().next().value!);
   }
 }
@@ -79,22 +79,17 @@ function referencedNames(source: string, candidates: ReadonlySet<string>): strin
     /* v8 ignore next -- TypeScript does not always probe virtual files through fileExists. */
     fileExists: (fileName) => sources.has(fileName),
     getSourceFile: (fileName, languageVersion) =>
-      // biome-ignore lint/style/noNonNullAssertion: the program requests only generated root files.
       createSourceFile(fileName, sources.get(fileName)!, languageVersion, true),
   };
   const program = createProgram([contractFile, sourceFile], options, host);
   const checker = program.getTypeChecker();
-  // biome-ignore lint/style/noNonNullAssertion: both generated files are program roots.
   const contract = program.getSourceFile(contractFile)!;
-  // biome-ignore lint/style/noNonNullAssertion: both generated files are program roots.
   const submitted = program.getSourceFile(sourceFile)!;
 
   const namesBySymbol = new Map<TypeScriptSymbol, string>();
   for (const statement of contract.statements) {
     const declaration = (statement as VariableStatement).declarationList.declarations[0];
-    // biome-ignore lint/style/noNonNullAssertion: every generated statement has one identifier declaration.
     const identifier = declaration!.name as Identifier;
-    // biome-ignore lint/style/noNonNullAssertion: generated ambient declarations always bind a symbol.
     namesBySymbol.set(checker.getSymbolAtLocation(identifier)!, identifier.text);
   }
 

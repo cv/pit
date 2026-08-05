@@ -1,5 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+
 import { type CapabilityCall, inferCapabilityCall } from "./capability-presentation.js";
 import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import { HangingIndentText } from "./hanging-indent-text.js";

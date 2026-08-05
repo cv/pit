@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { executeStreamingProcess } from "../src/host-process.js";
 
 describe("executeStreamingProcess", () => {

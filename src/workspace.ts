@@ -1,7 +1,9 @@
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import fg from "fast-glob";
+
 import { fileRevision, prepareEdit } from "./hashline.js";
 import {
   checkAbort,
@@ -33,7 +35,6 @@ function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
       };
     }
     await mkdir(dirname(path), { recursive: true });
-    // biome-ignore lint/style/noNonNullAssertion: non-deleted edits always provide content.
     const next = prepared.next!;
     await writeFile(path, next, { encoding: "utf8", signal });
     return {
@@ -126,7 +127,6 @@ function batchEdits(
         await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)),
       );
       const prepared = targets.map((target) => {
-        // biome-ignore lint/style/noNonNullAssertion: every target has a snapshot.
         const snapshot = snapshots.get(target.path)!;
         return {
           ...target,
@@ -142,7 +142,6 @@ function batchEdits(
             await unlink(target.path);
           } else {
             await mkdir(dirname(target.path), { recursive: true });
-            // biome-ignore lint/style/noNonNullAssertion: non-deleted edits always provide content.
             await writeFile(target.path, target.edit.next!, { encoding: "utf8", signal });
           }
           committed.push(target);
@@ -163,7 +162,6 @@ function batchEdits(
       }
       return {
         results: prepared.map((target) => {
-          // biome-ignore lint/style/noNonNullAssertion: deleted results do not read the revision.
           const next = target.edit.next!;
           return {
             kind: "edit" as const,

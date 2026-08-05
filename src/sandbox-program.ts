@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
 import { transform } from "esbuild";
 import * as ts from "typescript";
+
 import { SANDBOX_GLOBALS } from "./sandbox-contract.js";
 import {
   clearSavedFunctionDependencyGraphCache,
@@ -35,7 +37,6 @@ function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
   cache.delete(key);
   cache.set(key, value);
   if (cache.size > MAX_CACHE_ENTRIES) {
-    // biome-ignore lint/style/noNonNullAssertion: a non-empty oversized map always has an oldest key.
     cache.delete(cache.keys().next().value!);
   }
 }

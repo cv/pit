@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   CAPABILITY_REGISTRY,
   generateCapabilityContract,
@@ -383,7 +385,7 @@ describe("pit extension", () => {
         customType: "pit-functions",
         data: expect.objectContaining({
           name: "greet",
-          source: expect.stringContaining("function greet"),
+          source: `async function greet(_capabilities, input) {\n  return { greeting: "Hello, " + (input?.name ?? "world") + "!" };\n}`,
         }),
       }),
     );
@@ -414,6 +416,9 @@ describe("pit extension", () => {
     const source = `async function deferred({ shell }) {
       return shell.execFile("node", ["--version"]);
     }`;
+    const canonicalSource = `async function deferred({ shell }) {
+  return shell.execFile("node", ["--version"]);
+}`;
     const saved = await tool.execute(
       "call-id",
       { code: source, saveOnly: true },
@@ -429,7 +434,7 @@ describe("pit extension", () => {
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         customType: "pit-functions",
-        data: { name: "deferred", source },
+        data: { name: "deferred", source: canonicalSource },
       }),
     );
 

@@ -1,4 +1,5 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
+
 import type { RenderContext, RenderedResultValue } from "../result-renderer-types.js";
 import { sanitizeTerminalText } from "../text-sanitization.js";
 import {

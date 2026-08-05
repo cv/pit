@@ -1,10 +1,11 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
+
 import type { ResultTheme } from "../result-renderer-types.js";
 
 export type JsonRecord = Record<string, unknown>;
 
 export const MAX_RECURSIVE_DEPTH = 4;
-export const JSON_CONTAINER_PREFIX = /^\s*[\[{]/;
+export const JSON_CONTAINER_PREFIX = /^\s*[[{]/;
 const HASHED_LINE_PATTERN = /^(\d+:[^|]+\|)(.*)$/;
 
 export function isRecord(value: unknown): value is JsonRecord {

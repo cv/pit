@@ -60,7 +60,6 @@ export class InterruptibleRegexMatcher {
     this.worker.on("message", (message: WorkerResponse) => this.handleMessage(message));
     this.worker.on("error", (error) => this.fail(error));
     this.worker.on("exit", (code) => {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: close mutates lifecycle state asynchronously.
       if (!this.closed && code !== 0) {
         this.fail(new Error(`Regex worker stopped with exit code ${code}`));
       }
@@ -71,7 +70,6 @@ export class InterruptibleRegexMatcher {
     if (limit < 1) {
       return Promise.resolve([]);
     }
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: callers may race with asynchronous close.
     if (this.closed) {
       return Promise.reject(new Error("Regex worker is closed"));
     }
@@ -90,7 +88,6 @@ export class InterruptibleRegexMatcher {
   }
 
   async close(): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: close is intentionally idempotent.
     if (this.closed) {
       return;
     }

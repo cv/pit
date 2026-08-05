@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { renderGhResult } from "../src/gh-result-renderer.js";
 import { NPM_RESULT_RENDERERS } from "../src/npm-result-renderers.js";
 

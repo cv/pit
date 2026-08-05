@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { cleanupHarness, context, run, setupHarness, value } from "./extension-fixture.js";
 
 beforeEach(setupHarness);

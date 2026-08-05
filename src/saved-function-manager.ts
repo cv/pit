@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { formatSize, highlightCode } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+
 import type { FunctionRegistry, SessionFunctionRemovalPlan } from "./saved-functions.js";
 
 const COMMAND_ARGUMENTS_PATTERN = /\s+/;

@@ -1,5 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { display } from "../src/typescript-tool.js";
 import { cleanupHarness, setupHarness, tool } from "./extension-fixture.js";
 

@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
 import {
   type CAPABILITY_METHODS,
   type CapabilityName,

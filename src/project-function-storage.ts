@@ -1,11 +1,13 @@
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+
 import {
   CONFIG_DIR_NAME,
   type ExtensionContext,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
+
 import {
   getProjectFunctionMetadata,
   getSavedFunctionDependencyGraph,
@@ -201,7 +203,7 @@ export async function loadProjectFunctions(
   let removedInvalidDependency = true;
   while (removedInvalidDependency) {
     removedInvalidDependency = false;
-    for (const [name, source] of [...registry]) {
+    for (const [name, source] of registry) {
       try {
         validateTypeScript(source, registry);
       } catch (error) {

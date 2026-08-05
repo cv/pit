@@ -1,4 +1,5 @@
 import { type ExtensionAPI, truncateHead } from "@earendil-works/pi-coding-agent";
+
 import type { ExecutionProgressSnapshot } from "./execution-types.js";
 import type { FunctionActivity } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";

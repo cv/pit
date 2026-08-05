@@ -7,9 +7,9 @@ import {
 
 const PREFIX_STYLE_RESET = "\u001b[22m\u001b[39m";
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI SGR sequences start with ESC.
+// oxlint-disable-next-line no-control-regex
 const SGR_CODE_PATTERN = /\u001b\[[0-9;]*m/g;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI SGR sequences start with ESC.
+// oxlint-disable-next-line no-control-regex
 const LEADING_SGR_PATTERN = /^(?:\u001b\[[0-9;]*m)*/;
 
 function removeInheritedPrefixStyles(value: string, prefix: string): string {

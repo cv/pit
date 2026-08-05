@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import type { CapabilityTrace } from "../src/capability-trace.js";
 import { CapabilityDispatcher } from "../src/sandbox-capability-dispatcher.js";
 

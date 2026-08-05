@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { createFunctionState, createFunctionStateCommitQueue } from "../src/function-state.js";
 import { createCapabilities } from "../src/host-capabilities.js";
 

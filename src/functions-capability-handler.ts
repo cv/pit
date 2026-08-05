@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
 import { createFunctionCapabilityMethods } from "./function-capability-methods.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
 import type { FunctionActivity } from "./saved-functions.js";

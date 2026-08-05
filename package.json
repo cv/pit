@@ -11,14 +11,15 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "check": "npm run capabilities:check && tsc --noEmit && biome check . --error-on-warnings --diagnostic-level=warn",
+    "check": "npm run capabilities:check && tsc --noEmit && npm run lint && npm run format:check",
     "capabilities:check": "tsx scripts/generate-capability-contract.ts --check",
     "capabilities:generate": "tsx scripts/generate-capability-contract.ts",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "biome:check": "biome check . --error-on-warnings --diagnostic-level=warn",
-    "biome:fix": "biome check --write .",
-    "format": "biome format --write .",
+    "lint": "oxlint --deny-warnings .",
+    "lint:fix": "oxlint --fix --deny-warnings .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
     "quality:audit": "node scripts/audit-code-size.mjs",
     "package:check": "node scripts/verify-package.mjs"
   },
@@ -30,14 +31,15 @@
   "dependencies": {
     "esbuild": "^0.28.1",
     "fast-glob": "^3.3.3",
+    "oxfmt": "0.62.0",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.6",
     "@earendil-works/pi-coding-agent": "^0.83.0",
     "@earendil-works/pi-tui": "^0.83.0",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
+    "oxlint": "1.77.0",
     "tsx": "^4.20.0",
     "typebox": "^1.0.4",
     "vitest": "^4.1.10"

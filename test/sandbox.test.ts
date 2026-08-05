@@ -1,5 +1,6 @@
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+
 import type { CapabilityTrace } from "../src/capability-trace.js";
 import {
   type CapabilityRequest,
@@ -317,14 +318,12 @@ describe("runInSandbox", () => {
   });
 
   it("provides destructured capabilities through RPC", async () => {
-    const handler = vi.fn(
-      async (): Promise<unknown> => ({
-        stdout: "",
-        stderr: "",
-        code: 42,
-        truncated: false,
-      }),
-    );
+    const handler = vi.fn(async (): Promise<unknown> => ({
+      stdout: "",
+      stderr: "",
+      code: 42,
+      truncated: false,
+    }));
     const result = await runInSandbox(
       `async ({ shell }) => ({ value: (await shell.exec("sum")).code })`,
       handler,

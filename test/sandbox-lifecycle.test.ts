@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+
 import { SandboxLifecycle } from "../src/sandbox-lifecycle.js";
 
 describe("SandboxLifecycle", () => {

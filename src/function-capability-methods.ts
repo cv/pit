@@ -3,6 +3,7 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+
 import type { CAPABILITY_METHODS } from "./capability-registry.js";
 import { recordValue as record, stringValue as string } from "./cli.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";

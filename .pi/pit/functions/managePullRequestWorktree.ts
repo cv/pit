@@ -28,7 +28,6 @@ async function managePullRequestWorktree(
     throw new Error("number must be a positive integer");
   }
   const remote = input.remote ?? "origin";
-  // biome-ignore lint/performance/useTopLevelRegex: project functions expose one top-level callable.
   if (!/^[A-Za-z0-9_.-]+$/.test(remote)) {
     throw new Error("remote contains unsupported characters");
   }

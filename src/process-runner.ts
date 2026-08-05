@@ -5,6 +5,7 @@ import {
   truncateHead,
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
+
 import { boundedIntegerValue, type ProcessResult } from "./cli.js";
 import type { HostShellProgressEvent } from "./execution-types.js";
 import { executeStreamingProcess } from "./host-process.js";

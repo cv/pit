@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
+
 import {
   startCapabilityTrace as createCapabilityTrace,
   finishCapabilityTrace,

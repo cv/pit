@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { buildExecutionDashboardModel } from "../src/execution-dashboard-model.js";
 
 const functionContext = {

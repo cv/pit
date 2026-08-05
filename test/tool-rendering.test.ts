@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   cleanupHarness,
   renderToolCall,
@@ -79,6 +80,35 @@ describe("tool rendering", () => {
     const waiting = renderToolCall({ code: undefined }, { expanded: true, argsComplete: false });
     expect(waiting).toContain("waiting for source…");
     expect(waiting.split("\n")[1]).toContain("waiting for source…");
+  });
+
+  it("re-renders completed source with Oxfmt formatting", async () => {
+    const args = {
+      code: 'async({workspace,git})=>{const[file,status]=await Promise.all([workspace.read("package.json",{format:"raw"}),git.status(["--short"])]);return{file,status}}',
+    };
+    const state = {};
+    const invalidate = vi.fn();
+    const context = { expanded: true, argsComplete: true, state, invalidate };
+
+    const initial = renderToolCall(args, context);
+    expect(initial).toContain("const[file,status]");
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalledOnce());
+
+    const formatted = renderToolCall(args, context);
+    expect(formatted).toContain("const [file, status] = await Promise.all([");
+    expect(formatted).toContain("return { file, status };");
+    expect(formatted).toContain("7 lines, 0.0s");
+  });
+
+  it("keeps incomplete streaming source raw", async () => {
+    const state = {};
+    const invalidate = vi.fn();
+    const source = "async({workspace})=>workspace.read(";
+    const context = { expanded: true, argsComplete: false, state, invalidate };
+
+    expect(renderToolCall({ code: source }, context)).toContain(source);
+    await Promise.resolve();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it("keeps hidden call and result descriptions on adjacent lines", () => {

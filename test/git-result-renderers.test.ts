@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import type { CapabilityCall } from "../src/capability-presentation.js";
 import { renderResultValue } from "../src/renderers/generic.js";
 

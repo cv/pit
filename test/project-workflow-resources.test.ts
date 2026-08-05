@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
+
 import { getProjectFunctionMetadata, validateTypeScript } from "../src/sandbox.js";
 
 const functionFiles = [
@@ -46,6 +48,7 @@ describe("project agent workflow resources", () => {
     expect(coverage).toContain("cbranch-no|cstat-no|fstat-no");
     expect(review).toContain('["--cached", "--check"]');
     expect(format).toContain('"--write"');
+    expect(format).toContain("oxfmt");
     expect(format).toContain("anchorsInvalidated");
     expect(skill).toContain("runPitTargetedTests");
     expect(skill).toContain("formatPitChanges()");

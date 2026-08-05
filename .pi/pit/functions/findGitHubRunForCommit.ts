@@ -8,7 +8,6 @@ async function findGitHubRunForCommit(
   input: { repo: string; sha: string; limit?: number },
 ) {
   const sha = input.sha.trim().toLowerCase();
-  // biome-ignore lint/performance/useTopLevelRegex: project functions expose one top-level callable.
   if (!/^[0-9a-f]{7,40}$/.test(sha)) {
     throw new Error("sha must be a 7-40 character hexadecimal commit prefix");
   }

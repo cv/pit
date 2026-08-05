@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { fileRevision, lineAnchor } from "../src/hashline.js";
 import { WorkspaceReadScanner } from "../src/workspace-read.js";
 

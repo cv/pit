@@ -1,5 +1,5 @@
 /**
- * Formats only files currently changed in Git that Biome supports.
+ * Formats only files currently changed in Git that Oxfmt supports.
  *
  * @pit project
  * @param input.checkOnly - Check formatting without writing files.
@@ -29,6 +29,15 @@ async function formatPitChanges({ git, shell }, input: { checkOnly?: boolean } =
     ".cjs",
     ".json",
     ".jsonc",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".html",
+    ".md",
+    ".mdx",
+    ".css",
+    ".scss",
+    ".less",
   ];
   const files = [...new Set(candidates.map((file) => file.trim()).filter(Boolean))]
     .filter(
@@ -37,9 +46,9 @@ async function formatPitChanges({ git, shell }, input: { checkOnly?: boolean } =
     )
     .slice(0, 100);
   if (files.length === 0) {
-    return { files, changed: false, message: "No changed Biome-supported files" };
+    return { files, changed: false, message: "No changed Oxfmt-supported files" };
   }
-  const args = ["biome", "format", ...(input.checkOnly ? [] : ["--write"]), ...files];
+  const args = ["oxfmt", input.checkOnly ? "--check" : "--write", ...files];
   const result = await shell.execFile("npx", args, {
     raise: false,
     timeoutMs: 120000,

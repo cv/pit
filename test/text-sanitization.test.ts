@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { sanitizeTerminalText } from "../src/text-sanitization.js";
 
 const RESET_WITHOUT_BACKGROUND = "\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m";

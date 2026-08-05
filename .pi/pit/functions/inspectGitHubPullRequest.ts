@@ -26,7 +26,6 @@ async function inspectGitHubPullRequest({ gh }, input: { number: number; repo?: 
   }
 
   const repo = input.repo ?? "cv/pit";
-  // biome-ignore lint/performance/useTopLevelRegex: project functions expose one top-level callable.
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
     throw new Error("repo must use owner/name form");
   }

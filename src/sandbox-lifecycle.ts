@@ -45,7 +45,6 @@ export class SandboxLifecycle {
 
   finish(error?: Error, value?: unknown): void {
     /* v8 ignore next -- only asynchronous child-process races finish twice. */
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: asynchronous finish paths can race.
     if (this.#settled) {
       return;
     }

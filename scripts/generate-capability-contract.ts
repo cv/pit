@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+
 import { generateCapabilityContract } from "../src/capability-registry.js";
 
 const target = fileURLToPath(new URL("../src/capability-contract.d.ts", import.meta.url));

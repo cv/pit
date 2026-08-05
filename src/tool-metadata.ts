@@ -1,4 +1,5 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
+
 import { capabilityDocumentation } from "./capability-registry.js";
 
 export const PROMPT_SNIPPET =

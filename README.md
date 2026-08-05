@@ -68,21 +68,21 @@ Pit replaces the active coding tool set with `typescript` when the session start
 
 Pit injects only the capabilities that submitted code requests.
 
-| Capability | Purpose |
-| --- | --- |
+| Capability  | Purpose                                                                                      |
+| ----------- | -------------------------------------------------------------------------------------------- |
 | `workspace` | Read, search, list, create, edit, and delete files with bounded results and revision checks. |
-| `git` | Run common Git operations without shell interpolation. |
-| `npm` | Run scripts, tests, installs, audits, package checks, and package queries. |
-| `gh` | Work with GitHub issues, pull requests, Actions runs, releases, and the GitHub API. |
-| `shell` | Run a shell command or an argument-safe executable call with output limits. |
-| `http` | Send an HTTP request and receive a bounded response body. |
-| `ui` | Ask for confirmation, text, or a selection, and show notifications. |
-| `context` | Inspect the active Pi and Pit context. |
-| `session` | Inspect session metadata and manage its display name. |
-| `commands` | List extension, prompt-template, and skill slash commands with provenance. |
-| `models` | List configured models, inspect the current model, and select a model. |
-| `runtime` | Inspect runtime state and request confirmed reload or shutdown. |
-| `functions` | Inspect and remove trusted project functions. |
+| `git`       | Run common Git operations without shell interpolation.                                       |
+| `npm`       | Run scripts, tests, installs, audits, package checks, and package queries.                   |
+| `gh`        | Work with GitHub issues, pull requests, Actions runs, releases, and the GitHub API.          |
+| `shell`     | Run a shell command or an argument-safe executable call with output limits.                  |
+| `http`      | Send an HTTP request and receive a bounded response body.                                    |
+| `ui`        | Ask for confirmation, text, or a selection, and show notifications.                          |
+| `context`   | Inspect the active Pi and Pit context.                                                       |
+| `session`   | Inspect session metadata and manage its display name.                                        |
+| `commands`  | List extension, prompt-template, and skill slash commands with provenance.                   |
+| `models`    | List configured models, inspect the current model, and select a model.                       |
+| `runtime`   | Inspect runtime state and request confirmed reload or shutdown.                              |
+| `functions` | Inspect and remove trusted project functions.                                                |
 
 See [Capability reference](#capability-reference) for method details.
 
@@ -495,13 +495,14 @@ Regenerate the capability contract after a registry change:
 npm run capabilities:generate
 ```
 
-Apply Biome fixes:
+Apply safe lint fixes and format the repository with Oxlint and Oxfmt:
 
 ```sh
-npm run biome:fix
+npm run lint:fix
+npm run format
 ```
 
-`npm run check` verifies the generated capability contract, runs TypeScript, and runs Biome. Biome uses the `all` lint preset and treats warnings as errors.
+`npm run check` verifies the generated capability contract, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The custom quality audit retains Pit's file, function, and complexity limits.
 
 Pull requests and pushes to `main` run package verification, static checks, tests, and the coverage gate in GitHub Actions. A repository maintainer must configure branch protection to require the `test` check before merge.
 

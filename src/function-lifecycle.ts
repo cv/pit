@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
 import type { FunctionState } from "./function-state.js";
 import { reconcileFunctionState, resetFunctionUsage } from "./function-state.js";
 import { loadProjectFunctionConfig, loadProjectFunctions } from "./project-function-storage.js";

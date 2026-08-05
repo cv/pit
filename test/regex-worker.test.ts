@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+
 import { InterruptibleRegexMatcher } from "../src/regex-worker.js";
 
 const active: InterruptibleRegexMatcher[] = [];

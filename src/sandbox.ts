@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+
 import type { CapabilityTrace, FunctionExecutionContext } from "./capability-trace.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./sandbox-capability-dispatcher.js";
 import { SandboxLifecycle } from "./sandbox-lifecycle.js";

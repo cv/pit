@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
+
 import ts from "typescript";
 
 const ROOTS = ["src", "test", "scripts"];

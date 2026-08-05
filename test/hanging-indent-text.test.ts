@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { HangingIndentText } from "../src/hanging-indent-text.js";
 
 describe("HangingIndentText", () => {

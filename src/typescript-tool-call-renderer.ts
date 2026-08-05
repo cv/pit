@@ -1,9 +1,11 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+
 import { describeCapabilityCall, inferCapabilityCall } from "./capability-presentation.js";
 import { getNamedFunctionName, resolveSavedFunctionReferences } from "./sandbox.js";
 import type { FunctionRegistry } from "./saved-functions.js";
 import { sanitizeTerminalText } from "./text-sanitization.js";
+import { formatTypeScriptSource } from "./typescript-source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "./typescript-tool-timing.js";
 
 interface RenderTheme {
@@ -19,6 +21,43 @@ interface ToolCallArgs {
 
 interface ToolCallContext extends ToolCallTimingContext {
   expanded: boolean;
+}
+
+const SOURCE_FORMATTING_STATE = Symbol("pit-source-formatting");
+
+interface SourceFormattingState {
+  source: string;
+  formatted?: string;
+}
+
+type RendererState = Record<PropertyKey, unknown> & {
+  [SOURCE_FORMATTING_STATE]?: SourceFormattingState;
+};
+
+function formattedDisplaySource(code: string, context: ToolCallContext): string {
+  if (!(code && context.argsComplete)) {
+    return code;
+  }
+  const root =
+    context.state && typeof context.state === "object"
+      ? (context.state as RendererState)
+      : ({} as RendererState);
+  context.state = root;
+  let formatting = root[SOURCE_FORMATTING_STATE];
+  if (!formatting || formatting.source !== code) {
+    formatting = { source: code };
+    root[SOURCE_FORMATTING_STATE] = formatting;
+    void formatTypeScriptSource(code).then((formatted) => {
+      if (root[SOURCE_FORMATTING_STATE]?.source !== code) {
+        return;
+      }
+      root[SOURCE_FORMATTING_STATE].formatted = formatted;
+      if (formatted !== code) {
+        context.invalidate?.();
+      }
+    });
+  }
+  return formatting.formatted ?? code;
 }
 
 function normalizedLabel(value: unknown): string | undefined {
@@ -59,8 +98,9 @@ export function renderTypeScriptToolCall(
   registry: FunctionRegistry,
 ) {
   const code = typeof args.code === "string" ? args.code : "";
+  const displayedCode = formattedDisplaySource(code, context);
   const callLabel = describeCall(args.label, code, args.saveOnly === true, registry);
-  const lines = code ? highlightCode(code, "typescript") : [];
+  const lines = displayedCode ? highlightCode(displayedCode, "typescript") : [];
   const shown = context.expanded ? lines : [];
   const generation = generationTiming(context);
   const state = generation.complete

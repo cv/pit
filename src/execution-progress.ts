@@ -1,4 +1,5 @@
 import { truncateTail } from "@earendil-works/pi-coding-agent";
+
 import { type CapabilityTrace, CapabilityTraceCollector } from "./capability-trace.js";
 import type {
   ExecutionProgressListener,

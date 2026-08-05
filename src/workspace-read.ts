@@ -1,10 +1,12 @@
 import { createHash, type Hash } from "node:crypto";
 import { createReadStream } from "node:fs";
+
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   truncateHead,
 } from "@earendil-works/pi-coding-agent";
+
 import { object, resolveWorkspacePath, workspaceResultPath } from "./workspace-paths.js";
 
 export type WorkspaceReadFormat = "hashed" | "raw";
@@ -100,7 +102,6 @@ export class WorkspaceReadScanner {
   }
 
   #hashSegment(segment: string, hasNewline: boolean): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: state persists across streamed chunks.
     if (this.#pendingCarriageReturn) {
       if (!(hasNewline && segment === "")) {
         this.#lineHasher.update("\r");
@@ -116,7 +117,6 @@ export class WorkspaceReadScanner {
   }
 
   #finishLine(hasNewline: boolean): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: finish observes a trailing CR from the final chunk.
     if (this.#pendingCarriageReturn) {
       if (!hasNewline) {
         this.#lineHasher.update("\r");
@@ -153,7 +153,6 @@ function hashedContent(scan: WorkspaceReadScan, offset: number): string {
     .slice(0, scan.selectedHashes.length)
     .map((line, index) => {
       const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
-      // biome-ignore lint/style/noNonNullAssertion: selected lines are capped to available hashes.
       return `${offset + index}:${scan.selectedHashes[index]!}|${normalized}`;
     })
     .join("\n");

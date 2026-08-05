@@ -1,5 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
+
 import fg from "fast-glob";
+
 import { fileRevision, lineAnchor } from "./hashline.js";
 import { InterruptibleRegexMatcher } from "./regex-worker.js";
 import {
@@ -59,7 +61,7 @@ function parseSearchRequest(cwd: string, args: unknown[]): SearchRequest {
     try {
       RegExp(query, caseSensitive ? "g" : "gi");
     } catch (error) {
-      throw new Error(`Invalid search regex: ${String(error)}`);
+      throw new Error(`Invalid search regex: ${String(error)}`, { cause: error });
     }
   }
   return { query, options, searchPath, regex, caseSensitive, contextLines, limit };
@@ -151,7 +153,6 @@ async function scanSearchFile(input: {
     .split("\n")
     .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
   const contextLine = (lineIndex: number): SearchContextLine => {
-    // biome-ignore lint/style/noNonNullAssertion: callers use indices bounded by lines.length.
     const text = lines[lineIndex]!;
     return { line: lineIndex + 1, anchor: lineAnchor(lineIndex + 1, text), text };
   };
@@ -164,7 +165,6 @@ async function scanSearchFile(input: {
     regexColumns.set(match.lineIndex, columns);
   }
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    // biome-ignore lint/style/noNonNullAssertion: lineIndex is bounded by lines.length.
     const text = lines[lineIndex]!;
     const columns = input.regexMatcher
       ? (regexColumns.get(lineIndex) ?? [])

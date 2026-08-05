@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
 import { registerSavedFunctionFeatures } from "./function-lifecycle.js";
 import { createFunctionState, createFunctionStateCommitQueue } from "./function-state.js";
 import { SavedFunctionService } from "./saved-function-service.js";
