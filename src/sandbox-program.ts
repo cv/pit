@@ -23,6 +23,8 @@ const SIGNATURES_FILE = "/pit/saved-signatures.ts";
 const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities) => await (\n";
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
+const SAVED_CAPABILITY_HINT =
+  'There is no "saved" capability. Use async ({ functions }) => functions.listAll() to inspect saved functions; invoke one directly by name.';
 const MAX_CACHE_ENTRIES = 128;
 const validationCache = new Map<string, string | null>();
 const compilationCache = new Map<string, Promise<string>>();
@@ -317,6 +319,16 @@ export function validateTypeScript(
     const displayed = unique.slice(0, MAX_DIAGNOSTICS);
     const messages = displayed.map(formatDiagnostic);
     const omitted = unique.length - displayed.length;
+    const savedCapabilityHint = diagnostics.some((diagnostic) => {
+      const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+      return (
+        (diagnostic.code === 2304 && message === "Cannot find name 'saved'.") ||
+        (diagnostic.code === 2339 &&
+          message === "Property 'saved' does not exist on type 'PitCapabilities'.")
+      );
+    })
+      ? `\n${SAVED_CAPABILITY_HINT}`
+      : "";
     const savedHint =
       diagnostics.some((diagnostic) => diagnostic.code === 2304) && names.length > 0
         ? `\nAvailable saved functions: ${names.join(", ")}`
@@ -324,6 +336,7 @@ export function validateTypeScript(
     const error =
       `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
       (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
+      savedCapabilityHint +
       savedHint;
     cacheSet(validationCache, cacheKey, error);
     throw new Error(error);

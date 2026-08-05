@@ -629,6 +629,24 @@ async function linked(_capabilities, input) { return input; }`),
     );
   });
 
+  it.each<{ name: string; source: string }>([
+    { name: "bare namespace", source: "saved.list()" },
+    { name: "destructured capability", source: "async ({ saved }) => saved.list()" },
+    {
+      name: "capability property",
+      source: "async (capabilities) => capabilities.saved.list()",
+    },
+  ])("suggests the functions capability for $name", ({ source }) => {
+    expect(() => validateTypeScript(source)).toThrow(
+      'There is no "saved" capability. Use async ({ functions }) => functions.listAll()',
+    );
+  });
+
+  it("still permits a saved function named saved", () => {
+    const savedFunctions = new Map([["saved", "async function saved() { return true; }"]]);
+    expect(() => validateTypeScript("saved()", savedFunctions)).not.toThrow();
+  });
+
   it("propagates capability errors", async () => {
     await expect(
       runInSandbox("async ({ context }) => context.get()", async () => {
