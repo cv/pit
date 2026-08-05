@@ -532,13 +532,17 @@ describe("runInSandbox", () => {
     expect(remote.remoteTruncated).toBe(true);
     expect(JSON.stringify(remote)).not.toContain("private/path");
 
-    try {
-      await runInSandbox(`() => { throw new Error("x".repeat(20_000)); }`, async () => null);
-    } catch (error) {
-      const bounded = error as SandboxRemoteError;
-      expect(Buffer.byteLength(bounded.message)).toBeLessThanOrEqual(8_000);
-      expect(bounded.remoteTruncated).toBe(true);
-    }
+    const bounded = await runInSandbox(
+      `() => { throw new Error("x".repeat(20_000)); }`,
+      async () => null,
+    ).then(
+      () => {
+        throw new Error("expected sandbox failure");
+      },
+      (error: unknown) => error as SandboxRemoteError,
+    );
+    expect(Buffer.byteLength(bounded.message)).toBeLessThanOrEqual(8_000);
+    expect(bounded.remoteTruncated).toBe(true);
   });
 
   it("accepts legacy and defensive sandbox fatal error shapes", () => {

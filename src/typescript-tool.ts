@@ -298,6 +298,7 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     renderResult(result, options, theme, context) {
       return renderTypeScriptToolResult(result, options, theme, context);
     },
+    // oxlint-disable-next-line max-params -- Pi defines the tool execute signature.
     execute(id, params, signal, update, ctx) {
       return executeTypeScriptTool({
         ...services,

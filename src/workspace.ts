@@ -35,6 +35,7 @@ function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
       };
     }
     await mkdir(dirname(path), { recursive: true });
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     const next = prepared.next!;
     await writeFile(path, next, { encoding: "utf8", signal });
     return {
@@ -127,9 +128,12 @@ function batchEdits(
         await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)),
       );
       const prepared = targets.map((target) => {
+        // oxlint-disable-next-line typescript/no-non-null-assertion
         const snapshot = snapshots.get(target.path)!;
         return {
-          ...target,
+          path: target.path,
+          changes: target.changes,
+          index: target.index,
           snapshot,
           edit: prepareEdit(snapshot.existed ? snapshot.contents : undefined, target.changes),
         };
@@ -142,6 +146,7 @@ function batchEdits(
             await unlink(target.path);
           } else {
             await mkdir(dirname(target.path), { recursive: true });
+            // oxlint-disable-next-line typescript/no-non-null-assertion
             await writeFile(target.path, target.edit.next!, { encoding: "utf8", signal });
           }
           committed.push(target);
@@ -162,6 +167,7 @@ function batchEdits(
       }
       return {
         results: prepared.map((target) => {
+          // oxlint-disable-next-line typescript/no-non-null-assertion
           const next = target.edit.next!;
           return {
             kind: "edit" as const,

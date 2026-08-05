@@ -285,6 +285,7 @@ function prepareAnchoredEdit(contents: string, changes: EditChange[]): PreparedE
   });
   for (let left = 0; left < replacements.length; left++) {
     for (let right = left + 1; right < replacements.length; right++) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion
       if (replacementsConflict(replacements[left]!, replacements[right]!)) {
         throw new Error(
           `changes.changes[${replacements[left]?.index}] overlaps changes.changes[${replacements[right]?.index}]`,

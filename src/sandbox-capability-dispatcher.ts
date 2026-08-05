@@ -97,6 +97,7 @@ export class CapabilityDispatcher {
             });
             finishTrace("failed");
           }
+          return undefined;
         },
         (error) => {
           this.options.send({
@@ -105,6 +106,7 @@ export class CapabilityDispatcher {
             error: error instanceof Error ? error.message : String(error),
           });
           finishTrace("failed");
+          return undefined;
         },
       )
       .finally(() => {

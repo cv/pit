@@ -40,10 +40,8 @@ describe("capability presentation", () => {
           method,
           qualifiedName: `${capability}.${method}`,
         };
-        expect(describeCapabilityCall(call), call.qualifiedName).toBe(
-          methodDefinition.callDescription,
-        );
-        expect(capabilityResultRenderer(call), call.qualifiedName).toBe(
+        expect(describeCapabilityCall(call)).toBe(methodDefinition.callDescription);
+        expect(capabilityResultRenderer(call)).toBe(
           "resultRenderer" in methodDefinition ? methodDefinition.resultRenderer : undefined,
         );
       }

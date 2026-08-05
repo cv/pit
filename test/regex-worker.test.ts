@@ -41,24 +41,30 @@ describe("InterruptibleRegexMatcher", () => {
   it("rejects pending work on close and ignores stale responses", async () => {
     const value = matcher("^(a+)+$");
     const pending = value.match([`${"a".repeat(30_000)}!`], 1);
-    const rejection = expect(pending).rejects.toThrow("closed");
+    const rejection = pending.catch((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
     (value as any).handleMessage({ id: "invalid" });
     (value as any).handleMessage({ id: 999, matches: [] });
     await value.close();
-    await rejection;
+    await expect(rejection).resolves.toContain("closed");
   });
 
   it("validates worker responses", async () => {
     const withError = matcher("^(a+)+$");
     const rejected = withError.match([`${"a".repeat(30_000)}!`], 1);
-    const workerFailure = expect(rejected).rejects.toThrow("worker failure");
+    const workerFailure = rejected.catch((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
     (withError as any).handleMessage({ id: 1, error: "worker failure" });
-    await workerFailure;
+    await expect(workerFailure).resolves.toContain("worker failure");
 
     const malformed = matcher("^(a+)+$");
     const invalid = malformed.match([`${"a".repeat(30_000)}!`], 1);
-    const invalidResponse = expect(invalid).rejects.toThrow("invalid response");
+    const invalidResponse = invalid.catch((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
     (malformed as any).handleMessage({ id: 1, matches: "invalid" });
-    await invalidResponse;
+    await expect(invalidResponse).resolves.toContain("invalid response");
   });
 });

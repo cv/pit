@@ -37,6 +37,7 @@ function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
   cache.delete(key);
   cache.set(key, value);
   if (cache.size > MAX_CACHE_ENTRIES) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     cache.delete(cache.keys().next().value!);
   }
 }
@@ -191,10 +192,11 @@ export function getProjectFunctionMetadata(source: string): ProjectFunctionMetad
     .filter(ts.isJSDocParameterTag)
     .map((tag) => {
       const description = jsDocText(tag.comment).trim().replace(JSDOC_PARAMETER_PREFIX, "");
-      return {
-        name: tag.name.getText(file),
-        ...(description ? { description } : {}),
-      };
+      const parameter: ProjectFunctionParameter = { name: tag.name.getText(file) };
+      if (description) {
+        parameter.description = description;
+      }
+      return parameter;
     });
   return {
     name: declaration.name.text,

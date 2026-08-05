@@ -49,12 +49,13 @@ function formattedDisplaySource(code: string, context: ToolCallContext): string 
     root[SOURCE_FORMATTING_STATE] = formatting;
     void formatTypeScriptSource(code).then((formatted) => {
       if (root[SOURCE_FORMATTING_STATE]?.source !== code) {
-        return;
+        return undefined;
       }
       root[SOURCE_FORMATTING_STATE].formatted = formatted;
       if (formatted !== code) {
         context.invalidate?.();
       }
+      return undefined;
     });
   }
   return formatting.formatted ?? code;

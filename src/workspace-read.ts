@@ -153,6 +153,7 @@ function hashedContent(scan: WorkspaceReadScan, offset: number): string {
     .slice(0, scan.selectedHashes.length)
     .map((line, index) => {
       const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
+      // oxlint-disable-next-line typescript/no-non-null-assertion
       return `${offset + index}:${scan.selectedHashes[index]!}|${normalized}`;
     })
     .join("\n");

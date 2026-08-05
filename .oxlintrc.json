@@ -2,29 +2,55 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "categories": {
     "correctness": "error",
+    "perf": "error",
     "suspicious": "error"
   },
+  "plugins": ["import", "node", "oxc", "promise", "typescript", "unicorn", "vitest"],
   "ignorePatterns": ["coverage/**", "node_modules/**", "package-lock.json"],
   "options": {
     "reportUnusedDisableDirectives": "error"
   },
   "rules": {
+    "eslint/complexity": ["error", 40],
+    "eslint/max-lines": ["error", { "max": 500, "skipBlankLines": true, "skipComments": true }],
+    "eslint/max-lines-per-function": [
+      "error",
+      { "max": 150, "skipBlankLines": true, "skipComments": true }
+    ],
+    "eslint/max-params": ["error", 4],
+    "eslint/no-await-in-loop": "off",
     "eslint/no-underscore-dangle": "off",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
     "unicorn/consistent-function-scoping": "off",
     "unicorn/no-array-reverse": "off",
     "unicorn/no-array-sort": "off",
-    "unicorn/require-post-message-target-origin": "off"
+    "unicorn/require-post-message-target-origin": "off",
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/require-to-throw-message": "off"
   },
   "overrides": [
     {
       "files": ["test/**/*.ts"],
       "rules": {
-        "eslint/no-shadow": "off"
+        "eslint/max-lines": "off",
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-params": "off",
+        "eslint/no-shadow": "off",
+        "typescript/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["src/capability-contract.d.ts"],
+      "rules": {
+        "typescript/no-explicit-any": "off"
       }
     },
     {
       "files": [".pi/pit/functions/**/*.ts"],
       "rules": {
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-params": "off",
         "eslint/no-unused-vars": "off"
       }
     }

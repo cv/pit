@@ -27,6 +27,7 @@ function cacheSet<T>(cache: Map<string, T>, key: string, value: T, limit: number
   cache.delete(key);
   cache.set(key, value);
   if (cache.size > limit) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     cache.delete(cache.keys().next().value!);
   }
 }
@@ -79,17 +80,22 @@ function referencedNames(source: string, candidates: ReadonlySet<string>): strin
     /* v8 ignore next -- TypeScript does not always probe virtual files through fileExists. */
     fileExists: (fileName) => sources.has(fileName),
     getSourceFile: (fileName, languageVersion) =>
+      // oxlint-disable-next-line typescript/no-non-null-assertion
       createSourceFile(fileName, sources.get(fileName)!, languageVersion, true),
   };
   const program = createProgram([contractFile, sourceFile], options, host);
   const checker = program.getTypeChecker();
+  // oxlint-disable-next-line typescript/no-non-null-assertion
   const contract = program.getSourceFile(contractFile)!;
+  // oxlint-disable-next-line typescript/no-non-null-assertion
   const submitted = program.getSourceFile(sourceFile)!;
 
   const namesBySymbol = new Map<TypeScriptSymbol, string>();
   for (const statement of contract.statements) {
     const declaration = (statement as VariableStatement).declarationList.declarations[0];
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     const identifier = declaration!.name as Identifier;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     namesBySymbol.set(checker.getSymbolAtLocation(identifier)!, identifier.text);
   }
 

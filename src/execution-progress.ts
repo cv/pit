@@ -65,7 +65,7 @@ export class ExecutionProgressController {
     const trace = this.#traces.snapshot();
     return {
       ...(this.#shell.size
-        ? { progress: [...this.#shell.values()].map((entry) => ({ ...entry })) }
+        ? { progress: [...this.#shell.values()].map((entry) => Object.assign({}, entry)) }
         : {}),
       ...(this.#progressTruncated ? { progressTruncated: true as const } : {}),
       ...(trace.traces.length ? { traces: trace.traces } : {}),

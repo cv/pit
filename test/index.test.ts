@@ -334,10 +334,10 @@ describe("pit extension", () => {
       const pattern = new RegExp(`interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`);
       const body = contract.match(pattern)?.[1] ?? "";
       const declared = [...body.matchAll(/^ {2}([A-Za-z_$][\w$]*)\(/gm)].map((match) => match[1]);
-      expect(declared, capability).toEqual([...methods]);
-      expect(tool.description, `metadata for ${capability}`).toContain(`${capability}:`);
+      expect(declared).toEqual([...methods]);
+      expect(tool.description).toContain(`${capability}:`);
       for (const method of methods) {
-        expect(readme, `README for ${capability}.${method}`).toContain(`\`${method}(`);
+        expect(readme).toContain(`\`${method}(`);
       }
     }
   });

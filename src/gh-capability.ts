@@ -123,13 +123,16 @@ function prepareIssueList(raw: Record<string, unknown>): PreparedGhCommand {
   };
 }
 
-export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhCommand {
-  const raw = (index: number) => (args[index] === undefined ? {} : object(args[index]));
+function rawArgument(args: unknown[], index: number): Record<string, unknown> {
+  return args[index] === undefined ? {} : object(args[index]);
+}
+
+function prepareIssueCommand(method: GhMethod, args: unknown[]): PreparedGhCommand | undefined {
   switch (method) {
     case "issueList":
-      return prepareIssueList(raw(0));
+      return prepareIssueList(rawArgument(args, 0));
     case "issueView": {
-      const o = raw(1);
+      const o = rawArgument(args, 1);
       return {
         args: [
           "issue",
@@ -158,7 +161,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
       };
     }
     case "issueComment": {
-      const o = raw(2);
+      const o = rawArgument(args, 2);
       return {
         args: [
           "issue",
@@ -173,14 +176,24 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
       };
     }
     case "issueClose": {
-      const o = raw(1);
+      const o = rawArgument(args, 1);
       return {
         args: ["issue", "close", String(number(args[0], "number")), ...repo(o), ...extraArgs(o)],
         options: options(o),
       };
     }
+    default:
+      return;
+  }
+}
+
+function preparePullRequestCommand(
+  method: GhMethod,
+  args: unknown[],
+): PreparedGhCommand | undefined {
+  switch (method) {
     case "prList": {
-      const o = raw(0);
+      const o = rawArgument(args, 0);
       return {
         args: [
           "pr",
@@ -199,7 +212,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
       };
     }
     case "prView": {
-      const o = raw(1);
+      const o = rawArgument(args, 1);
       return {
         args: [
           "pr",
@@ -212,8 +225,15 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
         options: options(o),
       };
     }
+    default:
+      return;
+  }
+}
+
+function prepareRunCommand(method: GhMethod, args: unknown[]): PreparedGhCommand | undefined {
+  switch (method) {
     case "runList": {
-      const o = raw(0);
+      const o = rawArgument(args, 0);
       return {
         args: [
           "run",
@@ -233,7 +253,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
       };
     }
     case "runView": {
-      const o = raw(1);
+      const o = rawArgument(args, 1);
       return {
         args: [
           "run",
@@ -246,8 +266,15 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
         options: options(o),
       };
     }
+    default:
+      return;
+  }
+}
+
+function prepareReleaseCommand(method: GhMethod, args: unknown[]): PreparedGhCommand | undefined {
+  switch (method) {
     case "releaseView": {
-      const o = raw(1);
+      const o = rawArgument(args, 1);
       return {
         args: [
           "release",
@@ -277,7 +304,7 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
       };
     }
     case "api": {
-      const o = raw(2);
+      const o = rawArgument(args, 2);
       return {
         args: [
           "api",
@@ -288,6 +315,18 @@ export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhC
       };
     }
     default:
-      throw new Error(`Unknown gh method: ${method}`);
+      return;
   }
+}
+
+export function prepareGhCommand(method: GhMethod, args: unknown[]): PreparedGhCommand {
+  const prepared =
+    prepareIssueCommand(method, args) ??
+    preparePullRequestCommand(method, args) ??
+    prepareRunCommand(method, args) ??
+    prepareReleaseCommand(method, args);
+  if (!prepared) {
+    throw new Error(`Unknown gh method: ${method}`);
+  }
+  return prepared;
 }

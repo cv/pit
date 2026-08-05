@@ -153,6 +153,7 @@ async function scanSearchFile(input: {
     .split("\n")
     .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
   const contextLine = (lineIndex: number): SearchContextLine => {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     const text = lines[lineIndex]!;
     return { line: lineIndex + 1, anchor: lineAnchor(lineIndex + 1, text), text };
   };
@@ -165,6 +166,7 @@ async function scanSearchFile(input: {
     regexColumns.set(match.lineIndex, columns);
   }
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     const text = lines[lineIndex]!;
     const columns = input.regexMatcher
       ? (regexColumns.get(lineIndex) ?? [])
