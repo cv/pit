@@ -20,6 +20,10 @@ if (!Array.isArray(packageJson.pi?.extensions) || packageJson.pi.extensions.leng
   fail("package.json must declare at least one pi.extensions entry");
 }
 
+if (!packageJson.pi.prompts?.includes("./prompts")) {
+  fail("package.json must register ./prompts in pi.prompts");
+}
+
 if (!packageJson.files?.includes("prompts")) {
   fail("package.json files must include the prompts directory");
 }

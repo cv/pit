@@ -100,5 +100,6 @@ describe("project agent workflow resources", () => {
     expect(prompt).toContain("functions.promote(name, summary)");
     expect(prompt).toContain("If no function change is justified");
     expect(manifest.files).toContain("prompts");
+    expect(manifest.pi.prompts).toContain("./prompts");
   });
 });
