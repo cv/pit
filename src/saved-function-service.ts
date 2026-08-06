@@ -1,4 +1,4 @@
-import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
+import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 import {
   effectiveRegistry,
@@ -17,6 +17,11 @@ import {
   type ProjectFunctionMetadata,
   validateTypeScript,
 } from "./sandbox.js";
+import {
+  planSavedFunctionRemoval,
+  type SavedFunctionRemovalPlan,
+} from "./saved-function-removal.js";
+export type { SavedFunctionRemovalPlan } from "./saved-function-removal.js";
 import {
   FUNCTION_ENTRY_TYPE,
   type FunctionActivity,
@@ -79,16 +84,6 @@ export interface SavedFunctionServiceDependencies {
   state: FunctionState;
   commit: FunctionStateCommit;
   appendEntry(type: string, entry: FunctionEntry): void;
-}
-
-export interface SavedFunctionRemovalPlan {
-  name: string;
-  scope: FunctionScope;
-  directDependents: string[];
-  transitiveDependents: string[];
-  removalClosure: string[];
-  requiresCascade: boolean;
-  blocked: boolean;
 }
 
 export interface SessionFunctionRemovalOptions {
@@ -192,7 +187,7 @@ export class SavedFunctionService {
 
   async promoteToGlobal(request: GlobalFunctionPromotionRequest): Promise<void> {
     if (!this.#state.globalEnabled) {
-      throw new Error("Global functions are disabled. Enable them in ~/.pi/agent/pit.json");
+      throw new Error(`Global functions are disabled. Enable them in ${getAgentDir()}/pit.json`);
     }
     const source = this.#state.session.get(request.name);
     if (source === undefined) {
@@ -238,7 +233,7 @@ export class SavedFunctionService {
 
   removeFromGlobal(name: string): Promise<boolean> {
     if (!this.#state.globalEnabled) {
-      throw new Error("Global functions are disabled. Enable them in ~/.pi/agent/pit.json");
+      throw new Error(`Global functions are disabled. Enable them in ${getAgentDir()}/pit.json`);
     }
     return this.#commit(async () => {
       const plan = this.planRemoval(name, "global");
@@ -257,93 +252,7 @@ export class SavedFunctionService {
   }
 
   planRemoval(name: string, requestedScope?: FunctionScope): SavedFunctionRemovalPlan {
-    const scope =
-      requestedScope ??
-      (this.#state.session.has(name)
-        ? "session"
-        : this.#state.projectCandidates.has(name)
-          ? "project"
-          : this.#state.global.has(name)
-            ? "global"
-            : undefined);
-    if (scope === undefined) {
-      throw new Error(`Saved function "${name}" was not found`);
-    }
-    if (scope === "session") {
-      if (!this.#state.session.has(name)) {
-        throw new Error(`Session function "${name}" was not found`);
-      }
-      const dependents = getSavedFunctionDependencyGraph(this.#state.effective).dependents(name);
-      const directDependents = dependents.direct.filter((candidate) =>
-        this.#state.session.has(candidate),
-      );
-      const transitiveDependents = dependents.transitive.filter((candidate) =>
-        this.#state.session.has(candidate),
-      );
-      return {
-        name,
-        scope,
-        directDependents,
-        transitiveDependents,
-        removalClosure: [name, ...directDependents, ...transitiveDependents].sort((a, b) =>
-          a.localeCompare(b),
-        ),
-        requiresCascade: directDependents.length > 0 || transitiveDependents.length > 0,
-        blocked: false,
-      };
-    }
-    if (scope === "global") {
-      if (!this.#state.global.has(name)) {
-        throw new Error(`Global function "${name}" was not found`);
-      }
-      const globalDependents = getSavedFunctionDependencyGraph(this.#state.global).dependents(name);
-      const effectiveDependents =
-        this.#state.effective.get(name) === this.#state.global.get(name)
-          ? getSavedFunctionDependencyGraph(this.#state.effective).dependents(name)
-          : { direct: [], transitive: [] };
-      const directDependents = [
-        ...new Set([...globalDependents.direct, ...effectiveDependents.direct]),
-      ]
-        .filter((candidate) => candidate !== name)
-        .sort((a, b) => a.localeCompare(b));
-      const transitiveDependents = [
-        ...new Set([...globalDependents.transitive, ...effectiveDependents.transitive]),
-      ]
-        .filter((candidate) => candidate !== name && !directDependents.includes(candidate))
-        .sort((a, b) => a.localeCompare(b));
-      return {
-        name,
-        scope,
-        directDependents,
-        transitiveDependents,
-        removalClosure: [name],
-        requiresCascade: false,
-        blocked: directDependents.length > 0 || transitiveDependents.length > 0,
-      };
-    }
-
-    if (!this.#state.projectCandidates.has(name)) {
-      throw new Error(`Project function "${name}" was not found`);
-    }
-    const dependents = savedFunctionDependents(
-      this.#state.projectCandidates,
-      this.#state.session,
-      this.#state.effective,
-      name,
-    );
-    return {
-      name,
-      scope,
-      directDependents: dependents.direct,
-      transitiveDependents: dependents.transitive,
-      removalClosure: [name],
-      requiresCascade: false,
-      blocked: dependents.direct.length > 0 || dependents.transitive.length > 0,
-    };
-  }
-
-  planSessionRemoval(name: string): string[] {
-    return this.planRemoval(name, "session").removalClosure;
+    return planSavedFunctionRemoval(this.#state, name, requestedScope);
   }
 
   removeSession(name: string, options: SessionFunctionRemovalOptions = {}): Promise<string[]> {

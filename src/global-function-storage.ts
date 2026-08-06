@@ -34,7 +34,7 @@ export function globalFunctionConfigPath(): string {
   return join(getAgentDir(), "pit.json");
 }
 
-function pathFor(name: string): string {
+export function globalFunctionPath(name: string): string {
   validateSavedFunctionName(name);
   return join(globalFunctionDirectory(), `${name}.ts`);
 }
@@ -93,7 +93,7 @@ export async function saveGlobalFunction(
   candidates.set(name, source);
   validateTypeScript(source, candidates);
   const replaced = registry.has(name);
-  const path = pathFor(name);
+  const path = globalFunctionPath(name);
   await withFileMutationQueue(path, async () => {
     await mkdir(dirname(path), { recursive: true });
     const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
@@ -114,7 +114,7 @@ export async function saveGlobalFunction(
 }
 
 export function removeGlobalFunction(name: string): Promise<boolean> {
-  const path = pathFor(name);
+  const path = globalFunctionPath(name);
   return withFileMutationQueue(path, async () => {
     try {
       await rm(path);

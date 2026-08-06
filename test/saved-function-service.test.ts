@@ -185,7 +185,7 @@ describe("SavedFunctionService", () => {
       requiresCascade: true,
       blocked: false,
     });
-    expect(service.planSessionRemoval("baseHelper")).toEqual([
+    expect(service.planRemoval("baseHelper", "session").removalClosure).toEqual([
       "baseHelper",
       "dependentHelper",
       "transitiveHelper",
@@ -196,7 +196,7 @@ describe("SavedFunctionService", () => {
     expect(() => service.planRemoval("missingHelper", "project")).toThrow(
       'Project function "missingHelper" was not found',
     );
-    expect(() => service.planSessionRemoval("missingHelper")).toThrow(
+    expect(() => service.planRemoval("missingHelper", "session")).toThrow(
       'Session function "missingHelper" was not found',
     );
     await expect(service.removeSession("baseHelper")).rejects.toThrow("without explicit cascade");

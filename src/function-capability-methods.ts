@@ -7,6 +7,11 @@ import {
 import type { CAPABILITY_METHODS } from "./capability-registry.js";
 import { recordValue as record, stringValue as string } from "./cli.js";
 import type { FunctionState, FunctionStateCommit } from "./function-state.js";
+import {
+  globalFunctionConfigPath,
+  globalFunctionDirectory,
+  globalFunctionPath,
+} from "./global-function-storage.js";
 import { getSavedFunctionCallSignature, getSavedFunctionDependencyGraph } from "./sandbox.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./saved-function-service.js";
 import type { FunctionActivity, FunctionScope } from "./saved-functions.js";
@@ -122,34 +127,36 @@ function savedMetadata({
   };
 }
 
-export function createFunctionCapabilityMethods({
-  pi,
+type PersistentFunctionMethod =
+  | "list"
+  | "get"
+  | "remove"
+  | "listGlobal"
+  | "getGlobal"
+  | "removeGlobal";
+
+interface PersistentFunctionHandlerServices {
+  ctx: ExtensionContext;
+  functionState: FunctionState;
+  commitFunctionState: FunctionStateCommit;
+  activity: FunctionActivity[];
+  service: SavedFunctionService;
+  requireProjectAccess(): void;
+  requireGlobalAccess(): void;
+}
+
+function createPersistentFunctionHandlers({
   ctx,
   functionState,
   commitFunctionState,
   activity,
-}: FunctionCapabilityServices): Record<FunctionMethod, FunctionMethodHandler> {
-  const service = new SavedFunctionService({
-    state: functionState,
-    commit: commitFunctionState,
-    appendEntry: (type, entry) => pi.appendEntry(type, entry),
-  });
-  const requireProjectAccess = (): void => {
-    if (!ctx.isProjectTrusted()) {
-      throw new Error("Project functions require a trusted project");
-    }
-    if (!functionState.projectEnabled) {
-      throw new Error(
-        `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
-      );
-    }
-  };
-  const requireGlobalAccess = (): void => {
-    if (!functionState.globalEnabled) {
-      throw new Error("Global functions are disabled. Enable them in ~/.pi/agent/pit.json");
-    }
-  };
-
+  service,
+  requireProjectAccess,
+  requireGlobalAccess,
+}: PersistentFunctionHandlerServices): Pick<
+  Record<FunctionMethod, FunctionMethodHandler>,
+  PersistentFunctionMethod
+> {
   return {
     list: () => {
       requireProjectAccess();
@@ -202,7 +209,7 @@ export function createFunctionCapabilityMethods({
       }
       const confirmed = await ctx.ui.confirm(
         `Remove global function ${name}?`,
-        `Delete ~/.pi/agent/pit/functions/${name}.ts for every project?`,
+        `Delete ${globalFunctionPath(name)} for every project?`,
       );
       if (!confirmed) {
         throw new Error("Global function removal was cancelled");
@@ -213,6 +220,49 @@ export function createFunctionCapabilityMethods({
       }
       return { name, removed };
     },
+  };
+}
+
+export function createFunctionCapabilityMethods({
+  pi,
+  ctx,
+  functionState,
+  commitFunctionState,
+  activity,
+}: FunctionCapabilityServices): Record<FunctionMethod, FunctionMethodHandler> {
+  const service = new SavedFunctionService({
+    state: functionState,
+    commit: commitFunctionState,
+    appendEntry: (type, entry) => pi.appendEntry(type, entry),
+  });
+  const requireProjectAccess = (): void => {
+    if (!ctx.isProjectTrusted()) {
+      throw new Error("Project functions require a trusted project");
+    }
+    if (!functionState.projectEnabled) {
+      throw new Error(
+        `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
+      );
+    }
+  };
+  const requireGlobalAccess = (): void => {
+    if (!functionState.globalEnabled) {
+      throw new Error(
+        `Global functions are disabled. Enable them in ${globalFunctionConfigPath()}`,
+      );
+    }
+  };
+
+  return {
+    ...createPersistentFunctionHandlers({
+      ctx,
+      functionState,
+      commitFunctionState,
+      activity,
+      service,
+      requireProjectAccess,
+      requireGlobalAccess,
+    }),
     listAll: () =>
       [...functionState.effective.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
@@ -247,7 +297,7 @@ export function createFunctionCapabilityMethods({
         }
         const confirmed = await ctx.ui.confirm(
           `Save ${name} globally?`,
-          `Make ${name} available in every Pit project under ~/.pi/agent/pit/functions?`,
+          `Make ${name} available in every Pit project under ${globalFunctionDirectory()}?`,
         );
         if (!confirmed) {
           throw new Error("Global function promotion was cancelled");

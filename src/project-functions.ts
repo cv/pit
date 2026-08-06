@@ -88,6 +88,57 @@ export function savedFunctionDependents(
   };
 }
 
+interface ProjectClosureContext {
+  candidates: ReadonlyMap<string, string>;
+  registry: FunctionRegistry;
+  candidateGraph: ReturnType<typeof getSavedFunctionDependencyGraph>;
+}
+
+function requiredProjectSource(candidates: ReadonlyMap<string, string>, name: string): string {
+  const source = candidates.get(name);
+  if (source === undefined) {
+    throw new Error(`required project function "${name}" is unavailable`);
+  }
+  return source;
+}
+
+function projectClosure(
+  context: ProjectClosureContext,
+  roots: readonly string[],
+  sessionFunctions: ReadonlyMap<string, string>,
+  forceRoots = false,
+): string[] {
+  const ordered: string[] = [];
+  const selected = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (name: string, force: boolean): void => {
+    if (
+      (!force && sessionFunctions.has(name)) ||
+      context.registry.has(name) ||
+      selected.has(name)
+    ) {
+      return;
+    }
+    requiredProjectSource(context.candidates, name);
+    if (visiting.has(name)) {
+      return;
+    }
+    visiting.add(name);
+    for (const dependency of context.candidateGraph.directDependencies(name)) {
+      if (context.candidates.has(dependency)) {
+        visit(dependency, false);
+      }
+    }
+    visiting.delete(name);
+    selected.add(name);
+    ordered.push(name);
+  };
+  for (const root of [...roots].sort((a, b) => a.localeCompare(b))) {
+    visit(root, forceRoots);
+  }
+  return ordered;
+}
+
 export interface ProjectFunctionReconciliation {
   global: ReadonlyMap<string, string>;
   candidates: ReadonlyMap<string, string>;
@@ -107,6 +158,7 @@ export function reconcileProjectFunctionsForSession({
 }: ProjectFunctionReconciliation): string[] {
   const sessionCandidates = new Map(session);
   const candidateGraph = getSavedFunctionDependencyGraph(new Map([...global, ...candidates]));
+  const closureContext: ProjectClosureContext = { candidates, registry, candidateGraph };
   const availableCandidates = new Map([...global, ...candidates, ...sessionCandidates]);
   const availableGraph = getSavedFunctionDependencyGraph(availableCandidates);
   session.clear();
@@ -114,61 +166,20 @@ export function reconcileProjectFunctionsForSession({
   metadata.clear();
   const errors: string[] = [];
 
-  const requiredProjectSource = (name: string): string => {
-    const source = candidates.get(name);
-    if (source === undefined) {
-      throw new Error(`required project function "${name}" is unavailable`);
-    }
-    return source;
-  };
-
-  const projectClosure = (
-    roots: readonly string[],
-    sessionFunctions: ReadonlyMap<string, string>,
-    forceRoots = false,
-  ): string[] => {
-    const ordered: string[] = [];
-    const selected = new Set<string>();
-    const visiting = new Set<string>();
-    const visit = (name: string, force: boolean): void => {
-      if ((!force && sessionFunctions.has(name)) || registry.has(name) || selected.has(name)) {
-        return;
-      }
-      requiredProjectSource(name);
-      if (visiting.has(name)) {
-        return;
-      }
-      visiting.add(name);
-      const references = candidateGraph.directDependencies(name);
-      for (const dependency of references) {
-        if (candidates.has(dependency)) {
-          visit(dependency, false);
-        }
-      }
-      visiting.delete(name);
-      selected.add(name);
-      ordered.push(name);
-    };
-    for (const root of [...roots].sort((a, b) => a.localeCompare(b))) {
-      visit(root, forceRoots);
-    }
-    return ordered;
-  };
-
   const proposedEffective = (
     additions: readonly string[],
     sessionFunctions: ReadonlyMap<string, string>,
   ): FunctionRegistry => {
     const project = new Map(registry);
     for (const name of additions) {
-      project.set(name, requiredProjectSource(name));
+      project.set(name, requiredProjectSource(candidates, name));
     }
     return new Map([...global, ...project, ...sessionFunctions]);
   };
 
   const commitProjects = (names: readonly string[]): void => {
     for (const name of names) {
-      registry.set(name, requiredProjectSource(name));
+      registry.set(name, requiredProjectSource(candidates, name));
       const parsed = candidateMetadata.get(name);
       if (parsed) {
         metadata.set(name, parsed);
@@ -183,7 +194,7 @@ export function reconcileProjectFunctionsForSession({
       const roots = availableGraph
         .directReferences(source)
         .filter((reference) => !proposedSession.has(reference) && candidates.has(reference));
-      const additions = projectClosure(roots, proposedSession);
+      const additions = projectClosure(closureContext, roots, proposedSession);
       const effective = proposedEffective(additions, proposedSession);
       validateEffectiveRegistryCapacity(effective);
       validateTypeScript(source, effective);
@@ -199,7 +210,7 @@ export function reconcileProjectFunctionsForSession({
       continue;
     }
     try {
-      const additions = projectClosure([name], session, true);
+      const additions = projectClosure(closureContext, [name], session, true);
       validateEffectiveRegistryCapacity(proposedEffective(additions, session));
       commitProjects(additions);
     } catch (error) {

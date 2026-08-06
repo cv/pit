@@ -2,7 +2,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import type { FunctionState } from "./function-state.js";
 import { reconcileFunctionState, resetFunctionUsage } from "./function-state.js";
-import { loadGlobalFunctionConfig, loadGlobalFunctions } from "./global-function-storage.js";
+import {
+  globalFunctionDirectory,
+  globalFunctionPath,
+  loadGlobalFunctionConfig,
+  loadGlobalFunctions,
+} from "./global-function-storage.js";
 import { loadProjectFunctionConfig, loadProjectFunctions } from "./project-function-storage.js";
 import { globalFunctionCatalog, projectFunctionCatalog } from "./project-functions.js";
 import { registerFunctionManager } from "./saved-function-manager.js";
@@ -44,7 +49,7 @@ function registerSavedFunctionManager({
       }
       const confirmed = await ctx.ui.confirm(
         `Save ${name} globally?`,
-        `Make ${name} available in every Pit project under ~/.pi/agent/pit/functions?`,
+        `Make ${name} available in every Pit project under ${globalFunctionDirectory()}?`,
       );
       if (!confirmed) {
         return;
@@ -70,7 +75,7 @@ function registerSavedFunctionManager({
     removeFromGlobal: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
         `Remove ${name} globally?`,
-        `Delete ~/.pi/agent/pit/functions/${name}.ts for every project?`,
+        `Delete ${globalFunctionPath(name)} for every project?`,
       );
       if (!confirmed) {
         return;
