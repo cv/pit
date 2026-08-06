@@ -1,6 +1,6 @@
-import { getSavedFunctionDependencyGraph } from "../sandbox/run.js";
 import type { FunctionScope } from "./core.js";
-import { savedFunctionDependents } from "./project-functions.js";
+import { getSavedFunctionDependencyGraph } from "./graph.js";
+import { savedFunctionDependents } from "./persistent-functions.js";
 import type { FunctionState } from "./state.js";
 
 export interface SavedFunctionRemovalPlan {

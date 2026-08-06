@@ -1,22 +1,22 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
+import { createFunctionCapabilityHandler } from "../functions/capability-handler.js";
+import { type FunctionActivity, functionRunScope } from "../functions/core.js";
+import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
+import { createProcessRunner, formatProcessCommand } from "../process/runner.js";
+import type { CapabilityHandler } from "../sandbox/dispatcher.js";
 import {
   boundedIntegerValue as boundedInteger,
   recordValue as object,
   stringValue as string,
   stringArrayValue as stringArray,
-} from "../cli.js";
-import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
-import { createFunctionCapabilityHandler } from "../functions/capability-handler.js";
-import { type FunctionActivity, functionRunScope } from "../functions/core.js";
-import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
-import { prepareGhCommand } from "../gh-capability.js";
-import { prepareNpmCommand } from "../npm-capability.js";
-import { createProcessRunner, formatProcessCommand } from "../process-runner.js";
-import type { CapabilityHandler } from "../sandbox/run.js";
+} from "../shared/argument-values.js";
 import { handleWorkspace } from "../workspace/capability.js";
 import { createCommandsCapabilityHandler } from "./handlers/commands.js";
+import { prepareGhCommand } from "./handlers/gh.js";
 import { createModelsCapabilityHandler } from "./handlers/models.js";
+import { prepareNpmCommand } from "./handlers/npm.js";
 import { createRuntimeCapabilityHandler } from "./handlers/runtime.js";
 import { createSessionCapabilityHandler } from "./handlers/session.js";
 import {

@@ -1,11 +1,11 @@
+import { validateTypeScript } from "../sandbox/validation.js";
+import { type FunctionRegistry, validateEffectiveRegistryCapacity } from "./core.js";
+import { getSavedFunctionDependencyGraph } from "./graph.js";
 import {
   getSavedFunctionCallSignature,
-  getSavedFunctionDependencyGraph,
-  type ProjectFunctionMetadata,
-  validateTypeScript,
-} from "../sandbox/run.js";
-import { type FunctionRegistry, validateEffectiveRegistryCapacity } from "./core.js";
-import type { ProjectFunctionMetadataRegistry } from "./storage/project.js";
+  type PersistentFunctionMetadata,
+  type PersistentFunctionMetadataRegistry,
+} from "./source.js";
 
 const MAX_PROJECT_CATALOG_BYTES = 12_000;
 const MAX_PROJECT_FUNCTIONS = 64;
@@ -142,10 +142,10 @@ function projectClosure(
 export interface ProjectFunctionReconciliation {
   global: ReadonlyMap<string, string>;
   candidates: ReadonlyMap<string, string>;
-  candidateMetadata: ReadonlyMap<string, ProjectFunctionMetadata>;
+  candidateMetadata: ReadonlyMap<string, PersistentFunctionMetadata>;
   session: FunctionRegistry;
   registry: FunctionRegistry;
-  metadata: ProjectFunctionMetadataRegistry;
+  metadata: PersistentFunctionMetadataRegistry;
 }
 
 export function reconcileProjectFunctionsForSession({
@@ -221,7 +221,7 @@ export function reconcileProjectFunctionsForSession({
 }
 
 function persistentFunctionCatalog(
-  metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  metadata: ReadonlyMap<string, PersistentFunctionMetadata>,
   sessionFunctions: ReadonlyMap<string, string>,
   scope: "global" | "project",
 ): string {
@@ -272,14 +272,14 @@ function persistentFunctionCatalog(
 }
 
 export function projectFunctionCatalog(
-  metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  metadata: ReadonlyMap<string, PersistentFunctionMetadata>,
   sessionFunctions: ReadonlyMap<string, string> = new Map(),
 ): string {
   return persistentFunctionCatalog(metadata, sessionFunctions, "project");
 }
 
 export function globalFunctionCatalog(
-  metadata: ReadonlyMap<string, ProjectFunctionMetadata>,
+  metadata: ReadonlyMap<string, PersistentFunctionMetadata>,
   projectFunctions: ReadonlyMap<string, string>,
   sessionFunctions: ReadonlyMap<string, string>,
 ): string {

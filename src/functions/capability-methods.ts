@@ -5,11 +5,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import type { CAPABILITY_METHODS } from "../capabilities/registry.js";
-import { recordValue as record, stringValue as string } from "../cli.js";
-import { getSavedFunctionCallSignature, getSavedFunctionDependencyGraph } from "../sandbox/run.js";
+import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
 import { validateSavedFunctionName } from "./core.js";
+import { getSavedFunctionDependencyGraph } from "./graph.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./service.js";
+import { getSavedFunctionCallSignature } from "./source.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
 import {
   globalFunctionConfigPath,

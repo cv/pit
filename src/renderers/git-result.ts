@@ -1,6 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
-import { nonemptyLines, type ProcessResult, parseProcessResult } from "../cli.js";
+import { nonemptyLines, type ProcessResult, parseProcessResult } from "../process/results.js";
 import type { RenderContext, RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 const STATUS_PORCELAIN_PATTERN = /^.. /;

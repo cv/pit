@@ -4,28 +4,29 @@ Pit is organized around feature boundaries. `src/index.ts` is the extension comp
 
 ## Source layout
 
-- `src/capabilities/` defines the model-facing capability contract, registry, host composition, and small Pi control handlers.
+- `src/capabilities/` defines the model-facing capability contract, registry, host composition, command preparation, and Pi control handlers.
 - `src/functions/` owns session, project, and user-global saved functions, including state, persistence, dependency analysis, promotion, removal, and scoped runtime generation.
 - `src/sandbox/` owns validation, compilation, wire protocol, process lifecycle, dispatch, and restricted execution.
-- `src/tool/` owns TypeScript tool orchestration, source formatting, timing, metadata, and failure context.
+- `src/tool/` is the application adapter for TypeScript tool orchestration, rendering, source formatting, timing, metadata, and failure context.
+- `src/process/` owns host-process execution, bounded process results, and process-runner behavior.
 - `src/workspace/` owns workspace paths, hashed reads and edits, search, and regex worker behavior.
 - `src/execution/` owns progress snapshots, capability traces, and dashboard models.
-- `src/renderers/` contains TUI and result presentation. Domain and execution modules must not depend on TUI renderer modules.
+- `src/renderers/` contains TUI and result presentation. Only renderer modules, the tool adapter, and root composition may depend on them.
 - `src/shared/` contains neutral helpers that are safe for lower-level domains.
 - `src/generated/` contains generated artifacts and must not be edited manually.
 
-The remaining files directly under `src/` are composition or cross-domain adapters. Do not add a general-purpose `utils.ts`; place helpers in the domain that owns their semantics or in `src/shared/` when they are intentionally neutral.
+Files directly under `src/` are composition entry points or true cross-domain adapters. Do not add a general-purpose `utils.ts`; place helpers in the domain that owns their semantics or in `src/shared/` when they are intentionally neutral.
 
 ## Dependency rules
 
-- Internal modules import concrete leaf modules rather than broad barrel files.
-- Saved-function primitives may use `src/sandbox/validation.ts`, but must not depend on sandbox process execution.
-- Sandbox validation must not depend on saved-function state or persistence.
-- Execution state must not import TUI renderer modules.
+- Internal modules import concrete leaf modules rather than broad barrel or compatibility-facade files.
+- Saved-function primitives may use `src/sandbox/validation.ts`, but must not import sandbox execution or compilation entry points.
+- Sandbox validation may parse saved-function source, but must not depend on saved-function state or persistence.
+- Only `src/tool/`, root composition, and renderer modules may import TUI renderer modules.
 - Capability registry and host modules are expected composition roots with high fan-out.
 - Internal source imports must remain acyclic.
 
-`npm run structure:check` enforces an acyclic source graph and limits authored files directly under `src/`. It is part of `npm run check`.
+`npm run structure:check` enforces an acyclic source graph, limits authored files directly under `src/`, rejects saved-function imports through sandbox execution facades, validates renderer dependency direction, and verifies generated-contract placement. It is part of `npm run check`.
 
 ## Generated capability contract
 

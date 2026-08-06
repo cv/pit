@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { formatPitSkillsForPrompt } from "../skill-prompt.js";
 import { reconstructFunctions } from "./core.js";
 import { registerFunctionManager } from "./manager.js";
-import { globalFunctionCatalog, projectFunctionCatalog } from "./project-functions.js";
+import { globalFunctionCatalog, projectFunctionCatalog } from "./persistent-functions.js";
 import type { SavedFunctionService } from "./service.js";
 import type { FunctionState } from "./state.js";
 import { reconcileFunctionState, resetFunctionUsage } from "./state.js";

@@ -1,28 +1,24 @@
-import type { Dirent } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
-import {
-  CONFIG_DIR_NAME,
-  type ExtensionContext,
-  withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
+import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import {
-  getProjectFunctionMetadata,
-  getSavedFunctionDependencyGraph,
-  type ProjectFunctionMetadata,
-  validateTypeScript,
-} from "../../sandbox/run.js";
+import { validateTypeScript } from "../../sandbox/validation.js";
 import {
   type FunctionRegistry,
   validateSavedFunctionName,
   validateSavedFunctionSource,
 } from "../core.js";
+import { getSavedFunctionDependencyGraph } from "../graph.js";
+import { getProjectFunctionMetadata, type PersistentFunctionMetadataRegistry } from "../source.js";
+import {
+  isMissingFileError,
+  readPersistentFunctionCandidates,
+  removePersistentFunctionFile,
+  writePersistentFunctionFile,
+} from "./files.js";
 
 const PROJECT_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
-
-export type ProjectFunctionMetadataRegistry = Map<string, ProjectFunctionMetadata>;
 
 export interface ProjectFunctionConfig {
   enabled: boolean;
@@ -43,10 +39,6 @@ function pathFor(cwd: string, name: string): string {
   return join(directory(cwd), `${name}.ts`);
 }
 
-function errorCode(error: unknown): string | undefined {
-  return (error as { code?: string }).code;
-}
-
 export async function loadProjectFunctionConfig(
   ctx: ExtensionContext,
 ): Promise<ProjectFunctionConfig> {
@@ -57,7 +49,7 @@ export async function loadProjectFunctionConfig(
   try {
     source = await readFile(configPath(ctx.cwd), "utf8");
   } catch (error) {
-    if (errorCode(error) === "ENOENT") {
+    if (isMissingFileError(error)) {
       return { enabled: false };
     }
     throw error;
@@ -113,44 +105,19 @@ export async function saveProjectFunction(
   validateTypeScript(source, new Map([...global, ...candidates]));
   const replaced = registry.has(name);
   const path = pathFor(cwd, name);
-  await withFileMutationQueue(path, async () => {
-    await mkdir(dirname(path), { recursive: true });
-    const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
-    try {
-      await writeFile(temporary, source + (source.endsWith("\n") ? "" : "\n"), "utf8");
-      await rename(temporary, path);
-    } catch (error) {
-      try {
-        await rm(temporary, { force: true });
-      } catch {
-        // Preserve the original write failure when best-effort cleanup also fails.
-      }
-      throw error;
-    }
-  });
+  await writePersistentFunctionFile(path, source);
   registry.set(name, source);
   return replaced;
 }
 
 export function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
-  const path = pathFor(cwd, name);
-  return withFileMutationQueue(path, async () => {
-    try {
-      await rm(path);
-      return true;
-    } catch (error) {
-      if (errorCode(error) === "ENOENT") {
-        return false;
-      }
-      throw error;
-    }
-  });
+  return removePersistentFunctionFile(pathFor(cwd, name));
 }
 
 export async function loadProjectFunctions(
   ctx: ExtensionContext,
   registry: FunctionRegistry,
-  metadata: ProjectFunctionMetadataRegistry,
+  metadata: PersistentFunctionMetadataRegistry,
   global: ReadonlyMap<string, string> = new Map(),
 ): Promise<string[]> {
   registry.clear();
@@ -159,38 +126,11 @@ export async function loadProjectFunctions(
     return [];
   }
 
-  let entries: Dirent[];
-  try {
-    entries = await readdir(directory(ctx.cwd), { withFileTypes: true });
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  const errors: string[] = [];
-  const candidates = new Map<string, { source: string; metadata: ProjectFunctionMetadata }>();
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!(entry.isFile() && entry.name.endsWith(".ts"))) {
-      continue;
-    }
-    try {
-      const source = await readFile(join(directory(ctx.cwd), entry.name), "utf8");
-      const parsed = getProjectFunctionMetadata(source);
-      if (!parsed) {
-        throw new Error("missing @pit project JSDoc marker");
-      }
-      validateSavedFunctionName(parsed.name);
-      if (entry.name !== `${parsed.name}.ts`) {
-        throw new Error(`filename must be ${parsed.name}.ts`);
-      }
-      validateSavedFunctionSource(source);
-      candidates.set(parsed.name, { source, metadata: parsed });
-    } catch (error) {
-      errors.push(`${entry.name}: ${(error as Error).message}`);
-    }
-  }
+  const { candidates, errors } = await readPersistentFunctionCandidates({
+    directory: directory(ctx.cwd),
+    marker: "project",
+    metadata: getProjectFunctionMetadata,
+  });
 
   const sources = new Map([
     ...global,

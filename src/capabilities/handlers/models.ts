@@ -2,7 +2,7 @@ import {
   boundedIntegerValue as boundedInteger,
   recordValue as object,
   stringValue as string,
-} from "../../cli.js";
+} from "../../shared/argument-values.js";
 import type { PiControlServices } from "./services.js";
 
 type PiModel = NonNullable<PiControlServices["ctx"]["model"]>;

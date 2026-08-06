@@ -1,7 +1,6 @@
 import type { FunctionRegistry } from "./core.js";
-import { reconcileProjectFunctionsForSession } from "./project-functions.js";
-import type { GlobalFunctionMetadataRegistry } from "./storage/global.js";
-import type { ProjectFunctionMetadataRegistry } from "./storage/project.js";
+import { reconcileProjectFunctionsForSession } from "./persistent-functions.js";
+import type { PersistentFunctionMetadataRegistry } from "./source.js";
 
 export interface FunctionState {
   globalEnabled: boolean;
@@ -11,9 +10,9 @@ export interface FunctionState {
   projectCandidates: FunctionRegistry;
   session: FunctionRegistry;
   effective: FunctionRegistry;
-  globalMetadata: GlobalFunctionMetadataRegistry;
-  metadata: ProjectFunctionMetadataRegistry;
-  candidateMetadata: ProjectFunctionMetadataRegistry;
+  globalMetadata: PersistentFunctionMetadataRegistry;
+  metadata: PersistentFunctionMetadataRegistry;
+  candidateMetadata: PersistentFunctionMetadataRegistry;
   sessionRunCounts: Map<string, number>;
   promotionSuggested: Set<string>;
 }

@@ -4,7 +4,7 @@ import {
   parseProcessResult,
   type SemanticOutcome,
   semanticOutcome,
-} from "../cli.js";
+} from "../process/results.js";
 import type { RenderedResultValue, ValueRenderer } from "./types.js";
 
 // oxlint-disable-next-line no-control-regex

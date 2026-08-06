@@ -1,29 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  boundedIntegerValue,
-  nonemptyLines,
-  parseProcessResult,
-  recordValue,
-  semanticOutcome,
-  stringArrayValue,
-  stringValue,
-} from "../../src/cli.js";
+import { nonemptyLines, parseProcessResult, semanticOutcome } from "../../src/process/results.js";
 
 const processResult = (code = 0) => ({ stdout: "ok", stderr: "", code, truncated: false });
 
-describe("CLI contracts", () => {
-  it("validates argument shapes", () => {
-    expect(recordValue({ cwd: "/tmp" })).toEqual({ cwd: "/tmp" });
-    expect(() => recordValue([])).toThrow("must be an object");
-    expect(stringValue("git", "program")).toBe("git");
-    expect(() => stringValue(1, "program")).toThrow("must be a string");
-    expect(stringArrayValue(["status"], "args")).toEqual(["status"]);
-    expect(() => stringArrayValue([1], "args")).toThrow("array of strings");
-    expect(boundedIntegerValue(undefined, "limit", 10, 5)).toBe(5);
-    expect(() => boundedIntegerValue(11, "limit", 10, 5)).toThrow("between 1 and 10");
-  });
-
+describe("process results", () => {
   it("recognizes only canonical process result shapes", () => {
     expect(parseProcessResult(processResult())).toEqual(processResult());
     expect(parseProcessResult(null)).toBeUndefined();

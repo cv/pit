@@ -15,10 +15,11 @@ import { ExecutionProgressController } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
+import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
-import { getSavedFunctionCallSignature, runInSandbox } from "../sandbox/run.js";
+import { runInSandbox } from "../sandbox/run.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,

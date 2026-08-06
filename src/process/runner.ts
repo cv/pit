@@ -6,10 +6,11 @@ import {
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
 
-import { boundedIntegerValue, type ProcessResult } from "./cli.js";
-import type { HostShellProgressEvent } from "./execution/types.js";
-import { executeStreamingProcess } from "./host-process.js";
-import { resolveWorkspacePath } from "./workspace/paths.js";
+import type { HostShellProgressEvent } from "../execution/types.js";
+import { boundedIntegerValue } from "../shared/argument-values.js";
+import { resolveWorkspacePath } from "../workspace/paths.js";
+import { executeStreamingProcess } from "./host.js";
+import type { ProcessResult } from "./results.js";
 
 export function formatProcessCommand(program: string, args: string[]): string {
   return [program, ...args.map((argument) => JSON.stringify(argument))].join(" ");

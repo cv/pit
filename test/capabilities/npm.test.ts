@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { prepareNpmCommand } from "../../src/npm-capability.js";
+import { prepareNpmCommand } from "../../src/capabilities/handlers/npm.js";
 import type { CapabilityCall } from "../../src/renderers/capability.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 

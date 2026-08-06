@@ -10,14 +10,14 @@ import {
   projectFunctionCatalog,
   reconcileProjectFunctionsForSession as reconcileProjectFunctionState,
   savedFunctionDependents,
-} from "../../src/functions/project-functions.js";
+} from "../../src/functions/persistent-functions.js";
+import { getProjectFunctionMetadata } from "../../src/functions/source.js";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
   removeProjectFunction,
   saveProjectFunction,
 } from "../../src/functions/storage/project.js";
-import { getProjectFunctionMetadata } from "../../src/sandbox/run.js";
 
 let cwd: string;
 const registry = () => new Map<string, string>();

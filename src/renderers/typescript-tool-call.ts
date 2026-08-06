@@ -2,7 +2,8 @@ import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 
 import type { FunctionRegistry } from "../functions/core.js";
-import { getNamedFunctionName, resolveSavedFunctionReferences } from "../sandbox/run.js";
+import { resolveSavedFunctionReferences } from "../functions/graph.js";
+import { getNamedFunctionName } from "../functions/source.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";

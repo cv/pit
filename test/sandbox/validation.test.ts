@@ -1,7 +1,7 @@
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { formatDiagnostic, validateTypeScript } from "../../src/sandbox/run.js";
+import { formatDiagnostic, validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("validateTypeScript", () => {
   it("formats global and non-program diagnostics", () => {

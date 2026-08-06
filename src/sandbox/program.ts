@@ -12,14 +12,6 @@ import {
 } from "../functions/scoped-runtime.js";
 import { isProgramExpression } from "../functions/source.js";
 import { clearValidationCache, getValidationCacheStats, validateTypeScript } from "./validation.js";
-export { formatDiagnostic, validateTypeScript } from "./validation.js";
-export type { ProjectFunctionMetadata, ProjectFunctionParameter } from "../functions/source.js";
-export {
-  getGlobalFunctionMetadata,
-  getNamedFunctionName,
-  getProjectFunctionMetadata,
-  getSavedFunctionCallSignature,
-} from "../functions/source.js";
 
 const MAX_CACHE_ENTRIES = 128;
 const compilationCache = new Map<string, Promise<string>>();

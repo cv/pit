@@ -14,25 +14,6 @@ import {
   type WireMessage,
 } from "./wire.js";
 
-export type { CapabilityHandler, CapabilityRequest } from "./dispatcher.js";
-export type { ProjectFunctionMetadata, ProjectFunctionParameter } from "./program.js";
-export {
-  clearSandboxCaches,
-  formatDiagnostic,
-  getNamedFunctionName,
-  getGlobalFunctionMetadata,
-  getProjectFunctionMetadata,
-  getSandboxCacheStats,
-  getSavedFunctionCallSignature,
-  validateTypeScript,
-} from "./program.js";
-export type { SavedFunctionReference } from "../functions/graph.js";
-export {
-  getSavedFunctionDependencyGraph,
-  resolveSavedFunctionReferences,
-  SavedFunctionDependencyGraph,
-} from "../functions/graph.js";
-
 export interface SandboxOptions {
   memoryLimitMb?: number;
   timeoutMs?: number;

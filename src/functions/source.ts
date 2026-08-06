@@ -37,17 +37,19 @@ export function getNamedFunctionName(source: string): string | undefined {
     : undefined;
 }
 
-export interface ProjectFunctionParameter {
+export interface PersistentFunctionParameter {
   name: string;
   description?: string;
 }
 
-export interface ProjectFunctionMetadata {
+export interface PersistentFunctionMetadata {
   name: string;
   signature: string;
   summary: string;
-  parameters: ProjectFunctionParameter[];
+  parameters: PersistentFunctionParameter[];
 }
+
+export type PersistentFunctionMetadataRegistry = Map<string, PersistentFunctionMetadata>;
 
 function jsDocText(value: string | ts.NodeArray<ts.JSDocComment> | undefined): string {
   if (typeof value === "string") {
@@ -76,10 +78,10 @@ function functionCallSignature(
   return `${name}(input${optional}: ${type})`;
 }
 
-function getPersistentFunctionMetadata(
+function parsePersistentFunctionMetadata(
   source: string,
   expectedScope: "global" | "project",
-): ProjectFunctionMetadata | undefined {
+): PersistentFunctionMetadata | undefined {
   const file = ts.createSourceFile(
     `/pit/${expectedScope}-function.ts`,
     source,
@@ -122,7 +124,7 @@ function getPersistentFunctionMetadata(
     .filter(ts.isJSDocParameterTag)
     .map((tag) => {
       const description = jsDocText(tag.comment).trim().replace(JSDOC_PARAMETER_PREFIX, "");
-      const parameter: ProjectFunctionParameter = { name: tag.name.getText(file) };
+      const parameter: PersistentFunctionParameter = { name: tag.name.getText(file) };
       if (description) {
         parameter.description = description;
       }
@@ -137,13 +139,13 @@ function getPersistentFunctionMetadata(
 }
 
 /** Extract and validate an immediately attached `@pit project` JSDoc marker. */
-export function getProjectFunctionMetadata(source: string): ProjectFunctionMetadata | undefined {
-  return getPersistentFunctionMetadata(source, "project");
+export function getProjectFunctionMetadata(source: string): PersistentFunctionMetadata | undefined {
+  return parsePersistentFunctionMetadata(source, "project");
 }
 
 /** Extract and validate an immediately attached `@pit global` JSDoc marker. */
-export function getGlobalFunctionMetadata(source: string): ProjectFunctionMetadata | undefined {
-  return getPersistentFunctionMetadata(source, "global");
+export function getGlobalFunctionMetadata(source: string): PersistentFunctionMetadata | undefined {
+  return parsePersistentFunctionMetadata(source, "global");
 }
 
 export function getSavedFunctionCallSignature(source: string): string | undefined {

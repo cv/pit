@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getSavedFunctionDependencyGraph,
   resolveSavedFunctionReferences,
-} from "../../src/sandbox/run.js";
+} from "../../src/functions/graph.js";
 
 describe("saved function references", () => {
   it("resolves direct and transitive references in dependency order", () => {

@@ -140,7 +140,7 @@ type PitModelMetadata = {
   scoped: boolean;
 };
 
-type PitProjectFunctionMetadata = {
+type PitPersistentFunctionMetadata = {
   name: string;
   signature: string;
   summary: string;
@@ -399,15 +399,15 @@ interface PitRuntimeCapability {
 }
 
 interface PitFunctionsCapability {
-  list(): Promise<PitProjectFunctionMetadata[]>;
+  list(): Promise<PitPersistentFunctionMetadata[]>;
 
-  get(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;
+  get(name: string): Promise<PitPersistentFunctionMetadata & { source: string }>;
 
   remove(name: string): Promise<{ name: string; removed: boolean }>;
 
-  listGlobal(): Promise<PitProjectFunctionMetadata[]>;
+  listGlobal(): Promise<PitPersistentFunctionMetadata[]>;
 
-  getGlobal(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;
+  getGlobal(name: string): Promise<PitPersistentFunctionMetadata & { source: string }>;
 
   removeGlobal(name: string): Promise<{ name: string; removed: boolean }>;
 

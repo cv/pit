@@ -1,4 +1,4 @@
-import { nonemptyLines, parseProcessResult, semanticOutcome } from "../cli.js";
+import { nonemptyLines, parseProcessResult, semanticOutcome } from "../process/results.js";
 import type { RenderContext, RenderedResultValue, ValueRenderer } from "./types.js";
 
 function json(value: string): unknown {

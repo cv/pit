@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  clearSandboxCaches,
-  getSandboxCacheStats,
-  getSavedFunctionDependencyGraph,
-  runInSandbox,
-  validateTypeScript,
-} from "../../src/sandbox/run.js";
+import { getSavedFunctionDependencyGraph } from "../../src/functions/graph.js";
+import { clearSandboxCaches, getSandboxCacheStats } from "../../src/sandbox/program.js";
+import { runInSandbox } from "../../src/sandbox/run.js";
+import { validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("sandbox caches", () => {
   it("caches successful and failed validation plus compiled output", async () => {

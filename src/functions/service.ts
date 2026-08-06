@@ -1,15 +1,15 @@
 import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 
-import {
-  getNamedFunctionName,
-  getGlobalFunctionMetadata,
-  getProjectFunctionMetadata,
-  getSavedFunctionDependencyGraph,
-  type ProjectFunctionMetadata,
-  validateTypeScript,
-} from "../sandbox/run.js";
-import { savedFunctionDependents } from "./project-functions.js";
+import { validateTypeScript } from "../sandbox/validation.js";
+import { getSavedFunctionDependencyGraph } from "./graph.js";
+import { savedFunctionDependents } from "./persistent-functions.js";
 import { planSavedFunctionRemoval, type SavedFunctionRemovalPlan } from "./removal.js";
+import {
+  getGlobalFunctionMetadata,
+  getNamedFunctionName,
+  getProjectFunctionMetadata,
+  type PersistentFunctionMetadata,
+} from "./source.js";
 import {
   effectiveRegistry,
   type FunctionState,
@@ -42,14 +42,12 @@ export interface SavedFunctionPreparationRequest {
   context: SavedFunctionExecutionContext;
 }
 
-export interface ProjectFunctionPromotionRequest {
+export interface PersistentFunctionPromotionRequest {
   name: string;
   summary: string;
   context: SavedFunctionExecutionContext;
   activity?: FunctionActivity[];
 }
-
-export interface GlobalFunctionPromotionRequest extends ProjectFunctionPromotionRequest {}
 
 export interface ProjectFunctionRemovalRequest {
   name: string;
@@ -67,7 +65,7 @@ export interface PreparedSavedFunctionExecution {
   source: string;
   input?: unknown;
   name?: string;
-  projectMetadata?: ProjectFunctionMetadata;
+  projectMetadata?: PersistentFunctionMetadata;
   registry: FunctionRegistry;
   scopes: Map<string, FunctionScope>;
   globalFunctions: FunctionRegistry;
@@ -146,7 +144,7 @@ export class SavedFunctionService {
     this.#appendEntry = dependencies.appendEntry;
   }
 
-  async promoteToProject(request: ProjectFunctionPromotionRequest): Promise<void> {
+  async promoteToProject(request: PersistentFunctionPromotionRequest): Promise<void> {
     const source = this.#state.session.get(request.name);
     if (source === undefined) {
       throw new Error(`Saved function "${request.name}" was not found`);
@@ -182,7 +180,7 @@ export class SavedFunctionService {
     });
   }
 
-  async promoteToGlobal(request: GlobalFunctionPromotionRequest): Promise<void> {
+  async promoteToGlobal(request: PersistentFunctionPromotionRequest): Promise<void> {
     if (!this.#state.globalEnabled) {
       throw new Error(`Global functions are disabled. Enable them in ${getAgentDir()}/pit.json`);
     }

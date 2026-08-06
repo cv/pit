@@ -1,4 +1,4 @@
-import { stringValue as string } from "../../cli.js";
+import { stringValue as string } from "../../shared/argument-values.js";
 import type { PiControlServices } from "./services.js";
 
 type SessionCapabilityHandler = (method: string, args: unknown[]) => unknown | Promise<unknown>;

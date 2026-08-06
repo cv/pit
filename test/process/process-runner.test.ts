@@ -4,7 +4,7 @@ import {
   createProcessRunner,
   executeHostProcess,
   formatProcessCommand,
-} from "../../src/process-runner.js";
+} from "../../src/process/runner.js";
 
 describe("process runner", () => {
   it("runs bounded non-streaming commands without optional progress or signal", async () => {

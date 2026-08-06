@@ -1,9 +1,9 @@
-import type { CAPABILITY_METHODS } from "./capabilities/registry.js";
 import {
   recordValue as object,
   stringValue as string,
   stringArrayValue as stringArray,
-} from "./cli.js";
+} from "../../shared/argument-values.js";
+import type { CAPABILITY_METHODS } from "../registry.js";
 
 type NpmMethod = (typeof CAPABILITY_METHODS)["npm"][number];
 

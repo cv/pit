@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { executeStreamingProcess } from "../../src/host-process.js";
+import { executeStreamingProcess } from "../../src/process/host.js";
 
 describe("executeStreamingProcess", () => {
   it("streams separate stdout and stderr while preserving the final result", async () => {

@@ -7,14 +7,15 @@ export const functionsCapability = defineCapability({
   methods: {
     list: {
       callDescription: "List project functions",
-      declaration: "list(): Promise<PitProjectFunctionMetadata[]>;",
+      declaration: "list(): Promise<PitPersistentFunctionMetadata[]>;",
       documentation: "functions.list() lists trusted project-persisted functions",
       minimumArguments: 0,
       maximumArguments: 0,
     },
     get: {
       callDescription: "Inspect a project function",
-      declaration: "get(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;",
+      declaration:
+        "get(name: string): Promise<PitPersistentFunctionMetadata & { source: string }>;",
       documentation: "functions.get(name) returns project function metadata and source",
       minimumArguments: 1,
       maximumArguments: 1,
@@ -28,7 +29,7 @@ export const functionsCapability = defineCapability({
     },
     listGlobal: {
       callDescription: "List global functions",
-      declaration: "listGlobal(): Promise<PitProjectFunctionMetadata[]>;",
+      declaration: "listGlobal(): Promise<PitPersistentFunctionMetadata[]>;",
       documentation: "functions.listGlobal() lists user-global functions",
       minimumArguments: 0,
       maximumArguments: 0,
@@ -36,7 +37,7 @@ export const functionsCapability = defineCapability({
     getGlobal: {
       callDescription: "Inspect a global function",
       declaration:
-        "getGlobal(name: string): Promise<PitProjectFunctionMetadata & { source: string }>;",
+        "getGlobal(name: string): Promise<PitPersistentFunctionMetadata & { source: string }>;",
       documentation: "functions.getGlobal(name) returns global function metadata and source",
       minimumArguments: 1,
       maximumArguments: 1,

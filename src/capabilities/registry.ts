@@ -159,7 +159,7 @@ type PitModelMetadata = {
   scoped: boolean;
 };
 
-type PitProjectFunctionMetadata = {
+type PitPersistentFunctionMetadata = {
   name: string;
   signature: string;
   summary: string;
