@@ -2,9 +2,9 @@ import {
   buildExecutionDashboardModel,
   type DashboardCall,
   type DashboardEvent,
-} from "../execution-dashboard-model.js";
-import type { ExecutionProgressSnapshot } from "../execution-types.js";
-import type { FunctionActivity } from "../saved-functions.js";
+} from "../execution/dashboard-model.js";
+import type { ExecutionProgressSnapshot } from "../execution/types.js";
+import type { FunctionActivity } from "../functions/core.js";
 
 interface ExecutionDashboardDetails extends ExecutionProgressSnapshot {
   functions?: FunctionActivity[];

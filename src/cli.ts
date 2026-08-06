@@ -1,4 +1,4 @@
-import { sanitizeTerminalText } from "./text-sanitization.js";
+import { sanitizeTerminalText } from "./shared/text-sanitization.js";
 
 export interface ProcessResult {
   stdout: string;

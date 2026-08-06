@@ -6,10 +6,11 @@ const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "ut
 const piProvided = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"];
 const requiredRuntimeFiles = [
   "src/index.ts",
-  "src/sandbox.ts",
-  "src/sandbox-runner.mjs",
-  "src/capability-contract.d.ts",
+  "src/sandbox/run.ts",
+  "src/sandbox/runner.mjs",
+  "src/generated/capability-contract.d.ts",
   "prompts/pit-reflect.md",
+  "docs/architecture.md",
 ];
 
 function fail(message) {
@@ -26,6 +27,10 @@ if (!packageJson.pi.prompts?.includes("./prompts")) {
 
 if (!packageJson.files?.includes("prompts")) {
   fail("package.json files must include the prompts directory");
+}
+
+if (!packageJson.files?.includes("docs")) {
+  fail("package.json files must include the docs directory");
 }
 
 const declaredExtensions = packageJson.pi.extensions.map((entry) => {

@@ -1,4 +1,4 @@
-import type { CAPABILITY_METHODS } from "./capability-registry.js";
+import type { CAPABILITY_METHODS } from "./capabilities/registry.js";
 import { stringArrayValue as list, recordValue as object, stringValue as text } from "./cli.js";
 
 type GhMethod = (typeof CAPABILITY_METHODS)["gh"][number];

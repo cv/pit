@@ -1,4 +1,4 @@
-import type { CAPABILITY_METHODS } from "./capability-registry.js";
+import type { CAPABILITY_METHODS } from "./capabilities/registry.js";
 import {
   recordValue as object,
   stringValue as string,

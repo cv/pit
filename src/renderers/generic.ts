@@ -1,18 +1,18 @@
-import { type CapabilityCall, capabilityResultRenderer } from "../capability-presentation.js";
-import { renderGhResult } from "../gh-result-renderer.js";
-import { GIT_RESULT_RENDERERS } from "../git-result-renderers.js";
-import { NPM_RESULT_RENDERERS } from "../npm-result-renderers.js";
+import { type CapabilityCall, capabilityResultRenderer } from "./capability.js";
+import { renderArrayCompound, renderCompound, renderMultilineText } from "./compound.js";
+import { renderGhResult } from "./gh-result.js";
+import { GIT_RESULT_RENDERERS } from "./git-result.js";
+import { renderHttp } from "./http.js";
+import { NPM_RESULT_RENDERERS } from "./npm-result.js";
+import { renderShell } from "./process.js";
+import { hasOnlyKeys, indent, isRecord, type JsonRecord, plural, renderJson } from "./shared.js";
 import type {
   RenderContext,
   RenderedResultValue,
   ResultRendererKey,
   ResultTheme,
   ValueRenderer,
-} from "../result-renderer-types.js";
-import { renderArrayCompound, renderCompound, renderMultilineText } from "./compound.js";
-import { renderHttp } from "./http.js";
-import { renderShell } from "./process.js";
-import { hasOnlyKeys, indent, isRecord, type JsonRecord, plural, renderJson } from "./shared.js";
+} from "./types.js";
 import {
   renderEdit,
   renderGlob,
@@ -22,7 +22,7 @@ import {
   renderWorkspaceList,
 } from "./workspace.js";
 
-export type { RenderedResultValue } from "../result-renderer-types.js";
+export type { RenderedResultValue } from "./types.js";
 
 /** Direct capability results route here before shape-based fallback rendering. */
 const CAPABILITY_RESULT_RENDERERS = {

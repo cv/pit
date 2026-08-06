@@ -1,7 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
-import type { RenderContext, RenderedResultValue } from "../result-renderer-types.js";
-import { sanitizeTerminalText } from "../text-sanitization.js";
+import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import {
   indent,
   isRecord,
@@ -12,6 +11,7 @@ import {
   renderJson,
   syntaxLanguageForHint,
 } from "./shared.js";
+import type { RenderContext, RenderedResultValue } from "./types.js";
 
 type NestedRenderer = (value: unknown, context: RenderContext) => RenderedResultValue | undefined;
 

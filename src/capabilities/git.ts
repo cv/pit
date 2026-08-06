@@ -2,7 +2,7 @@ import {
   type CapabilityMethodDefinition,
   defineCapability,
   type ResultRendererKey,
-} from "../capability-core.js";
+} from "./core.js";
 
 function gitMethodDefinition(method: string, callDescription: string): CapabilityMethodDefinition {
   return {

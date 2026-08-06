@@ -1,13 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { registerSavedFunctionFeatures } from "./function-lifecycle.js";
-import { createFunctionState, createFunctionStateCommitQueue } from "./function-state.js";
-import { SavedFunctionService } from "./saved-function-service.js";
-import { registerTypeScriptTool } from "./typescript-tool.js";
+import { registerSavedFunctionFeatures } from "./functions/lifecycle.js";
+import { SavedFunctionService } from "./functions/service.js";
+import { createFunctionState, createFunctionStateCommitQueue } from "./functions/state.js";
+import { registerTypeScriptTool } from "./tool/typescript.js";
 
-export { CAPABILITY_METHODS } from "./capability-registry.js";
-export { effectiveRegistry } from "./function-state.js";
-export { reconstructFunctions, validateRegistryCapacity } from "./saved-functions.js";
+export { CAPABILITY_METHODS } from "./capabilities/registry.js";
+export { effectiveRegistry } from "./functions/state.js";
+export { reconstructFunctions, validateRegistryCapacity } from "./functions/core.js";
 
 export default function pit(pi: ExtensionAPI) {
   const functionState = createFunctionState();

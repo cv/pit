@@ -6,15 +6,17 @@
   "files": [
     "src",
     "prompts",
+    "docs",
     "README.md",
     "LICENSE"
   ],
   "private": true,
   "license": "MIT",
   "scripts": {
-    "check": "npm run capabilities:check && tsc --noEmit && npm run lint && npm run format:check",
+    "check": "npm run capabilities:check && npm run structure:check && tsc --noEmit && npm run lint && npm run format:check",
     "capabilities:check": "tsx scripts/generate-capability-contract.ts --check",
     "capabilities:generate": "tsx scripts/generate-capability-contract.ts",
+    "structure:check": "node scripts/check-structure.mjs",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "lint": "oxlint --deny-warnings .",

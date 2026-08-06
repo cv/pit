@@ -1,4 +1,3 @@
-import type { RenderContext, RenderedResultValue } from "../result-renderer-types.js";
 import {
   hasOnlyKeys,
   isRecord,
@@ -6,6 +5,7 @@ import {
   JSON_CONTAINER_PREFIX,
   renderJson,
 } from "./shared.js";
+import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderHttp(
   value: unknown,

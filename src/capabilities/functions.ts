@@ -1,4 +1,4 @@
-import { defineCapability } from "../capability-core.js";
+import { defineCapability } from "./core.js";
 
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",

@@ -1,7 +1,7 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
-import type { RenderContext, RenderedResultValue } from "../result-renderer-types.js";
 import { hasOnlyKeys, isRecord, languageForFile, plural, renderHashedFile } from "./shared.js";
+import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderRead(
   value: unknown,

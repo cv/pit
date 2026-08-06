@@ -41,7 +41,7 @@
       }
     },
     {
-      "files": ["src/capability-contract.d.ts"],
+      "files": ["src/generated/capability-contract.d.ts"],
       "rules": {
         "typescript/no-explicit-any": "off"
       }

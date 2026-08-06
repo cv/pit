@@ -7,9 +7,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { boundedIntegerValue, type ProcessResult } from "./cli.js";
-import type { HostShellProgressEvent } from "./execution-types.js";
+import type { HostShellProgressEvent } from "./execution/types.js";
 import { executeStreamingProcess } from "./host-process.js";
-import { resolveWorkspacePath } from "./workspace-paths.js";
+import { resolveWorkspacePath } from "./workspace/paths.js";
 
 export function formatProcessCommand(program: string, args: string[]): string {
   return [program, ...args.map((argument) => JSON.stringify(argument))].join(" ");

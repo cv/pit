@@ -1,6 +1,6 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 
-import type { ResultTheme } from "../result-renderer-types.js";
+import type { ResultTheme } from "./types.js";
 
 export type JsonRecord = Record<string, unknown>;
 

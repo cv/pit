@@ -1,6 +1,6 @@
-import type { RenderContext, RenderedResultValue } from "../result-renderer-types.js";
-import { sanitizeTerminalText } from "../text-sanitization.js";
+import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { hasOnlyKeys, isRecord } from "./shared.js";
+import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderShell(
   value: unknown,

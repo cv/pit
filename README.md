@@ -303,7 +303,7 @@ The child process cannot directly read workspace files, access the network, or s
 
 Failed TypeScript calls still use Pi's required thrown-error path and remain `isError: true`. Pit enriches the final result through `tool_result` middleware with a bounded root error, saved-function path, function activity, and redacted capability traces. Expanded TUI failures show the function path and execution dashboard. Non-function failures keep an empty path and concise error text.
 
-The generated capability contract is in [`src/capability-contract.d.ts`](src/capability-contract.d.ts). Authoritative method declarations, arity limits, model summaries, TUI descriptions, and result-renderer keys are in [`src/capability-registry.ts`](src/capability-registry.ts). Public host dispatch is exhaustive over the registered capability names. A new capability requires a host implementation before TypeScript checks pass.
+The generated capability contract is in [`src/generated/capability-contract.d.ts`](src/generated/capability-contract.d.ts). Authoritative method declarations, arity limits, model summaries, TUI descriptions, and result-renderer keys are in [`src/capabilities/registry.ts`](src/capabilities/registry.ts). Public host dispatch is exhaustive over the registered capability names. A new capability requires a host implementation before TypeScript checks pass.
 
 ## Read results in the TUI
 
@@ -496,6 +496,8 @@ Run `/functions list` and confirm that the function exists on the active session
 
 ## Development
 
+See [`docs/architecture.md`](docs/architecture.md) for source boundaries, dependency rules, generated artifacts, and test organization.
+
 Use the local source:
 
 ```sh
@@ -525,7 +527,7 @@ npm run lint:fix
 npm run format
 ```
 
-`npm run check` verifies the generated capability contract, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The custom quality audit retains Pit's file, function, and complexity limits.
+`npm run check` verifies the generated capability contract and structural boundaries, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The structure check limits root-level source files and rejects internal import cycles. The custom quality audit retains Pit's file, function, and complexity limits.
 
 Pull requests and pushes to `main` run package verification, static checks, tests, and the coverage gate in GitHub Actions. A repository maintainer must configure branch protection to require the `test` check before merge.
 
