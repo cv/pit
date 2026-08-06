@@ -27,6 +27,22 @@ describe("validateTypeScript", () => {
         length: 3,
       }),
     ).toBe("/other.ts:1:1 file error\n  bad\n  ^");
+
+    const missingLineFile = {
+      fileName: "/missing.ts",
+      text: "bad",
+      getLineAndCharacterOfPosition: () => ({ line: 4, character: 2 }),
+    } as unknown as ts.SourceFile;
+    expect(
+      formatDiagnostic({
+        category: ts.DiagnosticCategory.Error,
+        code: 3,
+        messageText: "missing line",
+        file: missingLineFile,
+        start: 0,
+        length: 1,
+      }),
+    ).toBe("/missing.ts:5:3 missing line");
   });
 
   it("reports concise syntax-first diagnostics with source excerpts", () => {

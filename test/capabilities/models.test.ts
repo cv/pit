@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { createModelsCapabilityHandler } from "../../src/capabilities/handlers/models.js";
 import {
   cleanupHarness,
   context,
@@ -117,5 +118,10 @@ describe("models capability", () => {
     await expect(
       run(`async ({ models }) => models.list({ availableOnly: "yes" as any })`),
     ).rejects.toThrow("must be a boolean");
+  });
+
+  it("ignores unknown internal dispatch", async () => {
+    const handler = createModelsCapabilityHandler({ pi: {} as never, ctx: {} as never });
+    await expect(handler("unknown", [])).resolves.toBeUndefined();
   });
 });

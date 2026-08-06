@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { createSessionCapabilityHandler } from "../../src/capabilities/handlers/session.js";
 import { cleanupHarness, context, run, setupHarness, value } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
@@ -92,5 +93,10 @@ describe("session capability", () => {
     await expect(run("async ({ session }) => session.compact()", ctx)).rejects.toThrow(
       "compact failed",
     );
+  });
+
+  it("ignores unknown internal dispatch", async () => {
+    const handler = createSessionCapabilityHandler({ pi: {} as never, ctx: {} as never });
+    expect(handler("unknown", [])).toBeUndefined();
   });
 });
