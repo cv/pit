@@ -4,6 +4,8 @@
 
 _About a 20-minute read._
 
+The complete session behind this case study is available as [interactive HTML](session.html) or [raw JSONL](session.jsonl). The export was sanitized to remove an email address, local home-directory paths, Apple Music account metadata, and unrelated recent-file metadata exposed by a macOS menu.
+
 ## I wanted a playlist
 
 I wasn't trying to build music-recommendation software. I was trying to get a music recommendation.

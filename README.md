@@ -13,7 +13,7 @@ This design gives Pit four main benefits:
 
 Each call runs in a fresh, permission-restricted process. Capabilities make effects explicit, and bounded results keep the model context and TUI compact.
 
-For a detailed experience report, see [I Wasn't Trying to Build an App](CASE_STUDY.md), a case study of growing an adaptive music-recommendation system through ordinary Pit use.
+For a detailed experience report, see [I Wasn't Trying to Build an App](docs/case_study/), a case study of growing an adaptive music-recommendation system through ordinary Pit use.
 
 ## See one call
 

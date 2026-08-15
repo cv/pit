@@ -5,7 +5,12 @@
   "bracketSpacing": true,
   "embeddedLanguageFormatting": "off",
   "endOfLine": "lf",
-  "ignorePatterns": ["coverage/**", "node_modules/**", "package-lock.json"],
+  "ignorePatterns": [
+    "coverage/**",
+    "docs/case_study/session.*",
+    "node_modules/**",
+    "package-lock.json"
+  ],
   "insertFinalNewline": true,
   "jsdoc": false,
   "objectWrap": "preserve",
