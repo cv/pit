@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { initTheme } from "@earendil-works/pi-coding-agent";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import type { CapabilityCall } from "../../src/renderers/capability.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
@@ -7,6 +8,8 @@ const theme = {
   fg: (color: string, text: string) => `<${color}>${text}</${color}>`,
   bold: (text: string) => `<bold>${text}</bold>`,
 };
+
+beforeAll(() => initTheme("dark"));
 
 function processResult(
   stdout = "",

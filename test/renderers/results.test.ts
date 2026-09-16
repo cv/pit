@@ -1,4 +1,5 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { display } from "../../src/tool/typescript.js";
@@ -59,7 +60,7 @@ describe("result renderers", () => {
       hasMore: true,
     });
     expect(readOutput).toContain("src/example.ts (5-5 of 10; raw, more available; rev rev-1)");
-    expect(readOutput).toContain("export const answer");
+    expect(stripTerminalSequences(readOutput)).toContain("export const answer");
 
     const searchOutput = renderValue({
       matches: [
@@ -175,7 +176,7 @@ describe("result renderers", () => {
       truncated: true,
     });
     expect(hashedRead).toContain("1-1 of 1; hashed, truncated");
-    expect(hashedRead).toContain("1:abc|heading");
+    expect(stripTerminalSequences(hashedRead)).toContain("1:abc|heading");
     expect(
       renderValue({
         file: "Makefile",
@@ -294,7 +295,7 @@ describe("result renderers", () => {
       ],
     });
     expect(nestedRead).toContain("items (array, 1 item)");
-    expect(nestedRead).toContain("1:abc|heading");
+    expect(stripTerminalSequences(nestedRead)).toContain("1:abc|heading");
 
     expect(render("first\rsecond")).toContain("\nfirst\nsecond");
     expect(render({ "\u001b": "first\nsecond" })).toContain("(unnamed) (text, 2 lines)");
@@ -485,13 +486,15 @@ describe("result renderers", () => {
     );
     const rendered = component?.render(120) ?? [];
 
-    expect(rendered.find((line) => line.includes("1:aaaaa|"))?.trimEnd()).toBe("  1:aaaaa|one");
-    expect(rendered.find((line) => line.includes("23:bbbbb|"))?.trimEnd()).toBe(
-      " 23:bbbbb|twenty-three",
-    );
-    expect(rendered.find((line) => line.includes("123:ccccc|"))?.trimEnd()).toBe(
-      "123:ccccc|one hundred twenty-three",
-    );
+    expect(
+      stripTerminalSequences(rendered.find((line) => line.includes("1:aaaaa|")) ?? "").trimEnd(),
+    ).toBe("  1:aaaaa|one");
+    expect(
+      stripTerminalSequences(rendered.find((line) => line.includes("23:bbbbb|")) ?? "").trimEnd(),
+    ).toBe(" 23:bbbbb|twenty-three");
+    expect(
+      stripTerminalSequences(rendered.find((line) => line.includes("123:ccccc|")) ?? "").trimEnd(),
+    ).toBe("123:ccccc|one hundred twenty-three");
   });
 
   it("syntax highlights hashed contents independently from their line prefixes", () => {
@@ -523,12 +526,15 @@ describe("result renderers", () => {
       { isError: false },
     );
     const rendered = component?.render(120) ?? [];
-    const highlighted = highlightCode(source, "typescript");
+    const highlighted = wrapTextWithAnsi(highlightCode(source, "typescript").join("\n"), 120);
 
     for (const [index, prefix] of prefixes.entries()) {
       const line = rendered.find((candidate) => candidate.includes(prefix));
       expect(line).toContain(`\u001b[2m\u001b[90m${prefix}\u001b[22m`);
-      expect(line).toContain(highlighted[index]);
+      const expectedLine = highlighted[index] as string;
+      expect(line).toContain(
+        expectedLine.endsWith("\u001b[39m") ? expectedLine.slice(0, -5) : expectedLine,
+      );
     }
   });
 });

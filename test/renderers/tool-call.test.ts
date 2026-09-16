@@ -1,3 +1,4 @@
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -90,11 +91,11 @@ describe("tool rendering", () => {
     const invalidate = vi.fn();
     const context = { expanded: true, argsComplete: true, state, invalidate };
 
-    const initial = renderToolCall(args, context);
+    const initial = stripTerminalSequences(renderToolCall(args, context));
     expect(initial).toContain("const[file,status]");
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalledOnce());
 
-    const formatted = renderToolCall(args, context);
+    const formatted = stripTerminalSequences(renderToolCall(args, context));
     expect(formatted).toContain("const [file, status] = await Promise.all([");
     expect(formatted).toContain("return { file, status };");
     expect(formatted).toContain("7 lines, 0.0s");
@@ -106,7 +107,7 @@ describe("tool rendering", () => {
     const source = "async({workspace})=>workspace.read(";
     const context = { expanded: true, argsComplete: false, state, invalidate };
 
-    expect(renderToolCall({ code: source }, context)).toContain(source);
+    expect(stripTerminalSequences(renderToolCall({ code: source }, context))).toContain(source);
     await Promise.resolve();
     expect(invalidate).not.toHaveBeenCalled();
   });

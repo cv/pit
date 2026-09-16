@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -445,7 +446,7 @@ describe("pit extension", () => {
 
     await functionsCommand.handler("show inspectMe", ctx);
     expect(rendered).toContain("inspectMe");
-    expect(rendered).toContain("async function inspectMe");
+    expect(stripTerminalSequences(rendered)).toContain("async function inspectMe");
 
     const longSource = Array.from(
       { length: 505 },

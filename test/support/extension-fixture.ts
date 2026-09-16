@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { initTheme } from "@earendil-works/pi-coding-agent";
 import { vi } from "vitest";
 
 import pit from "../../src/index.js";
@@ -140,6 +141,7 @@ export function getRegisteredCommand(name: string): any {
 }
 
 export async function setupHarness(): Promise<void> {
+  initTheme("dark");
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
   vi.stubEnv("PI_CODING_AGENT_DIR", join(cwd, "agent"));
   branchEntries = [];

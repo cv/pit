@@ -1,3 +1,4 @@
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { cleanupHarness, renderToolResult, setupHarness } from "../support/extension-fixture.js";
@@ -49,7 +50,7 @@ describe("tool rendering", () => {
       { content: [], details: { value: circular, truncated: false } },
       { expanded: true, isPartial: false },
     );
-    expect(expandedCircular).toContain("[object Object]");
+    expect(stripTerminalSequences(expandedCircular)).toContain("[object Object]");
   });
 
   it("renders concise and bounded failures", () => {

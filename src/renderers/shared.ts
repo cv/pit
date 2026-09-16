@@ -1,4 +1,5 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
+import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
 import type { ResultTheme } from "./types.js";
 
@@ -86,9 +87,13 @@ export function renderHashedFile(
       content: match[2] as string,
     };
   });
-  const highlighted = highlightCode(
+  const highlightedSource = highlightCode(
     parsed.map((line) => line.content).join("\n"),
     languageForFile(file),
+  ).join("\n");
+  const highlighted = wrapTextWithAnsi(
+    highlightedSource,
+    Math.max(1, ...parsed.map((line) => visibleWidth(line.content))),
   );
   const hangingIndents: Record<number, number> = {};
   const lines = parsed.map((line, index) => {
