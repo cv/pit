@@ -1,7 +1,6 @@
 /**
  * Reviews bounded staged and unstaged Git changes for Pit.
  *
- * @pit project
  * @param input.diffLines - Maximum lines in each diff. The default is 240.
  * @param input.commits - Recent commits to include. The default is 5.
  */

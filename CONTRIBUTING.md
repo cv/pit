@@ -28,6 +28,8 @@ pi -e ./src/index.ts
 
 Read [docs/architecture.md](docs/architecture.md) before changing source boundaries. Keep implementation in the domain that owns the behavior and avoid general-purpose utility modules.
 
+Project-persisted workflow helpers live in `.pi/functions/`. Their location determines scope; do not add `@pit project` or `@pit global` markers.
+
 When changing capability definitions, regenerate the contract:
 
 ```sh

@@ -17,6 +17,10 @@ Pit is organized around feature boundaries. `src/index.ts` is the extension comp
 
 Files directly under `src/` are composition entry points or true cross-domain adapters. Do not add a general-purpose `utils.ts`; place helpers in the domain that owns their semantics or in `src/shared/` when they are intentionally neutral.
 
+## Persistent function storage
+
+Project functions are written to `.pi/functions/`. Pit also reads legacy `.pi/pit/functions/` files for compatibility, but a same-name new-path file takes precedence. Global functions remain under the Pi agent directory at `pit/functions/`. Storage location and explicit promotion APIs determine scope; source markers do not. `.pi/pit.json` remains the project opt-in configuration file.
+
 ## Dependency rules
 
 - Internal modules import concrete leaf modules rather than broad barrel or compatibility-facade files.

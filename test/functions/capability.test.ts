@@ -25,7 +25,7 @@ beforeEach(async () => {
 afterEach(cleanupHarness);
 
 async function writeProjectFunction(name: string, source: string): Promise<void> {
-  const directory = join(cwd, ".pi/pit/functions");
+  const directory = join(cwd, ".pi/functions");
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, `${name}.ts`), source);
 }
@@ -35,11 +35,11 @@ describe("functions capability", () => {
     await Promise.all([
       writeProjectFunction(
         "betaProject",
-        "/** Beta. @pit project */ async function betaProject() { return true; }",
+        "/** Beta. */ async function betaProject() { return true; }",
       ),
       writeProjectFunction(
         "alphaProject",
-        "/** Alpha. @pit project */ async function alphaProject() { return true; }",
+        "/** Alpha. */ async function alphaProject() { return true; }",
       ),
     ]);
     await sessionStart({}, context());
@@ -52,14 +52,16 @@ describe("functions capability", () => {
       }`),
     ).toEqual({
       names: ["alphaProject", "betaProject"],
-      source: "/** Alpha. @pit project */ async function alphaProject() { return true; }",
+      source: "/** Alpha. */ async function alphaProject() { return true; }",
     });
   });
 
   it("manages effective and session functions", async () => {
-    await run(
-      "/** Capability project. @pit project */ async function capabilityProject() { return 'project'; }",
+    await writeProjectFunction(
+      "capabilityProject",
+      "/** Capability project. */ async function capabilityProject() { return 'project'; }",
     );
+    await sessionStart({}, context());
     await run("async function capabilitySession() { return 'session'; }");
     await run("async function removableSession() { return 1; }");
     await run("async function removableDependent() { return (await removableSession()) + 1; }");
@@ -111,7 +113,7 @@ describe("functions capability", () => {
       ),
     ).resolves.toEqual({ name: "capabilitySession", promoted: true, scope: "project" });
     await expect(
-      readFile(join(cwd, ".pi/pit/functions/capabilitySession.ts"), "utf8"),
+      readFile(join(cwd, ".pi/functions/capabilitySession.ts"), "utf8"),
     ).resolves.toContain("Promoted through the capability.");
 
     expect(
@@ -161,9 +163,11 @@ describe("functions capability", () => {
   }, 15_000);
 
   it("reports session overrides and blocked project removal plans", async () => {
-    await run(
-      "/** Shared plan helper. @pit project */ async function sharedPlan() { return 'project'; }",
+    await writeProjectFunction(
+      "sharedPlan",
+      "/** Shared plan helper. */ async function sharedPlan() { return 'project'; }",
     );
+    await sessionStart({}, context());
     await run("async function sharedPlan() { return 'session'; }");
     const override = await value(`async ({ functions }) => ({
       metadata: (await functions.listAll()).find(({ name }) => name === "sharedPlan"),
@@ -175,10 +179,17 @@ describe("functions capability", () => {
     });
     await value(`async ({ functions }) => functions.removeSession("sharedPlan")`);
 
-    await run("/** Plan base. @pit project */ async function projectPlanBase() { return 1; }");
-    await run(
-      "/** Plan dependent. @pit project */ async function projectPlanDependent() { return projectPlanBase(); }",
-    );
+    await Promise.all([
+      writeProjectFunction(
+        "projectPlanBase",
+        "/** Plan base. */ async function projectPlanBase() { return 1; }",
+      ),
+      writeProjectFunction(
+        "projectPlanDependent",
+        "/** Plan dependent. */ async function projectPlanDependent() { return projectPlanBase(); }",
+      ),
+    ]);
+    await sessionStart({}, context());
     expect(
       await value(`async ({ functions }) => functions.planRemoval("projectPlanBase", "project")`),
     ).toEqual({

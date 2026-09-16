@@ -1,7 +1,6 @@
 /**
  * Aggregates workflow failures and usage patterns across recent Pit sessions.
  *
- * @pit project
  * @param input.limit - Maximum sessions to inspect. The default is 12.
  * @param input.examples - Repeated failure labels retained per session. The default is 5.
  */

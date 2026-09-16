@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getNamedFunctionName,
-  getProjectFunctionMetadata,
+  getPersistentFunctionMetadata,
   getSavedFunctionCallSignature,
 } from "../../src/functions/source.js";
 
@@ -13,6 +13,8 @@ describe("saved function source", () => {
     expect(getNamedFunctionName("async function () { return null; }")).toBeUndefined();
     expect(getNamedFunctionName("async () => null")).toBeUndefined();
     expect(getNamedFunctionName("missing()")).toBeUndefined();
+
+    expect(getNamedFunctionName("}")).toBeUndefined();
 
     expect(getSavedFunctionCallSignature("async function runTests() { return null; }")).toBe(
       "runTests()",
@@ -30,17 +32,21 @@ describe("saved function source", () => {
     expect(getSavedFunctionCallSignature("async () => null")).toBeUndefined();
   });
 
-  it("extracts project function documentation", () => {
-    expect(getProjectFunctionMetadata("")).toBeUndefined();
+  it("extracts persistent function documentation without requiring scope markers", () => {
+    expect(getPersistentFunctionMetadata("")).toBeUndefined();
     expect(
-      getProjectFunctionMetadata("async function first() {} async function second() {}"),
+      getPersistentFunctionMetadata("async function first() {} async function second() {}"),
     ).toBeUndefined();
+
+    expect(getPersistentFunctionMetadata("const value = true;")).toBeUndefined();
+    expect(() =>
+      getPersistentFunctionMetadata("async function undocumented() { return true; }"),
+    ).toThrow("persistent functions require a JSDoc summary");
     expect(
-      getProjectFunctionMetadata(`/**
+      getPersistentFunctionMetadata(`/**
  * Documented helper.
  *
  * Details.
- * @pit project
  * @param input.raw
  */
 async function documented(_capabilities, input) { return input; }`),
@@ -51,7 +57,7 @@ async function documented(_capabilities, input) { return input; }`),
       parameters: [{ name: "input.raw" }],
     });
     expect(
-      getProjectFunctionMetadata(`/**
+      getPersistentFunctionMetadata(`/**
  * Uses {@link documented} metadata.
  * @pit project
  * @param input.raw - See {@link documented}.

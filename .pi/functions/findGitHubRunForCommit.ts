@@ -1,7 +1,6 @@
 /**
  * Finds the newest GitHub Actions run whose head SHA matches a commit prefix.
  *
- * @pit project
  */
 async function findGitHubRunForCommit(
   { gh },

@@ -1,7 +1,6 @@
 /**
  * Finds the exact GitHub Actions run for a commit and waits for its bounded completion.
  *
- * @pit project
  */
 async function waitForGitHubRunForCommit(
   _capabilities,

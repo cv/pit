@@ -119,7 +119,7 @@ describe("function registry handler", () => {
 
     registerFunctionManager(pi as any, new Map(), {
       projectFunctions: new Map([
-        ["projectOnly", "/** Project only. @pit project */ async function projectOnly() {}"],
+        ["projectOnly", "/** Project only. */ async function projectOnly() {}"],
       ]),
       planSessionRemoval: (name) => ({
         directDependents: [],

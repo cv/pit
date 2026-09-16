@@ -1,6 +1,5 @@
 /**
  * Runs Pit's standard static, test, coverage, and package gates.
- * @pit project
  */
 async function validatePit({ npm }, input: { coverage?: boolean; packageCheck?: boolean } = {}) {
   type GateResult = { name: string; code: number; stdout: string; stderr: string };

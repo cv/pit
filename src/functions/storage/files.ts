@@ -11,6 +11,12 @@ export interface PersistentFunctionCandidate {
   metadata: PersistentFunctionMetadata;
 }
 
+export interface PersistentFunctionCandidates {
+  candidates: Map<string, PersistentFunctionCandidate>;
+  discoveredNames: Set<string>;
+  errors: string[];
+}
+
 export function isMissingFileError(error: unknown): boolean {
   return (error as { code?: string }).code === "ENOENT";
 }
@@ -47,28 +53,28 @@ export function removePersistentFunctionFile(path: string): Promise<boolean> {
 
 export async function readPersistentFunctionCandidates(input: {
   directory: string;
-  marker: "global" | "project";
   metadata(source: string): PersistentFunctionMetadata | undefined;
-}): Promise<{
-  candidates: Map<string, PersistentFunctionCandidate>;
-  errors: string[];
-}> {
+}): Promise<PersistentFunctionCandidates> {
   let entries;
   try {
     entries = await readdir(input.directory, { withFileTypes: true });
   } catch (error) {
-    if (isMissingFileError(error)) return { candidates: new Map(), errors: [] };
+    if (isMissingFileError(error)) {
+      return { candidates: new Map(), discoveredNames: new Set(), errors: [] };
+    }
     throw error;
   }
 
   const candidates = new Map<string, PersistentFunctionCandidate>();
+  const discoveredNames = new Set<string>();
   const errors: string[] = [];
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (!(entry.isFile() && entry.name.endsWith(".ts"))) continue;
+    discoveredNames.add(entry.name.slice(0, -3));
     try {
       const source = await readFile(join(input.directory, entry.name), "utf8");
       const metadata = input.metadata(source);
-      if (!metadata) throw new Error(`missing @pit ${input.marker} JSDoc marker`);
+      if (!metadata) throw new Error("expected one documented top-level function declaration");
       validateSavedFunctionName(metadata.name);
       if (entry.name !== `${metadata.name}.ts`) {
         throw new Error(`filename must be ${metadata.name}.ts`);
@@ -79,5 +85,5 @@ export async function readPersistentFunctionCandidates(input: {
       errors.push(`${entry.name}: ${(error as Error).message}`);
     }
   }
-  return { candidates, errors };
+  return { candidates, discoveredNames, errors };
 }

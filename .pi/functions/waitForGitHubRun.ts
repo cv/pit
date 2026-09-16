@@ -1,7 +1,6 @@
 /**
  * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
  *
- * @pit project
  * @param input.attempts - Maximum status checks. The default is 12.
  * @param input.intervalMs - Delay between checks. The default is 15000 ms.
  * @param input.initialDelayMs - Delay before the first check. The default is 120000 ms.

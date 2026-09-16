@@ -4,6 +4,20 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-16
+
+### Changed
+
+- Project functions are now written to `.pi/functions/`; legacy `.pi/pit/functions/` files remain readable, with new-path definitions taking precedence.
+- Persistent function scope now comes from storage location or explicit promotion APIs instead of `@pit project` and `@pit global` JSDoc tags.
+- Directly submitted named functions always begin session-scoped and require `functions.promote()` or the `/functions` TUI for persistence.
+- Pit's trusted project workflow helpers moved to `.pi/functions/`.
+
+### Compatibility
+
+- Existing marked persistent files continue to load; scope tags are ignored.
+- Updating a legacy project function writes the new path and removes the old copy. Project removal clears both locations to prevent legacy definitions from resurfacing.
+
 ## [0.14.1] - 2026-09-16
 
 ### Fixed
@@ -51,7 +65,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/cv/pit/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/cv/pit/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/cv/pit/compare/v0.13.3...v0.14.0
 [0.13.3]: https://github.com/cv/pit/releases/tag/v0.13.3

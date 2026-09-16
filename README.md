@@ -39,26 +39,26 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Node 22.19 or newer. Pit v0.14.1 is tested with Pi 0.85.1; other Pi versions may work, but they are not part of this release's compatibility guarantee. Pit uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
+Pit requires Node 22.19 or newer. Pit v0.15.0 is tested with Pi 0.85.1; other Pi versions may work, but they are not part of this release's compatibility guarantee. Pit uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
 
 Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
 Install the pinned release globally:
 
 ```sh
-pi install git:github.com/cv/pit@v0.14.1
+pi install git:github.com/cv/pit@v0.15.0
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:github.com/cv/pit@v0.14.1
+pi install -l git:github.com/cv/pit@v0.15.0
 ```
 
 Use the pinned release one time without changing settings:
 
 ```sh
-pi -e git:github.com/cv/pit@v0.14.1
+pi -e git:github.com/cv/pit@v0.15.0
 ```
 
 Update an existing unpinned Git installation and reload extensions:
@@ -240,7 +240,7 @@ Global functions are disabled by default. Enable them in the Pi agent directory,
 }
 ```
 
-Pit stores readable global source files in `~/.pi/agent/pit/functions/` and requires an `@pit global` JSDoc marker. Global definitions are available across projects after `/reload`. A trusted project can opt out with `{ "globalFunctions": { "enabled": false } }` in `.pi/pit.json`.
+Pit stores readable global source files in `~/.pi/agent/pit/functions/`. Their location determines global scope; no special JSDoc tag is required. Global definitions are available across projects after `/reload`. A trusted project can opt out with `{ "globalFunctions": { "enabled": false } }` in `.pi/pit.json`.
 
 Use `functions.promote(name, summary, { to: "global" })` or **Save globally** in `/functions`. Global promotion and removal require interactive confirmation. Promotion is blocked while the session function depends on project or session functions; promote stable dependencies first. Global functions resolve only global dependencies. Project functions resolve project definitions with global fallback. Session functions resolve session, project, then global definitions.
 
@@ -256,13 +256,12 @@ Project functions are disabled by default. Enable them only for a trusted projec
 }
 ```
 
-Add a descriptive JSDoc comment with `@pit project` to persist a named function across sessions:
+Use `functions.promote(name, summary)` or **Save to project** in `/functions` to persist a session function. Pit writes a documented source file like this:
 
 ```ts
 /**
  * Runs repository tests.
  *
- * @pit project
  * @param input.coverage - Enable coverage.
  */
 async function runTests({ npm }, input: { coverage?: boolean } = {}) {
@@ -272,7 +271,7 @@ async function runTests({ npm }, input: { coverage?: boolean } = {}) {
 
 Project functions use the same execution rules as session functions. Pit commits a function after successful execution, or after static validation when `saveOnly` is `true`.
 
-Pit stores project functions as readable TypeScript files in `.pi/pit/functions/`. It loads them at session start and shows their derived signatures in the system prompt. An unmarked definition with the same name creates a session override. A marked definition updates the project version and clears that override.
+Pit stores project functions as readable TypeScript files in `.pi/functions/`. It also reads legacy `.pi/pit/functions/` files for compatibility, while a same-name file in `.pi/functions/` takes precedence. Scope comes from storage location, not a source marker. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
 
 Pit loads project source only after explicit opt-in and Pi's project-trust check. The function still runs in the same restricted process as a session function.
 
@@ -288,7 +287,7 @@ Run `/functions` without arguments to open the interactive TUI manager. The mana
 /functions delete runTests
 ```
 
-Select a session function to inspect it, save it to the project, or delete it. **Save to project** asks for a short summary, adds the `@pit project` marker, writes the project function, and removes the session definition. This action requires an enabled, trusted project.
+Select a session function to inspect it, save it to the project, or delete it. **Save to project** asks for a short summary, writes the documented project function to `.pi/functions/`, and removes the session definition. This action requires an enabled, trusted project.
 
 Select a project function to inspect it or remove it from the project. Project removal fails when a project or session function depends on the target.
 

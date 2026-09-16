@@ -61,7 +61,7 @@ function registerSavedFunctionManager({
     removeFromProject: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
         `Remove ${name} from project?`,
-        `Delete .pi/pit/functions/${name}.ts?`,
+        `Delete .pi/functions/${name}.ts and any legacy copy?`,
       );
       if (!confirmed) {
         return;

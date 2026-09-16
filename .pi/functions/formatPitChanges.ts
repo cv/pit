@@ -1,7 +1,6 @@
 /**
  * Formats only files currently changed in Git that Oxfmt supports.
  *
- * @pit project
  * @param input.checkOnly - Check formatting without writing files.
  */
 async function formatPitChanges({ git, shell }, input: { checkOnly?: boolean } = {}) {

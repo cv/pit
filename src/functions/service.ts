@@ -3,13 +3,15 @@ import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { validateTypeScript } from "../sandbox/validation.js";
 import { getSavedFunctionDependencyGraph } from "./graph.js";
 import { savedFunctionDependents } from "./persistent-functions.js";
-import { planSavedFunctionRemoval, type SavedFunctionRemovalPlan } from "./removal.js";
 import {
-  getGlobalFunctionMetadata,
-  getNamedFunctionName,
-  getProjectFunctionMetadata,
-  type PersistentFunctionMetadata,
-} from "./source.js";
+  prepareSavedFunctionExecution,
+  type PreparedSavedFunctionExecution,
+  type SavedFunctionExecutionContext,
+  type SavedFunctionPreparationRequest,
+} from "./preparation.js";
+import { planSavedFunctionRemoval, type SavedFunctionRemovalPlan } from "./removal.js";
+import { getPersistentFunctionMetadata } from "./source.js";
+export type { PreparedSavedFunctionExecution } from "./preparation.js";
 import {
   effectiveRegistry,
   type FunctionState,
@@ -23,24 +25,9 @@ import {
   FUNCTION_ENTRY_TYPE,
   type FunctionActivity,
   type FunctionEntry,
-  type FunctionRegistry,
   type FunctionScope,
-  functionScopeRegistry,
   validateRegistryCapacity,
-  validateSavedFunctionName,
 } from "./core.js";
-
-export interface SavedFunctionExecutionContext {
-  cwd: string;
-  isProjectTrusted(): boolean;
-}
-
-export interface SavedFunctionPreparationRequest {
-  source: string;
-  input?: unknown;
-  saveOnly?: boolean;
-  context: SavedFunctionExecutionContext;
-}
 
 export interface PersistentFunctionPromotionRequest {
   name: string;
@@ -59,20 +46,6 @@ export interface ProjectFunctionStateRemovalRequest {
   name: string;
   state: FunctionState;
   commit: FunctionStateCommit;
-}
-
-export interface PreparedSavedFunctionExecution {
-  source: string;
-  input?: unknown;
-  name?: string;
-  projectMetadata?: PersistentFunctionMetadata;
-  registry: FunctionRegistry;
-  scopes: Map<string, FunctionScope>;
-  globalFunctions: FunctionRegistry;
-  projectFunctions: FunctionRegistry;
-  sessionFunctions: FunctionRegistry;
-  candidateProject?: FunctionRegistry;
-  candidateSession?: FunctionRegistry;
 }
 
 export interface SavedFunctionServiceDependencies {
@@ -94,7 +67,7 @@ function persistentFunctionSource(
   if (!normalizedSummary) {
     throw new Error(`${scope === "global" ? "Global" : "Project"} function summary is required`);
   }
-  return `/**\n * ${normalizedSummary}\n *\n * @pit ${scope}\n */\n${source}`;
+  return `/** ${normalizedSummary} */\n${source}`;
 }
 
 function projectFunctionSource(source: string, summary: string): string {
@@ -150,7 +123,7 @@ export class SavedFunctionService {
       throw new Error(`Saved function "${request.name}" was not found`);
     }
     const promotedSource = projectFunctionSource(source, request.summary);
-    if (!getProjectFunctionMetadata(promotedSource)) {
+    if (!getPersistentFunctionMetadata(promotedSource)) {
       throw new Error(
         `Saved function "${request.name}" must be a top-level function declaration to save it to the project`,
       );
@@ -158,6 +131,8 @@ export class SavedFunctionService {
     const prepared = this.prepare({
       source: promotedSource,
       saveOnly: true,
+
+      project: true,
       context: request.context,
     });
     await this.commit(prepared, { cwd: request.context.cwd }, request.activity ?? []);
@@ -189,7 +164,7 @@ export class SavedFunctionService {
       throw new Error(`Session function "${request.name}" was not found`);
     }
     const promotedSource = persistentFunctionSource(source, request.summary, "global");
-    const metadata = getGlobalFunctionMetadata(promotedSource);
+    const metadata = getPersistentFunctionMetadata(promotedSource);
     if (!metadata) {
       throw new Error(
         `Saved function "${request.name}" must be a top-level function declaration to save it globally`,
@@ -269,68 +244,7 @@ export class SavedFunctionService {
   }
 
   prepare(request: SavedFunctionPreparationRequest): PreparedSavedFunctionExecution {
-    const name = getNamedFunctionName(request.source);
-    const projectMetadata = getProjectFunctionMetadata(request.source);
-    if (request.saveOnly && name === undefined) {
-      throw new Error("saveOnly requires a named top-level function");
-    }
-    if (request.saveOnly && request.input !== undefined) {
-      throw new Error("saveOnly does not accept top-level params");
-    }
-
-    let registry = this.#state.effective;
-    let candidateProject: FunctionRegistry | undefined;
-    let candidateSession: FunctionRegistry | undefined;
-    if (name) {
-      validateSavedFunctionName(name);
-      if (projectMetadata) {
-        if (!request.context.isProjectTrusted()) {
-          throw new Error("Project functions require a trusted project");
-        }
-        if (!this.#state.projectEnabled) {
-          throw new Error(
-            `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
-          );
-        }
-        validateRegistryCapacity(this.#state.effective, name, request.source);
-        candidateProject = new Map(this.#state.project);
-        candidateProject.set(name, request.source);
-        validateTypeScript(
-          request.source,
-          new Map([...this.#state.global, ...candidateProject]),
-          request.input,
-        );
-        candidateSession = new Map(this.#state.session);
-        candidateSession.delete(name);
-        registry = effectiveRegistry(candidateProject, candidateSession, this.#state.global);
-        validateTypeScript(request.source, registry, request.input);
-      } else {
-        validateRegistryCapacity(this.#state.effective, name, request.source);
-        candidateSession = new Map(this.#state.session);
-        candidateSession.set(name, request.source);
-        registry = effectiveRegistry(this.#state.project, candidateSession, this.#state.global);
-        validateTypeScript(request.source, registry, request.input);
-      }
-    }
-    const scopes = functionScopeRegistry(
-      registry,
-      this.#state.global,
-      candidateProject ?? this.#state.project,
-      candidateSession ?? this.#state.session,
-    );
-    return {
-      source: request.source,
-      ...(request.input === undefined ? {} : { input: request.input }),
-      ...(name ? { name } : {}),
-      ...(projectMetadata ? { projectMetadata } : {}),
-      registry,
-      scopes,
-      globalFunctions: this.#state.global,
-      projectFunctions: candidateProject ?? this.#state.project,
-      sessionFunctions: candidateSession ?? this.#state.session,
-      ...(candidateProject ? { candidateProject } : {}),
-      ...(candidateSession ? { candidateSession } : {}),
-    };
+    return prepareSavedFunctionExecution(this.#state, request);
   }
 
   async commit(

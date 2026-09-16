@@ -1,7 +1,6 @@
 /**
  * Creates or removes an isolated worktree for reviewing a GitHub pull request.
  *
- * @pit project
  */
 async function managePullRequestWorktree(
   { context, shell, workspace },

@@ -1,6 +1,5 @@
 /**
  * Reports bounded Git delivery readiness without rerunning validation.
- * @pit project
  */
 async function preparePitDelivery({ git }) {
   const [status, diffCheck, stagedDiffCheck] = await Promise.all([
