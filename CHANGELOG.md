@@ -4,6 +4,14 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-16
+
+### Fixed
+
+- Report timed-out streaming processes with exit code 124 and aborted processes with exit code 130 instead of treating signal termination as success.
+- Add bounded timeout and abort diagnostics to process results.
+- Escalate to SIGKILL when a child ignores SIGTERM.
+
 ## [0.14.0] - 2026-09-16
 
 ### Added
@@ -43,7 +51,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/cv/pit/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/cv/pit/compare/v0.13.3...v0.14.0
 [0.13.3]: https://github.com/cv/pit/releases/tag/v0.13.3
 [0.13.2]: https://github.com/cv/pit/releases/tag/v0.13.2

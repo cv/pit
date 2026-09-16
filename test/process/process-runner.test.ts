@@ -32,4 +32,19 @@ describe("process runner", () => {
       runner.run({ program: "git", args: ["status"], options: {} }),
     ).resolves.toMatchObject({ code: 0, stdout: "ok" });
   });
+
+  it("reports timed out streaming commands as failures", async () => {
+    const progress: Array<{ phase: string; code?: number }> = [];
+    const result = await executeHostProcess({
+      pi: {} as any,
+      defaultCwd: process.cwd(),
+      program: process.execPath,
+      args: ["-e", "setInterval(() => {}, 1000)"],
+      options: { timeoutMs: 20 },
+      onProgress: (event) => progress.push(event),
+    });
+
+    expect(result).toMatchObject({ code: 124, stderr: "Command timed out after 20ms" });
+    expect(progress.at(-1)).toEqual({ phase: "end", code: 124 });
+  });
 });

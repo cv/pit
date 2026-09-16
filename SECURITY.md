@@ -9,7 +9,7 @@ Pit provides security fixes for the latest tagged release.
 | 0.14.x           | Yes       |
 | Earlier releases | No        |
 
-Pit v0.14.0 is tested with Node.js 22.19 or newer and Pi 0.85.1. Other Pi versions may work but are not part of the tested compatibility target.
+Pit v0.14.1 is tested with Node.js 22.19 or newer and Pi 0.85.1. Other Pi versions may work but are not part of the tested compatibility target.
 
 ## Reporting a vulnerability
 

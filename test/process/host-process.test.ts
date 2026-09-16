@@ -29,7 +29,7 @@ describe("executeStreamingProcess", () => {
       ["-e", "setInterval(() => {}, 1000)"],
       { cwd: process.cwd(), timeout: 20, onChunk: () => undefined },
     );
-    expect(timedOut.killed).toBe(true);
+    expect(timedOut).toMatchObject({ killed: true, termination: "timeout", code: 124 });
 
     const controller = new AbortController();
     const abortedPromise = executeStreamingProcess(
@@ -44,7 +44,7 @@ describe("executeStreamingProcess", () => {
     );
     controller.abort();
     const aborted = await abortedPromise;
-    expect(aborted.killed).toBe(true);
+    expect(aborted).toMatchObject({ killed: true, termination: "abort", code: 130 });
 
     const alreadyAborted = new AbortController();
     alreadyAborted.abort();
@@ -58,7 +58,16 @@ describe("executeStreamingProcess", () => {
         onChunk: () => undefined,
       },
     );
-    expect(immediate.killed).toBe(true);
+    expect(immediate).toMatchObject({ killed: true, termination: "abort", code: 130 });
+  });
+
+  it("reports externally signaled exits as failures", async () => {
+    const result = await executeStreamingProcess(
+      process.execPath,
+      ["-e", 'process.kill(process.pid, "SIGTERM")'],
+      { cwd: process.cwd(), timeout: 0, onChunk: () => undefined },
+    );
+    expect(result).toMatchObject({ code: 1, killed: false });
   });
 
   it("returns a failed result when spawning fails", async () => {
