@@ -58,7 +58,9 @@ export class InterruptibleRegexMatcher {
       resourceLimits: { maxOldGenerationSizeMb: 32 },
     });
     this.worker.on("message", (message: WorkerResponse) => this.handleMessage(message));
-    this.worker.on("error", (error) => this.fail(error));
+    this.worker.on("error", (error) =>
+      this.fail(error instanceof Error ? error : new Error(String(error))),
+    );
     this.worker.on("exit", (code) => {
       if (!this.closed && code !== 0) {
         this.fail(new Error(`Regex worker stopped with exit code ${code}`));
