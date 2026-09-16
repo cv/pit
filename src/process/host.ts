@@ -8,6 +8,7 @@ export interface StreamingProcessResult {
   stderr: string;
   code: number;
   killed: boolean;
+  termination?: "timeout" | "abort";
 }
 
 export interface StreamingProcessOptions {
@@ -118,22 +119,25 @@ export async function executeStreamingProcess(
   let stdout = "";
   let stderr = "";
   let killed = false;
+  let termination: StreamingProcessResult["termination"];
   let timeout: NodeJS.Timeout | undefined;
-  const killProcess = () => {
+  const killProcess = (reason: NonNullable<StreamingProcessResult["termination"]>) => {
     /* v8 ignore next -- abort and timeout may race to kill the same child. */
     if (killed) {
       return;
     }
     killed = true;
+    termination = reason;
     child.kill("SIGTERM");
     /* v8 ignore next 5 -- test children terminate on SIGTERM; this is the escalation fallback. */
     const forceKill = setTimeout(() => {
-      if (!child.killed) {
+      if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
       }
     }, FORCE_KILL_DELAY_MS);
     forceKill.unref?.();
   };
+  const abortProcess = () => killProcess("abort");
   const onStdout = (data: Buffer) => {
     const chunk = data.toString();
     stdout += chunk;
@@ -148,24 +152,31 @@ export async function executeStreamingProcess(
   child.stderr?.on("data", onStderr);
   if (options.signal) {
     if (options.signal.aborted) {
-      killProcess();
+      abortProcess();
     } else {
-      options.signal.addEventListener("abort", killProcess, { once: true });
+      options.signal.addEventListener("abort", abortProcess, { once: true });
     }
   }
   if (options.timeout > 0) {
-    timeout = setTimeout(killProcess, options.timeout);
+    timeout = setTimeout(() => killProcess("timeout"), options.timeout);
   }
   try {
     const code = await waitForChildProcess(child);
-    return { stdout, stderr, code: code ?? 0, killed };
+    const terminatedCode = termination === "timeout" ? 124 : termination === "abort" ? 130 : 1;
+    return {
+      stdout,
+      stderr,
+      code: code ?? terminatedCode,
+      killed,
+      ...(termination ? { termination } : {}),
+    };
   } catch {
-    return { stdout, stderr, code: 1, killed };
+    return { stdout, stderr, code: 1, killed, ...(termination ? { termination } : {}) };
   } finally {
     if (timeout) {
       clearTimeout(timeout);
     }
-    options.signal?.removeEventListener("abort", killProcess);
+    options.signal?.removeEventListener("abort", abortProcess);
     child.stdout?.removeListener("data", onStdout);
     child.stderr?.removeListener("data", onStderr);
   }

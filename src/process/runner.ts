@@ -87,8 +87,15 @@ export async function executeHostProcess({
         timeout,
       });
   onProgress?.({ phase: "end", code: result.code });
+  const processStderr =
+    result.stderr ||
+    ("termination" in result && result.termination === "timeout"
+      ? `Command timed out after ${timeout}ms`
+      : "termination" in result && result.termination === "abort"
+        ? "Command aborted"
+        : "");
   const stdout = truncateOutput(result.stdout, { maxBytes, maxLines });
-  const stderr = truncateOutput(result.stderr, { maxBytes, maxLines });
+  const stderr = truncateOutput(processStderr, { maxBytes, maxLines });
   if (options.raise === true && result.code !== 0) {
     const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4000);
     throw new Error(

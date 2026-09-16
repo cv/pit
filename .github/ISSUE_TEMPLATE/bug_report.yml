@@ -10,7 +10,7 @@ body:
     id: pit-version
     attributes:
       label: Pit version
-      placeholder: v0.14.0
+      placeholder: v0.14.1
     validations:
       required: true
   - type: input
