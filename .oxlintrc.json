@@ -47,7 +47,7 @@
       }
     },
     {
-      "files": [".pi/pit/functions/**/*.ts"],
+      "files": [".pi/functions/**/*.ts"],
       "rules": {
         "eslint/max-lines-per-function": "off",
         "eslint/max-params": "off",

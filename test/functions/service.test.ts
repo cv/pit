@@ -48,19 +48,39 @@ describe("SavedFunctionService", () => {
     expect(activity).toEqual([{ action: "set", name: "sessionHelper", replaced: false }]);
   });
 
+  it("validates explicit project preparation and trust", () => {
+    const { state, service } = fixture();
+    state.projectEnabled = true;
+    expect(() =>
+      service.prepare({
+        source: "async () => true",
+        project: true,
+        context: { cwd: "/tmp", isProjectTrusted: () => true },
+      }),
+    ).toThrow("top-level function declaration");
+    expect(() =>
+      service.prepare({
+        source: "/** Documented helper. */ async function documented() { return true; }",
+        project: true,
+        context: { cwd: "/tmp", isProjectTrusted: () => false },
+      }),
+    ).toThrow("trusted project");
+  });
+
   it("validates and persists trusted project definitions", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pit-service-"));
     directories.push(cwd);
     const { state, service } = fixture();
-    const source =
-      "/** Project helper.\n * @pit project\n */\nasync function projectHelper() { return 2; }";
+    const source = "/** Project helper. */\nasync function projectHelper() { return 2; }";
     expect(() =>
-      service.prepare({ source, context: { cwd, isProjectTrusted: () => true } }),
+      service.prepare({ source, project: true, context: { cwd, isProjectTrusted: () => true } }),
     ).toThrow("Project functions are disabled");
     state.projectEnabled = true;
     state.session.set("projectHelper", "async function projectHelper() { return 1; }");
     const prepared = service.prepare({
       source,
+
+      project: true,
       context: { cwd, isProjectTrusted: () => true },
     });
     expect(prepared.scopes.get("projectHelper")).toBe("project");
@@ -68,7 +88,7 @@ describe("SavedFunctionService", () => {
     await service.commit(prepared, { cwd }, activity);
     expect(state.project.get("projectHelper")).toBe(source);
     expect(state.session.has("projectHelper")).toBe(false);
-    expect(await readFile(join(cwd, ".pi", "pit", "functions", "projectHelper.ts"), "utf8")).toBe(
+    expect(await readFile(join(cwd, ".pi", "functions", "projectHelper.ts"), "utf8")).toBe(
       `${source}\n`,
     );
     expect(activity[0]).toMatchObject({ name: "projectHelper", scope: "project" });
@@ -93,11 +113,11 @@ describe("SavedFunctionService", () => {
     });
 
     const projectSource = await readFile(
-      join(cwd, ".pi", "pit", "functions", "promotedHelper.ts"),
+      join(cwd, ".pi", "functions", "promotedHelper.ts"),
       "utf8",
     );
     expect(projectSource).toContain("* Runs the promoted helper.");
-    expect(projectSource).toContain("* @pit project");
+    expect(projectSource).not.toContain("@pit");
     expect(projectSource).toContain(source);
     expect(state.project.get("promotedHelper")).toBe(projectSource.trimEnd());
     expect(state.session.has("promotedHelper")).toBe(false);

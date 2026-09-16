@@ -156,7 +156,7 @@ const history = await getAppleMusicListeningHistory({
 
 Session functions are stored as branch-local entries in Pi's session tree. Navigating to another branch reconstructs the function registry for that branch. A function can remain experimental there, override an existing project function, or disappear when the branch changes.
 
-When a function has survived representative use, it can be promoted. Project functions are written as ordinary TypeScript files under `.pi/pit/functions/`, marked with `@pit project`, and checked into Git. Their signatures and summaries are added to future agent prompts, while their full source is injected only when referenced.
+When a function has survived representative use, it can be promoted. Project functions are written as ordinary documented TypeScript files under `.pi/functions/` and checked into Git; their location determines scope. Their signatures and summaries are added to future agent prompts, while their full source is injected only when referenced.
 
 This creates a ratchet:
 

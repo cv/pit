@@ -6,10 +6,19 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      development-dependencies:
+      compatible-development-dependencies:
         dependency-type: development
+        update-types: [minor, patch]
+        exclude-patterns:
+          - "@earendil-works/pi-*"
+          - oxfmt
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+
+    groups:
+      compatible-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]

@@ -1,7 +1,6 @@
 /**
  * Runs Pit's maintainability audit and returns bounded structured findings.
  *
- * @pit project
  */
 async function auditPitCodeQuality(
   { context, shell },

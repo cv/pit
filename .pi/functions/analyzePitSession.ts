@@ -1,6 +1,5 @@
 /**
  * Audits a Pi session for recurring tool-call failures and workflow smells.
- * @pit project
  */
 async function analyzePitSession(
   { context, shell },

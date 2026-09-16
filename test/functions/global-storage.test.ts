@@ -58,9 +58,8 @@ describe("global function storage", () => {
 
   it("saves, replaces, and removes global source files", async () => {
     const registry = new Map<string, string>();
-    const first = "/** Stored global. @pit global */ async function storedGlobal() { return 1; }";
-    const second =
-      "/** Stored global two. @pit global */ async function storedGlobal() { return 2; }\n";
+    const first = "/** Stored global. */ async function storedGlobal() { return 1; }";
+    const second = "/** Stored global two. */ async function storedGlobal() { return 2; }\n";
 
     await expect(saveGlobalFunction("storedGlobal", first, registry)).resolves.toBe(false);
     await expect(
@@ -84,16 +83,16 @@ describe("global function storage", () => {
     );
     await writeFile(
       join(directory, "globalDependent.ts"),
-      "/** Global dependent. @pit global */ async function globalDependent() { return globalBase(); }",
+      "/** Global dependent. */ async function globalDependent() { return globalBase(); }",
     );
     await writeFile(join(directory, "missingMarker.ts"), "async function missingMarker() {};");
     await writeFile(
       join(directory, "wrongName.ts"),
-      "/** Wrong name. @pit global */ async function actualName() { return true; }",
+      "/** Wrong name. */ async function actualName() { return true; }",
     );
     await writeFile(
       join(directory, "missingDependency.ts"),
-      "/** Missing dependency. @pit global */ async function missingDependency() { return absentGlobal(); }",
+      "/** Missing dependency. */ async function missingDependency() { return absentGlobal(); }",
     );
 
     const registry = new Map<string, string>();
@@ -101,7 +100,7 @@ describe("global function storage", () => {
     const errors = await loadGlobalFunctions(registry, metadata);
     expect([...registry.keys()].sort()).toEqual(["globalBase", "globalDependent"]);
     expect([...metadata.keys()].sort()).toEqual(["globalBase", "globalDependent"]);
-    expect(errors.join("\n")).toContain("missing @pit global JSDoc marker");
+    expect(errors.join("\n")).toContain("expected one documented top-level function declaration");
     expect(errors.join("\n")).toContain("filename must be actualName.ts");
     expect(errors.join("\n")).toContain("absentGlobal");
   });
@@ -116,7 +115,7 @@ describe("global function storage", () => {
     await expect(
       saveGlobalFunction(
         "overflowGlobal",
-        "/** Overflow. @pit global */ async function overflowGlobal() { return true; }",
+        "/** Overflow. */ async function overflowGlobal() { return true; }",
         registry,
       ),
     ).rejects.toThrow("limited to 64 functions");

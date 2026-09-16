@@ -2,23 +2,23 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { getProjectFunctionMetadata } from "../../src/functions/source.js";
+import { getPersistentFunctionMetadata } from "../../src/functions/source.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 
 const functionFiles = [
-  ["analyzePitSession", ".pi/pit/functions/analyzePitSession.ts"],
-  ["analyzePitSessions", ".pi/pit/functions/analyzePitSessions.ts"],
-  ["auditPitCodeQuality", ".pi/pit/functions/auditPitCodeQuality.ts"],
-  ["formatPitChanges", ".pi/pit/functions/formatPitChanges.ts"],
-  ["findGitHubRunForCommit", ".pi/pit/functions/findGitHubRunForCommit.ts"],
-  ["inspectPitCoverageGaps", ".pi/pit/functions/inspectPitCoverageGaps.ts"],
-  ["inspectGitHubPullRequest", ".pi/pit/functions/inspectGitHubPullRequest.ts"],
-  ["managePullRequestWorktree", ".pi/pit/functions/managePullRequestWorktree.ts"],
-  ["preparePitDelivery", ".pi/pit/functions/preparePitDelivery.ts"],
-  ["reviewPitChanges", ".pi/pit/functions/reviewPitChanges.ts"],
-  ["runPitTargetedTests", ".pi/pit/functions/runPitTargetedTests.ts"],
-  ["validatePit", ".pi/pit/functions/validatePit.ts"],
-  ["waitForGitHubRun", ".pi/pit/functions/waitForGitHubRun.ts"],
+  ["analyzePitSession", ".pi/functions/analyzePitSession.ts"],
+  ["analyzePitSessions", ".pi/functions/analyzePitSessions.ts"],
+  ["auditPitCodeQuality", ".pi/functions/auditPitCodeQuality.ts"],
+  ["formatPitChanges", ".pi/functions/formatPitChanges.ts"],
+  ["findGitHubRunForCommit", ".pi/functions/findGitHubRunForCommit.ts"],
+  ["inspectPitCoverageGaps", ".pi/functions/inspectPitCoverageGaps.ts"],
+  ["inspectGitHubPullRequest", ".pi/functions/inspectGitHubPullRequest.ts"],
+  ["managePullRequestWorktree", ".pi/functions/managePullRequestWorktree.ts"],
+  ["preparePitDelivery", ".pi/functions/preparePitDelivery.ts"],
+  ["reviewPitChanges", ".pi/functions/reviewPitChanges.ts"],
+  ["runPitTargetedTests", ".pi/functions/runPitTargetedTests.ts"],
+  ["validatePit", ".pi/functions/validatePit.ts"],
+  ["waitForGitHubRun", ".pi/functions/waitForGitHubRun.ts"],
 ] as const;
 
 describe("project agent workflow resources", () => {
@@ -28,18 +28,18 @@ describe("project agent workflow resources", () => {
     );
     const registry = new Map(entries);
     for (const [name, source] of entries) {
-      expect(getProjectFunctionMetadata(source)).toMatchObject({ name });
+      expect(getPersistentFunctionMetadata(source)).toMatchObject({ name });
       expect(() => validateTypeScript(source, registry)).not.toThrow();
     }
   }, 15_000);
 
   it("provides bounded inner-loop workflow helpers", async () => {
     const [sessions, targeted, coverage, review, format, skill] = await Promise.all([
-      readFile(".pi/pit/functions/analyzePitSessions.ts", "utf8"),
-      readFile(".pi/pit/functions/runPitTargetedTests.ts", "utf8"),
-      readFile(".pi/pit/functions/inspectPitCoverageGaps.ts", "utf8"),
-      readFile(".pi/pit/functions/reviewPitChanges.ts", "utf8"),
-      readFile(".pi/pit/functions/formatPitChanges.ts", "utf8"),
+      readFile(".pi/functions/analyzePitSessions.ts", "utf8"),
+      readFile(".pi/functions/runPitTargetedTests.ts", "utf8"),
+      readFile(".pi/functions/inspectPitCoverageGaps.ts", "utf8"),
+      readFile(".pi/functions/reviewPitChanges.ts", "utf8"),
+      readFile(".pi/functions/formatPitChanges.ts", "utf8"),
       readFile(".pi/skills/pit-delivery/SKILL.md", "utf8"),
     ]);
     expect(sessions).toContain("analyzePitSession");
@@ -60,10 +60,10 @@ describe("project agent workflow resources", () => {
 
   it("uses bounded and non-duplicative delivery workflows", async () => {
     const [audit, validation, preparation, wait, skill] = await Promise.all([
-      readFile(".pi/pit/functions/analyzePitSession.ts", "utf8"),
-      readFile(".pi/pit/functions/validatePit.ts", "utf8"),
-      readFile(".pi/pit/functions/preparePitDelivery.ts", "utf8"),
-      readFile(".pi/pit/functions/waitForGitHubRun.ts", "utf8"),
+      readFile(".pi/functions/analyzePitSession.ts", "utf8"),
+      readFile(".pi/functions/validatePit.ts", "utf8"),
+      readFile(".pi/functions/preparePitDelivery.ts", "utf8"),
+      readFile(".pi/functions/waitForGitHubRun.ts", "utf8"),
       readFile(".pi/skills/pit-delivery/SKILL.md", "utf8"),
     ]);
     expect(audit).toContain("workflowFailureRatePercent");

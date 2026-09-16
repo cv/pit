@@ -13,7 +13,7 @@ This skill owns workflow policy: sequencing, judgment, acceptance criteria, and 
 - Compose helpers when a phase needs more than one operation, but keep dependent mutations serialized.
 - Do not create a same-named session override for a project helper during delivery.
 - If a helper is unexpectedly unavailable, inspect `context.get()` and `functions.getSaved(name)`. Repair the trusted project configuration or helper rather than silently maintaining a duplicate workflow in this skill.
-- If helper behavior must change, update its file under `.pi/pit/functions/` and its tests; keep this skill focused on when and why to invoke it.
+- If helper behavior must change, update its file under `.pi/functions/` and its tests; keep this skill focused on when and why to invoke it.
 
 ## Implement
 

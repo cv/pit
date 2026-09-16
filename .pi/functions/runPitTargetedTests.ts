@@ -1,7 +1,6 @@
 /**
  * Runs a bounded targeted Vitest command for explicit Pit test files.
  *
- * @pit project
  * @param input.files - Test files under test/ with names that end in .test.ts.
  */
 async function runPitTargetedTests({ shell }, input: { files: string[] }) {

@@ -10,7 +10,10 @@ import {
   validateSavedFunctionSource,
 } from "../core.js";
 import { getSavedFunctionDependencyGraph } from "../graph.js";
-import { getProjectFunctionMetadata, type PersistentFunctionMetadataRegistry } from "../source.js";
+import {
+  getPersistentFunctionMetadata,
+  type PersistentFunctionMetadataRegistry,
+} from "../source.js";
 import {
   isMissingFileError,
   readPersistentFunctionCandidates,
@@ -18,7 +21,8 @@ import {
   writePersistentFunctionFile,
 } from "./files.js";
 
-const PROJECT_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
+const PROJECT_FUNCTION_DIRECTORY = ["functions"] as const;
+const LEGACY_PROJECT_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
 
 export interface ProjectFunctionConfig {
   enabled: boolean;
@@ -26,17 +30,29 @@ export interface ProjectFunctionConfig {
   error?: string;
 }
 
-function directory(cwd: string): string {
+export function projectFunctionDirectory(cwd: string): string {
   return join(cwd, CONFIG_DIR_NAME, ...PROJECT_FUNCTION_DIRECTORY);
+}
+
+export function legacyProjectFunctionDirectory(cwd: string): string {
+  return join(cwd, CONFIG_DIR_NAME, ...LEGACY_PROJECT_FUNCTION_DIRECTORY);
 }
 
 function configPath(cwd: string): string {
   return join(cwd, CONFIG_DIR_NAME, "pit.json");
 }
 
-function pathFor(cwd: string, name: string): string {
+function pathFor(directory: string, name: string): string {
   validateSavedFunctionName(name);
-  return join(directory(cwd), `${name}.ts`);
+  return join(directory, `${name}.ts`);
+}
+
+function currentPathFor(cwd: string, name: string): string {
+  return pathFor(projectFunctionDirectory(cwd), name);
+}
+
+function legacyPathFor(cwd: string, name: string): string {
+  return pathFor(legacyProjectFunctionDirectory(cwd), name);
 }
 
 export async function loadProjectFunctionConfig(
@@ -104,14 +120,16 @@ export async function saveProjectFunction(
   candidates.set(name, source);
   validateTypeScript(source, new Map([...global, ...candidates]));
   const replaced = registry.has(name);
-  const path = pathFor(cwd, name);
-  await writePersistentFunctionFile(path, source);
+  await writePersistentFunctionFile(currentPathFor(cwd, name), source);
+  await removePersistentFunctionFile(legacyPathFor(cwd, name));
   registry.set(name, source);
   return replaced;
 }
 
-export function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
-  return removePersistentFunctionFile(pathFor(cwd, name));
+export async function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
+  const current = await removePersistentFunctionFile(currentPathFor(cwd, name));
+  const legacy = await removePersistentFunctionFile(legacyPathFor(cwd, name));
+  return current || legacy;
 }
 
 export async function loadProjectFunctions(
@@ -126,11 +144,24 @@ export async function loadProjectFunctions(
     return [];
   }
 
-  const { candidates, errors } = await readPersistentFunctionCandidates({
-    directory: directory(ctx.cwd),
-    marker: "project",
-    metadata: getProjectFunctionMetadata,
-  });
+  const [legacy, current] = await Promise.all([
+    readPersistentFunctionCandidates({
+      directory: legacyProjectFunctionDirectory(ctx.cwd),
+      metadata: getPersistentFunctionMetadata,
+    }),
+    readPersistentFunctionCandidates({
+      directory: projectFunctionDirectory(ctx.cwd),
+      metadata: getPersistentFunctionMetadata,
+    }),
+  ]);
+  for (const name of current.discoveredNames) {
+    legacy.candidates.delete(name);
+  }
+  const candidates = new Map([...legacy.candidates, ...current.candidates]);
+  const errors = [
+    ...legacy.errors.map((error) => `${CONFIG_DIR_NAME}/pit/functions/${error}`),
+    ...current.errors.map((error) => `${CONFIG_DIR_NAME}/functions/${error}`),
+  ];
 
   const sources = new Map([
     ...global,

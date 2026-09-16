@@ -58,16 +58,16 @@ describe("global functions", () => {
     await enableGlobalFunctions();
     await writeGlobalFunction(
       "sharedValue",
-      '/** Shared global value. @pit global */ async function sharedValue() { return "global"; }',
+      '/** Shared global value. */ async function sharedValue() { return "global"; }',
     );
     await writeGlobalFunction(
       "globalConsumer",
-      "/** Global consumer. @pit global */ async function globalConsumer() { return sharedValue(); }",
+      "/** Global consumer. */ async function globalConsumer() { return sharedValue(); }",
     );
     await enableProjectFunctions();
     await writeProjectFunction(
       "projectConsumer",
-      "/** Project consumer. @pit project */ async function projectConsumer() { return sharedValue(); }",
+      "/** Project consumer. */ async function projectConsumer() { return sharedValue(); }",
     );
     await sessionStart({}, context());
 
@@ -83,7 +83,7 @@ describe("global functions", () => {
 
     await writeProjectFunction(
       "sharedValue",
-      '/** Project override. @pit project */ async function sharedValue() { return "project"; }',
+      '/** Project override. */ async function sharedValue() { return "project"; }',
     );
     await sessionStart({}, context());
     await expect(value("sharedValue()")).resolves.toBe("project");
@@ -109,7 +109,7 @@ describe("global functions", () => {
     await enableGlobalFunctions();
     await writeGlobalFunction(
       "hiddenGlobal",
-      "/** Hidden global. @pit global */ async function hiddenGlobal() { return true; }",
+      "/** Hidden global. */ async function hiddenGlobal() { return true; }",
     );
     await enableProjectFunctions(false);
     await sessionStart({}, context());
@@ -134,7 +134,7 @@ describe("global functions", () => {
     ).resolves.toEqual({ name: "portableHelper", promoted: true, scope: "global" });
     await expect(
       readFile(join(agentDir(), "pit", "functions", "portableHelper.ts"), "utf8"),
-    ).resolves.toContain("@pit global");
+    ).resolves.not.toContain("@pit");
     const info = await value("async ({ context }) => context.get()");
     expect(info.globalFunctions).toContain("portableHelper");
     expect(info.sessionFunctions).not.toContain("portableHelper");
@@ -164,7 +164,7 @@ describe("global functions", () => {
     await enableGlobalFunctions();
     await writeGlobalFunction(
       "catalogGlobal",
-      "/** Catalog global. @pit global */ async function catalogGlobal() { return true; }",
+      "/** Catalog global. */ async function catalogGlobal() { return true; }",
     );
     await sessionStart({}, context());
     const prompt = beforeAgentStart({ systemPrompt: "base" });
@@ -197,7 +197,7 @@ describe("global functions", () => {
     ]);
     await expect(
       readFile(join(agentDir(), "pit", "functions", "managerGlobal.ts"), "utf8"),
-    ).resolves.toContain("@pit global");
+    ).resolves.not.toContain("@pit");
 
     const removeContext = context({ mode: "tui" });
     removeContext.ui.select
@@ -216,7 +216,7 @@ describe("global functions", () => {
     await enableGlobalFunctions();
     await writeGlobalFunction(
       "confirmedGlobal",
-      "/** Confirmed global. @pit global */ async function confirmedGlobal() { return true; }",
+      "/** Confirmed global. */ async function confirmedGlobal() { return true; }",
     );
     await sessionStart({}, context());
 
@@ -225,7 +225,7 @@ describe("global functions", () => {
     ]);
     await expect(
       value('async ({ functions }) => functions.getGlobal("confirmedGlobal")'),
-    ).resolves.toEqual(expect.objectContaining({ source: expect.stringContaining("@pit global") }));
+    ).resolves.toEqual(expect.objectContaining({ source: expect.not.stringContaining("@pit") }));
     await expect(
       value('async ({ functions }) => functions.getGlobal("missingGlobal")'),
     ).rejects.toThrow("is unavailable");
@@ -258,11 +258,11 @@ describe("global functions", () => {
     await enableGlobalFunctions();
     await writeGlobalFunction(
       "globalRemovalBase",
-      "/** Removal base. @pit global */ async function globalRemovalBase() { return 1; }",
+      "/** Removal base. */ async function globalRemovalBase() { return 1; }",
     );
     await writeGlobalFunction(
       "globalRemovalConsumer",
-      "/** Removal consumer. @pit global */ async function globalRemovalConsumer() { return globalRemovalBase(); }",
+      "/** Removal consumer. */ async function globalRemovalConsumer() { return globalRemovalBase(); }",
     );
     await sessionStart({}, context());
 
@@ -309,15 +309,15 @@ it("reports sorted global metadata and transitive removal blockers", async () =>
   await enableGlobalFunctions();
   await writeGlobalFunction(
     "chainBase",
-    "/** Chain base. @pit global */ async function chainBase() { return 1; }",
+    "/** Chain base. */ async function chainBase() { return 1; }",
   );
   await writeGlobalFunction(
     "chainMiddle",
-    "/** Chain middle. @pit global */ async function chainMiddle() { return chainBase(); }",
+    "/** Chain middle. */ async function chainMiddle() { return chainBase(); }",
   );
   await writeGlobalFunction(
     "chainTop",
-    "/** Chain top. @pit global */ async function chainTop() { return chainMiddle(); }",
+    "/** Chain top. */ async function chainTop() { return chainMiddle(); }",
   );
   await sessionStart({}, context());
 
@@ -342,15 +342,15 @@ it("handles cancelled and absent global manager operations", async () => {
   await enableGlobalFunctions();
   await writeGlobalFunction(
     "absentGlobalFile",
-    "/** Absent file. @pit global */ async function absentGlobalFile() { return true; }",
+    "/** Absent file. */ async function absentGlobalFile() { return true; }",
   );
   await writeGlobalFunction(
     "absentCapabilityFile",
-    "/** Absent capability. @pit global */ async function absentCapabilityFile() { return true; }",
+    "/** Absent capability. */ async function absentCapabilityFile() { return true; }",
   );
   await writeGlobalFunction(
     "removalCancelled",
-    "/** Removal cancelled. @pit global */ async function removalCancelled() { return true; }",
+    "/** Removal cancelled. */ async function removalCancelled() { return true; }",
   );
   await sessionStart({}, context());
   await run("async function summaryCancelled() { return true; }");
@@ -388,7 +388,7 @@ it("handles cancelled and absent global manager operations", async () => {
   await functionsCommand.handler("", cancelledRemovalContext);
   await expect(
     readFile(join(agentDir(), "pit", "functions", "removalCancelled.ts"), "utf8"),
-  ).resolves.toContain("@pit global");
+  ).resolves.not.toContain("@pit");
 
   await rm(join(agentDir(), "pit", "functions", "absentCapabilityFile.ts"));
   await expect(

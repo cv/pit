@@ -1,7 +1,6 @@
 /**
  * Returns a bounded review summary for a GitHub pull request.
  *
- * @pit project
  */
 async function inspectGitHubPullRequest({ gh }, input: { number: number; repo?: string }) {
   interface ReviewActor {

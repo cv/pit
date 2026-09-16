@@ -10,7 +10,10 @@ import {
   validateSavedFunctionName,
 } from "../core.js";
 import { getSavedFunctionDependencyGraph } from "../graph.js";
-import { getGlobalFunctionMetadata, type PersistentFunctionMetadataRegistry } from "../source.js";
+import {
+  getPersistentFunctionMetadata,
+  type PersistentFunctionMetadataRegistry,
+} from "../source.js";
 import {
   isMissingFileError,
   readPersistentFunctionCandidates,
@@ -106,8 +109,7 @@ export async function loadGlobalFunctions(
   metadata.clear();
   const { candidates, errors } = await readPersistentFunctionCandidates({
     directory: globalFunctionDirectory(),
-    marker: "global",
-    metadata: getGlobalFunctionMetadata,
+    metadata: getPersistentFunctionMetadata,
   });
 
   const sources = new Map([...candidates].map(([name, value]) => [name, value.source]));

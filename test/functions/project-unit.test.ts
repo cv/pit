@@ -11,7 +11,7 @@ import {
   reconcileProjectFunctionsForSession as reconcileProjectFunctionState,
   savedFunctionDependents,
 } from "../../src/functions/persistent-functions.js";
-import { getProjectFunctionMetadata } from "../../src/functions/source.js";
+import { getPersistentFunctionMetadata } from "../../src/functions/source.js";
 import {
   loadProjectFunctionConfig,
   loadProjectFunctions,
@@ -87,19 +87,19 @@ it("orders multiple transitive project dependents", () => {
 });
 
 function sizedProjectFunction(name: string, bytes: number): string {
-  const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;
+  const prefix = `/** ${name} helper. */ async function ${name}() { /*`;
   const suffix = "*/ return true; }";
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
 
 function sizedProjectDependent(name: string, dependency: string, bytes: number): string {
-  const prefix = `/** ${name} helper. @pit project */ async function ${name}() { /*`;
+  const prefix = `/** ${name} helper. */ async function ${name}() { /*`;
   const suffix = `*/ return ${dependency}(); }`;
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
 
 function sizedInvalidProjectFunction(name: string, bytes: number): string {
-  const prefix = `/** ${name} invalid helper. @pit project */ async function ${name}() { /*`;
+  const prefix = `/** ${name} invalid helper. */ async function ${name}() { /*`;
   const suffix = "*/ return 1n; }";
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
@@ -147,12 +147,68 @@ describe("project function storage", () => {
 
   it("saves, replaces, and removes files", async () => {
     const functions = registry();
-    const source = "/** Summary. @pit project */ async function saved() { return true; }";
+    const source = "/** Summary. */ async function saved() { return true; }";
     expect(await saveProjectFunction(cwd, "saved", source, functions)).toBe(false);
-    expect(await readFile(join(cwd, ".pi/pit/functions/saved.ts"), "utf8")).toBe(source + "\n");
+    expect(await readFile(join(cwd, ".pi/functions/saved.ts"), "utf8")).toBe(source + "\n");
     expect(await saveProjectFunction(cwd, "saved", source + "\n", functions)).toBe(true);
     expect(await removeProjectFunction(cwd, "saved")).toBe(true);
     expect(await removeProjectFunction(cwd, "saved")).toBe(false);
+  });
+
+  it("prefers current functions and migrates legacy files on write", async () => {
+    const legacyDirectory = join(cwd, ".pi/pit/functions");
+    const currentDirectory = join(cwd, ".pi/functions");
+    await Promise.all([
+      mkdir(legacyDirectory, { recursive: true }),
+      mkdir(currentDirectory, { recursive: true }),
+    ]);
+    const legacySource =
+      "/** Legacy helper. @pit project */ async function shared() { return 'legacy'; }";
+    const currentSource = "/** Current helper. */ async function shared() { return 'current'; }";
+    await writeFile(join(legacyDirectory, "shared.ts"), legacySource);
+
+    await writeFile(
+      join(legacyDirectory, "malformedLegacy.ts"),
+      "async function malformedLegacy() { return false; }",
+    );
+
+    const functions = registry();
+    const docs = metadata();
+    const legacyErrors = await loadProjectFunctions(ctx(), functions, docs);
+    expect(legacyErrors.join("\n")).toContain(".pi/pit/functions/malformedLegacy.ts");
+    expect(functions.get("shared")).toBe(legacySource);
+
+    await rm(join(legacyDirectory, "malformedLegacy.ts"));
+
+    await writeFile(join(currentDirectory, "shared.ts"), currentSource);
+    expect(await loadProjectFunctions(ctx(), functions, docs)).toEqual([]);
+    expect(functions.get("shared")).toBe(currentSource);
+
+    await writeFile(
+      join(currentDirectory, "shared.ts"),
+      "async function shared() { return 'invalid'; }",
+    );
+    const errors = await loadProjectFunctions(ctx(), functions, docs);
+    expect(functions.has("shared")).toBe(false);
+    expect(errors.join("\n")).toContain(".pi/functions/shared.ts");
+
+    await rm(join(currentDirectory, "shared.ts"));
+    await saveProjectFunction(cwd, "shared", currentSource, functions);
+    await expect(readFile(join(currentDirectory, "shared.ts"), "utf8")).resolves.toBe(
+      `${currentSource}\n`,
+    );
+    await expect(readFile(join(legacyDirectory, "shared.ts"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    await writeFile(join(legacyDirectory, "shared.ts"), legacySource);
+    expect(await removeProjectFunction(cwd, "shared")).toBe(true);
+    await expect(readFile(join(currentDirectory, "shared.ts"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(join(legacyDirectory, "shared.ts"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("does not impose an aggregate quota on project storage alone", async () => {
@@ -170,36 +226,36 @@ describe("project function storage", () => {
     expect(
       [...functions.values()].reduce((total, value) => total + Buffer.byteLength(value), 0),
     ).toBe(1_001_900);
-    await expect(
-      readFile(join(cwd, ".pi/pit/functions/storedProjectExtra.ts"), "utf8"),
-    ).resolves.toBe(source + "\n");
+    await expect(readFile(join(cwd, ".pi/functions/storedProjectExtra.ts"), "utf8")).resolves.toBe(
+      source + "\n",
+    );
   });
 
   it("loads valid files and reports malformed files", async () => {
-    const directory = join(cwd, ".pi/pit/functions");
+    const directory = join(cwd, ".pi/functions");
     await mkdir(join(directory, "ignored-directory.ts"), { recursive: true });
     await Promise.all([
       writeFile(join(directory, "ignored.txt"), "ignored"),
       writeFile(
         join(directory, "alpha.ts"),
-        "/** Alpha helper. @pit project */ async function alpha() { return true; }",
+        "/** Alpha helper. */ async function alpha() { return true; }",
       ),
       writeFile(
         join(directory, "beta.ts"),
-        "/** Beta helper. @pit project */ async function beta() { return alpha(); }",
+        "/** Beta helper. */ async function beta() { return alpha(); }",
       ),
       writeFile(
         join(directory, "gamma.ts"),
-        "/** Gamma helper. @pit project */ async function gamma() { return (await alpha()).missing; }",
+        "/** Gamma helper. */ async function gamma() { return (await alpha()).missing; }",
       ),
       writeFile(join(directory, "missing.ts"), "async function missing() { return null; }"),
       writeFile(
         join(directory, "wrong.ts"),
-        "/** Wrong file. @pit project */ async function other() { return null; }",
+        "/** Wrong file. */ async function other() { return null; }",
       ),
       writeFile(
         join(directory, "invalid.ts"),
-        "/** Invalid. @pit project */ async function invalid() { return 1n; }",
+        "/** Invalid. */ async function invalid() { return 1n; }",
       ),
       writeFile(join(directory, "oversized.ts"), "x".repeat(100_001)),
     ]);
@@ -209,14 +265,14 @@ describe("project function storage", () => {
     expect([...functions.keys()]).toEqual(["alpha", "beta"]);
     expect([...docs.keys()]).toEqual(["alpha", "beta"]);
     expect(errors.join("\n")).toMatch(
-      /missing @pit project|filename must be|source exceeds|TypeScript validation failed/,
+      /persistent functions require a JSDoc summary|filename must be|source exceeds|TypeScript validation failed/,
     );
     expect(await loadProjectFunctions(ctx(false), functions, docs)).toEqual([]);
     expect(functions.size).toBe(0);
   });
 
   it("does not let invalid load candidates consume final function capacity", async () => {
-    const directory = join(cwd, ".pi/pit/functions");
+    const directory = join(cwd, ".pi/functions");
     await mkdir(directory, { recursive: true });
     const invalidSources = Array.from({ length: 10 }, (_, index) => {
       const name = `invalidCandidate${String(index).padStart(2, "0")}`;
@@ -476,24 +532,24 @@ describe("project function storage", () => {
   });
 
   it("surfaces storage errors and cleans failed temporary writes", async () => {
-    await mkdir(join(cwd, ".pi/pit/functions/blocked.ts"), { recursive: true });
-    const source = "/** Blocked. @pit project */ async function blocked() { return null; }";
+    await mkdir(join(cwd, ".pi/functions/blocked.ts"), { recursive: true });
+    const source = "/** Blocked. */ async function blocked() { return null; }";
     await expect(saveProjectFunction(cwd, "blocked", source, registry())).rejects.toThrow();
     await rm(join(cwd, ".pi"), { recursive: true });
     await mkdir(join(cwd, ".pi/pit"), { recursive: true });
-    await writeFile(join(cwd, ".pi/pit/functions"), "not a directory");
+    await writeFile(join(cwd, ".pi/functions"), "not a directory");
     await expect(loadProjectFunctions(ctx(), registry(), metadata())).rejects.toThrow();
     await rm(join(cwd, ".pi"), { recursive: true });
-    await mkdir(join(cwd, ".pi/pit/functions/directory.ts"), { recursive: true });
+    await mkdir(join(cwd, ".pi/functions/directory.ts"), { recursive: true });
     await expect(removeProjectFunction(cwd, "directory")).rejects.toThrow();
   });
 
   it("derives no-input, required-input, and optional-input signatures", () => {
     const signatures = [
-      "/** No input. @pit project */ async function noInput() {}",
-      "/** Required input. @pit project */ async function required(_capabilities, input: { value: string }) {}",
-      "/** Optional input. @pit project */ async function optional(_capabilities, input?: number) {}",
-    ].map((source) => getProjectFunctionMetadata(source)?.signature);
+      "/** No input. */ async function noInput() {}",
+      "/** Required input. */ async function required(_capabilities, input: { value: string }) {}",
+      "/** Optional input. */ async function optional(_capabilities, input?: number) {}",
+    ].map((source) => getPersistentFunctionMetadata(source)?.signature);
     expect(signatures).toEqual([
       "noInput()",
       "required(input: { value: string })",
@@ -505,13 +561,13 @@ describe("project function storage", () => {
     const source = `/**
  * Greets someone using the project convention.
  *
- * @pit project
+ *
  * @param input.name - Name to greet.
  */
 async function projectGreeting(_capabilities, input: { name?: string } = {}) {
   return { greeting: "Hello, " + (input.name ?? "project") };
 }`;
-    const parsed = getProjectFunctionMetadata(source);
+    const parsed = getPersistentFunctionMetadata(source);
     expect(parsed).toEqual({
       name: "projectGreeting",
       signature: "projectGreeting(input?: { name?: string })",

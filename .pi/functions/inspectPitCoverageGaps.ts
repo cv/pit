@@ -1,7 +1,6 @@
 /**
  * Reports bounded uncovered-line and branch markers from Pit's generated coverage HTML.
  *
- * @pit project
  * @param input.files - Optional source paths such as src/index.ts.
  * @param input.limit - Maximum uncovered markers. The default is 100.
  */
