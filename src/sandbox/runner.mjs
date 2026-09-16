@@ -186,6 +186,7 @@ async function start(source, input) {
   try {
     // Indirect eval prevents evaluated code from seeing this module's lexical
     // token and RPC state. The OS permission layer contains its globals.
+    // oxlint-disable-next-line no-eval -- compiled user code runs in the restricted child process.
     const main = (0, eval)(source);
     if (typeof main !== "function") {
       throw new TypeError("TypeScript source must evaluate to a function");
