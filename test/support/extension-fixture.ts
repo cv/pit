@@ -59,7 +59,7 @@ export function context(overrides: Record<string, unknown> = {}) {
     hasPendingMessages: () => false,
     getContextUsage: () => ({ tokens: 1234, contextWindow: 200000, percent: 0.617 }),
     modelRegistry: {
-      refresh: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => ({ aborted: false, errors: new Map() })),
       getAll: () => configuredModels,
       getAvailable: () => configuredModels.filter((model) => model.available !== false),
       find: (provider: string, id: string) =>

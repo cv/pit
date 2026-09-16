@@ -13,12 +13,14 @@ export const modelsCapability = defineCapability({
     },
     list: {
       callDescription: "List configured models",
-      declaration: `list(options?: {
-  availableOnly?: boolean;
-  query?: string;
-  limit?: number;
-}): Promise<{ models: PitModelMetadata[]; truncated: boolean }>;`,
-      documentation: "models.list(options?) returns bounded configured model metadata",
+      declaration: `list(options?: { availableOnly?: boolean; query?: string; limit?: number }): Promise<{
+  models: PitModelMetadata[];
+  truncated: boolean;
+  refreshErrors: Array<{ provider: string; message: string }>;
+  refreshErrorsTruncated: boolean;
+}>;`,
+      documentation:
+        "models.list(options?) returns bounded configured model metadata and refresh diagnostics",
       minimumArguments: 0,
       maximumArguments: 1,
     },

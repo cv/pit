@@ -1,6 +1,11 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { formatSize, highlightCode } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import {
+  matchesKey,
+  truncateToWidth,
+  visibleWidth,
+  wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 
 import type { FunctionRegistry, FunctionScope, SessionFunctionRemovalPlan } from "./core.js";
 
@@ -27,16 +32,24 @@ export interface FunctionManagerOptions {
 }
 
 class SavedFunctionViewer {
-  private readonly lines: string[];
-  private readonly omitted: number;
+  private lines: string[] = [];
+  private omitted = 0;
 
   constructor(
     private readonly name: string,
-    source: string,
+    private readonly source: string,
     private readonly theme: Theme,
     private readonly close: () => void,
   ) {
-    const highlighted = highlightCode(source, "typescript");
+    this.rebuildHighlighting();
+  }
+
+  private rebuildHighlighting(): void {
+    const sourceLines = this.source.split("\n");
+    const highlighted = wrapTextWithAnsi(
+      highlightCode(this.source, "typescript").join("\n"),
+      Math.max(1, ...sourceLines.map((line) => visibleWidth(line))),
+    );
     this.lines = highlighted.slice(0, 500);
     this.omitted = highlighted.length - this.lines.length;
   }
@@ -53,7 +66,7 @@ class SavedFunctionViewer {
   }
 
   invalidate(): void {
-    // The viewer has no cached layout state.
+    this.rebuildHighlighting();
   }
 
   handleInput(data: string): void {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createModelsCapabilityHandler } from "../../src/capabilities/handlers/models.js";
 import {
@@ -120,8 +120,62 @@ describe("models capability", () => {
     ).rejects.toThrow("must be a boolean");
   });
 
+  it("returns bounded model refresh diagnostics and forwards the execution signal", async () => {
+    const errors = new Map<string, Error>([
+      ["alpha", new Error(`offline\n${"x".repeat(400)}`)],
+      ...Array.from(
+        { length: 10 },
+        (_, index) => [`provider-${index}`, new Error(`failure ${index}`)] as const,
+      ),
+    ]);
+    const base = context();
+    const refresh = vi.fn(async (_options?: { signal?: AbortSignal }) => ({
+      aborted: false,
+      errors,
+    }));
+    const ctx = context({ modelRegistry: { ...base.modelRegistry, refresh } });
+
+    const result = await value("async ({ models }) => models.list({ availableOnly: false })", ctx);
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(refresh.mock.calls[0]?.[0]?.signal).toBeInstanceOf(AbortSignal);
+    expect(result.refreshErrors).toHaveLength(10);
+    expect(result.refreshErrors[0]).toMatchObject({ provider: "alpha" });
+    expect(result.refreshErrors[0].message).not.toContain("\n");
+    expect(result.refreshErrors[0].message.length).toBeLessThanOrEqual(300);
+    expect(result.refreshErrorsTruncated).toBe(true);
+  });
+
+  it("rejects cancelled refreshes and provider failures when selecting a model", async () => {
+    const signal = new AbortController().signal;
+    const base = context();
+    const cancelled = createModelsCapabilityHandler({
+      pi: {} as never,
+      ctx: context({
+        modelRegistry: {
+          ...base.modelRegistry,
+          refresh: vi.fn(async () => ({ aborted: true, errors: new Map() })),
+        },
+      }) as never,
+    });
+    await expect(cancelled("list", [], signal)).rejects.toThrow("refresh was cancelled");
+
+    const refresh = vi.fn(async () => ({
+      aborted: false,
+      errors: new Map([["test", new Error("provider offline")]]),
+    }));
+    const failed = createModelsCapabilityHandler({
+      pi: {} as never,
+      ctx: context({ modelRegistry: { ...base.modelRegistry, refresh } }) as never,
+    });
+    await expect(failed("set", ["test", "available"], signal)).rejects.toThrow(
+      "test: provider offline",
+    );
+    expect(refresh).toHaveBeenCalledWith({ providers: ["test"], signal });
+  });
+
   it("ignores unknown internal dispatch", async () => {
     const handler = createModelsCapabilityHandler({ pi: {} as never, ctx: {} as never });
-    await expect(handler("unknown", [])).resolves.toBeUndefined();
+    await expect(handler("unknown", [], new AbortController().signal)).resolves.toBeUndefined();
   });
 });

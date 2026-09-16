@@ -6,8 +6,47 @@ import {
 import type { PiControlServices } from "./services.js";
 
 type PiModel = NonNullable<PiControlServices["ctx"]["model"]>;
+type ModelRefreshResult = Awaited<ReturnType<PiControlServices["ctx"]["modelRegistry"]["refresh"]>>;
 
-type ModelsCapabilityHandler = (method: string, args: unknown[]) => unknown | Promise<unknown>;
+type ModelsCapabilityHandler = (
+  method: string,
+  args: unknown[],
+  signal: AbortSignal,
+) => unknown | Promise<unknown>;
+
+const MAX_REFRESH_ERRORS = 10;
+const MAX_REFRESH_ERROR_CHARS = 300;
+
+function boundedErrorMessage(error: Error): string {
+  const message = error.message.replace(/\s+/g, " ").trim();
+  return message.length <= MAX_REFRESH_ERROR_CHARS
+    ? message
+    : `${message.slice(0, MAX_REFRESH_ERROR_CHARS - 1)}…`;
+}
+
+function refreshDiagnostics(result: ModelRefreshResult) {
+  const all = [...result.errors]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([provider, error]) => ({ provider, message: boundedErrorMessage(error) }));
+  return {
+    refreshErrors: all.slice(0, MAX_REFRESH_ERRORS),
+    refreshErrorsTruncated: all.length > MAX_REFRESH_ERRORS,
+  };
+}
+
+function ensureRefreshCompleted(result: ModelRefreshResult, signal: AbortSignal): void {
+  if (result.aborted || signal.aborted) {
+    throw new Error("Model catalog refresh was cancelled");
+  }
+}
+
+function refreshFailure(result: ModelRefreshResult): string {
+  const diagnostics = refreshDiagnostics(result);
+  const shown = diagnostics.refreshErrors
+    .map((entry) => `${entry.provider}: ${entry.message}`)
+    .join("; ");
+  return `${shown}${diagnostics.refreshErrorsTruncated ? "; … additional provider errors omitted" : ""}`;
+}
 
 export function createModelsCapabilityHandler({
   pi,
@@ -32,12 +71,11 @@ export function createModelsCapabilityHandler({
     };
   };
 
-  return async (method, args) => {
+  return async (method, args, signal) => {
     if (method === "current") {
       return ctx.model ? metadata(ctx.model) : undefined;
     }
     if (method === "list") {
-      await ctx.modelRegistry.refresh();
       const options = args[0] === undefined ? {} : object(args[0], "options");
       const availableOnly = options.availableOnly ?? true;
       if (typeof availableOnly !== "boolean") {
@@ -46,6 +84,8 @@ export function createModelsCapabilityHandler({
       const query =
         options.query === undefined ? "" : string(options.query, "options.query").toLowerCase();
       const limit = boundedInteger(options.limit, "options.limit", 200, 100);
+      const refresh = await ctx.modelRegistry.refresh({ signal });
+      ensureRefreshCompleted(refresh, signal);
       const source = availableOnly ? ctx.modelRegistry.getAvailable() : ctx.modelRegistry.getAll();
       const matches = source.filter((model) =>
         `${model.provider}/${model.id} ${model.name}`.toLowerCase().includes(query),
@@ -53,12 +93,17 @@ export function createModelsCapabilityHandler({
       return {
         models: matches.slice(0, limit).map(metadata),
         truncated: matches.length > limit,
+        ...refreshDiagnostics(refresh),
       };
     }
     if (method === "set") {
-      await ctx.modelRegistry.refresh();
       const provider = string(args[0], "provider");
       const id = string(args[1], "model id");
+      const refresh = await ctx.modelRegistry.refresh({ providers: [provider], signal });
+      ensureRefreshCompleted(refresh, signal);
+      if (refresh.errors.size > 0) {
+        throw new Error(`Model catalog refresh failed: ${refreshFailure(refresh)}`);
+      }
       const model = ctx.modelRegistry.find(provider, id);
       if (!model) {
         throw new Error(`Model "${provider}/${id}" is unavailable`);

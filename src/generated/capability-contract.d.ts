@@ -385,11 +385,12 @@ interface PitCommandsCapability {
 interface PitModelsCapability {
   current(): Promise<PitModelMetadata | undefined>;
 
-  list(options?: {
-    availableOnly?: boolean;
-    query?: string;
-    limit?: number;
-  }): Promise<{ models: PitModelMetadata[]; truncated: boolean }>;
+  list(options?: { availableOnly?: boolean; query?: string; limit?: number }): Promise<{
+    models: PitModelMetadata[];
+    truncated: boolean;
+    refreshErrors: Array<{ provider: string; message: string }>;
+    refreshErrorsTruncated: boolean;
+  }>;
 
   set(provider: string, id: string): Promise<{ provider: string; id: string; changed: boolean }>;
 }

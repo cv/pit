@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -421,7 +422,11 @@ describe("pit extension", () => {
   });
 
   it("inspects saved source and drives the interactive /functions manager", async () => {
-    await run("async function inspectMe() { return { ok: true }; }");
+    await run(`async function inspectMe() {
+      /* first
+      second */
+      return { ok: true };
+    }`);
     const ctx = context({ mode: "tui" });
     let rendered = "";
     ctx.ui.custom = vi.fn(async (factory?: any) => {
@@ -430,11 +435,15 @@ describe("pit extension", () => {
       }
       let closed = false;
       const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+      initTheme("dark");
       const component = factory({}, theme, {}, () => {
         closed = true;
       });
-      rendered = component.render(120).join("\n");
+      const darkRendered = component.render(120).join("\n");
+      initTheme("light");
       component.invalidate();
+      rendered = component.render(120).join("\n");
+      expect(rendered).not.toBe(darkRendered);
       component.handleInput("x");
       expect(closed).toBe(false);
       component.handleInput("\r");
@@ -447,6 +456,9 @@ describe("pit extension", () => {
     await functionsCommand.handler("show inspectMe", ctx);
     expect(rendered).toContain("inspectMe");
     expect(stripTerminalSequences(rendered)).toContain("async function inspectMe");
+
+    const continuedComment = rendered.split("\n").find((line) => line.includes("second */")) ?? "";
+    expect(continuedComment.slice(0, continuedComment.indexOf("second */"))).toContain("\u001b[");
 
     const longSource = Array.from(
       { length: 505 },
