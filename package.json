@@ -1,6 +1,6 @@
 {
   "name": "pit",
-  "version": "0.13.3",
+  "version": "0.14.0",
   "description": "A single, capability-injected TypeScript tool for Pi",
   "type": "module",
   "files": [
@@ -8,6 +8,8 @@
     "prompts",
     "docs",
     "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "LICENSE"
   ],
   "private": true,
@@ -58,11 +60,13 @@
     "pi-extension",
     "coding-agent",
     "typescript",
-    "sandbox"
+    "sandbox",
+    "developer-tools",
+    "ai-agent"
   ],
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/cv/pit.git"
+    "url": "git+https://github.com/cv/pit.git"
   },
   "homepage": "https://github.com/cv/pit#readme",
   "bugs": {

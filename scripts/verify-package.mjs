@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 
 const root = process.cwd();
 const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+
+const readme = await readFile(resolve(root, "README.md"), "utf8");
 const piProvided = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"];
 const requiredRuntimeFiles = [
   "src/index.ts",
@@ -11,10 +13,22 @@ const requiredRuntimeFiles = [
   "src/generated/capability-contract.d.ts",
   "prompts/pit-reflect.md",
   "docs/architecture.md",
+  "docs/releasing.md",
+  "CHANGELOG.md",
+  "SECURITY.md",
 ];
 
 function fail(message) {
   throw new Error(`Package verification failed: ${message}`);
+}
+
+if (packageJson.private !== true) {
+  fail("GitHub-distributed Pit must remain private to npm");
+}
+
+const installReference = `git:github.com/cv/pit@v${packageJson.version}`;
+if (readme.split(installReference).length - 1 < 3) {
+  fail(`README.md must use ${installReference} in pinned install examples`);
 }
 
 if (!Array.isArray(packageJson.pi?.extensions) || packageJson.pi.extensions.length === 0) {
@@ -31,6 +45,12 @@ if (!packageJson.files?.includes("prompts")) {
 
 if (!packageJson.files?.includes("docs")) {
   fail("package.json files must include the docs directory");
+}
+
+for (const file of ["CHANGELOG.md", "SECURITY.md"]) {
+  if (!packageJson.files?.includes(file)) {
+    fail(`package.json files must include ${file}`);
+  }
 }
 
 const declaredExtensions = packageJson.pi.extensions.map((entry) => {

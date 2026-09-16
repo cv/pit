@@ -39,29 +39,37 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Node 22.19 or newer and Pi 0.80.10 or newer. It uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
+Pit requires Node 22.19 or newer. Pit v0.14.0 is tested with Pi 0.85.1; other Pi versions may work, but they are not part of this release's compatibility guarantee. Pit uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
 
-Pit is a private Git-based Pi package. You need repository access and configured GitHub SSH credentials.
+Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
 Install the pinned release globally:
 
 ```sh
-pi install git:git@github.com:cv/pit.git@v0.13.3
+pi install git:github.com/cv/pit@v0.14.0
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:git@github.com:cv/pit.git@v0.13.3
+pi install -l git:github.com/cv/pit@v0.14.0
 ```
 
-Use the pinned release one time without a settings change:
+Use the pinned release one time without changing settings:
 
 ```sh
-pi -e git:git@github.com:cv/pit.git@v0.13.3
+pi -e git:github.com/cv/pit@v0.14.0
 ```
 
-Pit replaces the active coding tool set with `typescript` when the session starts.
+Update an existing unpinned Git installation and reload extensions:
+
+```sh
+pi update git:github.com/cv/pit
+```
+
+Then run `/reload` in Pi.
+
+Pit intentionally replaces the active coding tool set with `typescript` when each session starts, including when Pi's `defaultTools` setting names other tools.
 
 > [!IMPORTANT]
 > Review the source before installation. Pi extensions run with the permissions of the host process. Pit restricts submitted code, but its host capabilities can still change files, run commands, and access the network.
@@ -341,6 +349,8 @@ Capability destructuring makes intent visible. It is not an approval boundary. R
 
 This isolation is stronger than `node:vm`, which is not a security boundary. It does not replace a container, virtual machine, or operating-system sandbox. If you use a hostile model or a multi-tenant workload, use an additional operating-system boundary.
 
+Report suspected vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
 ## Capability reference
 
 ### `workspace`
@@ -425,7 +435,7 @@ UI methods require a mode that provides a UI.
 ### `models`
 
 - `current()` returns bounded metadata for the active model.
-- `list(options?)` returns bounded model metadata; available models are the default.
+- `list(options?)` returns bounded model metadata and bounded provider refresh diagnostics in `refreshErrors`; available models are the default.
 - `set(provider, id)` selects an explicit configured model and fails when credentials are unavailable.
 
 ### `runtime`
@@ -476,9 +486,9 @@ Output is bounded. Read metadata uses sparse defaults:
 
 Run `node --version`. Install Node 22.19 or newer. Start Pi again with the new Node version.
 
-### Git cannot install the package
+### Git cannot install or update the package
 
-Run `ssh -T git@github.com`. Confirm that GitHub accepts the SSH key. Confirm that the account can access `cv/pit`.
+Confirm that `https://github.com/cv/pit` is reachable. Run `pi update git:github.com/cv/pit`, then `/reload`. If a pinned tag is unavailable, verify that the tag exists in [GitHub Releases](https://github.com/cv/pit/releases).
 
 ### An edit reports a revision or anchor mismatch
 
@@ -495,6 +505,12 @@ Run Pi in a mode that provides a UI. Do not use a UI capability in a non-UI mode
 ### A saved function is unavailable
 
 Run `/functions list` and confirm that the function exists on the active session branch. Call `context.get()` to inspect the active function names.
+
+## Support
+
+Use [GitHub Issues](https://github.com/cv/pit/issues) for reproducible bugs and focused feature requests. Pit follows a best-effort support model for the tested Pi and Node.js versions documented above. Other Pi releases, operating systems, shells, and terminal environments may work but are not guaranteed.
+
+Do not report suspected vulnerabilities in public issues. Follow [SECURITY.md](SECURITY.md) instead. Contributions are welcome under [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Development
 
@@ -531,7 +547,7 @@ npm run format
 
 `npm run check` verifies the generated capability contract and structural boundaries, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The structure check limits root-level source files and rejects internal import cycles. The custom quality audit retains Pit's file, function, and complexity limits.
 
-Pull requests and pushes to `main` run package verification, static checks, tests, and the coverage gate in GitHub Actions. A repository maintainer must configure branch protection to require the `test` check before merge.
+Pull requests and pushes to `main` run package verification, static checks, dependency auditing, and coverage on the supported Node.js matrix. Public branch protection requires those checks before merge. See [the release guide](docs/releasing.md) for tagged GitHub releases.
 
 ## License
 
