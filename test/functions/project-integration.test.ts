@@ -47,7 +47,7 @@ beforeEach(async () => {
 afterEach(cleanupHarness);
 
 function sizedFunction(name: string, bytes: number): string {
-  const prefix = `async function ${name}() { /*`;
+  const prefix = `async function ${name}({}) { /*`;
   const suffix = "*/ return true; }";
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
@@ -73,7 +73,7 @@ describe("project functions", () => {
  *
  * @param input.name - Name to greet.
  */
-async function projectGreeting(_capabilities, input: { name?: string } = {}) {
+async function projectGreeting({}, input: { name?: string } = {}) {
   return { greeting: "Hello, " + (input.name ?? "project") };
 }`;
     const defined = await run(source);
@@ -84,7 +84,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     expect(defined.content[0].text).toContain("[Session functions: projectGreeting");
 
     await value(
-      'async ({ functions }) => functions.promote("projectGreeting", "Greets someone using the project convention.")',
+      'async ({ functions: { list: functionList, promote, remove: removeProject } }) => promote("projectGreeting", "Greets someone using the project convention.")',
     );
     const stored = await readFile(join(cwd, ".pi/functions/projectGreeting.ts"), "utf8");
     expect(stored).not.toContain("@pit");
@@ -113,13 +113,13 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
 
     setBranchEntries([]);
     await sessionStart({}, context());
-    const invoked = await run(`projectGreeting({ name: "Pi" })`);
+    const invoked = await run(`async ({ projectGreeting }) => projectGreeting({ name: "Pi" })`);
     expect(invoked.details.value).toEqual({ greeting: "Hello, Pi" });
     expect(invoked.content[0].text).not.toContain("[Session functions:");
   });
 
   it("saves a selected session function to the project", async () => {
-    await run("async function menuProject() { return 'project menu'; }");
+    await run("async function menuProject({}) { return 'project menu'; }");
     const ctx = context({ mode: "tui" });
     ctx.ui.input = vi.fn(async () => "Runs the project menu workflow.");
     ctx.ui.select = vi
@@ -148,9 +148,9 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
         data: { name: "menuProject", deleted: true },
       }),
     );
-    expect(await value("menuProject()")).toBe("project menu");
-    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([]);
-    expect((await value("async ({ context }) => context.get()")).projectFunctions).toEqual([
+    expect(await value("async ({ menuProject }) => menuProject()")).toBe("project menu");
+    expect((await value("async ({ context: { get } }) => get()")).sessionFunctions).toEqual([]);
+    expect((await value("async ({ context: { get } }) => get()")).projectFunctions).toEqual([
       "menuProject",
     ]);
   });
@@ -158,7 +158,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
   it("lists, inspects, and removes project functions from the manager", async () => {
     await writeProjectFunction(
       "managedProject",
-      "/** Managed project helper. */ async function managedProject() { return true; }",
+      "/** Managed project helper. */ async function managedProject({}) { return true; }",
     );
     await sessionStart({}, context());
     const listed = context();
@@ -194,16 +194,16 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     await expect(
       readFile(join(cwd, ".pi/functions/managedProject.ts"), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
-    expect((await value("async ({ context }) => context.get()")).projectFunctions).toEqual([]);
+    expect((await value("async ({ context: { get } }) => get()")).projectFunctions).toEqual([]);
   });
 
   it("labels session overrides and directly inspects project functions", async () => {
     await writeProjectFunction(
       "scopedProject",
-      "/** Scoped project helper. */ async function scopedProject() { return 'project'; }",
+      "/** Scoped project helper. */ async function scopedProject({}) { return 'project'; }",
     );
     await sessionStart({}, context());
-    const overridden = await run("async function scopedProject() { return 'session'; }");
+    const overridden = await run("async function scopedProject({}) { return 'session'; }");
     expect(overridden.content[0].text).toContain("[Session functions: scopedProject()]");
     const listed = context();
     await functionsCommand.handler("list", listed);
@@ -214,7 +214,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
 
     await writeProjectFunction(
       "directProject",
-      "/** Direct inspection helper. */ async function directProject() { return true; }",
+      "/** Direct inspection helper. */ async function directProject({}) { return true; }",
     );
     await sessionStart({}, context());
     const inspected = context({ mode: "tui" });
@@ -225,7 +225,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
   it("handles cancelled, absent, and blocked project removals", async () => {
     await writeProjectFunction(
       "removalMenu",
-      "/** Removal menu helper. */ async function removalMenu() { return true; }",
+      "/** Removal menu helper. */ async function removalMenu({}) { return true; }",
     );
     await sessionStart({}, context());
     const cancelled = context({ mode: "tui" });
@@ -239,7 +239,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       .mockResolvedValueOnce(undefined);
 
     await functionsCommand.handler("", cancelled);
-    expect((await value("async ({ context }) => context.get()")).projectFunctions).toEqual([
+    expect((await value("async ({ context: { get } }) => get()")).projectFunctions).toEqual([
       "removalMenu",
     ]);
 
@@ -261,11 +261,11 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
     await Promise.all([
       writeProjectFunction(
         "removalMenuBase",
-        "/** Removal base. */ async function removalMenuBase() { return true; }",
+        "/** Removal base. */ async function removalMenuBase({}) { return true; }",
       ),
       writeProjectFunction(
         "removalMenuDependent",
-        "/** Removal dependent. */ async function removalMenuDependent() { return removalMenuBase(); }",
+        "/** Removal dependent. */ async function removalMenuDependent({ removalMenuBase }) { return removalMenuBase(); }",
       ),
     ]);
     await sessionStart({}, context());
@@ -286,7 +286,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
   });
 
   it("handles cancelled and invalid project saves from the function manager", async () => {
-    await run("async function cancelledProject() { return true; }");
+    await run("async function cancelledProject({}) { return true; }");
     const cancelled = context({ mode: "tui" });
     cancelled.ui.input.mockResolvedValueOnce(undefined as never);
     cancelled.ui.select = vi
@@ -298,11 +298,11 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       .mockResolvedValueOnce(undefined);
 
     await functionsCommand.handler("", cancelled);
-    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([
+    expect((await value("async ({ context: { get } }) => get()")).sessionFunctions).toEqual([
       "cancelledProject",
     ]);
 
-    await run("((async function wrappedProject() { return true; }))");
+    await run("((async function wrappedProject({}) { return true; }))");
     const invalid = context({ mode: "tui" });
     invalid.ui.input = vi.fn(async () => "Wrapped project helper.");
     invalid.ui.select = vi
@@ -318,7 +318,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       expect.stringContaining("must be a top-level function declaration"),
       "error",
     );
-    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([
+    expect((await value("async ({ context: { get } }) => get()")).sessionFunctions).toEqual([
       "cancelledProject",
       "wrappedProject",
     ]);
@@ -326,14 +326,14 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
 
   it("reloads project functions that invoke the typed npm capability", async () => {
     const source = `/** Runs project tests. */
-async function projectTests({ npm }) {
-  return npm.test({ raise: true });
+async function projectTests({ npm: { test } }) {
+  return test({ raise: true });
 }`;
     await writeProjectFunction("projectTests", source);
     execMock.mockClear();
 
     await sessionStart({}, context());
-    const invoked = await run("projectTests()");
+    const invoked = await run("async ({ projectTests }) => projectTests()");
 
     expect(execMock).toHaveBeenCalledWith(
       "npm",
@@ -350,33 +350,34 @@ async function projectTests({ npm }) {
   it("prefers session overrides until the session branch reloads", async () => {
     await writeProjectFunction(
       "projectGreeting",
-      '/** Project greeting. */ async function projectGreeting() { return "project"; }',
+      '/** Project greeting. */ async function projectGreeting({}) { return "project"; }',
     );
     await sessionStart({}, context());
     await tool.execute(
       "call-id",
-      { code: 'async function projectGreeting() { return "session"; }', saveOnly: true },
+      { code: 'async function projectGreeting({}) { return "session"; }', saveOnly: true },
       undefined,
       undefined,
       context(),
     );
-    expect(await value("projectGreeting()")).toBe("session");
+    expect(await value("async ({ projectGreeting }) => projectGreeting()")).toBe("session");
 
     setBranchEntries([]);
     await sessionStart({}, context());
-    expect(await value("projectGreeting()")).toBe("project");
+    expect(await value("async ({ projectGreeting }) => projectGreeting()")).toBe("project");
   });
 
   it("wires idempotent project removal through the functions capability", async () => {
     await writeProjectFunction(
       "removableProject",
-      "/** Removable project. */ async function removableProject() { return true; }",
+      "/** Removable project. */ async function removableProject({}) { return true; }",
     );
     await sessionStart({}, context());
 
-    const removed = await run(`async ({ functions }) => ({
-      first: await functions.remove("removableProject"),
-      second: await functions.remove("removableProject"),
+    const removed =
+      await run(`async ({ functions: { list: functionList, promote, remove: removeProject } }) => ({
+      first: await removeProject("removableProject"),
+      second: await removeProject("removableProject"),
     })`);
     expect(removed.details.value).toEqual({
       first: { name: "removableProject", removed: true },
@@ -393,18 +394,18 @@ async function projectTests({ npm }) {
   it("supports save-only project updates and clears session overrides", async () => {
     await writeProjectFunction(
       "versionedProject",
-      "/** Project version one. */ async function versionedProject() { return 1; }",
+      "/** Project version one. */ async function versionedProject({}) { return 1; }",
     );
     setBranchEntries([
       sessionFunctionEntry(
         "versionedProject",
-        'async function versionedProject() { return "session override"; }',
+        'async function versionedProject({}) { return "session override"; }',
       ),
-      sessionFunctionEntry("sessionHelper", "async function sessionHelper() { return 42; }"),
+      sessionFunctionEntry("sessionHelper", "async function sessionHelper({}) { return 42; }"),
     ]);
     await sessionStart({}, context());
 
-    const source = "/** Project version two. */ async function versionedProject() { return 2; }";
+    const source = "/** Project version two. */ async function versionedProject({}) { return 2; }";
     const saved = await tool.execute(
       "call-id",
       { code: source, saveOnly: true },
@@ -414,7 +415,7 @@ async function projectTests({ npm }) {
     );
     expect(saved.details.value).toEqual({ savedFunction: "versionedProject", executed: false });
     await value(
-      'async ({ functions }) => functions.promote("versionedProject", "Project version two.")',
+      'async ({ functions: { list: functionList, promote, remove: removeProject } }) => promote("versionedProject", "Project version two.")',
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
@@ -422,19 +423,23 @@ async function projectTests({ npm }) {
         data: { name: "versionedProject", deleted: true },
       }),
     );
-    expect(await value("Promise.all([versionedProject(), sessionHelper()])")).toEqual([2, 42]);
+    expect(
+      await value(
+        "async ({ versionedProject, sessionHelper }) => Promise.all([versionedProject(), sessionHelper()])",
+      ),
+    ).toEqual([2, 42]);
   }, 15_000);
 
   it("keeps legacy scope markers session-scoped until explicit promotion", async () => {
     const saved = await run(`/** Legacy marker. @pit project */
-async function markedSession() {
+async function markedSession({}) {
   return "session";
 }`);
 
     expect(saved.details.functions).toEqual([
       { action: "set", name: "markedSession", replaced: false },
     ]);
-    expect(await value("async ({ context }) => context.get()")).toMatchObject({
+    expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
       projectFunctions: [],
       sessionFunctions: ["markedSession"],
     });
@@ -475,7 +480,7 @@ async function markedSession() {
     expect(rejection).toMatchObject({
       reason: expect.objectContaining({ message: expect.stringContaining("total source") }),
     });
-    const sessionFunctions = (await value("async ({ context }) => context.get()"))
+    const sessionFunctions = (await value("async ({ context: { get } }) => get()"))
       .sessionFunctions as string[];
     expect(sessionFunctions).toHaveLength(10);
     expect(
@@ -487,47 +492,49 @@ async function markedSession() {
   it("reconciles the project function when a session override is deleted", async () => {
     await writeProjectFunction(
       "quotaProject",
-      "/** Quota project. */ async function quotaProject() { return true; }",
+      "/** Quota project. */ async function quotaProject({}) { return true; }",
     );
     setBranchEntries([
       sessionFunctionEntry(
         "quotaProject",
-        'async function quotaProject() { return "session override"; }',
+        'async function quotaProject({}) { return "session override"; }',
       ),
     ]);
     await sessionStart({}, context());
-    expect(await value("quotaProject()")).toBe("session override");
+    expect(await value("async ({ quotaProject }) => quotaProject()")).toBe("session override");
 
     await functionsCommand.handler("delete quotaProject", context());
-    expect(await value("quotaProject()")).toBe(true);
+    expect(await value("async ({ quotaProject }) => quotaProject()")).toBe(true);
   });
 
   it("rejects removal with project, transitive, and session dependents", async () => {
     await Promise.all([
       writeProjectFunction(
         "dependencyBase",
-        "/** Base. */ async function dependencyBase() { return 1; }",
+        "/** Base. */ async function dependencyBase({}) { return 1; }",
       ),
       writeProjectFunction(
         "directProject",
-        "/** Direct project dependent. */ async function directProject() { return dependencyBase(); }",
+        "/** Direct project dependent. */ async function directProject({ dependencyBase }) { return dependencyBase(); }",
       ),
       writeProjectFunction(
         "transitiveProject",
-        "/** Transitive project dependent. */ async function transitiveProject() { return directProject(); }",
+        "/** Transitive project dependent. */ async function transitiveProject({ directProject }) { return directProject(); }",
       ),
     ]);
     setBranchEntries([
-      sessionFunctionEntry("directProject", "async function directProject() { return 2; }"),
+      sessionFunctionEntry("directProject", "async function directProject({}) { return 2; }"),
       sessionFunctionEntry(
         "sessionDependent",
-        "async function sessionDependent() { return dependencyBase(); }",
+        "async function sessionDependent({ dependencyBase }) { return dependencyBase(); }",
       ),
     ]);
     await sessionStart({}, context());
 
     await expect(
-      run('async ({ functions }) => functions.remove("dependencyBase")'),
+      run(
+        'async ({ functions: { list: functionList, promote, remove: removeProject } }) => removeProject("dependencyBase")',
+      ),
     ).rejects.toThrow("direct: directProject, sessionDependent; transitive: transitiveProject");
     await expect(readFile(join(cwd, ".pi/functions/dependencyBase.ts"), "utf8")).resolves.toContain(
       "dependencyBase",
@@ -537,7 +544,7 @@ async function markedSession() {
   it("serializes project removal with a concurrent dependent save", async () => {
     await writeProjectFunction(
       "removalRaceBase",
-      "/** Removal race base. */ async function removalRaceBase() { return 1; }",
+      "/** Removal race base. */ async function removalRaceBase({}) { return 1; }",
     );
     await sessionStart({}, context());
     const functionPath = join(cwd, ".pi/functions/removalRaceBase.ts");
@@ -555,12 +562,14 @@ async function markedSession() {
     };
 
     try {
-      const removal = run(`async ({ functions }) => functions.remove("removalRaceBase")`);
+      const removal = run(
+        `async ({ functions: { list: functionList, promote, remove: removeProject } }) => removeProject("removalRaceBase")`,
+      );
       await removalBlocked;
       const dependentSave = tool.execute(
         "call-id",
         {
-          code: "async function removalRaceDependent() { return removalRaceBase(); }",
+          code: "async function removalRaceDependent({ removalRaceBase }) { return removalRaceBase(); }",
           saveOnly: true,
         },
         undefined,
@@ -580,7 +589,7 @@ async function markedSession() {
           message: expect.stringContaining("removalRaceBase"),
         }),
       });
-      expect(await value("async ({ context }) => context.get()")).toMatchObject({
+      expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
         projectFunctions: [],
         sessionFunctions: [],
         savedFunctions: [],
@@ -595,32 +604,36 @@ async function markedSession() {
   it("allows project removal when session overrides satisfy session dependents", async () => {
     await writeProjectFunction(
       "overriddenBase",
-      "/** Project base. */ async function overriddenBase() { return 1; }",
+      "/** Project base. */ async function overriddenBase({}) { return 1; }",
     );
     setBranchEntries([
-      sessionFunctionEntry("overriddenBase", "async function overriddenBase() { return 2; }"),
+      sessionFunctionEntry("overriddenBase", "async function overriddenBase({}) { return 2; }"),
       sessionFunctionEntry(
         "overrideConsumer",
-        "async function overrideConsumer() { return overriddenBase(); }",
+        "async function overrideConsumer({ overriddenBase }) { return overriddenBase(); }",
       ),
     ]);
     await sessionStart({}, context());
 
     await expect(
-      value('async ({ functions }) => functions.remove("overriddenBase")'),
+      value(
+        'async ({ functions: { list: functionList, promote, remove: removeProject } }) => removeProject("overriddenBase")',
+      ),
     ).resolves.toEqual({ name: "overriddenBase", removed: true });
-    await expect(value("overrideConsumer()")).resolves.toBe(2);
+    await expect(value("async ({ overrideConsumer }) => overrideConsumer()")).resolves.toBe(2);
   });
 
   it("commits project definitions only after successful execution", async () => {
     await expect(
       run(`/** Fails intentionally. */
-async function brokenProject() { throw new Error("project failure"); }`),
+async function brokenProject({}) { throw new Error("project failure"); }`),
     ).rejects.toThrow("project failure");
     await expect(
       readFile(join(cwd, ".pi/functions/brokenProject.ts"), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(run("brokenProject()")).rejects.toThrow("Cannot find name 'brokenProject'");
+    await expect(run("async ({ brokenProject }) => brokenProject()")).rejects.toThrow(
+      /Property 'brokenProject' does not exist/,
+    );
   });
 
   it("warns about malformed project files at session start", async () => {
@@ -644,28 +657,32 @@ async function brokenProject() { throw new Error("project failure"); }`),
   it("is disabled unless the project explicitly opts in", async () => {
     await writeProjectFunction(
       "keptProject",
-      "/** Kept while disabled. */ async function keptProject() { return true; }",
+      "/** Kept while disabled. */ async function keptProject({}) { return true; }",
     );
     await sessionStart({}, context());
     await rm(join(cwd, ".pi/pit.json"));
     await sessionStart({}, context());
 
     await expect(
-      run("/** Disabled helper. */ async function disabledProject() { return true; }"),
+      run("/** Disabled helper. */ async function disabledProject({}) { return true; }"),
     ).resolves.toMatchObject({
       details: { functions: [{ action: "set", name: "disabledProject" }] },
     });
-    await expect(run("async ({ functions }) => functions.list()")).rejects.toThrow(
-      "Project functions are disabled",
-    );
+    await expect(
+      run(
+        "async ({ functions: { list: functionList, promote, remove: removeProject } }) => functionList()",
+      ),
+    ).rejects.toThrow("Project functions are disabled");
     await expect(
       readFile(join(cwd, ".pi/functions/disabledProject.ts"), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(join(cwd, ".pi/functions/keptProject.ts"), "utf8")).resolves.toContain(
       "Kept while disabled",
     );
-    await expect(run("keptProject()")).rejects.toThrow("Cannot find name 'keptProject'");
-    expect(await value("async ({ context }) => context.get()")).toMatchObject({
+    await expect(run("async ({ keptProject }) => keptProject()")).rejects.toThrow(
+      /Property 'keptProject' does not exist/,
+    );
+    expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
       projectFunctionsEnabled: false,
       projectFunctions: [],
     });
@@ -679,7 +696,7 @@ async function brokenProject() { throw new Error("project failure"); }`),
       expect.stringContaining("Invalid .pi/pit.json"),
       "warning",
     );
-    expect(await value("async ({ context }) => context.get()", ctx)).toMatchObject({
+    expect(await value("async ({ context: { get } }) => get()", ctx)).toMatchObject({
       projectFunctionsEnabled: false,
     });
   });
@@ -687,12 +704,12 @@ async function brokenProject() { throw new Error("project failure"); }`),
   it("requires project trust only for explicit persistent operations", async () => {
     expect(beforeAgentStart({ systemPrompt: "base" }, context())).toBeUndefined();
     await expect(
-      run("/** */ async function undocumented() { return null; }"),
+      run("/** */ async function undocumented({}) { return null; }"),
     ).resolves.toMatchObject({
       details: { functions: [{ action: "set", name: "undocumented" }] },
     });
     await expect(
-      run("/** Summary. @pit global */ async function wrongScope() { return null; }"),
+      run("/** Summary. @pit global */ async function wrongScope({}) { return null; }"),
     ).resolves.toMatchObject({
       details: { functions: [{ action: "set", name: "wrongScope" }] },
     });
@@ -700,12 +717,15 @@ async function brokenProject() { throw new Error("project failure"); }`),
     const untrusted = context({ isProjectTrusted: () => false });
     await expect(
       run(
-        'async ({ functions }) => functions.promote("undocumented", "Documented helper.")',
+        'async ({ functions: { list: functionList, promote, remove: removeProject } }) => promote("undocumented", "Documented helper.")',
         untrusted,
       ),
     ).rejects.toThrow("trusted project");
-    await expect(run("async ({ functions }) => functions.list()", untrusted)).rejects.toThrow(
-      "trusted project",
-    );
+    await expect(
+      run(
+        "async ({ functions: { list: functionList, promote, remove: removeProject } }) => functionList()",
+        untrusted,
+      ),
+    ).rejects.toThrow("trusted project");
   });
 });
