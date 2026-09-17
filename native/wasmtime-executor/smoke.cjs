@@ -84,6 +84,37 @@ async function main() {
   assert.equal(javascriptExecuted, true);
   assert.equal(javascriptCallbackCalls, 1);
 
+  const prepared = JSON.parse(fs.readFileSync("./prepared-program.json", "utf8"));
+  const allowedEffects = new Set(prepared.effects);
+  let preparedResult;
+  const preparedExecuted = await executor.executeJavascript(
+    guest,
+    prepared.source,
+    async (rawRequest) => {
+      const request = JSON.parse(rawRequest);
+      if (request.type === "result") {
+        preparedResult = request.value;
+        return JSON.stringify({ value: null });
+      }
+      const effect = `${request.capability}.${request.method}`;
+      if (request.capability !== "__pit" && !allowedEffects.has(effect)) {
+        return JSON.stringify({ error: `Function grant does not allow ${effect}` });
+      }
+      if (effect === "context.get") {
+        return JSON.stringify({ value: { cwd: "/wasmtime", backend: "quickjs" } });
+      }
+      if (effect === "__pit.savedFunctionRun") {
+        return JSON.stringify({ value: null });
+      }
+      return JSON.stringify({ error: `Unsupported smoke effect: ${effect}` });
+    },
+  );
+  assert.equal(preparedExecuted, true);
+  assert.deepEqual(preparedResult, {
+    context: { cwd: "/wasmtime", backend: "quickjs" },
+    input: { value: 42 },
+  });
+
   console.log(
     JSON.stringify({
       backend: "wasmtime",
@@ -94,6 +125,7 @@ async function main() {
       asyncHostCallback: true,
       quickJsGuest: javascriptExecuted,
       jsonHostBridge: true,
+      preparedPitProgram: preparedExecuted,
       guestImports,
     }),
   );
