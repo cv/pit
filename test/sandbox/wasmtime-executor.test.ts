@@ -146,16 +146,32 @@ describe("createWasmtimeFunctionExecutor", () => {
     expect(addon.executeQueuedJavascript).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid guest protocol messages", async () => {
+  it.each([JSON.stringify({ type: "unknown" }), "null"])(
+    "rejects invalid guest protocol message %s",
+    async (message) => {
+      const addon: WasmtimeAddon = {
+        async executeQueuedJavascript(_component, _source, callback) {
+          await callback(message);
+          return true;
+        },
+      };
+      const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+      await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
+        "Invalid Pit guest request",
+      );
+    },
+  );
+
+  it("rejects guest timers beyond the execution timeout", async () => {
     const addon: WasmtimeAddon = {
       async executeQueuedJavascript(_component, _source, callback) {
-        await callback(JSON.stringify({ type: "unknown" }));
+        await callback(JSON.stringify({ type: "timer", delayMs: 501 }));
         return true;
       },
     };
     const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
     await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
-      "Invalid Pit guest request",
+      "Pit guest timer exceeds execution timeout",
     );
   });
 

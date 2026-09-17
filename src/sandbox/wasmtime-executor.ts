@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
 import {
@@ -26,6 +27,21 @@ export interface WasmtimeAddon {
     memoryLimitMb?: number,
     executionId?: string,
   ): Promise<boolean>;
+}
+
+interface TimerRequest {
+  type: "timer";
+  delayMs: number;
+}
+
+function isTimerRequest(
+  request: Record<string, unknown>,
+): request is Record<string, unknown> & TimerRequest {
+  return (
+    request.type === "timer" &&
+    Number.isSafeInteger(request.delayMs) &&
+    Number(request.delayMs) >= 0
+  );
 }
 
 export interface WasmtimeFunctionExecutorOptions {
@@ -76,7 +92,19 @@ export function createWasmtimeFunctionExecutor({
         if (Buffer.byteLength(raw) > MAX_PROTOCOL_FRAME_BYTES) {
           throw new Error("Pit guest request exceeds bounds");
         }
-        const message = JSON.parse(raw) as WireMessage;
+        const value = JSON.parse(raw) as unknown;
+        if (!(value && typeof value === "object" && !Array.isArray(value))) {
+          throw new Error("Invalid Pit guest request");
+        }
+        const request = value as Record<string, unknown>;
+        if (isTimerRequest(request)) {
+          if (request.delayMs > options.timeoutMs) {
+            throw new Error("Pit guest timer exceeds execution timeout");
+          }
+          await delay(request.delayMs, undefined, { signal });
+          return JSON.stringify({ value: null });
+        }
+        const message = request as WireMessage;
         if (message.type === "result") {
           resultReceived = true;
           result = message.value;

@@ -92,7 +92,11 @@ describe("configuredFunctionExecutor", () => {
       const executor = configuredFunctionExecutor({});
       await expect(
         executor.execute(
-          { compiled: "async () => 42", effects: [] },
+          {
+            compiled:
+              "async () => await new Promise((resolve) => setTimeout(() => resolve(42), 10))",
+            effects: [],
+          },
           async () => {
             throw new Error("unexpected capability call");
           },
