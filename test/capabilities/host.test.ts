@@ -21,9 +21,9 @@ describe("host capabilities", () => {
       .mockResolvedValueOnce({ stdout: "second", stderr: "", code: 0 });
     const controller = new AbortController();
     const result = await run(
-      `async ({ shell }) => [
-      await shell.exec("first"),
-      await shell.exec("second", { cwd: ".", timeoutMs: 50 }),
+      `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => [
+      await shellExec("first"),
+      await shellExec("second", { cwd: ".", timeoutMs: 50 }),
     ]`,
       context(),
       controller.signal,
@@ -61,19 +61,21 @@ describe("host capabilities", () => {
         code: 0,
       });
 
-    const head = await value(`async ({ shell }) => shell.exec("head", {
+    const head =
+      await value(`async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("head", {
       maxLines: 2, truncate: "head",
     })`);
     expect(head).toMatchObject({ stdout: "one\ntwo", stderr: "alpha\nbeta", truncated: true });
 
-    const tail = await value(`async ({ shell }) => shell.exec("tail", {
+    const tail =
+      await value(`async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("tail", {
       maxLines: 2, maxBytes: 50, truncate: "tail",
     })`);
     expect(tail).toMatchObject({ stdout: "three\nfour", truncated: true });
 
     const callsBeforeInvalid = execMock.mock.calls.length;
-    const errors = await value(`async ({ shell }) => {
-      const raw = shell as any;
+    const errors = await value(`async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => {
+      const raw = { exec: shellExec, execFile: shellExecFile } as any;
       const capture = async (options) => { try { await raw.exec("invalid", options); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture({ maxBytes: 0 }),
@@ -95,7 +97,7 @@ describe("host capabilities", () => {
     const result = await tool.execute(
       "stream-call",
       {
-        code: `async ({ shell }) => shell.execFile(${JSON.stringify(process.execPath)}, [
+        code: `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExecFile(${JSON.stringify(process.execPath)}, [
           "-e", ${JSON.stringify(script)},
         ])`,
       },
@@ -120,7 +122,9 @@ describe("host capabilities", () => {
     const shellUpdates: any[] = [];
     const shellResult = await tool.execute(
       "stream-shell-call",
-      { code: 'async ({ shell }) => shell.exec("printf shell-progress")' },
+      {
+        code: 'async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("printf shell-progress")',
+      },
       undefined,
       (update: any) => shellUpdates.push(update),
       context(),
@@ -133,7 +137,7 @@ describe("host capabilities", () => {
     execMock.mockResolvedValueOnce({ stdout: "committed", stderr: "", code: 0 });
     const controller = new AbortController();
     const result = await run(
-      `async ({ shell }) => shell.execFile("git", ["commit", "-m", "$(touch unsafe)"], {
+      `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExecFile("git", ["commit", "-m", "$(touch unsafe)"], {
       cwd: ".", timeoutMs: 5000, raise: true,
     })`,
       context(),
@@ -147,21 +151,27 @@ describe("host capabilities", () => {
     );
 
     execMock.mockResolvedValueOnce({ stdout: "status", stderr: "", code: 0 });
-    expect(await value(`async ({ shell }) => shell.execFile("git", ["status"])`)).toMatchObject({
+    expect(
+      await value(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExecFile("git", ["status"])`,
+      ),
+    ).toMatchObject({
       stdout: "status",
       code: 0,
     });
 
     execMock.mockResolvedValueOnce({ stdout: "", stderr: "failed", code: 9 });
     await expect(
-      run(`async ({ shell }) => shell.execFile("git", ["push"], { raise: true })`),
+      run(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExecFile("git", ["push"], { raise: true })`,
+      ),
     ).rejects.toThrow(/Command failed with exit code 9: git "push"[\s\S]*failed/);
   });
 
   it("executes typed GitHub filters and selected JSON fields", async () => {
     execMock.mockResolvedValueOnce({ stdout: "[]", stderr: "", code: 0 });
 
-    const response = await value(`async ({ gh }) => gh.prList({
+    const response = await value(`async ({ gh: { prList: ghPrList } }) => ghPrList({
       repo: "NVIDIA/NemoClaw",
       author: "@me",
       state: "open",
@@ -191,15 +201,16 @@ describe("host capabilities", () => {
   });
 
   it("executes allowlisted Git subcommands without shell interpolation", async () => {
-    const results = await value(`async ({ git }) => [
-      await git.status(["--short"], { cwd: ".", timeoutMs: 5000, raise: true }),
-      await git.diff(["--stat"]),
-      await git.log(["-3", "--oneline"]),
-      await git.add(["src/index.ts"]),
-      await git.commit(["-m", "$(touch unsafe)"]),
-      await git.show(["HEAD"]),
-      await git.push(),
-      await git.tag(["--list"]),
+    const results =
+      await value(`async ({ git: { add: gitAdd, commit: gitCommit, diff: gitDiff, log: gitLog, push: gitPush, show: gitShow, status: gitStatus, tag: gitTag } }) => [
+      await gitStatus(["--short"], { cwd: ".", timeoutMs: 5000, raise: true }),
+      await gitDiff(["--stat"]),
+      await gitLog(["-3", "--oneline"]),
+      await gitAdd(["src/index.ts"]),
+      await gitCommit(["-m", "$(touch unsafe)"]),
+      await gitShow(["HEAD"]),
+      await gitPush(),
+      await gitTag(["--list"]),
     ]`);
 
     expect(results).toHaveLength(8);
@@ -219,15 +230,15 @@ describe("host capabilities", () => {
     );
 
     const callsBeforeInvalid = execMock.mock.calls.length;
-    const errors = await value(`async ({ git }) => {
-      const raw = git as any;
+    const errors =
+      await value(`async ({ git: { add: gitAdd, commit: gitCommit, diff: gitDiff, log: gitLog, push: gitPush, show: gitShow, status: gitStatus, tag: gitTag } }) => {
+      const raw = { diff: gitDiff, log: gitLog, show: gitShow, status: gitStatus } as any;
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture(() => raw.status("--short")),
         await capture(() => raw.diff([42])),
         await capture(() => raw.log([], "bad")),
         await capture(() => raw.show([], { raise: "yes" })),
-        await capture(() => raw.nope()),
       ];
     }`);
     expect(errors).toEqual([
@@ -235,14 +246,15 @@ describe("host capabilities", () => {
       "args must be an array of strings",
       "options must be an object",
       "options.raise must be a boolean",
-      "Unknown capability or method: git.nope",
     ]);
     expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
   });
 
   it("persists bounded capability traces without argument values", async () => {
     execMock.mockResolvedValueOnce({ stdout: "## main\n", stderr: "", code: 0 });
-    const result = await run(`async ({ git }) => git.status(["--short", "secret-path"])`);
+    const result = await run(
+      `async ({ git: { add: gitAdd, commit: gitCommit, diff: gitDiff, log: gitLog, push: gitPush, show: gitShow, status: gitStatus, tag: gitTag } }) => gitStatus(["--short", "secret-path"])`,
+    );
 
     expect(result.details.traces).toEqual([
       expect.objectContaining({
@@ -259,8 +271,8 @@ describe("host capabilities", () => {
   });
 
   it("truncates persisted traces after the retention limit", async () => {
-    const result = await run(`async ({ context }) => {
-      for (let index = 0; index < 129; index++) await context.get();
+    const result = await run(`async ({ context: { get: contextGet } }) => {
+      for (let index = 0; index < 129; index++) await contextGet();
       return null;
     }`);
 
@@ -269,9 +281,9 @@ describe("host capabilities", () => {
     expect(result.details.tracesTruncated).toBe(true);
   });
 
-  it("validates shell.execFile arguments", async () => {
-    const errors = await value(`async ({ shell }) => {
-      const raw = shell as any;
+  it("validates shellExecFile arguments", async () => {
+    const errors = await value(`async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => {
+      const raw = { exec: shellExec, execFile: shellExecFile } as any;
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture(() => raw.execFile(42, [])),
@@ -293,43 +305,54 @@ describe("host capabilities", () => {
   it("raises on nonzero shell exits when requested", async () => {
     execMock.mockResolvedValueOnce({ stdout: "partial output", stderr: "command failed", code: 7 });
     await expect(
-      run(`async ({ shell }) => shell.exec("failing", { raise: true })`),
+      run(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("failing", { raise: true })`,
+      ),
     ).rejects.toThrow(/Command failed with exit code 7: failing[\s\S]*command failed/);
 
     execMock.mockResolvedValueOnce({ stdout: "ok", stderr: "", code: 0 });
     expect(
-      await value(`async ({ shell }) => shell.exec("passing", { raise: true })`),
+      await value(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("passing", { raise: true })`,
+      ),
     ).toMatchObject({ stdout: "ok", code: 0 });
 
     execMock.mockResolvedValueOnce({ stdout: "stdout failure", stderr: "", code: 2 });
     await expect(
-      run(`async ({ shell }) => shell.exec("stdout-only", { raise: true })`),
+      run(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("stdout-only", { raise: true })`,
+      ),
     ).rejects.toThrow(/stdout-only[\s\S]*stdout failure/);
     execMock.mockResolvedValueOnce({ stdout: "", stderr: "", code: 3 });
-    await expect(run(`async ({ shell }) => shell.exec("silent", { raise: true })`)).rejects.toThrow(
-      "Command failed with exit code 3: silent",
-    );
-
-    await expect(run(`async ({ shell }) => shell.exec("bad", { raise: "yes" })`)).rejects.toThrow(
-      /string.*boolean/,
-    );
     await expect(
-      run(`async ({ shell }) => (shell as any).exec("bad", { raise: "yes" })`),
+      run(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("silent", { raise: true })`,
+      ),
+    ).rejects.toThrow("Command failed with exit code 3: silent");
+
+    await expect(
+      run(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("bad", { raise: "yes" })`,
+      ),
+    ).rejects.toThrow(/string.*boolean/);
+    await expect(
+      run(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => (shellExec as any)("bad", { raise: "yes" })`,
+      ),
     ).rejects.toThrow("options.raise must be a boolean");
   });
 
   it("validates shell calls and rejects unknown capabilities", async () => {
-    expect(await value(`async ({ shell }) => shell.exec("ok")`)).toMatchObject({ code: 0 });
-    const errors = await value(`async (capabilities) => {
-      const { shell, mystery } = capabilities as any;
+    expect(
+      await value(
+        `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("ok")`,
+      ),
+    ).toMatchObject({ code: 0 });
+    const errors = await value(`async ({ shell: { exec: shellExec } }) => {
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
-      return [await capture(() => shell.exec(1)), await capture(() => shell.exec("x", "bad")), await capture(() => mystery.go())];
+      return [await capture(() => (shellExec as any)(1)), await capture(() => (shellExec as any)("x", "bad"))];
     }`);
-    expect(errors).toEqual([
-      "command must be a string",
-      "options must be an object",
-      "Unknown capability or method: mystery.go",
-    ]);
+    expect(errors).toEqual(["command must be a string", "options must be an object"]);
   });
 
   it("performs HTTP requests and truncates large responses", async () => {
@@ -344,8 +367,8 @@ describe("host capabilities", () => {
     const controller = new AbortController();
     const result = (
       await run(
-        `async ({ http }) => {
-      const response = await http.request("https://example.test", {
+        `async ({ http: { request: httpRequest } }) => {
+      const response = await httpRequest("https://example.test", {
         method: "POST", headers: { "x-input": "yes" }, body: "payload",
       });
       return { ...response, body: response.body.length };
@@ -376,11 +399,11 @@ describe("host capabilities", () => {
       .mockResolvedValueOnce(new Response("x".repeat(1_000_000)))
       .mockResolvedValueOnce(new Response(chunked));
     vi.stubGlobal("fetch", fetchMock);
-    const result = await value(`async ({ http }) => {
+    const result = await value(`async ({ http: { request: httpRequest } }) => {
       const responses = [
-        await http.request("https://example.test/empty"),
-        await http.request("https://example.test/exact"),
-        await http.request("https://example.test/chunked"),
+        await httpRequest("https://example.test/empty"),
+        await httpRequest("https://example.test/exact"),
+        await httpRequest("https://example.test/chunked"),
       ];
       return responses.map((response) => ({ ...response, body: response.body.length }));
     }`);
@@ -394,13 +417,16 @@ describe("host capabilities", () => {
       "fetch",
       vi.fn(async () => new Response("abcdefghij")),
     );
-    const result = await value(`async ({ http }) => http.request("https://example.test", {
+    const result =
+      await value(`async ({ http: { request: httpRequest } }) => httpRequest("https://example.test", {
       maxBytes: 5,
     })`);
     expect(result).toMatchObject({ body: "abcde", truncated: true });
 
     await expect(
-      run(`async ({ http }) => http.request("https://example.test", { maxBytes: 0 })`),
+      run(
+        `async ({ http: { request: httpRequest } }) => httpRequest("https://example.test", { maxBytes: 0 })`,
+      ),
     ).rejects.toThrow("options.maxBytes must be an integer between 1 and 1000000");
   });
 
@@ -409,31 +435,27 @@ describe("host capabilities", () => {
       "fetch",
       vi.fn(async () => new Response("small")),
     );
-    const result = await value(`async ({ http }) => {
-      const ok = await http.request("https://example.test");
+    const result = await value(`async ({ http: { request: httpRequest } }) => {
+      const ok = await httpRequest("https://example.test");
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
-      const raw = http as any;
-      return [ok, await capture(() => raw.request(1)), await capture(() => raw.request("x", "bad")), await capture(() => raw.nope("x"))];
+      const raw = { request: httpRequest } as any;
+      return [ok, await capture(() => raw.request(1)), await capture(() => raw.request("x", "bad"))];
     }`);
     expect(result[0]).toMatchObject({ body: "small", truncated: false });
-    expect(result.slice(1)).toEqual([
-      "url must be a string",
-      "options must be an object",
-      "Unknown capability or method: http.nope",
-    ]);
+    expect(result.slice(1)).toEqual(["url must be a string", "options must be an object"]);
   });
 
   it("provides UI and context capabilities", async () => {
     const ctx = context();
     const result = await value(
-      `async ({ ui, context }) => ({
-      confirmed: await ui.confirm("Confirm", "Sure?"),
-      input: await ui.input("Input"),
-      inputWithPlaceholder: await ui.input("Input", "hint"),
-      selected: await ui.select("Pick", ["a", "b"]),
-      notified: await ui.notify("Done", "warning"),
-      defaultNotify: await ui.notify("Again"),
-      context: await context.get(),
+      `async ({ ui: { confirm: uiConfirm, input: uiInput, notify: uiNotify, select: uiSelect }, context: { get: contextGet } }) => ({
+      confirmed: await uiConfirm("Confirm", "Sure?"),
+      input: await uiInput("Input"),
+      inputWithPlaceholder: await uiInput("Input", "hint"),
+      selected: await uiSelect("Pick", ["a", "b"]),
+      notified: await uiNotify("Done", "warning"),
+      defaultNotify: await uiNotify("Again"),
+      context: await contextGet(),
     })`,
       ctx,
     );
@@ -456,35 +478,36 @@ describe("host capabilities", () => {
 
   it("handles unavailable and invalid UI operations", async () => {
     const noUi = context({ hasUI: false });
-    await expect(run(`async ({ ui }) => ui.confirm("x", "y")`, noUi)).rejects.toThrow(
-      "UI is not available",
-    );
+    await expect(
+      run(
+        `async ({ ui: { confirm: uiConfirm, input: uiInput, notify: uiNotify, select: uiSelect } }) => uiConfirm("x", "y")`,
+        noUi,
+      ),
+    ).rejects.toThrow("UI is not available");
 
-    const errors = await value(`async ({ ui }) => {
+    const errors =
+      await value(`async ({ ui: { confirm: uiConfirm, input: uiInput, notify: uiNotify, select: uiSelect } }) => {
       const capture = async (fn) => { try { await fn(); return "ok"; } catch (e) { return e.message; } };
-      const raw = ui as any;
+      const raw = { confirm: uiConfirm, select: uiSelect } as any;
       return [
         await capture(() => raw.confirm(1, "x")),
         await capture(() => raw.select("x", "bad")),
-        await capture(() => raw.nope()),
       ];
     }`);
-    expect(errors).toEqual([
-      "title must be a string",
-      "options must be an array",
-      "Unknown capability or method: ui.nope",
-    ]);
+    expect(errors).toEqual(["title must be a string", "options must be an array"]);
   });
 
   it("handles missing model and renders primitive results", async () => {
     const noModel = context({ model: undefined });
-    expect(await value("async ({ context }) => context.get()", noModel)).toMatchObject({ cwd });
-    expect((await run(`() => "plain text"`)).content[0].text).toBe("plain text");
-    expect((await run("() => undefined")).content[0].text).toBe("undefined");
+    expect(
+      await value("async ({ context: { get: contextGet } }) => contextGet()", noModel),
+    ).toMatchObject({ cwd });
+    expect((await run(`({}) => "plain text"`)).content[0].text).toBe("plain text");
+    expect((await run("({}) => undefined")).content[0].text).toBe("undefined");
   });
 
   it("truncates oversized tool output", async () => {
-    const result = await run(`() => "x".repeat(200000)`);
+    const result = await run(`({}) => "x".repeat(200000)`);
     expect(result.content[0].text).toContain("[Result truncated]");
     expect(result.details).toEqual({ value: undefined, truncated: true });
   });

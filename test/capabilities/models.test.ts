@@ -40,9 +40,9 @@ afterEach(cleanupHarness);
 describe("models capability", () => {
   it("lists available models by default and supports bounded queries", async () => {
     expect(
-      await value(`async ({ models }) => ({
-        available: await models.list(),
-        all: await models.list({ availableOnly: false, query: "unavailable", limit: 1 }),
+      await value(`async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => ({
+        available: await modelsList(),
+        all: await modelsList({ availableOnly: false, query: "unavailable", limit: 1 }),
       })`),
     ).toMatchObject({
       available: {
@@ -60,9 +60,9 @@ describe("models capability", () => {
     const ctx = context({ scopedModels: [{ model: available }] });
     expect(
       await value(
-        `async ({ models }) => ({
-          full: await models.list({ availableOnly: false }),
-          limited: await models.list({ availableOnly: false, limit: 1 }),
+        `async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => ({
+          full: await modelsList({ availableOnly: false }),
+          limited: await modelsList({ availableOnly: false, limit: 1 }),
         })`,
         ctx,
       ),
@@ -85,9 +85,9 @@ describe("models capability", () => {
     const ctx = context({ model: available });
     expect(
       await value(
-        `async ({ models }) => ({
-        current: await models.current(),
-        selected: await models.set("test", "available"),
+        `async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => ({
+        current: await modelsCurrent(),
+        selected: await modelsSet("test", "available"),
       })`,
         ctx,
       ),
@@ -99,9 +99,16 @@ describe("models capability", () => {
 
   it("reports no current model and detects a model change", async () => {
     await expect(
-      value("async ({ models }) => models.current()", context({ model: undefined })),
+      value(
+        "async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => modelsCurrent()",
+        context({ model: undefined }),
+      ),
     ).resolves.toBeUndefined();
-    await expect(value(`async ({ models }) => models.set("test", "available")`)).resolves.toEqual({
+    await expect(
+      value(
+        `async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => modelsSet("test", "available")`,
+      ),
+    ).resolves.toEqual({
       provider: "test",
       id: "available",
       changed: true,
@@ -109,14 +116,20 @@ describe("models capability", () => {
   });
 
   it("rejects unknown models, missing credentials, and invalid options", async () => {
-    await expect(run(`async ({ models }) => models.set("test", "missing")`)).rejects.toThrow(
-      "is unavailable",
-    );
-    await expect(run(`async ({ models }) => models.set("test", "unavailable")`)).rejects.toThrow(
-      "no configured credentials",
-    );
     await expect(
-      run(`async ({ models }) => models.list({ availableOnly: "yes" as any })`),
+      run(
+        `async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => modelsSet("test", "missing")`,
+      ),
+    ).rejects.toThrow("is unavailable");
+    await expect(
+      run(
+        `async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => modelsSet("test", "unavailable")`,
+      ),
+    ).rejects.toThrow("no configured credentials");
+    await expect(
+      run(
+        `async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => modelsList({ availableOnly: "yes" as any })`,
+      ),
     ).rejects.toThrow("must be a boolean");
   });
 
@@ -135,7 +148,10 @@ describe("models capability", () => {
     }));
     const ctx = context({ modelRegistry: { ...base.modelRegistry, refresh } });
 
-    const result = await value("async ({ models }) => models.list({ availableOnly: false })", ctx);
+    const result = await value(
+      "async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => modelsList({ availableOnly: false })",
+      ctx,
+    );
 
     expect(refresh).toHaveBeenCalledOnce();
     expect(refresh.mock.calls[0]?.[0]?.signal).toBeInstanceOf(AbortSignal);

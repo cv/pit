@@ -14,7 +14,9 @@ afterEach(cleanupHarness);
 
 describe("runtime capability", () => {
   it("reports runtime status", async () => {
-    await expect(value("async ({ runtime }) => runtime.status()")).resolves.toEqual({
+    await expect(
+      value("async ({ runtime: { status: runtimeStatus } }) => runtimeStatus()"),
+    ).resolves.toEqual({
       mode: "interactive",
       idle: true,
       pendingMessages: false,
