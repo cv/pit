@@ -52,6 +52,35 @@ describe("runInSandbox", () => {
     );
   });
 
+  it("runs explicitly injected custom and native functions through RPC", async () => {
+    const handler = vi.fn(async ({ capability, method, args }: CapabilityRequest) => {
+      if (capability === "__pit" && method === "savedFunctionRun") return null;
+      if (capability === "workspace" && method === "read") {
+        return { content: `read:${String(args[0])}` };
+      }
+      throw new Error(`unexpected function call: ${capability}.${method}`);
+    });
+    const result = await runInSandbox(
+      "async ({ inspect }, input: { file: string }) => inspect(input)",
+      handler,
+      {
+        unifiedFunctions: true,
+        input: { file: "README.md" },
+        projectFunctions: new Map([
+          [
+            "inspect",
+            "async function inspect({ workspace: { read } }, input: { file: string }) { return read(input.file); }",
+          ],
+        ]),
+      },
+    );
+
+    expect(result).toEqual({ content: "read:README.md" });
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ capability: "workspace", method: "read", args: ["README.md"] }),
+    );
+  });
+
   it("emits bounded runtime traces for concurrent success and failure", async () => {
     const updates: CapabilityTrace[] = [];
     const result = await runInSandbox(
