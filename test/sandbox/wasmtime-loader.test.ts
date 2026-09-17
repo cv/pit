@@ -8,6 +8,25 @@ import { nodeFunctionExecutor } from "../../src/sandbox/run.js";
 import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js";
 
 describe("configuredFunctionExecutor", () => {
+  it("selects the current host target when none is injected", () => {
+    const operations = {
+      loadAddon: vi.fn(() => ({ executeQueuedJavascript: vi.fn() })),
+      readComponent: vi.fn(() => new Uint8Array([1, 2, 3])),
+    };
+    let outcome = "loaded";
+    try {
+      configuredFunctionExecutor({}, operations);
+    } catch (error) {
+      outcome = error instanceof Error ? error.message : String(error);
+    }
+    const target = `${process.platform}-${process.arch}`;
+    expect(outcome).toBe(
+      target === "linux-arm64"
+        ? "loaded"
+        : `Pit Wasmtime execution does not support ${target}; set PIT_FUNCTION_EXECUTOR=node to use the deprecated Node executor`,
+    );
+  });
+
   it("loads the Linux ARM64 Wasmtime prebuild by default", () => {
     const loadAddon = vi.fn(() => ({ executeQueuedJavascript: vi.fn() }));
     const readComponent = vi.fn(() => new Uint8Array([1, 2, 3]));
