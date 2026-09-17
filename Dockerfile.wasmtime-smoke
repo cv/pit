@@ -3,12 +3,15 @@ FROM rust:1.95-bookworm AS builder
 WORKDIR /build
 COPY native/wasmtime-executor/Cargo.toml native/wasmtime-executor/Cargo.lock native/wasmtime-executor/build.rs ./
 COPY native/wasmtime-executor/src ./src
-RUN cargo build --release --locked
+RUN --mount=type=cache,id=pit-cargo-registry,target=/usr/local/cargo/registry \
+  --mount=type=cache,id=pit-wasmtime-target,target=/build/target \
+  cargo build --release --locked \
+  && cp /build/target/release/libpit_wasmtime_executor.so /build/pit_wasmtime_executor.node
 
 FROM node:24-bookworm-slim
 
 WORKDIR /smoke
-COPY --from=builder /build/target/release/libpit_wasmtime_executor.so ./pit_wasmtime_executor.node
+COPY --from=builder /build/pit_wasmtime_executor.node ./pit_wasmtime_executor.node
 COPY native/wasmtime-executor/smoke.cjs ./smoke.cjs
 
 CMD ["node", "smoke.cjs"]
