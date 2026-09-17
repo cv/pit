@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
 import type { CapabilityRequest } from "../../src/sandbox/dispatcher.js";
-import { runInSandbox, SandboxRemoteError, sandboxFatalError } from "../../src/sandbox/run.js";
+import type { FunctionExecutor } from "../../src/sandbox/executor.js";
+import {
+  runInSandbox,
+  runWithFunctionExecutor,
+  SandboxRemoteError,
+  sandboxFatalError,
+} from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("runInSandbox", () => {
@@ -14,6 +20,30 @@ describe("runInSandbox", () => {
       },
     );
     expect(result).toEqual({ answer: 42 });
+  });
+
+  it("prepares and delegates programs through a backend-neutral executor", async () => {
+    const execute = vi.fn(async () => ({ backend: "test" }));
+    const executor: FunctionExecutor = { execute };
+    const handler = async () => null;
+
+    await expect(
+      runWithFunctionExecutor(
+        "async ({ context: { get } }, _input: { value: number }) => get()",
+        handler,
+        { input: { value: 1 }, memoryLimitMb: 64, timeoutMs: 250 },
+        executor,
+      ),
+    ).resolves.toEqual({ backend: "test" });
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ compiled: expect.any(String), effects: ["context.get"] }),
+      handler,
+      expect.objectContaining({
+        input: { value: 1 },
+        memoryLimitMb: 64,
+        timeoutMs: 250,
+      }),
+    );
   });
 
   it("passes initial input as the function's second argument", async () => {
