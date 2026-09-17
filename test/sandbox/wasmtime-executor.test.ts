@@ -162,6 +162,22 @@ describe("createWasmtimeFunctionExecutor", () => {
     },
   );
 
+  it("completes bounded guest timers", async () => {
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript(_component, _source, callback) {
+        expect(JSON.parse(await callback(JSON.stringify({ type: "timer", delayMs: 0 })))).toEqual({
+          value: null,
+        });
+        await callback(JSON.stringify({ type: "result", value: "timer-complete" }));
+        return true;
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+    await expect(executor.execute(program([]), async () => null, options)).resolves.toBe(
+      "timer-complete",
+    );
+  });
+
   it("rejects guest timers beyond the execution timeout", async () => {
     const addon: WasmtimeAddon = {
       async executeQueuedJavascript(_component, _source, callback) {
