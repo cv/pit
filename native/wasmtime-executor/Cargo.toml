@@ -8,7 +8,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "3.12.6", default-features = false, features = ["napi8"] }
+napi = { version = "3.12.6", default-features = false, features = ["async", "napi8"] }
 napi-derive = "3.6.7"
 wasmtime = "48.0.2"
 
