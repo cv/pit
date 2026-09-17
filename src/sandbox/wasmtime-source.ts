@@ -8,6 +8,15 @@ let __pit_next_id = 1;
 let __pit_next_invocation_id = 1;
 let __pit_function_context;
 
+globalThis.setTimeout = (handler, timeout = 0, ...args) => {
+  if (typeof handler !== "function") throw new TypeError("setTimeout handler must be a function");
+  const requested = Number(timeout);
+  const delayMs = Number.isFinite(requested) ? Math.max(0, Math.floor(requested)) : 0;
+  const timer = pitCall(JSON.stringify({ type: "timer", delayMs }));
+  void timer.then(() => handler(...args));
+  return timer;
+};
+
 const __pit_rpc = async (message) => {
   const response = JSON.parse(await pitCall(JSON.stringify({
     ...message,
