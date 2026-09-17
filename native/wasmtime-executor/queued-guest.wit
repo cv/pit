@@ -1,0 +1,29 @@
+package pit:quickjs@0.1.0;
+
+interface runner {
+    record request {
+        id: u32,
+        payload: string,
+    }
+
+    variant completion {
+        success(string),
+        failure(string),
+    }
+
+    variant poll-state {
+        pending,
+        complete,
+        failed(string),
+    }
+
+    initialize: func();
+    start: func(source: string);
+    take-requests: func() -> list<request>;
+    deliver: func(id: u32, completion: completion);
+    poll: func() -> poll-state;
+}
+
+world queued-guest {
+    export runner;
+}
