@@ -31,11 +31,21 @@ RUN --mount=type=cache,id=pit-cargo-registry,target=/usr/local/cargo/registry \
   cargo build --manifest-path /guest/Cargo.toml --target wasm32-wasip2 --release --locked \
   && javy init-plugin /guest/target/wasm32-wasip2/release/pit_javy_guest.wasm -o /build/pit_javy_guest.wasm
 
+FROM node:24-bookworm-slim AS program
+
+WORKDIR /pit
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY src ./src
+COPY native/wasmtime-executor/prepare-smoke.mts ./native/wasmtime-executor/prepare-smoke.mts
+RUN npx tsx native/wasmtime-executor/prepare-smoke.mts /prepared-program.json
+
 FROM node:24-bookworm-slim
 
 WORKDIR /smoke
 COPY --from=builder /build/pit_wasmtime_executor.node ./pit_wasmtime_executor.node
 COPY --from=builder /build/pit_javy_guest.wasm ./pit_javy_guest.wasm
+COPY --from=program /prepared-program.json ./prepared-program.json
 COPY native/wasmtime-executor/smoke.cjs ./smoke.cjs
 
 CMD ["node", "smoke.cjs"]

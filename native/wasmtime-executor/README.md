@@ -11,7 +11,8 @@ The initial smoke test proves:
 - an async Wasmtime host import can await a JavaScript Promise through a threadsafe N-API callback;
 - a custom Javy QuickJS guest has no WASI imports and dynamically compiles JavaScript;
 - top-level JavaScript `await` can call that asynchronous host bridge;
-- bounded UTF-8 JSON requests and responses cross the guest boundary without WASI; and
+- bounded UTF-8 JSON requests and responses cross the guest boundary without WASI;
+- JavaScript emitted by `prepareSandboxProgram` executes and returns a JSON-compatible result; and
 - Wasmtime trap causes survive the JavaScript boundary.
 
 Build and run it without installing Rust on the host:
@@ -21,4 +22,4 @@ docker build -f Dockerfile.wasmtime-smoke -t pit-wasmtime-smoke:issue-82 .
 docker run --rm pit-wasmtime-smoke:issue-82
 ```
 
-The next step is to return a JSON-compatible program result and run the JavaScript emitted by `prepareSandboxProgram`. Concurrent `Promise.all` host calls remain the main blocker: the current synchronous QuickJS `pitCall` wrapper suspends the Wasm instance for each host request, so calls cannot overlap. A production guest needs a queued non-blocking API or Component Model async task support.
+Concurrent `Promise.all` host calls are now the main blocker: the current synchronous QuickJS `pitCall` wrapper suspends the Wasm instance for each host request, so calls cannot overlap. A production guest needs a queued non-blocking API or Component Model async task support.
