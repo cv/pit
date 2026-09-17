@@ -146,7 +146,7 @@ After validation and scope resolution, esbuild transforms the generated TypeScri
 
 ## Sandbox and RPC boundary
 
-`src/sandbox/wasmtime-loader.ts` selects the executor and loads the checked-in Linux ARM64 N-API addon and QuickJS component. Wasmtime is the default. `PIT_FUNCTION_EXECUTOR=node` selects the deprecated permission-restricted Node child for diagnostics or unsupported platforms; explicit `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` paths can replace both packaged artifacts together.
+`scripts/install-wasmtime.mjs` selects the current OS and architecture during Pi's Git package `npm install`, downloads only that release addon plus the shared QuickJS component, verifies both against the release checksum manifest, and writes them atomically under `native/prebuilds/<target>/`. `src/sandbox/wasmtime-loader.ts` loads those artifacts by default. Missing implicit artifacts warn and fall back to the deprecated Node child; explicit Wasmtime configuration remains strict. `PIT_FUNCTION_EXECUTOR=node` selects Node deliberately, while `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` can replace both installed artifacts together.
 
 `src/sandbox/wasmtime-executor.ts` gives every invocation a random execution ID and creates a bounded dispatcher for the program's resolved effects. It wraps the compiled program as an ES module that exposes a queued `pitCall()` bridge. The custom component retains JavaScript Promise resolvers, exports queued requests to Rust, accepts completions, and pumps pending QuickJS jobs.
 

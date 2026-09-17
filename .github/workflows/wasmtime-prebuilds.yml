@@ -1,0 +1,105 @@
+name: Wasmtime prebuilds
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  guest:
+    name: QuickJS Wasm guest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libclang-dev
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add wasm32-wasip2 --toolchain 1.95.0
+      - name: Build QuickJS component
+        env:
+          BINDGEN_EXTRA_CLANG_ARGS: -isystem /usr/lib/llvm-18/lib/clang/18/include
+        run: cargo +1.95.0 build --manifest-path native/wasmtime-executor/queued-guest/Cargo.toml --target wasm32-wasip2 --release --locked
+      - name: Stage component
+        run: |
+          mkdir -p dist
+          cp native/wasmtime-executor/queued-guest/target/wasm32-wasip2/release/pit_queued_quickjs_guest.wasm dist/pit-queued-quickjs-guest.wasm
+      - name: Upload component
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wasmtime-guest
+          path: dist/pit-queued-quickjs-guest.wasm
+          if-no-files-found: error
+
+  addon:
+    name: ${{ matrix.target }} addon
+    needs: guest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            library: native/wasmtime-executor/target/release/libpit_wasmtime_executor.so
+          - target: linux-x64
+            runner: ubuntu-24.04
+            library: native/wasmtime-executor/target/release/libpit_wasmtime_executor.so
+          - target: darwin-arm64
+            runner: macos-15
+            library: native/wasmtime-executor/target/release/libpit_wasmtime_executor.dylib
+          - target: darwin-x64
+            runner: macos-15-intel
+            library: native/wasmtime-executor/target/release/libpit_wasmtime_executor.dylib
+          - target: win32-arm64
+            runner: windows-11-arm
+            library: native/wasmtime-executor/target/release/pit_wasmtime_executor.dll
+          - target: win32-x64
+            runner: windows-2025
+            library: native/wasmtime-executor/target/release/pit_wasmtime_executor.dll
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Use lockfile-compatible npm
+        run: npm install --global npm@11.17.0
+      - name: Install JavaScript dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.95.0 --profile minimal
+      - name: Build native addon
+        shell: bash
+        run: cargo +1.95.0 build --manifest-path native/wasmtime-executor/Cargo.toml --release --locked
+      - name: Download QuickJS component
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wasmtime-guest
+          path: dist
+      - name: Stage smoke test
+        shell: bash
+        run: |
+          cp "${{ matrix.library }}" dist/pit_wasmtime_executor.node
+          cp "${{ matrix.library }}" "dist/pit-wasmtime-${{ matrix.target }}.node"
+          cp native/wasmtime-executor/smoke.cjs dist/smoke.cjs
+          npx tsx native/wasmtime-executor/prepare-smoke.mts dist/prepared-program.json
+          npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=dist/wasmtime-adapter.cjs
+      - name: Smoke-test native addon
+        shell: bash
+        run: cd dist && node smoke.cjs
+      - name: Upload native addon
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wasmtime-${{ matrix.target }}
+          path: dist/pit-wasmtime-${{ matrix.target }}.node
+          if-no-files-found: error
