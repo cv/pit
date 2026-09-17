@@ -17,7 +17,15 @@ fn modify_runtime(runtime: Runtime) -> Runtime {
         ctx.globals()
             .set(
                 "pitCall",
-                Func::from(|value: u32| -> u32 { crate::pit_call(value) }),
+                Func::from(|request: String| -> String {
+                    let request = request.into_bytes();
+                    let handle =
+                        crate::pit_call_start(request.as_ptr() as u32, request.len() as u32);
+                    let length = crate::pit_call_len(handle);
+                    let mut response = vec![0_u8; length as usize];
+                    crate::pit_call_read(handle, response.as_mut_ptr() as u32);
+                    String::from_utf8(response).expect("Pit host response must be UTF-8")
+                }),
             )
             .unwrap();
     });
