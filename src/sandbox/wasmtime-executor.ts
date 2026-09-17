@@ -13,7 +13,7 @@ import { isCapabilityCallMessage } from "./wire.js";
 const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
 const MAX_CAPABILITY_CALLS = 1_024;
 const MAX_CONCURRENT_CAPABILITY_CALLS = 32;
-const DEFAULT_FUEL = 1_000_000_000_000;
+const DEFAULT_FUEL = Number.MAX_SAFE_INTEGER;
 
 export interface WasmtimeAddon {
   interruptQueuedJavascript?(executionId: string): boolean;
