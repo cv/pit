@@ -1,21 +1,6 @@
 import { createHash } from "node:crypto";
 
-import {
-  type CompilerHost,
-  type CompilerOptions,
-  createCompilerHost,
-  createProgram,
-  createSourceFile,
-  forEachChild,
-  type Identifier,
-  isIdentifier,
-  isTypeNode,
-  ModuleKind,
-  type Node,
-  ScriptTarget,
-  type Symbol as TypeScriptSymbol,
-  type VariableStatement,
-} from "typescript";
+import { getFunctionDependencies } from "./dependencies.js";
 
 const MAX_DEPENDENCY_GRAPH_CACHE_ENTRIES = 32;
 const MAX_REFERENCE_CACHE_ENTRIES = 128;
@@ -55,76 +40,6 @@ function sourceFingerprint(source: string): string {
   return fingerprint([source]);
 }
 
-function referencedNames(source: string, candidates: ReadonlySet<string>): string[] {
-  const contractFile = "/pit/reference-contract.d.ts";
-  const sourceFile = "/pit/references.ts";
-  const declarations = [...candidates]
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => `declare const ${name}: (...args: unknown[]) => unknown;`)
-    .join("\n");
-  const wrapped = `function __pit_reference_scope() {\n${source}\n}`;
-  const options: CompilerOptions = {
-    target: ScriptTarget.ES2022,
-    module: ModuleKind.ESNext,
-    noLib: true,
-    noResolve: true,
-    skipLibCheck: true,
-  };
-  const baseHost = createCompilerHost(options, true);
-  const sources = new Map([
-    [contractFile, declarations],
-    [sourceFile, wrapped],
-  ]);
-  const host: CompilerHost = {
-    ...baseHost,
-    /* v8 ignore next -- TypeScript does not always probe virtual files through fileExists. */
-    fileExists: (fileName) => sources.has(fileName),
-    getSourceFile: (fileName, languageVersion) =>
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      createSourceFile(fileName, sources.get(fileName)!, languageVersion, true),
-  };
-  const program = createProgram([contractFile, sourceFile], options, host);
-  const checker = program.getTypeChecker();
-  // oxlint-disable-next-line typescript/no-non-null-assertion
-  const contract = program.getSourceFile(contractFile)!;
-  // oxlint-disable-next-line typescript/no-non-null-assertion
-  const submitted = program.getSourceFile(sourceFile)!;
-
-  const namesBySymbol = new Map<TypeScriptSymbol, string>();
-  for (const statement of contract.statements) {
-    const declaration = (statement as VariableStatement).declarationList.declarations[0];
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    const identifier = declaration!.name as Identifier;
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    namesBySymbol.set(checker.getSymbolAtLocation(identifier)!, identifier.text);
-  }
-
-  const references = new Set<string>();
-  const visit = (node: Node): void => {
-    if (isIdentifier(node)) {
-      let ancestor: Node | undefined = node;
-      let typeOnly = false;
-      while (ancestor && ancestor !== submitted) {
-        if (isTypeNode(ancestor)) {
-          typeOnly = true;
-          break;
-        }
-        ancestor = ancestor.parent;
-      }
-      if (!typeOnly) {
-        const symbol = checker.getSymbolAtLocation(node);
-        const name = symbol ? namesBySymbol.get(symbol) : undefined;
-        if (name) {
-          references.add(name);
-        }
-      }
-    }
-    forEachChild(node, visit);
-  };
-  visit(submitted);
-  return [...references].sort((a, b) => a.localeCompare(b));
-}
-
 export interface SavedFunctionReference {
   name: string;
   source: string;
@@ -151,9 +66,7 @@ export class SavedFunctionDependencyGraph {
   }
 
   directReferences(source: string): readonly string[] {
-    if (this.#names.size === 0) {
-      return [];
-    }
+    if (this.#names.size === 0) return [];
     const key = sourceFingerprint(source);
     const cached = this.#referenceCache.get(key);
     if (cached?.source === source) {
@@ -161,16 +74,17 @@ export class SavedFunctionDependencyGraph {
       cacheSet(this.#referenceCache, key, cached, MAX_REFERENCE_CACHE_ENTRIES);
       return cached.names;
     }
-    const names = referencedNames(source, this.#names);
+    const names = getFunctionDependencies(source)
+      .dependencies.map(({ id }) => id)
+      .filter((name) => this.#names.has(name))
+      .sort((left, right) => left.localeCompare(right));
     cacheSet(this.#referenceCache, key, { source, names }, MAX_REFERENCE_CACHE_ENTRIES);
     return names;
   }
 
   directDependencies(name: string): readonly string[] {
     const source = this.#sources.get(name);
-    if (source === undefined) {
-      return [];
-    }
+    if (source === undefined) return [];
     return this.directReferences(source).filter((dependency) => dependency !== name);
   }
 
@@ -180,26 +94,18 @@ export class SavedFunctionDependencyGraph {
     const visiting = new Set<string>();
     const visit = (name: string, isDirect: boolean): void => {
       const savedSource = this.#sources.get(name);
-      if (savedSource === undefined || visiting.has(name)) {
-        return;
-      }
+      if (savedSource === undefined || visiting.has(name)) return;
       const existing = resolved.get(name);
       if (existing) {
-        if (isDirect) {
-          existing.direct = true;
-        }
+        if (isDirect) existing.direct = true;
         return;
       }
       visiting.add(name);
-      for (const dependency of this.directDependencies(name)) {
-        visit(dependency, false);
-      }
+      for (const dependency of this.directDependencies(name)) visit(dependency, false);
       visiting.delete(name);
       resolved.set(name, { name, source: savedSource, direct: isDirect });
     };
-    for (const name of direct) {
-      visit(name, true);
-    }
+    for (const name of direct) visit(name, true);
     return [...resolved.values()];
   }
 
@@ -216,24 +122,18 @@ export class SavedFunctionDependencyGraph {
     const transitive = new Set<string>();
     const visiting = new Set<string>();
     const visit = (dependency: string): void => {
-      if (visiting.has(dependency)) {
-        return;
-      }
+      if (visiting.has(dependency)) return;
       visiting.add(dependency);
       for (const dependent of reverse.get(dependency) ?? []) {
-        if (!direct.has(dependent) && dependent !== name) {
-          transitive.add(dependent);
-        }
+        if (!direct.has(dependent) && dependent !== name) transitive.add(dependent);
         visit(dependent);
       }
       visiting.delete(dependency);
     };
-    for (const dependent of direct) {
-      visit(dependent);
-    }
+    for (const dependent of direct) visit(dependent);
     return {
-      direct: [...direct].sort((a, b) => a.localeCompare(b)),
-      transitive: [...transitive].sort((a, b) => a.localeCompare(b)),
+      direct: [...direct].sort((left, right) => left.localeCompare(right)),
+      transitive: [...transitive].sort((left, right) => left.localeCompare(right)),
     };
   }
 
@@ -264,29 +164,30 @@ export class SavedFunctionDependencyGraph {
           );
         }
       }
-      if (lowLinks.get(name) !== indices.get(name)) {
-        return;
-      }
+      if (lowLinks.get(name) !== indices.get(name)) return;
       const component: string[] = [];
       let member: string | undefined;
       do {
         member = stack.pop();
-        /* v8 ignore else -- Tarjan's stack always contains the current node. */
         if (member !== undefined) {
           onStack.delete(member);
           component.push(member);
         }
       } while (member !== name);
       if (component.length > 1) {
-        cycles.push(component.sort((a, b) => a.localeCompare(b)) as [string, string, ...string[]]);
+        cycles.push(
+          component.sort((left, right) => left.localeCompare(right)) as [
+            string,
+            string,
+            ...string[],
+          ],
+        );
       }
     };
     for (const name of this.#sources.keys()) {
-      if (!indices.has(name)) {
-        visit(name);
-      }
+      if (!indices.has(name)) visit(name);
     }
-    return cycles.sort((a, b) => a[0].localeCompare(b[0]));
+    return cycles.sort((left, right) => left[0].localeCompare(right[0]));
   }
 }
 
@@ -318,19 +219,10 @@ export function clearSavedFunctionDependencyGraphCache(): void {
   dependencyReferenceCacheHits = 0;
 }
 
-export function getSavedFunctionDependencyGraphCacheStats(): {
-  dependencyGraphEntries: number;
-  dependencyGraphHits: number;
-  dependencyReferenceEntries: number;
-  dependencyReferenceHits: number;
-} {
+export function getSavedFunctionDependencyGraphCacheStats() {
   return {
     dependencyGraphEntries: dependencyGraphCache.size,
     dependencyGraphHits: dependencyGraphCacheHits,
-    dependencyReferenceEntries: [...dependencyGraphCache.values()].reduce(
-      (total, graph) => total + graph.referenceCacheEntries,
-      0,
-    ),
     dependencyReferenceHits: dependencyReferenceCacheHits,
   };
 }

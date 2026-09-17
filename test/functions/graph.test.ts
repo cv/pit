@@ -5,44 +5,35 @@ import {
   resolveSavedFunctionReferences,
 } from "../../src/functions/graph.js";
 
-describe("saved function references", () => {
+describe("explicit function dependencies", () => {
   it("resolves direct and transitive references in dependency order", () => {
     const saved = new Map([
-      ["base", "async function base() { return 1; }"],
-      ["composed", "async function composed() { return base() + 1; }"],
-      ["unrelated", "async function unrelated() { return 0; }"],
+      ["base", "async function base({}) { return 1; }"],
+      ["composed", "async function composed({ base }) { return base() + 1; }"],
+      ["unrelated", "async function unrelated({}) { return 0; }"],
     ]);
-    expect(resolveSavedFunctionReferences("composed()", saved)).toEqual([
+    expect(resolveSavedFunctionReferences("async ({ composed }) => composed()", saved)).toEqual([
       { name: "base", source: saved.get("base"), direct: false },
       { name: "composed", source: saved.get("composed"), direct: true },
     ]);
-    expect(resolveSavedFunctionReferences("({ base: 1 }).base", saved)).toEqual([]);
+    expect(resolveSavedFunctionReferences("async ({}) => ({ base: 1 }).base", saved)).toEqual([]);
     expect(
-      resolveSavedFunctionReferences(
-        `
-      const base = 1;
-      function local(base) { return 1; }
-      const object = { base: 1, base() { return 1; } };
-      const { base: renamed } = object;
-      try { throw new Error(); } catch (base) { void base; }
-      class base { value = renamed; }
-      type Named = base;
-      type Queried = typeof base;
-    `,
-        saved,
-      ),
-    ).toEqual([]);
-
-    expect(resolveSavedFunctionReferences("composed() + base()", saved)).toEqual([
+      resolveSavedFunctionReferences("async ({ composed, base }) => composed() + base()", saved),
+    ).toEqual([
       { name: "base", source: saved.get("base"), direct: true },
       { name: "composed", source: saved.get("composed"), direct: true },
     ]);
 
     const directPromotion = new Map([
-      ["aComposed", "async function aComposed() { return zBase(); }"],
-      ["zBase", "async function zBase() { return 1; }"],
+      ["aComposed", "async function aComposed({ zBase }) { return zBase(); }"],
+      ["zBase", "async function zBase({}) { return 1; }"],
     ]);
-    expect(resolveSavedFunctionReferences("aComposed() + zBase()", directPromotion)).toEqual([
+    expect(
+      resolveSavedFunctionReferences(
+        "async ({ aComposed, zBase }) => aComposed() + zBase()",
+        directPromotion,
+      ),
+    ).toEqual([
       { name: "zBase", source: directPromotion.get("zBase"), direct: true },
       { name: "aComposed", source: directPromotion.get("aComposed"), direct: true },
     ]);
@@ -51,11 +42,11 @@ describe("saved function references", () => {
   it("reports direct and transitive reverse dependencies", () => {
     const graph = getSavedFunctionDependencyGraph(
       new Map([
-        ["base", "async function base() { return 1; }"],
-        ["middle", "async function middle() { return base(); }"],
-        ["sibling", "async function sibling() { return base(); }"],
-        ["leafA", "async function leafA() { return middle(); }"],
-        ["leafB", "async function leafB() { return middle(); }"],
+        ["base", "async function base({}) { return 1; }"],
+        ["middle", "async function middle({ base }) { return base(); }"],
+        ["sibling", "async function sibling({ base }) { return base(); }"],
+        ["leafA", "async function leafA({ middle }) { return middle(); }"],
+        ["leafB", "async function leafB({ middle }) { return middle(); }"],
       ]),
     );
 
@@ -67,15 +58,15 @@ describe("saved function references", () => {
     expect(graph.cycles()).toEqual([]);
   });
 
-  it("handles and orders cyclic saved references without duplication", () => {
+  it("detects and orders explicit dependency cycles", () => {
     const saved = new Map([
-      ["first", "async function first() { return second(); }"],
-      ["second", "async function second() { return first(); }"],
-      ["alpha", "async function alpha() { return beta(); }"],
-      ["beta", "async function beta() { return alpha(); }"],
+      ["first", "async function first({ second }) { return second(); }"],
+      ["second", "async function second({ first }) { return first(); }"],
+      ["alpha", "async function alpha({ beta }) { return beta(); }"],
+      ["beta", "async function beta({ alpha }) { return alpha(); }"],
     ]);
     const graph = getSavedFunctionDependencyGraph(saved);
-    const references = graph.resolve("first()");
+    const references = graph.resolve("async ({ first }) => first()");
     expect(references.map((reference) => reference.name).sort()).toEqual(["first", "second"]);
     expect(graph.cycles()).toEqual([
       ["alpha", "beta"],
