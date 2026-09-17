@@ -1,6 +1,12 @@
 name: Wasmtime prebuilds
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/wasmtime-prebuilds.yml
+      - native/wasmtime-executor/**
+      - scripts/install-wasmtime.mjs
+      - src/sandbox/wasmtime-*.ts
   workflow_dispatch:
   workflow_call:
 
