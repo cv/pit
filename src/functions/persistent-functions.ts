@@ -232,7 +232,7 @@ function persistentFunctionCatalog(
   const lines = [
     `## ${title} TypeScript functions`,
     "",
-    `These ${scope}-persisted functions are available as lexical bindings in the typescript tool:`,
+    `These ${scope}-persisted functions are available as explicit dependencies in the typescript tool's first parameter:`,
   ];
   const entries = [...metadata.values()].sort((a, b) => a.name.localeCompare(b.name));
   let shown = 0;
@@ -267,7 +267,10 @@ function persistentFunctionCatalog(
       `- … ${entries.length - shown} more; use functions.${method}() for the complete catalog.`,
     );
   }
-  lines.push("", "Invoke them directly, for example: runTests({ coverage: true }).");
+  lines.push(
+    "",
+    "Inject them by name, for example: async ({ runTests }) => runTests({ coverage: true }).",
+  );
   return lines.join("\n");
 }
 
