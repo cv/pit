@@ -1,6 +1,6 @@
 # Wasmtime executor
 
-Pit executes submitted JavaScript in-process through a Linux ARM64 N-API addon, a fresh Wasmtime store, and a custom QuickJS component. Wasmtime is the default function executor. The permission-restricted Node child remains a deprecated diagnostic fallback selected with `PIT_FUNCTION_EXECUTOR=node`.
+Pit executes submitted JavaScript in-process through a platform prebuilt N-API addon, a fresh Wasmtime store, and a custom QuickJS component. Wasmtime is the default function executor on supported Linux, macOS, and Windows ARM64/x64 targets. The permission-restricted Node child remains a deprecated fallback.
 
 Each invocation receives:
 
@@ -17,19 +17,18 @@ The component imports WASI Preview 2 runtime interfaces required by Javy. The ho
 
 The guest protocol is defined in `queued-guest/wit/world.wit` and mirrored for the Wasmtime host in `wit/queued-guest.wit`. JavaScript `pitCall()` calls return pending Promises and enqueue requests. The host drains each batch, executes independent callbacks concurrently, delivers completions, and polls QuickJS until the program completes.
 
-## Build and smoke test
+## Cross-platform prebuilds
 
-Build the checked-in Linux ARM64 prebuilds:
+`.github/workflows/wasmtime-prebuilds.yml` builds and smoke-tests native addons on Linux, macOS, and Windows ARM64/x64 runners. The QuickJS component is built once because it is platform-independent. A tagged release calls the same workflow, collects its artifacts, creates a SHA-256 manifest, and publishes everything as release assets.
+
+Pi runs `npm install` for Git packages. `scripts/install-wasmtime.mjs` downloads only the current target's addon and the shared component, verifies their release checksums, and writes them atomically under `native/prebuilds/<target>/`. Missing assets warn and leave the deprecated Node fallback available. Set `PIT_WASMTIME_INSTALL_STRICT=1` when installation must fail instead.
+
+## Local build and smoke test
+
+Build Linux artifacts for the Docker host's architecture:
 
 ```sh
 npm run wasmtime:build
-```
-
-The command requires Docker on a Linux ARM64 host and writes:
-
-```text
-native/prebuilds/linux-arm64/pit_wasmtime_executor.node
-native/prebuilds/linux-arm64/pit_queued_quickjs_guest.wasm
 ```
 
 Build and run the bounded smoke harness:

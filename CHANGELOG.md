@@ -6,7 +6,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Added
 
-- Ship Linux ARM64 prebuilds for the in-process Wasmtime N-API executor and queued QuickJS component.
+- Build and smoke-test Linux, macOS, and Windows ARM64/x64 Wasmtime addons in CI, attach them to tagged releases, and install only the matching checksum-verified prebuild during Git package installation.
 - Propagate external cancellation into Wasmtime through race-safe execution IDs and epoch interruption.
 
 ### Changed

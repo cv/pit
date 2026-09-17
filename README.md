@@ -39,7 +39,7 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Linux ARM64 and Node 22.19 or newer. The current compatibility target is Pi 0.85.1; other Pi versions may work, but they are not part of the release guarantee. Submitted programs run in the packaged in-process Wasmtime/QuickJS executor by default. The old permission-restricted Node executor remains available temporarily with `PIT_FUNCTION_EXECUTOR=node`.
+Pit requires Node 22.19 or newer. The current compatibility target is Pi 0.85.1; other Pi versions may work, but they are not part of the release guarantee. During Git package installation, Pit downloads and verifies the matching Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. Submitted programs then run in the in-process Wasmtime/QuickJS executor by default. If no verified prebuild is available, Pit warns and temporarily uses the deprecated permission-restricted Node executor.
 
 Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
@@ -465,7 +465,7 @@ Output is bounded. Read metadata uses sparse defaults:
 
 ## Limitations
 
-- The default Wasmtime executor currently supports Linux ARM64 only; set `PIT_FUNCTION_EXECUTOR=node` to use the deprecated fallback elsewhere. Pit still requires Node 22.19 or newer as the Pi extension host.
+- Wasmtime prebuild installation requires access to the tagged GitHub release assets. Missing or unsupported prebuilds fall back to the deprecated Node executor. Pit requires Node 22.19 or newer as the Pi extension host.
 - Session functions belong to one session branch.
 - Global functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
 - Workspace paths are not restricted to the current project.
