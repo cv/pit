@@ -1,6 +1,6 @@
 # Unified function system
 
-- Status: Proposed
+- Status: Accepted; implementation in progress
 - Target: Pit 0.16.0
 - Tracking: [#82](https://github.com/cv/pit/issues/82)
 
@@ -123,6 +123,16 @@ The final identifier segment must match the top-level function declaration name.
 Identifier segments must be valid TypeScript identifiers. The registry rejects reserved or prototype-sensitive segments, including `$next`, `__proto__`, `prototype`, and `constructor`.
 
 A registry cannot contain a leaf/namespace collision. It cannot define both `workspace` and `workspace.read` in the same effective namespace.
+
+### Canonical persistence policy
+
+User source loads automatically, with no replacement for the old `globalFunctions.enabled` flag. Project configuration cannot disable user or package-owned global definitions. An absent user directory is empty and is created only on a successful write. External edits are discovered on reload/session start, not by a watcher.
+
+Persistent paths must round-trip through the dotted identifier mapping. `workspace/read.ts` is canonical; `workspace.read.ts` is not an alternate spelling. Reject case-only collisions, reserved filesystem names, and leaf/namespace conflicts without selecting a discovery-order winner. Discover only regular implementation `.ts` files; skip declarations and temporary files. Do not follow symlinked files or subdirectories. Bound traversal and bytes read before parsing.
+
+Invalid definitions reserve their identifiers: dependent invocations fail rather than silently falling back to a lower implementation. Keep bounded diagnostics and allow unrelated functions to run. Explicit removal or a corrected reload resolves the invalid definition.
+
+User promotion validates portability against user/global definitions. Invocation still resolves dependencies virtually against the active layers. Persistent file replacement is atomic, but it is not a distributed transaction across the filesystem, Pi's session history, and other running Pi instances.
 
 ### Enablement
 
