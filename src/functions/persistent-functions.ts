@@ -140,7 +140,7 @@ function projectClosure(
 }
 
 export interface ProjectFunctionReconciliation {
-  global: ReadonlyMap<string, string>;
+  user: ReadonlyMap<string, string>;
   candidates: ReadonlyMap<string, string>;
   candidateMetadata: ReadonlyMap<string, PersistentFunctionMetadata>;
   session: FunctionRegistry;
@@ -149,7 +149,7 @@ export interface ProjectFunctionReconciliation {
 }
 
 export function reconcileProjectFunctionsForSession({
-  global,
+  user,
   candidates,
   candidateMetadata,
   session,
@@ -157,9 +157,9 @@ export function reconcileProjectFunctionsForSession({
   metadata,
 }: ProjectFunctionReconciliation): string[] {
   const sessionCandidates = new Map(session);
-  const candidateGraph = getSavedFunctionDependencyGraph(new Map([...global, ...candidates]));
+  const candidateGraph = getSavedFunctionDependencyGraph(new Map([...user, ...candidates]));
   const closureContext: ProjectClosureContext = { candidates, registry, candidateGraph };
-  const availableCandidates = new Map([...global, ...candidates, ...sessionCandidates]);
+  const availableCandidates = new Map([...user, ...candidates, ...sessionCandidates]);
   const availableGraph = getSavedFunctionDependencyGraph(availableCandidates);
   session.clear();
   registry.clear();
@@ -174,7 +174,7 @@ export function reconcileProjectFunctionsForSession({
     for (const name of additions) {
       project.set(name, requiredProjectSource(candidates, name));
     }
-    return new Map([...global, ...project, ...sessionFunctions]);
+    return new Map([...user, ...project, ...sessionFunctions]);
   };
 
   const commitProjects = (names: readonly string[]): void => {
@@ -223,12 +223,12 @@ export function reconcileProjectFunctionsForSession({
 function persistentFunctionCatalog(
   metadata: ReadonlyMap<string, PersistentFunctionMetadata>,
   sessionFunctions: ReadonlyMap<string, string>,
-  scope: "global" | "project",
+  scope: "user" | "project",
 ): string {
   if (metadata.size === 0) {
     return "";
   }
-  const title = scope === "global" ? "Global" : "Project";
+  const title = scope === "user" ? "User" : "Project";
   const lines = [
     `## ${title} TypeScript functions`,
     "",
@@ -262,7 +262,7 @@ function persistentFunctionCatalog(
     shown++;
   }
   if (shown < entries.length) {
-    const method = scope === "global" ? "listGlobal" : "list";
+    const method = scope === "user" ? "listUser" : "list";
     lines.push(
       `- … ${entries.length - shown} more; use functions.${method}() for the complete catalog.`,
     );
@@ -281,7 +281,7 @@ export function projectFunctionCatalog(
   return persistentFunctionCatalog(metadata, sessionFunctions, "project");
 }
 
-export function globalFunctionCatalog(
+export function userFunctionCatalog(
   metadata: ReadonlyMap<string, PersistentFunctionMetadata>,
   projectFunctions: ReadonlyMap<string, string>,
   sessionFunctions: ReadonlyMap<string, string>,
@@ -289,5 +289,5 @@ export function globalFunctionCatalog(
   const effectiveMetadata = new Map(
     [...metadata].filter(([name]) => !projectFunctions.has(name) && !sessionFunctions.has(name)),
   );
-  return persistentFunctionCatalog(effectiveMetadata, new Map(), "global");
+  return persistentFunctionCatalog(effectiveMetadata, new Map(), "user");
 }

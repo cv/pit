@@ -12,14 +12,13 @@ export const contextCapability = defineCapability({
   thinkingLevel: string;
   sessionFile: string | undefined;
   savedFunctions: string[];
-  globalFunctions: string[];
+  userFunctions: string[];
   projectFunctions: string[];
   sessionFunctions: string[];
-  globalFunctionsEnabled: boolean;
   projectFunctionsEnabled: boolean;
 }>;`,
       documentation:
-        "context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions, globalFunctions, projectFunctions, sessionFunctions, globalFunctionsEnabled, projectFunctionsEnabled",
+        "context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions, userFunctions, projectFunctions, sessionFunctions, projectFunctionsEnabled",
       minimumArguments: 0,
       maximumArguments: 0,
     },

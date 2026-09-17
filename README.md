@@ -43,7 +43,7 @@ Pit requires Node 22.19 or newer. The current compatibility target is Pi 0.85.1;
 
 Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
-Install the pinned release globally:
+Install the pinned release to user scope:
 
 ```sh
 pi install git:github.com/cv/pit@v0.15.1
@@ -183,8 +183,8 @@ A read batch supports `fail-fast` and `settled` failure handling. An edit batch 
 Use a named top-level function for work that can recur:
 
 ```ts
-async function runTests({ npm }, input: { coverage?: boolean } = {}) {
-  return npm.test({ coverage: input.coverage, raise: true });
+async function runTests({ npm: { test } }, input: { coverage?: boolean } = {}) {
+  return test({ coverage: input.coverage, raise: true });
 }
 ```
 
@@ -208,41 +208,35 @@ Supply top-level `params` when the first execution needs input:
 }
 ```
 
-Call a saved function as an ordinary TypeScript expression:
+Call a saved function through explicit dependency injection:
 
 ```ts
-runTests()
-runTests({ coverage: true })
+async ({ runTests }) => runTests()
+async ({ runTests }) => runTests({ coverage: true })
 ```
 
-Unmarked named functions become session functions. They survive reloads and follow the active session branch. A replacement is rejected if it invalidates a dependent function.
+Directly submitted named functions become session functions. They survive reloads and follow the active session branch. A replacement is rejected if it invalidates a dependent function.
 
 Saved functions can call other saved functions. Pit injects only referenced functions and their transitive dependencies into each restricted process. Types remain available across calls. Nested calls have a maximum depth of 32.
 
-The effective registry contains global, project, and session functions. Resolution precedence is session, then project, then global. The registry has these limits:
+The effective registry resolves session, then project, then user, then immutable Pit global definitions. User-authored source has these limits; built-ins do not count toward them. The registry has these limits:
 
 - 64 functions.
 - 100 KB for one function.
 - 1 MB of combined saved source.
 
-Successful tool results include a compact, compaction-safe catalog of active session-function signatures. Effective global and project functions are documented in the system prompt instead of being repeated in every result. Catalogs contain only complete signatures and report omitted entries when they reach the output budget. `context.get().savedFunctions` also lists all effective names.
-Pit tracks only in-memory invocation counts by function name; it does not retain arguments, source, or results as usage telemetry. After five invocations in one loaded branch lifecycle, a non-temporary session function receives one bounded suggestion to use `functions.promote(name, summary)`. Global functions, project functions, session overrides, and names that look temporary are excluded. Reload and session-tree navigation reset counts and suggestion state.
+Successful tool results include a compact, compaction-safe catalog of active session-function signatures. Effective user and project functions are documented in the system prompt instead of being repeated in every result. Catalogs contain only complete signatures and report omitted entries when they reach the output budget. `context.get().savedFunctions` also lists all effective names.
+Pit tracks only in-memory invocation counts by function name; it does not retain arguments, source, or results as usage telemetry. After five invocations in one loaded branch lifecycle, a non-temporary session function receives one bounded suggestion to use `functions.promote(name, summary)`. User functions, project functions, session overrides, and names that look temporary are excluded. Reload and session-tree navigation reset counts and suggestion state.
 
-### Reuse user-global functions
+### Reuse user functions
 
-Global functions are disabled by default. Enable them in the Pi agent directory, which defaults to `~/.pi/agent/pit.json` and respects `PI_CODING_AGENT_DIR`:
+User functions load automatically from `${PI_CODING_AGENT_DIR}/functions/` (default `~/.pi/agent/functions/`). No user enablement flag is required, and project configuration does not disable user functions. Global functions are immutable built-ins owned by Pit, not files owned by the user.
 
-```json
-{
-  "globalFunctions": {
-    "enabled": true
-  }
-}
-```
+Use `functions.promote(name, summary, { to: "user" })` or **Save to user scope** in `/functions`. User promotion and removal require interactive confirmation. Promotion rejects project- or session-only dependencies; promote stable dependencies first. At invocation, dependencies resolve virtually against session, project, user, and global layers.
 
-Pit stores readable global source files in `~/.pi/agent/pit/functions/`. Their location determines global scope; no special JSDoc tag is required. Global definitions are available across projects after `/reload`. A trusted project can opt out with `{ "globalFunctions": { "enabled": false } }` in `.pi/pit.json`.
+Files have one documented function declaration and canonical path-derived identifiers: `company/check.ts` declares `check` and is injected as `company.check`. Alternate dotted filenames, case-only collisions, and leaf/namespace collisions are rejected. Discovery is bounded; symlinked subdirectories are not followed and symlinked function files are rejected. Invalid definitions reserve their identifier so calls cannot silently fall back to a lower implementation. Fix or explicitly remove the invalid definition, then reload external edits.
 
-Use `functions.promote(name, summary, { to: "global" })` or **Save globally** in `/functions`. Global promotion and removal require interactive confirmation. Promotion is blocked while the session function depends on project or session functions; promote stable dependencies first. Global functions resolve only global dependencies. Project functions resolve project definitions with global fallback. Session functions resolve session, project, then global definitions.
+This upgrade intentionally removes the old `globalFunctions` enablement settings, `listGlobal`/`getGlobal`/`removeGlobal` APIs, and `{ to: "global" }` promotion. Files in `${PI_CODING_AGENT_DIR}/pit/functions/` are ignored and left untouched. Old session entries are not replayed. Recreate required functions with explicit dependencies and move persistent files manually; see the [migration guide](docs/function-system-migration.md).
 
 ### Share trusted project functions
 
@@ -264,18 +258,18 @@ Use `functions.promote(name, summary)` or **Save to project** in `/functions` to
  *
  * @param input.coverage - Enable coverage.
  */
-async function runTests({ npm }, input: { coverage?: boolean } = {}) {
-  return npm.test({ coverage: input.coverage, raise: true });
+async function runTests({ npm: { test } }, input: { coverage?: boolean } = {}) {
+  return test({ coverage: input.coverage, raise: true });
 }
 ```
 
 Project functions use the same execution rules as session functions. Pit commits a function after successful execution, or after static validation when `saveOnly` is `true`.
 
-Pit stores project functions as readable TypeScript files in `.pi/functions/`. It also reads legacy `.pi/pit/functions/` files for compatibility, while a same-name file in `.pi/functions/` takes precedence. Scope comes from storage location, not a source marker. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
+Pit stores project functions as readable TypeScript files in `.pi/functions/`. Legacy `.pi/pit/functions/` files are ignored and left untouched. Scope comes from storage location, not a source marker. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
 
 Pit loads project source only after explicit opt-in and Pi's project-trust check. The function still runs in the same restricted process as a session function.
 
-Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` to manage project definitions. Use `functions.listGlobal()`, `functions.getGlobal(name)`, and confirmed `functions.removeGlobal(name)` for user-global definitions. Use `functions.listAll()` and `functions.getSaved(name, scope?)` to inspect effective or explicitly scoped functions, including dependencies, dependents, and override state. Use `functions.planRemoval(name, scope?)` to inspect an exact removal closure without mutation. Session removal rejects dependent cascades unless `functions.removeSession(name, { cascade: true })` explicitly opts in. Use `functions.promote(name, summary)` to save a session function to the project or pass `{ to: "global" }` for confirmed global persistence. Persistent removal remains blocked when saved functions depend on the target. Disabling global or project functions does not delete existing source files.
+Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` to manage project definitions. Use `functions.listUser()`, `functions.getUser(name)`, and confirmed `functions.removeUser(name)` for user definitions. Use `functions.listAll()` and `functions.getSaved(name, scope?)` to inspect effective or explicitly scoped functions, including dependencies, dependents, and override state. Use `functions.planRemoval(name, scope?)` to inspect an exact removal closure without mutation. Session removal rejects dependent cascades unless `functions.removeSession(name, { cascade: true })` explicitly opts in. Use `functions.promote(name, summary)` to save a session function to the project or pass `{ to: "user" }` for confirmed user persistence. Persistent removal remains blocked when saved functions depend on the target. Disabling project functions does not delete existing source files. User functions load automatically.
 
 ### Manage saved functions
 
@@ -416,7 +410,7 @@ UI methods require a mode that provides a UI.
 
 ### `context`
 
-- `get()` returns the working directory, mode, model, thinking level, session file, effective/global/project/session function names, and global/project enablement.
+- `get()` returns the working directory, mode, model, thinking level, session file, effective/user/project/session function names, and user/project enablement.
 
 ### `session`
 
@@ -444,13 +438,13 @@ UI methods require a mode that provides a UI.
 - `list()` lists documented project functions.
 - `get(name)` returns project function metadata and source.
 - `remove(name)` removes a project function when no function depends on it.
-- `listGlobal()` lists user-global functions.
-- `getGlobal(name)` returns global function metadata and source.
-- `removeGlobal(name)` removes a global function after interactive confirmation when no function depends on it.
+- `listUser()` lists user functions.
+- `getUser(name)` returns user function metadata and source.
+- `removeUser(name)` removes a user function after interactive confirmation when no function depends on it.
 - `listAll()` lists effective functions with scope, dependencies, dependents, and override state.
 - `getSaved(name, scope?)` returns effective or explicitly scoped source and dependency metadata.
 - `planRemoval(name, scope?)` returns the exact removal closure and blockers without mutation.
-- `promote(name, summary, options?)` saves a session function to the trusted project by default or globally with `{ to: "global" }` after confirmation.
+- `promote(name, summary, options?)` saves a session function to the trusted project by default or to user scope with `{ to: "user" }` after confirmation.
 - `removeSession(name, options?)` removes a branch-local function; dependent cascades require `{ cascade: true }`.
 
 ### Common behavior
@@ -467,7 +461,7 @@ Output is bounded. Read metadata uses sparse defaults:
 
 - Wasmtime prebuild installation requires access to the tagged GitHub release assets. Missing or unsupported prebuilds fall back to the deprecated Node executor. Pit requires Node 22.19 or newer as the Pi extension host.
 - Session functions belong to one session branch.
-- Global functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
+- User functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
 - Workspace paths are not restricted to the current project.
 - Shell commands are not restricted by an allowlist.
 - The `git` capability allows specific subcommands, but it does not restrict their arguments, hooks, remotes, or network destinations.

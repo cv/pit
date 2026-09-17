@@ -3,7 +3,7 @@ import { defineCapability } from "./core.js";
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",
   promptSummary:
-    "project list/get/remove; global list/get/remove; effective listAll/getSaved/planRemoval/promote/removeSession",
+    "project list/get/remove; user list/get/remove; effective listAll/getSaved/planRemoval/promote/removeSession",
   methods: {
     list: {
       callDescription: "List project functions",
@@ -27,25 +27,25 @@ export const functionsCapability = defineCapability({
       minimumArguments: 1,
       maximumArguments: 1,
     },
-    listGlobal: {
-      callDescription: "List global functions",
-      declaration: "listGlobal(): Promise<PitPersistentFunctionMetadata[]>;",
-      documentation: "functions.listGlobal() lists user-global functions",
+    listUser: {
+      callDescription: "List user functions",
+      declaration: "listUser(): Promise<PitPersistentFunctionMetadata[]>;",
+      documentation: "functions.listUser() lists user functions",
       minimumArguments: 0,
       maximumArguments: 0,
     },
-    getGlobal: {
-      callDescription: "Inspect a global function",
+    getUser: {
+      callDescription: "Inspect a user function",
       declaration:
-        "getGlobal(name: string): Promise<PitPersistentFunctionMetadata & { source: string }>;",
-      documentation: "functions.getGlobal(name) returns global function metadata and source",
+        "getUser(name: string): Promise<PitPersistentFunctionMetadata & { source: string }>;",
+      documentation: "functions.getUser(name) returns user function metadata and source",
       minimumArguments: 1,
       maximumArguments: 1,
     },
-    removeGlobal: {
-      callDescription: "Remove a global function",
-      declaration: "removeGlobal(name: string): Promise<{ name: string; removed: boolean }>;",
-      documentation: "functions.removeGlobal(name) removes a confirmed user-global function",
+    removeUser: {
+      callDescription: "Remove a user function",
+      declaration: "removeUser(name: string): Promise<{ name: string; removed: boolean }>;",
+      documentation: "functions.removeUser(name) removes a confirmed user function",
       minimumArguments: 1,
       maximumArguments: 1,
     },
@@ -83,9 +83,9 @@ export const functionsCapability = defineCapability({
   name: string,
   summary: string,
   options?: PitPromotionOptions,
-): Promise<{ name: string; promoted: true; scope: "global" | "project" }>;`,
+): Promise<{ name: string; promoted: true; scope: "user" | "project" }>;`,
       documentation:
-        "functions.promote(name, summary, { to? }) persists a session function to the project by default or globally after confirmation",
+        "functions.promote(name, summary, { to? }) persists a session function to the project by default or to user scope after confirmation",
       minimumArguments: 2,
       maximumArguments: 3,
     },

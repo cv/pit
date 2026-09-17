@@ -3,14 +3,15 @@ import { reconcileProjectFunctionsForSession } from "./persistent-functions.js";
 import type { PersistentFunctionMetadataRegistry } from "./source.js";
 
 export interface FunctionState {
-  globalEnabled: boolean;
   projectEnabled: boolean;
-  global: FunctionRegistry;
+  user: FunctionRegistry;
+  invalidUser: Map<string, string>;
+  invalidProject: Map<string, string>;
   project: FunctionRegistry;
   projectCandidates: FunctionRegistry;
   session: FunctionRegistry;
   effective: FunctionRegistry;
-  globalMetadata: PersistentFunctionMetadataRegistry;
+  userMetadata: PersistentFunctionMetadataRegistry;
   metadata: PersistentFunctionMetadataRegistry;
   candidateMetadata: PersistentFunctionMetadataRegistry;
   sessionRunCounts: Map<string, number>;
@@ -21,14 +22,15 @@ export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promis
 
 export function createFunctionState(): FunctionState {
   return {
-    globalEnabled: false,
     projectEnabled: false,
-    global: new Map(),
+    user: new Map(),
+    invalidUser: new Map(),
+    invalidProject: new Map(),
     project: new Map(),
     projectCandidates: new Map(),
     session: new Map(),
     effective: new Map(),
-    globalMetadata: new Map(),
+    userMetadata: new Map(),
     metadata: new Map(),
     candidateMetadata: new Map(),
     sessionRunCounts: new Map(),
@@ -55,7 +57,7 @@ export function resetFunctionUsage(state: FunctionState): void {
 
 export function refreshEffectiveFunctions(state: FunctionState): void {
   state.effective.clear();
-  for (const [name, source] of state.global) {
+  for (const [name, source] of state.user) {
     state.effective.set(name, source);
   }
   for (const [name, source] of state.project) {
@@ -68,7 +70,7 @@ export function refreshEffectiveFunctions(state: FunctionState): void {
 
 export function reconcileFunctionState(state: FunctionState): string[] {
   const errors = reconcileProjectFunctionsForSession({
-    global: state.global,
+    user: state.user,
     candidates: state.projectCandidates,
     candidateMetadata: state.candidateMetadata,
     session: state.session,
@@ -82,7 +84,7 @@ export function reconcileFunctionState(state: FunctionState): string[] {
 export function effectiveRegistry(
   project: ReadonlyMap<string, string>,
   session: ReadonlyMap<string, string>,
-  global: ReadonlyMap<string, string> = new Map(),
+  user: ReadonlyMap<string, string> = new Map(),
 ): FunctionRegistry {
-  return new Map([...global, ...project, ...session]);
+  return new Map([...user, ...project, ...session]);
 }

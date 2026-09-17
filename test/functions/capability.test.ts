@@ -247,7 +247,7 @@ describe("functions capability", () => {
       run(
         `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (planRemoval as any)("missing", "invalid")`,
       ),
-    ).rejects.toThrow('function scope must be "global", "project", or "session"');
+    ).rejects.toThrow('function scope must be "user", "project", or "session"');
     await expect(
       run(
         `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (removeSession as any)("missing", { cascade: "yes" })`,

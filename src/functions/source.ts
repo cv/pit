@@ -121,10 +121,10 @@ export function getPersistentFunctionMetadata(
   };
 }
 
-export function getSavedFunctionCallSignature(source: string): string | undefined {
+export function getSavedFunctionCallSignature(source: string, id?: string): string | undefined {
   const expression = submissionExpression(source);
   if (!(expression && ts.isFunctionExpression(expression) && expression.name)) {
     return;
   }
-  return functionCallSignature(expression.name.text, expression.parameters);
+  return functionCallSignature(id ?? expression.name.text, expression.parameters);
 }

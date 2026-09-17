@@ -44,7 +44,7 @@ describe("project agent workflow resources", () => {
       ctx,
       state.projectCandidates,
       state.candidateMetadata,
-      state.global,
+      { user: state.user },
     );
     errors.push(...reconcileFunctionState(state));
 

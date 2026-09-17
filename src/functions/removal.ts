@@ -22,10 +22,10 @@ function selectedScope(
     requestedScope ??
     (state.session.has(name)
       ? "session"
-      : state.projectCandidates.has(name)
+      : state.projectCandidates.has(name) || state.invalidProject.has(name)
         ? "project"
-        : state.global.has(name)
-          ? "global"
+        : state.user.has(name) || state.invalidUser.has(name)
+          ? "user"
           : undefined);
   if (scope === undefined) {
     throw new Error(`Saved function "${name}" was not found`);
@@ -55,26 +55,26 @@ function sessionRemovalPlan(state: FunctionState, name: string): SavedFunctionRe
   };
 }
 
-function globalRemovalPlan(state: FunctionState, name: string): SavedFunctionRemovalPlan {
-  if (!state.global.has(name)) {
-    throw new Error(`Global function "${name}" was not found`);
+function userRemovalPlan(state: FunctionState, name: string): SavedFunctionRemovalPlan {
+  if (!state.user.has(name) && !state.invalidUser.has(name)) {
+    throw new Error(`User function "${name}" was not found`);
   }
-  const globalDependents = getSavedFunctionDependencyGraph(state.global).dependents(name);
+  const userDependents = getSavedFunctionDependencyGraph(state.user).dependents(name);
   const effectiveDependents =
-    state.effective.get(name) === state.global.get(name)
+    state.effective.get(name) === state.user.get(name)
       ? getSavedFunctionDependencyGraph(state.effective).dependents(name)
       : { direct: [], transitive: [] };
-  const directDependents = [...new Set([...globalDependents.direct, ...effectiveDependents.direct])]
+  const directDependents = [...new Set([...userDependents.direct, ...effectiveDependents.direct])]
     .filter((candidate) => candidate !== name)
     .sort((a, b) => a.localeCompare(b));
   const transitiveDependents = [
-    ...new Set([...globalDependents.transitive, ...effectiveDependents.transitive]),
+    ...new Set([...userDependents.transitive, ...effectiveDependents.transitive]),
   ]
     .filter((candidate) => candidate !== name && !directDependents.includes(candidate))
     .sort((a, b) => a.localeCompare(b));
   return {
     name,
-    scope: "global",
+    scope: "user",
     directDependents,
     transitiveDependents,
     removalClosure: [name],
@@ -84,7 +84,7 @@ function globalRemovalPlan(state: FunctionState, name: string): SavedFunctionRem
 }
 
 function projectRemovalPlan(state: FunctionState, name: string): SavedFunctionRemovalPlan {
-  if (!state.projectCandidates.has(name)) {
+  if (!state.projectCandidates.has(name) && !state.invalidProject.has(name)) {
     throw new Error(`Project function "${name}" was not found`);
   }
   const dependents = savedFunctionDependents(
@@ -109,8 +109,9 @@ export function planSavedFunctionRemoval(
   name: string,
   requestedScope?: FunctionScope,
 ): SavedFunctionRemovalPlan {
+  if (requestedScope === "global") throw new Error("Global functions are immutable");
   const scope = selectedScope(state, name, requestedScope);
   if (scope === "session") return sessionRemovalPlan(state, name);
-  if (scope === "global") return globalRemovalPlan(state, name);
+  if (scope === "user") return userRemovalPlan(state, name);
   return projectRemovalPlan(state, name);
 }

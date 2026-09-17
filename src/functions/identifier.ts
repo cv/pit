@@ -24,6 +24,9 @@ export function functionIdSegments(id: string): string[] {
 
 export function functionRelativePath(id: string): string {
   const segments = functionIdSegments(id);
+  if (segments.some((segment) => /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i.test(segment))) {
+    throw new Error("function path contains a reserved filesystem name");
+  }
   const name = segments.pop() as string;
   return join(...segments, `${name}.ts`);
 }
@@ -39,6 +42,9 @@ export function functionIdFromRelativePath(path: string): string {
   }
   const id = normalized.slice(0, -3).split("/").join(".");
   validateFunctionId(id);
+  if (functionRelativePath(id).split(sep).join("/") !== normalized) {
+    throw new Error("function path must use canonical directories for dotted identifiers");
+  }
   return id;
 }
 

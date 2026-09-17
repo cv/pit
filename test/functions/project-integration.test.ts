@@ -61,7 +61,7 @@ async function writeProjectFunction(name: string, source: string): Promise<void>
 function sessionFunctionEntry(name: string, source: string) {
   return {
     type: "custom",
-    customType: "pit-functions",
+    customType: "pit-function-definitions",
     data: { name, source },
   };
 }
@@ -144,7 +144,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: { name: "menuProject", deleted: true },
       }),
     );
@@ -188,7 +188,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     expect(ctx.ui.custom).toHaveBeenCalledTimes(1);
     expect(ctx.ui.confirm).toHaveBeenCalledWith(
       "Remove managedProject from project?",
-      "Delete .pi/functions/managedProject.ts and any legacy copy?",
+      "Delete .pi/functions/managedProject.ts?",
     );
     expect(ctx.ui.notify).toHaveBeenCalledWith("Removed project function: managedProject", "info");
     await expect(
@@ -419,7 +419,7 @@ async function projectTests({ npm: { test } }) {
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: { name: "versionedProject", deleted: true },
       }),
     );
@@ -454,7 +454,7 @@ async function markedSession({}) {
     setBranchEntries(
       Array.from({ length: 9 }, (_, index) => ({
         type: "custom",
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: {
           name: `capacityBase${index}`,
           source: sizedFunction(`capacityBase${index}`, 99_000),
@@ -709,7 +709,7 @@ async function brokenProject({}) { throw new Error("project failure"); }`),
       details: { functions: [{ action: "set", name: "undocumented" }] },
     });
     await expect(
-      run("/** Summary. @pit global */ async function wrongScope({}) { return null; }"),
+      run("/** Summary. @pit user */ async function wrongScope({}) { return null; }"),
     ).resolves.toMatchObject({
       details: { functions: [{ action: "set", name: "wrongScope" }] },
     });

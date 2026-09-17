@@ -9,6 +9,14 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Build and smoke-test Linux, macOS, and Windows ARM64/x64 Wasmtime addons in CI, attach them to tagged releases, and install only the matching checksum-verified prebuild during Git package installation.
 - Propagate external cancellation into Wasmtime through race-safe execution IDs and epoch interruption.
 
+### Breaking changes
+
+- User-owned functions use `user` scope and `${PI_CODING_AGENT_DIR}/functions/`, loaded automatically without enablement configuration.
+- Remove legacy user/project path readers and user-global management aliases; user APIs are `listUser`, `getUser`, and `removeUser`, with promotion `{ to: "user" }`.
+- Ignore pre-upgrade `pit-functions` session entries. New definitions use branch-local `pit-function-definitions` entries.
+- Discover documented functions recursively by canonical path, with bounded reads and collision/symlink checks. Invalid definitions block affected calls instead of silently falling back.
+- No automatic migration: old files remain untouched. See [the migration guide](docs/function-system-migration.md).
+
 ### Changed
 
 - Make Wasmtime the default TypeScript function executor.

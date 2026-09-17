@@ -67,20 +67,40 @@ function savedEntries(savedFunctions: ReadonlyMap<string, string>) {
   return [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
+interface DependencyTypeNode {
+  signature?: number;
+  children: Map<string, DependencyTypeNode>;
+}
+
 function injectedDependencyDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
-  const properties: string[] = [];
-  for (const [name] of savedEntries(savedFunctions)) {
-    if (!name.includes(".")) {
-      const index = savedEntries(savedFunctions).findIndex(([candidate]) => candidate === name);
-      properties.push(
-        `${JSON.stringify(name)}: PitInjectedFunction<typeof __pit_signature_${index}>;`,
-      );
+  const root: DependencyTypeNode = { children: new Map() };
+  savedEntries(savedFunctions).forEach(([id], index) => {
+    let node = root;
+    for (const segment of id.split(".")) {
+      let child = node.children.get(segment);
+      if (!child) {
+        child = { children: new Map() };
+        node.children.set(segment, child);
+      }
+      node = child;
     }
-  }
-  if (properties.length === 0) return "";
+    node.signature = index;
+  });
+  const render = (node: DependencyTypeNode, base: string): string => {
+    if (node.signature !== undefined)
+      return `PitInjectedFunction<typeof __pit_signature_${node.signature}>`;
+    if (!node.children.size) return base;
+    const keys = [...node.children.keys()].map((key) => JSON.stringify(key)).join(" | ");
+    const properties = [...node.children].map(([key, child]) => {
+      const quoted = JSON.stringify(key);
+      return `${quoted}: ${render(child, `PitProperty<${base}, ${quoted}>`)};`;
+    });
+    return `Omit<${base}, ${keys}> & { ${properties.join(" ")} }`;
+  };
   return `type PitInjectedArguments<T extends (...args: any[]) => any> = Parameters<T> extends [any, ...infer Rest] ? Rest : [];
 type PitInjectedFunction<T extends (...args: any[]) => any> = (...args: PitInjectedArguments<T>) => Promise<Awaited<ReturnType<T>>>;
-interface PitCapabilities { ${properties.join(" ")} }`;
+type PitProperty<T, K extends PropertyKey> = K extends keyof T ? T[K] : {};
+type PitCapabilities = ${render(root, "PitBuiltinCapabilities")};`;
 }
 
 function savedSignatures(savedFunctions: ReadonlyMap<string, string>): string {
@@ -119,8 +139,7 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
     return (
       (diagnostic.code === 2304 && message === "Cannot find name 'saved'.") ||
-      (diagnostic.code === 2339 &&
-        message === "Property 'saved' does not exist on type 'PitCapabilities'.")
+      (diagnostic.code === 2339 && message.startsWith("Property 'saved' does not exist on type "))
     );
   })
     ? `\n${SAVED_CAPABILITY_HINT}`
@@ -187,7 +206,7 @@ export function validateTypeScript(
   const sources = new Map([
     [
       CONTRACT_FILE,
-      `${CAPABILITY_CONTRACT + SANDBOX_GLOBALS}
+      `${CAPABILITY_CONTRACT.replaceAll("PitCapabilities", "PitBuiltinCapabilities").replace("capabilities: PitBuiltinCapabilities", "capabilities: PitCapabilities") + SANDBOX_GLOBALS}
 ${injectedDependencyDeclarations(savedFunctions)}`,
     ],
     [PROGRAM_FILE, wrapped],

@@ -21,14 +21,14 @@ interface FunctionSummary {
 }
 
 export interface FunctionManagerOptions {
-  globalFunctions?: FunctionRegistry;
+  userFunctions?: FunctionRegistry;
   projectFunctions?: FunctionRegistry;
   planSessionRemoval(name: string): SessionFunctionRemovalPlan;
   removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
-  saveToGlobal?: (name: string, ctx: ExtensionContext) => Promise<void>;
+  saveToUser?: (name: string, ctx: ExtensionContext) => Promise<void>;
   removeFromProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
-  removeFromGlobal?: (name: string, ctx: ExtensionContext) => Promise<void>;
+  removeFromUser?: (name: string, ctx: ExtensionContext) => Promise<void>;
 }
 
 class SavedFunctionViewer {
@@ -82,14 +82,14 @@ class SavedFunctionViewer {
 }
 
 class SavedFunctionManager {
-  readonly #globalFunctions: FunctionRegistry;
+  readonly #userFunctions: FunctionRegistry;
   readonly #projectFunctions: FunctionRegistry;
 
   constructor(
     private readonly savedFunctions: FunctionRegistry,
     private readonly options: FunctionManagerOptions,
   ) {
-    this.#globalFunctions = options.globalFunctions ?? new Map<string, string>();
+    this.#userFunctions = options.userFunctions ?? new Map<string, string>();
     this.#projectFunctions = options.projectFunctions ?? new Map<string, string>();
   }
 
@@ -101,7 +101,7 @@ class SavedFunctionManager {
   }
 
   private summaries(): FunctionSummary[] {
-    const effective = new Map(this.#globalFunctions);
+    const effective = new Map(this.#userFunctions);
     for (const [name, source] of this.#projectFunctions) {
       effective.set(name, source);
     }
@@ -115,11 +115,11 @@ class SavedFunctionManager {
           ? "session"
           : this.#projectFunctions.has(name)
             ? "project"
-            : "global";
+            : "user";
         const overridesLower =
           scope === "session"
-            ? this.#projectFunctions.has(name) || this.#globalFunctions.has(name)
-            : scope === "project" && this.#globalFunctions.has(name);
+            ? this.#projectFunctions.has(name) || this.#userFunctions.has(name)
+            : scope === "project" && this.#userFunctions.has(name);
         return {
           name,
           source,
@@ -133,13 +133,13 @@ class SavedFunctionManager {
 
   private async inspect(name: string, ctx: ExtensionContext, scope?: FunctionScope): Promise<void> {
     const source =
-      scope === "global"
-        ? this.#globalFunctions.get(name)
+      scope === "user"
+        ? this.#userFunctions.get(name)
         : scope === "project"
           ? this.#projectFunctions.get(name)
           : (this.savedFunctions.get(name) ??
             this.#projectFunctions.get(name) ??
-            this.#globalFunctions.get(name));
+            this.#userFunctions.get(name));
     if (source === undefined) {
       ctx.ui.notify(`Saved function "${name}" was not found`, "error");
       return;
@@ -217,7 +217,7 @@ class SavedFunctionManager {
       return [
         "Inspect source",
         ...(this.options.saveToProject ? ["Save to project"] : []),
-        ...(this.options.saveToGlobal ? ["Save globally"] : []),
+        ...(this.options.saveToUser ? ["Save to user scope"] : []),
         "Delete",
         "Close",
       ];
@@ -231,7 +231,7 @@ class SavedFunctionManager {
     }
     return [
       "Inspect source",
-      ...(this.options.removeFromGlobal ? ["Remove globally"] : []),
+      ...(this.options.removeFromUser ? ["Remove from user scope"] : []),
       "Close",
     ];
   }
@@ -245,12 +245,12 @@ class SavedFunctionManager {
       await this.inspect(entry.name, ctx, entry.scope);
     } else if (action === "Save to project" && this.options.saveToProject) {
       await this.runProjectAction(() => this.options.saveToProject?.(entry.name, ctx), ctx);
-    } else if (action === "Save globally" && this.options.saveToGlobal) {
-      await this.runProjectAction(() => this.options.saveToGlobal?.(entry.name, ctx), ctx);
+    } else if (action === "Save to user scope" && this.options.saveToUser) {
+      await this.runProjectAction(() => this.options.saveToUser?.(entry.name, ctx), ctx);
     } else if (action === "Remove from project" && this.options.removeFromProject) {
       await this.runProjectAction(() => this.options.removeFromProject?.(entry.name, ctx), ctx);
-    } else if (action === "Remove globally" && this.options.removeFromGlobal) {
-      await this.runProjectAction(() => this.options.removeFromGlobal?.(entry.name, ctx), ctx);
+    } else if (action === "Remove from user scope" && this.options.removeFromUser) {
+      await this.runProjectAction(() => this.options.removeFromUser?.(entry.name, ctx), ctx);
     } else if (action === "Delete") {
       await this.delete(entry.name, ctx);
     }

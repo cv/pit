@@ -1,4 +1,4 @@
-import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 
 import { validateTypeScript } from "../sandbox/validation.js";
 import { getSavedFunctionDependencyGraph } from "./graph.js";
@@ -11,6 +11,7 @@ import {
 } from "./preparation.js";
 import { planSavedFunctionRemoval, type SavedFunctionRemovalPlan } from "./removal.js";
 import { getPersistentFunctionMetadata } from "./source.js";
+import { assertFunctionsAvailable } from "./storage/validation.js";
 export type { PreparedSavedFunctionExecution } from "./preparation.js";
 import {
   effectiveRegistry,
@@ -18,8 +19,8 @@ import {
   type FunctionStateCommit,
   reconcileFunctionState,
 } from "./state.js";
-import { removeGlobalFunction, saveGlobalFunction } from "./storage/global.js";
 import { removeProjectFunction, saveProjectFunction } from "./storage/project.js";
+import { removeUserFunction, saveUserFunction } from "./storage/user.js";
 export type { SavedFunctionRemovalPlan } from "./removal.js";
 import {
   FUNCTION_ENTRY_TYPE,
@@ -61,11 +62,11 @@ export interface SessionFunctionRemovalOptions {
 function persistentFunctionSource(
   source: string,
   summary: string,
-  scope: "global" | "project",
+  scope: "user" | "project",
 ): string {
   const normalizedSummary = summary.trim().replace(/\s+/g, " ").replaceAll("*/", "* /");
   if (!normalizedSummary) {
-    throw new Error(`${scope === "global" ? "Global" : "Project"} function summary is required`);
+    throw new Error(`${scope === "user" ? "User" : "Project"} function summary is required`);
   }
   return `/** ${normalizedSummary} */\n${source}`;
 }
@@ -97,6 +98,7 @@ export function removeProjectFunctionFromState(
       }
     }
     const removed = await removeProjectFunction(cwd, name);
+    state.invalidProject.delete(name);
     state.project.delete(name);
     state.projectCandidates.delete(name);
     state.metadata.delete(name);
@@ -155,67 +157,64 @@ export class SavedFunctionService {
     });
   }
 
-  async promoteToGlobal(request: PersistentFunctionPromotionRequest): Promise<void> {
-    if (!this.#state.globalEnabled) {
-      throw new Error(`Global functions are disabled. Enable them in ${getAgentDir()}/pit.json`);
-    }
+  async promoteToUser(request: PersistentFunctionPromotionRequest): Promise<void> {
     const source = this.#state.session.get(request.name);
     if (source === undefined) {
       throw new Error(`Session function "${request.name}" was not found`);
     }
-    const promotedSource = persistentFunctionSource(source, request.summary, "global");
+    const promotedSource = persistentFunctionSource(source, request.summary, "user");
     const metadata = getPersistentFunctionMetadata(promotedSource);
     if (!metadata) {
       throw new Error(
-        `Saved function "${request.name}" must be a top-level function declaration to save it globally`,
+        `Saved function "${request.name}" must be a top-level function declaration to save it to user scope`,
       );
     }
     const graph = getSavedFunctionDependencyGraph(this.#state.effective);
     const blockers = graph
       .directDependencies(request.name)
-      .filter((dependency) => dependency !== request.name && !this.#state.global.has(dependency));
+      .filter((dependency) => dependency !== request.name && !this.#state.user.has(dependency));
     if (blockers.length > 0) {
       throw new Error(
-        `Cannot promote "${request.name}" globally; non-global dependencies remain: ${blockers.join(", ")}`,
+        `Cannot promote "${request.name}" to user scope; non-user dependencies remain: ${blockers.join(", ")}`,
       );
     }
     await this.#commit(async () => {
-      const currentGlobal = new Map(this.#state.global);
-      currentGlobal.set(request.name, promotedSource);
+      const currentUser = new Map(this.#state.user);
+      currentUser.set(request.name, promotedSource);
       validateRegistryCapacity(this.#state.effective, request.name, promotedSource);
-      validateTypeScript(promotedSource, currentGlobal);
+      assertFunctionsAvailable(promotedSource, currentUser, this.#state.invalidUser);
+      validateTypeScript(promotedSource, currentUser);
       const currentSession = new Map(this.#state.session);
       currentSession.delete(request.name);
       validateTypeScript(
         promotedSource,
-        effectiveRegistry(this.#state.project, currentSession, currentGlobal),
+        effectiveRegistry(this.#state.project, currentSession, currentUser),
       );
-      const replaced = this.#state.global.has(request.name);
-      await saveGlobalFunction(request.name, promotedSource, this.#state.global);
-      this.#state.global.set(request.name, promotedSource);
-      this.#state.globalMetadata.set(request.name, metadata);
+      const replaced = this.#state.user.has(request.name);
+      await saveUserFunction(request.name, promotedSource, this.#state.user);
+      this.#state.user.set(request.name, promotedSource);
+      this.#state.userMetadata.set(request.name, metadata);
+      this.#state.invalidUser.delete(request.name);
       this.#appendEntry(FUNCTION_ENTRY_TYPE, { name: request.name, deleted: true });
       this.#state.session.delete(request.name);
       reconcileFunctionState(this.#state);
-      request.activity?.push({ action: "set", name: request.name, replaced, scope: "global" });
+      request.activity?.push({ action: "set", name: request.name, replaced, scope: "user" });
     });
   }
 
-  removeFromGlobal(name: string): Promise<boolean> {
-    if (!this.#state.globalEnabled) {
-      throw new Error(`Global functions are disabled. Enable them in ${getAgentDir()}/pit.json`);
-    }
+  removeFromUser(name: string): Promise<boolean> {
     return this.#commit(async () => {
-      const plan = this.planRemoval(name, "global");
+      const plan = this.planRemoval(name, "user");
       if (plan.blocked) {
         const dependents = [...plan.directDependents, ...plan.transitiveDependents];
         throw new Error(
-          `Cannot remove global function "${name}"; dependent saved functions remain: ${dependents.join(", ")}`,
+          `Cannot remove user function "${name}"; dependent saved functions remain: ${dependents.join(", ")}`,
         );
       }
-      const removed = await removeGlobalFunction(name);
-      this.#state.global.delete(name);
-      this.#state.globalMetadata.delete(name);
+      const removed = await removeUserFunction(name);
+      this.#state.invalidUser.delete(name);
+      this.#state.user.delete(name);
+      this.#state.userMetadata.delete(name);
       reconcileFunctionState(this.#state);
       return removed;
     });
@@ -261,20 +260,21 @@ export class SavedFunctionService {
         validateRegistryCapacity(this.#state.effective, name, source);
         const currentProject = new Map(this.#state.project);
         currentProject.set(name, source);
-        validateTypeScript(source, new Map([...this.#state.global, ...currentProject]), input);
+        validateTypeScript(source, new Map([...this.#state.user, ...currentProject]), input);
         const currentSession = new Map(this.#state.session);
         currentSession.delete(name);
         validateTypeScript(
           source,
-          effectiveRegistry(currentProject, currentSession, this.#state.global),
+          effectiveRegistry(currentProject, currentSession, this.#state.user),
           input,
         );
 
         const replaced = this.#state.project.has(name);
         await saveProjectFunction(context.cwd, name, source, {
           registry: this.#state.projectCandidates,
-          global: this.#state.global,
+          user: this.#state.user,
         });
+        this.#state.invalidProject.delete(name);
         this.#state.project.set(name, source);
         this.#state.metadata.set(name, projectMetadata);
         this.#state.candidateMetadata.set(name, projectMetadata);
@@ -294,7 +294,7 @@ export class SavedFunctionService {
       currentSession.set(name, source);
       validateTypeScript(
         source,
-        effectiveRegistry(this.#state.project, currentSession, this.#state.global),
+        effectiveRegistry(this.#state.project, currentSession, this.#state.user),
         input,
       );
       const replaced = this.#state.session.has(name);
