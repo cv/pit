@@ -32,8 +32,9 @@ describe("project agent workflow resources", () => {
     const registry = new Map(entries);
     for (const [name, source] of entries) {
       expect(getPersistentFunctionMetadata(source)).toMatchObject({ name });
-      expect(() => validateTypeScript(source, registry)).not.toThrow();
     }
+    // Validation checks every saved implementation in the registry, not just the root.
+    expect(() => validateTypeScript("async ({}) => null", registry)).not.toThrow();
   }, 15_000);
 
   it("loads and reconciles the complete project workflow graph", async () => {
