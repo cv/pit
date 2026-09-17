@@ -6,7 +6,10 @@ import {
   reconstructFunctions,
   validateRegistryCapacity,
 } from "../../src/index.js";
-import { savedFunctionCatalogNotice } from "../../src/tool/typescript.js";
+import {
+  promotionSuggestionNotice,
+  savedFunctionCatalogNotice,
+} from "../../src/tool/typescript.js";
 import { cleanupHarness, context, setupHarness } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
@@ -137,5 +140,15 @@ describe("function registry handler", () => {
         return "Close";
       });
     await command?.handler("", projectCtx);
+  });
+
+  it("formats singular, plural, duplicate, and bounded promotion guidance", () => {
+    expect(promotionSuggestionNotice([])).toBe("");
+    expect(promotionSuggestionNotice(["only", "only"])).toContain(
+      "heavily reused session function only",
+    );
+    const many = promotionSuggestionNotice(["six", "five", "four", "three", "two", "one"]);
+    expect(many).toContain("heavily reused session functions");
+    expect(many).toContain("… 1 more");
   });
 });

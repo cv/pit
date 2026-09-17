@@ -8,23 +8,23 @@ import { validateTypeScript } from "../../src/sandbox/validation.js";
 describe("sandbox caches", () => {
   it("caches successful and failed validation plus compiled output", async () => {
     clearSandboxCaches();
-    const source = "() => ({ answer: 42 })";
+    const source = "({}) => ({ answer: 42 })";
     validateTypeScript(source);
     validateTypeScript(source);
 
-    const invalid = "() => 1n";
+    const invalid = "({}) => 1n";
     expect(() => validateTypeScript(invalid)).toThrow();
     expect(() => validateTypeScript(invalid)).toThrow();
 
     await runInSandbox(source, async () => null);
     await runInSandbox(source, async () => null);
     expect(getSandboxCacheStats()).toEqual({
-      validationEntries: 2,
+      validationEntries: 3,
       compilationEntries: 1,
-      validationHits: 4,
+      validationHits: 3,
       compilationHits: 1,
-      dependencyGraphEntries: 1,
-      dependencyGraphHits: 3,
+      dependencyGraphEntries: 0,
+      dependencyGraphHits: 0,
       dependencyReferenceHits: 0,
     });
     clearSandboxCaches();

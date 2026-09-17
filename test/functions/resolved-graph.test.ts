@@ -89,4 +89,54 @@ describe("unified function graph", () => {
       "function dependency cycle: first -> second -> first",
     );
   });
+
+  it("reuses a shared resolved dependency node", () => {
+    const registry = createLayeredFunctionRegistry([
+      sourceFunctionDefinition(
+        "first",
+        "project",
+        "async function first({ workspace: { read } }) { return read('a'); }",
+      ),
+      sourceFunctionDefinition(
+        "second",
+        "project",
+        "async function second({ workspace: { read } }) { return read('b'); }",
+      ),
+    ]);
+    const graph = resolveFunctionGraph(
+      "async ({ first, second }) => Promise.all([first(), second()])",
+      registry,
+    );
+
+    expect(graph.nodes.has("global:workspace.read")).toBe(true);
+    expect([...graph.nodes.keys()].filter((key) => key === "global:workspace.read")).toHaveLength(
+      1,
+    );
+  });
+
+  it("rejects unavailable source dependencies and next on global definitions", () => {
+    expect(() =>
+      resolveFunctionGraph(
+        "async ({ wrapper }) => wrapper()",
+        createLayeredFunctionRegistry([
+          sourceFunctionDefinition("wrapper", "project", "async function wrapper({ missing }) {}"),
+        ]),
+      ),
+    ).toThrow('function "wrapper" requires unavailable dependency "missing"');
+
+    expect(() =>
+      resolveFunctionGraph(
+        "async ({ custom }) => custom()",
+        createLayeredFunctionRegistry([
+          sourceFunctionDefinition("custom", "global", "async function custom({ $next }) {}"),
+        ]),
+      ),
+    ).toThrow('global function "custom" cannot declare $next');
+  });
+
+  it("rejects next on submitted programs", () => {
+    expect(() =>
+      resolveFunctionGraph("async ({ $next }) => $next()", createLayeredFunctionRegistry()),
+    ).toThrow("submitted programs cannot declare $next");
+  });
 });

@@ -37,6 +37,7 @@ function dependencyTree(
 function renderDependencyTree(tree: DependencyTree, indexes: ReadonlyMap<string, number>): string {
   if (tree.target) {
     const index = indexes.get(tree.target);
+    /* v8 ignore next -- graph nodes and dependency targets are produced together. */
     if (index === undefined)
       throw new Error(`resolved function node "${tree.target}" is unavailable`);
     return `__pit_function_${index}`;
@@ -59,6 +60,7 @@ function renderSourceAssignment(
   node: ResolvedFunctionNode,
   indexes: ReadonlyMap<string, number>,
 ): string {
+  /* v8 ignore next -- callers dispatch native definitions to the native renderer. */
   if (node.definition.kind !== "source") throw new Error("expected a source definition");
   const dependencies = renderDependencyTree(
     dependencyTree(node.dependencies, node.nextKey),

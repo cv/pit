@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { compileUnifiedSandboxSource } from "../../src/sandbox/program.js";
+import { compileSandboxSource } from "../../src/sandbox/program.js";
 
 async function compiledProgram(source: string, projectFunctions: ReadonlyMap<string, string>) {
-  const compiled = await compileUnifiedSandboxSource(source, { projectFunctions });
+  const compiled = await compileSandboxSource(source, { projectFunctions });
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
   return (0, eval)(compiled) as (
     capabilities: object,
@@ -12,7 +12,7 @@ async function compiledProgram(source: string, projectFunctions: ReadonlyMap<str
   ) => Promise<unknown>;
 }
 
-describe("compileUnifiedSandboxSource", () => {
+describe("compileSandboxSource", () => {
   it("compiles typed explicit custom and native dependencies", async () => {
     const source = `async ({ inspect }, input: { file: string }) => inspect(input)`;
     const inspect = `async function inspect(
@@ -36,8 +36,8 @@ describe("compileUnifiedSandboxSource", () => {
   });
 
   it("rejects missing explicit functions before compilation", async () => {
-    await expect(
-      compileUnifiedSandboxSource("async ({ missing }) => missing()", {}),
-    ).rejects.toThrow(/Property 'missing' does not exist|unavailable function "missing"/);
+    await expect(compileSandboxSource("async ({ missing }) => missing()", {})).rejects.toThrow(
+      /Property 'missing' does not exist|unavailable function "missing"/,
+    );
   });
 });

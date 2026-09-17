@@ -8,7 +8,7 @@ import { validateTypeScript } from "../../src/sandbox/validation.js";
 describe("runInSandbox", () => {
   it("executes TypeScript and returns a copied value", async () => {
     const result = await runInSandbox(
-      "async (): Promise<{ answer: number }> => ({ answer: 6 * 7 })",
+      "async ({}): Promise<{ answer: number }> => ({ answer: 6 * 7 })",
       async () => {
         throw new Error("unexpected capability call");
       },
@@ -17,8 +17,7 @@ describe("runInSandbox", () => {
   });
 
   it("passes initial input as the function's second argument", async () => {
-    const source =
-      "async (_capabilities, input: { value: number }) => ({ value: input.value * 2 })";
+    const source = "async ({}, input: { value: number }) => ({ value: input.value * 2 })";
     await expect(runInSandbox(source, async () => null, { input: { value: 21 } })).resolves.toEqual(
       { value: 42 },
     );
@@ -26,7 +25,7 @@ describe("runInSandbox", () => {
       /string.*number/,
     );
     await expect(runInSandbox("42", async () => null, { input: {} })).rejects.toThrow(
-      "Top-level params can only be passed to a function expression",
+      "TypeScript programs must be function expressions",
     );
   });
 
@@ -38,7 +37,7 @@ describe("runInSandbox", () => {
       truncated: false,
     }));
     const result = await runInSandbox(
-      `async ({ shell }) => ({ value: (await shell.exec("sum")).code })`,
+      `async ({ shell: { exec } }) => ({ value: (await exec("sum")).code })`,
       handler,
     );
     expect(result).toEqual({ value: 42 });
@@ -64,7 +63,6 @@ describe("runInSandbox", () => {
       "async ({ inspect }, input: { file: string }) => inspect(input)",
       handler,
       {
-        unifiedFunctions: true,
         input: { file: "README.md" },
         projectFunctions: new Map([
           [
@@ -84,9 +82,9 @@ describe("runInSandbox", () => {
   it("emits bounded runtime traces for concurrent success and failure", async () => {
     const updates: CapabilityTrace[] = [];
     const result = await runInSandbox(
-      `async ({ shell, context }) => Promise.all([
-        shell.exec("secret command"),
-        context.get(),
+      `async ({ shell: { exec }, context: { get } }) => Promise.all([
+        exec("secret command"),
+        get(),
       ])`,
       async ({ capability }) => {
         if (capability === "shell") {
@@ -119,7 +117,7 @@ describe("runInSandbox", () => {
     const failed: CapabilityTrace[] = [];
     await expect(
       runInSandbox(
-        "async ({ context }) => context.get()",
+        "async ({ context: { get } }) => get()",
         async () => {
           throw new Error("host refused");
         },
@@ -129,7 +127,7 @@ describe("runInSandbox", () => {
     expect(failed.at(-1)).toMatchObject({ status: "failed", durationMs: expect.any(Number) });
 
     await expect(
-      runInSandbox("async ({ context }) => context.get()", async () => ({ ok: true }), {
+      runInSandbox("async ({ context: { get } }) => get()", async () => ({ ok: true }), {
         onCapabilityTrace: () => {
           throw new Error("observer failed");
         },
@@ -148,7 +146,6 @@ describe("runInSandbox", () => {
       throw new Error("unexpected capability call");
     });
     const result = await runInSandbox("async ({ answer }) => answer({ value: 42 })", handler, {
-      unifiedFunctions: true,
       sessionFunctions: savedFunctions,
     });
     expect(result).toEqual({ answer: 42 });
@@ -177,7 +174,6 @@ describe("runInSandbox", () => {
     const source = `async function ${functionName}({}) { return "${name}"; }`;
     const savedFunctions = new Map([[functionName, source]]);
     const options = {
-      unifiedFunctions: true,
       ...(scope === "user" ? { userFunctions: savedFunctions } : {}),
       ...(scope === "project" ? { projectFunctions: savedFunctions } : {}),
       ...(scope === "session" ? { sessionFunctions: savedFunctions } : {}),
@@ -189,9 +185,7 @@ describe("runInSandbox", () => {
 
   it("rejects an effective root missing from its declared scope", async () => {
     await expect(
-      runInSandbox("async ({ missingScoped }) => missingScoped()", async () => null, {
-        unifiedFunctions: true,
-      }),
+      runInSandbox("async ({ missingScoped }) => missingScoped()", async () => null, {}),
     ).rejects.toThrow("Property 'missingScoped' does not exist");
   });
 
@@ -213,7 +207,6 @@ describe("runInSandbox", () => {
         throw new Error("unexpected capability call");
       },
       {
-        unifiedFunctions: true,
         projectFunctions: new Map([["outer", savedFunctions.get("outer") as string]]),
         sessionFunctions: new Map([["inner", savedFunctions.get("inner") as string]]),
         onCapabilityTrace: (trace) => traces.push(trace),
@@ -267,7 +260,6 @@ describe("runInSandbox", () => {
     const failed = new Map([["broken", `async function broken({}) { throw new Error("boom"); }`]]);
     await expect(
       runInSandbox("async ({ broken }) => broken()", handler, {
-        unifiedFunctions: true,
         sessionFunctions: failed,
       }),
     ).rejects.toThrow('Function "broken" failed: boom');
@@ -278,7 +270,6 @@ describe("runInSandbox", () => {
     ]);
     await expect(
       runInSandbox("async ({ first }) => first()", handler, {
-        unifiedFunctions: true,
         sessionFunctions: recursive,
       }),
     ).rejects.toThrow("function dependency cycle: first -> second -> first");
@@ -288,7 +279,7 @@ describe("runInSandbox", () => {
     let failure: unknown;
     try {
       await runInSandbox(
-        `() => {
+        `({}) => {
           const error = new Error("remote boom");
           error.stack = "Error: remote boom\\n" + Array.from(
             { length: 40 },
@@ -310,7 +301,7 @@ describe("runInSandbox", () => {
     expect(JSON.stringify(remote)).not.toContain("private/path");
 
     const bounded = await runInSandbox(
-      `() => { throw new Error("x".repeat(20_000)); }`,
+      `({}) => { throw new Error("x".repeat(20_000)); }`,
       async () => null,
     ).then(
       () => {
@@ -344,10 +335,12 @@ describe("runInSandbox", () => {
   });
 
   it("contextually types expressions using active saved functions", () => {
-    const savedFunctions = new Map([["answer", "async function answer() { return 42; }"]]);
-    expect(() => validateTypeScript("answer()", savedFunctions)).not.toThrow();
-    expect(() => validateTypeScript("missing()", savedFunctions)).toThrow(
-      /Cannot find name 'missing'[\s\S]*Available saved functions: answer/,
+    const savedFunctions = new Map([["answer", "async function answer({}) { return 42; }"]]);
+    expect(() =>
+      validateTypeScript("async ({ answer }) => answer()", savedFunctions),
+    ).not.toThrow();
+    expect(() => validateTypeScript("async ({ missing }) => missing()", savedFunctions)).toThrow(
+      /Property 'missing' does not exist[\s\S]*Available functions: answer/,
     );
   });
 
@@ -360,18 +353,18 @@ describe("runInSandbox", () => {
     },
   ])("suggests the functions capability for $name", ({ source }) => {
     expect(() => validateTypeScript(source)).toThrow(
-      'There is no "saved" capability. Use async ({ functions }) => functions.listAll()',
+      'There is no "saved" namespace. Use async ({ functions: { listAll } }) => listAll()',
     );
   });
 
   it("still permits a saved function named saved", () => {
-    const savedFunctions = new Map([["saved", "async function saved() { return true; }"]]);
-    expect(() => validateTypeScript("saved()", savedFunctions)).not.toThrow();
+    const savedFunctions = new Map([["saved", "async function saved({}) { return true; }"]]);
+    expect(() => validateTypeScript("async ({ saved }) => saved()", savedFunctions)).not.toThrow();
   });
 
   it("propagates capability errors", async () => {
     await expect(
-      runInSandbox("async ({ context }) => context.get()", async () => {
+      runInSandbox("async ({ context: { get } }) => get()", async () => {
         throw new Error("host refused");
       }),
     ).rejects.toThrow("host refused");
@@ -380,7 +373,7 @@ describe("runInSandbox", () => {
   it("cannot read arbitrary files directly", async () => {
     await expect(
       runInSandbox(
-        `async () => process.getBuiltinModule("node:fs").readFileSync("/etc/passwd", "utf8")`,
+        `async ({}) => process.getBuiltinModule("node:fs").readFileSync("/etc/passwd", "utf8")`,
         async () => null,
       ),
     ).rejects.toThrow(/permission|access|denied|ERR_ACCESS_DENIED/i);
@@ -388,7 +381,7 @@ describe("runInSandbox", () => {
 
   it("isolates the environment and tolerates untrusted process output", async () => {
     const result = await runInSandbox(
-      `async () => {
+      `async ({}) => {
         console.log("diagnostic");
         process.stdout.write("not json\\n");
         process.stdout.write(JSON.stringify({ token: "wrong", type: "result", value: 1 }) + "\\n");
@@ -403,18 +396,18 @@ describe("runInSandbox", () => {
   it("bounds protocol frames in both directions", async () => {
     await expect(
       runInSandbox(
-        `async () => { process.stdout.write("x".repeat(8_000_001)); return null; }`,
+        `async ({}) => { process.stdout.write("x".repeat(8_000_001)); return null; }`,
         async () => null,
       ),
     ).rejects.toThrow(/RPC frame exceeds/);
 
     await expect(
-      runInSandbox("async ({ context }) => context.get()", async () => "x".repeat(8_000_001)),
+      runInSandbox("async ({ context: { get } }) => get()", async () => "x".repeat(8_000_001)),
     ).rejects.toThrow(/Capability response exceeds RPC limit/);
 
     await expect(
       runInSandbox(
-        `async ({ context }) => (context as any).get("x".repeat(8_000_001))`,
+        `async ({ context: { get } }) => (get as any)("x".repeat(8_000_001))`,
         async () => null,
       ),
     ).rejects.toThrow(/RPC frame exceeds/);
@@ -424,8 +417,8 @@ describe("runInSandbox", () => {
     const rejected: CapabilityTrace[] = [];
     await expect(
       runInSandbox(
-        `async ({ context }) => Promise.all(
-          Array.from({ length: 33 }, () => context.get())
+        `async ({ context: { get } }) => Promise.all(
+          Array.from({ length: 33 }, () => get())
         )`,
         async () => {
           await new Promise((resolve) => setTimeout(resolve, 25));
@@ -438,8 +431,8 @@ describe("runInSandbox", () => {
 
     await expect(
       runInSandbox(
-        `async ({ context }) => {
-          for (let index = 0; index < 1025; index++) await context.get();
+        `async ({ context: { get } }) => {
+          for (let index = 0; index < 1025; index++) await get();
           return null;
         }`,
         async () => null,
@@ -450,7 +443,7 @@ describe("runInSandbox", () => {
   it("waits for floating capability calls before reporting success", async () => {
     let completed = false;
     const result = await runInSandbox(
-      "async ({ context }) => { context.get(); return 42; }",
+      "async ({ context: { get } }) => { get(); return 42; }",
       async () => {
         await new Promise((resolve) => setTimeout(resolve, 25));
         completed = true;
@@ -465,7 +458,7 @@ describe("runInSandbox", () => {
     let aborted = false;
     await expect(
       runInSandbox(
-        "async ({ context }) => context.get()",
+        "async ({ context: { get } }) => get()",
         async ({ signal }) =>
           new Promise((_resolve, reject) => {
             signal.addEventListener(
@@ -484,18 +477,20 @@ describe("runInSandbox", () => {
   });
 
   it("reports a child that exits without a result", async () => {
-    await expect(runInSandbox("() => process.exit(7)", async () => null)).rejects.toThrow(/exit 7/);
+    await expect(runInSandbox("({}) => process.exit(7)", async () => null)).rejects.toThrow(
+      /exit 7/,
+    );
   });
 
   it("reports a child terminated by a signal", async () => {
     await expect(
-      runInSandbox(`() => process.kill(process.pid, "SIGTERM")`, async () => null),
+      runInSandbox(`({}) => process.kill(process.pid, "SIGTERM")`, async () => null),
     ).rejects.toThrow(/SIGTERM/);
   });
 
   it("handles non-Error capability failures", async () => {
     await expect(
-      runInSandbox("async ({ context }) => context.get()", async () => {
+      runInSandbox("async ({ context: { get } }) => get()", async () => {
         throw "string failure";
       }),
     ).rejects.toThrow("string failure");
@@ -504,7 +499,7 @@ describe("runInSandbox", () => {
   it("does not reply after execution has timed out", async () => {
     await expect(
       runInSandbox(
-        "async ({ context }) => context.get()",
+        "async ({ context: { get } }) => get()",
         async () => {
           await new Promise((resolve) => setTimeout(resolve, 50));
           return 1;
@@ -519,7 +514,7 @@ describe("runInSandbox", () => {
     const original = process.execPath;
     process.execPath = "/definitely/missing/node";
     try {
-      await expect(runInSandbox("() => 1", async () => null)).rejects.toThrow(/ENOENT/);
+      await expect(runInSandbox("({}) => 1", async () => null)).rejects.toThrow(/ENOENT/);
     } finally {
       process.execPath = original;
     }
@@ -529,32 +524,32 @@ describe("runInSandbox", () => {
     const original = process.env.PATH;
     delete process.env.PATH;
     try {
-      await expect(runInSandbox("() => 42", async () => null, { memoryLimitMb: 32 })).resolves.toBe(
-        42,
-      );
+      await expect(
+        runInSandbox("({}) => 42", async () => null, { memoryLimitMb: 32 }),
+      ).resolves.toBe(42);
     } finally {
       process.env.PATH = original;
     }
   });
 
   it("executes value expressions and rejects malformed source", async () => {
-    await expect(runInSandbox("42", async () => null)).resolves.toBe(42);
+    await expect(runInSandbox("async ({}) => 42", async () => null)).resolves.toBe(42);
     await expect(runInSandbox("(() =>", async () => null)).rejects.toThrow();
   });
 
   it("rejects values that cannot cross the JSON wire", async () => {
-    await expect(runInSandbox("() => 1n", async () => null)).rejects.toThrow(/bigint/i);
+    await expect(runInSandbox("({}) => 1n", async () => null)).rejects.toThrow(/bigint/i);
   });
 
   it("terminates runaway code", async () => {
     await expect(
-      runInSandbox("() => { while (true) {} }", async () => null, { timeoutMs: 100 }),
+      runInSandbox("({}) => { while (true) {} }", async () => null, { timeoutMs: 100 }),
     ).rejects.toThrow("timed out");
   });
 
   it("supports cancellation", async () => {
     const controller = new AbortController();
-    const promise = runInSandbox("async () => new Promise(() => {})", async () => null, {
+    const promise = runInSandbox("async ({}) => new Promise(() => {})", async () => null, {
       signal: controller.signal,
     });
     controller.abort();
@@ -563,22 +558,22 @@ describe("runInSandbox", () => {
     const alreadyAborted = new AbortController();
     alreadyAborted.abort();
     await expect(
-      runInSandbox("() => 1", async () => null, { signal: alreadyAborted.signal }),
+      runInSandbox("({}) => 1", async () => null, { signal: alreadyAborted.signal }),
     ).rejects.toThrow("cancelled");
   });
 
   it("validates resource limits", async () => {
-    await expect(runInSandbox("() => 1", async () => null, { memoryLimitMb: 15 })).rejects.toThrow(
-      "at least 16",
-    );
     await expect(
-      runInSandbox("() => 1", async () => null, { memoryLimitMb: Number.NaN }),
+      runInSandbox("({}) => 1", async () => null, { memoryLimitMb: 15 }),
     ).rejects.toThrow("at least 16");
-    await expect(runInSandbox("() => 1", async () => null, { timeoutMs: 0 })).rejects.toThrow(
+    await expect(
+      runInSandbox("({}) => 1", async () => null, { memoryLimitMb: Number.NaN }),
+    ).rejects.toThrow("at least 16");
+    await expect(runInSandbox("({}) => 1", async () => null, { timeoutMs: 0 })).rejects.toThrow(
       "positive",
     );
     await expect(
-      runInSandbox("() => 1", async () => null, { timeoutMs: Number.POSITIVE_INFINITY }),
+      runInSandbox("({}) => 1", async () => null, { timeoutMs: Number.POSITIVE_INFINITY }),
     ).rejects.toThrow("positive");
   });
 });

@@ -303,7 +303,7 @@ describe("pit extension", () => {
     );
     expect(anonymous.details.value).toEqual({ doubled: 42 });
     await expect(runWithParams("inspect()", {})).rejects.toThrow(
-      "unified function programs must be function expressions",
+      "TypeScript programs must be function expressions",
     );
   });
 
