@@ -162,7 +162,7 @@ Current defensive bounds are:
 | Saved-function nesting depth    |                   32 |
 | Default TypeScript wall time    |           30 seconds |
 | Default Wasmtime memory limit   |               128 MB |
-| Default Wasmtime fuel           |        4,000,000,000 |
+| Default Wasmtime fuel           |    1,000,000,000,000 |
 
 Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs are registered race-safely: an abort arriving before native registration is queued and interrupts initialization once the epoch timer is installed. The same abort signal reaches cooperative host capability handlers. Each execution registration, epoch timer, store, and QuickJS runtime is discarded when the call settles.
 
