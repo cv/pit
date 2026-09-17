@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { getPersistentFunctionMetadata } from "../../src/functions/source.js";
+import { createFunctionState, reconcileFunctionState } from "../../src/functions/state.js";
+import { loadProjectFunctions } from "../../src/functions/storage/project.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 
 const functionFiles = [
@@ -19,6 +21,7 @@ const functionFiles = [
   ["runPitTargetedTests", ".pi/functions/runPitTargetedTests.ts"],
   ["validatePit", ".pi/functions/validatePit.ts"],
   ["waitForGitHubRun", ".pi/functions/waitForGitHubRun.ts"],
+  ["waitForGitHubRunForCommit", ".pi/functions/waitForGitHubRunForCommit.ts"],
 ] as const;
 
 describe("project agent workflow resources", () => {
@@ -31,6 +34,22 @@ describe("project agent workflow resources", () => {
       expect(getPersistentFunctionMetadata(source)).toMatchObject({ name });
       expect(() => validateTypeScript(source, registry)).not.toThrow();
     }
+  }, 15_000);
+
+  it("loads and reconciles the complete project workflow graph", async () => {
+    const state = createFunctionState();
+    state.projectEnabled = true;
+    const ctx = { cwd: process.cwd(), isProjectTrusted: () => true } as any;
+    const errors = await loadProjectFunctions(
+      ctx,
+      state.projectCandidates,
+      state.candidateMetadata,
+      state.global,
+    );
+    errors.push(...reconcileFunctionState(state));
+
+    expect(errors).toEqual([]);
+    expect([...state.project.keys()].sort()).toEqual(functionFiles.map(([name]) => name).sort());
   }, 15_000);
 
   it("provides bounded inner-loop workflow helpers", async () => {
