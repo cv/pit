@@ -21,7 +21,7 @@ import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
-import { runInSandbox, runWithFunctionExecutor } from "../sandbox/run.js";
+import { runWithFunctionExecutor } from "../sandbox/run.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
@@ -94,7 +94,7 @@ interface TypeScriptToolServices {
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   savedFunctionService: SavedFunctionService;
-  functionExecutor?: FunctionExecutor;
+  functionExecutor: FunctionExecutor;
 }
 
 interface TypeScriptToolParams {
@@ -180,10 +180,12 @@ async function executeSandboxValue({
     ...(request.params.params === undefined ? {} : { input: request.params.params }),
     onCapabilityTrace: (trace: CapabilityTrace) => executionProgress.recordTrace(trace),
   };
-  /* v8 ignore next -- opt-in native branch is exercised by the Docker Pi smoke target. */
-  return request.functionExecutor
-    ? runWithFunctionExecutor(preparedFunction.source, handler, options, request.functionExecutor)
-    : runInSandbox(preparedFunction.source, handler, options);
+  return runWithFunctionExecutor(
+    preparedFunction.source,
+    handler,
+    options,
+    request.functionExecutor,
+  );
 }
 
 function buildToolResult(input: {

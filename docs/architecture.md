@@ -1,8 +1,8 @@
 # Architecture
 
-This document describes Pit's implementation as of v0.15.1. It is a maintainer's map of the current runtime, not a promise that every internal interface is stable. User-facing behavior belongs in the [README](../README.md); release procedure belongs in [releasing.md](releasing.md).
+This document describes Pit's current unreleased runtime. It is a maintainer's map, not a promise that every internal interface is stable. User-facing behavior belongs in the [README](../README.md); release procedure belongs in [releasing.md](releasing.md).
 
-Pit presents one `typescript` tool to the model. Submitted TypeScript is formatted and type-checked in the trusted extension host, compiled into a self-contained program, and evaluated in a fresh permission-restricted Node process. The child has no useful ambient authority. It requests effects from the host through typed capabilities such as `workspace`, `git`, `npm`, `gh`, `shell`, and `http`.
+Pit presents one `typescript` tool to the model. Submitted TypeScript is formatted and type-checked in the trusted extension host, compiled into a self-contained program, and evaluated by QuickJS inside a fresh bounded Wasmtime store. The Wasm component has no useful ambient authority. It requests effects from the host through explicitly injected functions such as `workspace.read`, `git.status`, and `http.request`.
 
 ## System model
 
@@ -10,36 +10,39 @@ Pit presents one `typescript` tool to the model. Submitted TypeScript is formatt
 Pi extension host
 │
 ├─ src/index.ts                         composition root
-│  ├─ FunctionState                    in-memory global/project/session registries
+│  ├─ FunctionState                    persistent/session source state
 │  ├─ SavedFunctionService             preparation, promotion, persistence, removal
 │  ├─ saved-function lifecycle         Pi events, prompt catalogs, /functions
+│  ├─ configured FunctionExecutor      Wasmtime default; Node fallback
 │  └─ TypeScript tool adapter          request orchestration and rendering
 │
 ├─ trusted preparation path
 │  ├─ Oxfmt source canonicalization
 │  ├─ TypeScript semantic validation
-│  ├─ saved-function dependency and scope resolution
+│  ├─ layered function graph and grant resolution
 │  └─ esbuild compilation
 │
-├─ fresh restricted Node child
-│  └─ compiled submission + capability proxies
+├─ in-process native boundary
+│  ├─ fresh Wasmtime store + restricted WASI context
+│  └─ custom QuickJS component + queued JSON requests
 │          │
-│          └─ authenticated newline-delimited JSON RPC
+│          └─ bounded concurrent host callbacks
 │
 └─ trusted capability dispatcher
+   ├─ exact resolved effect grant
    ├─ workspace and process adapters
    ├─ Pi session, command, model, runtime, and UI adapters
-   ├─ saved-function management
+   ├─ function management and attribution
    └─ bounded HTTP requests
 ```
 
 There are three distinct authority layers:
 
-1. **Pi and the Pit extension host are trusted.** They hold the extension context, saved-function state, filesystem access, process execution, network access, and UI handles.
-2. **Each submitted program runs in an untrusted child.** Node's permission model prevents direct filesystem, network, subprocess, worker, addon, and inherited-environment access.
-3. **Capabilities deliberately reintroduce selected host authority.** The sandbox is a boundary around direct access, not around effects explicitly exposed by a capability. Validation and bounds are therefore part of each host capability's contract.
+1. **Pi and the Pit extension host are trusted.** They hold the extension context, function state, filesystem access, process execution, network access, and UI handles.
+2. **Each submitted program runs in an untrusted Wasm guest.** Its restricted WASI context inherits no filesystem, environment, network, arguments, or stdio. Fuel, epoch deadlines, store limits, and protocol limits bound each invocation.
+3. **Injected functions deliberately reintroduce selected host authority.** The sandbox is a boundary around direct access, not around effects explicitly exposed by a function. The host enforces the exact resolved transitive effect grant.
 
-Pit has no long-lived code worker or daemon. A new child is created for each TypeScript invocation; only extension-host state and persisted function definitions survive between calls.
+Pit has no long-lived code worker or daemon. Each TypeScript invocation creates a new Wasmtime engine, store, and QuickJS runtime; only extension-host state, the loaded component bytes, and persisted function definitions survive between calls.
 
 ## Extension composition and Pi lifecycle
 
@@ -88,7 +91,7 @@ Persistent function source is not copied into the prompt. Session overrides are 
 1. **Canonicalize source.** Pit asks Oxfmt to format the completed submission with a fixed configuration. Formatting is best-effort: formatter failure does not replace the more useful validation path.
 2. **Prepare candidate state.** `SavedFunctionService.prepare()` classifies the source as anonymous or as a named top-level function. A named direct submission is always prepared as a session definition. Project or global persistence requires an explicit promotion path.
 3. **Validate the candidate registry.** The new definition is evaluated against the registry that would exist after a successful commit. This makes the definition available to its own first execution without mutating live state prematurely.
-4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a child, and dispatches capability calls.
+4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh Wasmtime store, and dispatches capability calls.
 5. **Commit only after success.** A named direct submission is appended to Pi's session history and installed in memory only after execution succeeds. Failed definitions do not become active. With `saveOnly`, execution is skipped but the same validated commit path is used.
 6. **Build a bounded result.** The model receives truncated text when needed, saved-function guidance, promotion suggestions, and a compact session catalog. Structured details retain traces, progress, and untruncated values only when safe to do so.
 
@@ -106,7 +109,7 @@ The execution pipeline deliberately separates **prepare**, **run**, and **commit
 - declarations and source signatures for reachable saved functions; and
 - the submitted program wrapper.
 
-Validation uses strict ES2022 compiler settings without emitting JavaScript. Diagnostics are deduplicated, bounded, and rewritten to locations in the submitted source. The actual serialized `params` value is included in validation so obvious input-shape mismatches fail before a child starts.
+Validation uses strict ES2022 compiler settings without emitting JavaScript. Diagnostics are deduplicated, bounded, and rewritten to locations in the submitted source. The actual serialized `params` value is included in validation so obvious input-shape mismatches fail before guest execution starts.
 
 Validation results use a bounded 128-entry cache keyed by source, effective function sources, available names, execution form, and input. Both successful and failed validations are cached.
 
@@ -121,7 +124,7 @@ The graph supports:
 - strongly connected component detection for cycles; and
 - bounded fingerprinted caches for registries and source references.
 
-Only definitions reachable from the submitted source are compiled into a child program. The complete transitive closure is resolved with cycle-safe traversal; generated declarations and deferred wrappers allow mutually referential definitions to be assembled without depending on assignment order.
+Only definitions reachable from the submitted source are compiled into a guest program. The complete transitive closure is resolved with cycle-safe traversal; generated declarations and deferred wrappers allow mutually referential definitions to be assembled without depending on assignment order.
 
 ### Scope-aware runtime generation
 
@@ -143,26 +146,27 @@ After validation and scope resolution, esbuild transforms the generated TypeScri
 
 ## Sandbox and RPC boundary
 
-`src/sandbox/run.ts` launches `src/sandbox/runner.mjs` with Node's permission model enabled. The child can read only the runner file, receives only `PATH` in its environment, and has a default 128 MB old-space limit. The runner has no project or third-party imports.
+`src/sandbox/wasmtime-loader.ts` selects the executor and loads the checked-in Linux ARM64 N-API addon and QuickJS component. Wasmtime is the default. `PIT_FUNCTION_EXECUTOR=node` selects the deprecated permission-restricted Node child for diagnostics or unsupported platforms; explicit `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` paths can replace both packaged artifacts together.
 
-The compiled source is evaluated indirectly so it cannot capture the runner module's lexical RPC state. Its apparent capabilities are nested proxies. Calling `workspace.read(...)`, for example, emits a wire request instead of touching the filesystem in the child.
+`src/sandbox/wasmtime-executor.ts` gives every invocation a random execution ID and creates a bounded dispatcher for the program's resolved effects. It wraps the compiled program as an ES module that exposes a queued `pitCall()` bridge. The custom component retains JavaScript Promise resolvers, exports queued requests to Rust, accepts completions, and pumps pending QuickJS jobs.
 
-Parent and child communicate with token-authenticated, newline-delimited JSON frames over standard input and output. A random token is generated per invocation. Frames with the wrong token are ignored, malformed output is ignored, and oversized frames fail the invocation. Child `console` output is redirected to standard error so diagnostics cannot corrupt the protocol stream.
+The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a capability handler.
 
 Current defensive bounds are:
 
 | Resource                        | Effective host limit |
 | ------------------------------- | -------------------: |
-| Wire frame                      |      8,000,000 bytes |
+| Protocol frame                  |      8,000,000 bytes |
 | Capability calls per invocation |                1,024 |
 | Concurrent capability calls     |                   32 |
 | Saved-function nesting depth    |                   32 |
 | Default TypeScript wall time    |           30 seconds |
-| Default child old-space limit   |               128 MB |
+| Default Wasmtime memory limit   |               128 MB |
+| Default Wasmtime fuel           |        4,000,000,000 |
 
-The child has looser duplicate call limits as defense in depth; the host limits above are authoritative. On result or failure, both sides wait for already-started capability calls to settle before finalizing. Cancellation and timeout abort the signal shared by host capability handlers and then terminate the child. `SandboxLifecycle` uses `SIGKILL` for deterministic child cleanup.
+Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs are registered race-safely: an abort arriving before native registration is queued and interrupts initialization once the epoch timer is installed. The same abort signal reaches cooperative host capability handlers. Each execution registration, epoch timer, store, and QuickJS runtime is discarded when the call settles.
 
-Remote failures cross the wire as bounded name, message, and stack-frame data. The host reconstructs a `SandboxRemoteError`; raw child objects and arbitrary prototypes never cross the boundary.
+Wasmtime links the WASI interfaces required by Javy, but `WasiCtx::builder().build()` inherits nothing. The guest cannot directly read files, access environment credentials, open network connections, or launch processes. Wasmtime itself is a native addon inside Pi's process, so a native runtime defect shares the trusted host's crash boundary.
 
 ## Capability architecture
 
@@ -262,7 +266,7 @@ Current saved-function capacity bounds are 64 effective definitions, 100,000 byt
 
 ## Workspace consistency model
 
-Workspace effects execute in the trusted host. Paths are resolved against Pi's current working directory; an absolute path remains absolute. The workspace capability is therefore not a repository-containment sandbox. Its safety model is the restricted child plus explicit host capability surface, optimistic edit checks, bounded output, and the agent's operating policy.
+Workspace effects execute in the trusted host. Paths are resolved against Pi's current working directory; an absolute path remains absolute. The workspace capability is therefore not a repository-containment sandbox. Its safety model is the restricted Wasm guest plus the explicit host function surface, optimistic edit checks, bounded output, and the agent's operating policy.
 
 Hashed reads return:
 
@@ -343,7 +347,7 @@ Files directly under `src/` are composition entry points or true cross-domain ad
 | Add or change a capability          | `src/capabilities/<name>.ts`                     | `registry.ts`, `host.ts`, handlers, generated contract, renderer |
 | Change TypeScript request semantics | `src/tool/typescript.ts`                         | preparation, sandbox run, result renderers                       |
 | Change validation or compilation    | `src/sandbox/validation.ts` or `program.ts`      | generated contract, function graph, scoped runtime               |
-| Change child isolation or RPC       | `src/sandbox/run.ts` and `runner.mjs`            | lifecycle, wire, dispatcher, security tests                      |
+| Change guest isolation or protocol  | `src/sandbox/wasmtime-executor.ts` and `native/` | guest source, dispatcher, prebuilds, security tests              |
 | Change saved-function scope         | `src/functions/state.ts` and `scoped-runtime.ts` | preparation, reconciliation, graph, removal                      |
 | Change persistent storage           | `src/functions/storage/`                         | lifecycle, service, project integration tests                    |
 | Change workspace edits              | `src/workspace/hashline.ts` and `capability.ts`  | read/search, concurrency tests                                   |
@@ -367,4 +371,4 @@ Tests are grouped by behavior under `test/`, mirroring source domains where usef
 
 Shared extension harnesses live in `test/support/`. Split suites by behavior rather than requiring one test file per source file.
 
-The standard static gate runs generated-contract drift detection, architecture checks, TypeScript, Oxlint, and Oxfmt. The test and coverage gates exercise host-child boundaries and the package verification gate checks the files distributed by the GitHub tag. Changes to TUI, extension lifecycle, saved-function loading, sandbox behavior, partial updates, or renderers also require a `/reload` smoke test because those boundaries depend on live Pi integration.
+The standard static gate runs generated-contract drift detection, architecture checks, TypeScript, Oxlint, and Oxfmt. The test and coverage gates exercise host-guest boundaries and the package verification gate checks the files distributed by the GitHub tag. Changes to TUI, extension lifecycle, saved-function loading, sandbox behavior, partial updates, or renderers also require a `/reload` smoke test because those boundaries depend on live Pi integration.

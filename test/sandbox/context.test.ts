@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseFunctionExecutionContext } from "../../src/sandbox/run.js";
 
 describe("function execution wire context", () => {
-  it.each(["global", "project", "session"] as const)(
+  it.each(["global", "user", "project", "session"] as const)(
     "accepts bounded %s invocation context",
     (scope) => {
       expect(

@@ -9,7 +9,7 @@ Pit provides security fixes for the latest tagged release.
 | 0.15.x           | Yes       |
 | Earlier releases | No        |
 
-Pit v0.15.1 is tested with Node.js 22.19 or newer and Pi 0.85.1. Other Pi versions may work but are not part of the tested compatibility target.
+Pit requires Node.js 22.19 or newer as the Pi extension host. The default Wasmtime executor currently targets Linux ARM64. Other platforms can temporarily select the deprecated Node executor with `PIT_FUNCTION_EXECUTOR=node`.
 
 ## Reporting a vulnerability
 
@@ -21,7 +21,7 @@ Include the affected version, reproduction steps, impact, and any suggested miti
 
 ## Security model
 
-Submitted TypeScript runs in a fresh process under Node's permission model and can affect the host only through injected capabilities. This is an application boundary, not a container, virtual machine, or operating-system sandbox.
+Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store and can affect the host only through host-authorized injected functions. The component receives restricted WASI Preview 2 bindings with no inherited filesystem, environment, network, arguments, or stdio. This is an application boundary, not a container, virtual machine, or operating-system sandbox. Wasmtime is loaded as a native addon in Pi's process, so native runtime defects share the host process's crash boundary.
 
 Host capabilities remain powerful. In particular:
 

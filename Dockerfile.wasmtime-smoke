@@ -23,6 +23,11 @@ RUN --mount=type=cache,id=pit-cargo-registry,target=/usr/local/cargo/registry \
   cargo build --manifest-path /queued-guest/Cargo.toml --target wasm32-wasip2 --release --locked \
   && cp /queued-guest/target/wasm32-wasip2/release/pit_queued_quickjs_guest.wasm /build/pit_queued_quickjs_guest.wasm
 
+FROM scratch AS artifacts
+
+COPY --from=builder /build/pit_wasmtime_executor.node /
+COPY --from=builder /build/pit_queued_quickjs_guest.wasm /
+
 FROM node:24-bookworm-slim AS program
 
 WORKDIR /pit
@@ -40,9 +45,6 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1 \
 
 ENV PI_SKIP_VERSION_CHECK=1 \
   PI_TELEMETRY=0 \
-  PIT_FUNCTION_EXECUTOR=wasmtime \
-  PIT_WASMTIME_ADDON=/opt/pit/native/pit_wasmtime_executor.node \
-  PIT_WASMTIME_COMPONENT=/opt/pit/native/pit_queued_quickjs_guest.wasm \
   TERM=xterm-256color
 
 WORKDIR /opt/pit
@@ -51,8 +53,8 @@ RUN npm ci --omit=dev \
   && npm cache clean --force
 COPY src ./src
 COPY prompts ./prompts
-COPY --from=builder /build/pit_wasmtime_executor.node ./native/pit_wasmtime_executor.node
-COPY --from=builder /build/pit_queued_quickjs_guest.wasm ./native/pit_queued_quickjs_guest.wasm
+COPY --from=builder /build/pit_wasmtime_executor.node ./native/prebuilds/linux-arm64/pit_wasmtime_executor.node
+COPY --from=builder /build/pit_queued_quickjs_guest.wasm ./native/prebuilds/linux-arm64/pit_queued_quickjs_guest.wasm
 
 RUN mkdir -p /workspace \
   && printf '%s\n' '{"name":"pit-wasmtime-workspace","private":true}' > /workspace/package.json \
