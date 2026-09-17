@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::{
+    sync::{Arc, mpsc},
+    thread,
+    time::Duration,
+};
 
 use futures::future::join_all;
 use napi::{
@@ -7,7 +11,10 @@ use napi::{
     threadsafe_function::ThreadsafeFunction,
 };
 use napi_derive::napi;
-use wasmtime::{Config, Engine, Instance, Module, Store, component::ResourceTable};
+use wasmtime::{
+    Config, Engine, Instance, Module, Store, StoreLimits, StoreLimitsBuilder,
+    component::ResourceTable,
+};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 mod queued {
@@ -26,11 +33,13 @@ fn engine() -> Result<Engine> {
     let mut config = Config::new();
     config.consume_fuel(true);
     config.wasm_component_model(true);
+    config.epoch_interruption(true);
     Engine::new(&config).map_err(js_error)
 }
 
 fn store<T>(engine: &Engine, data: T, fuel: Option<u32>) -> Result<Store<T>> {
     let mut store = Store::new(engine, data);
+    store.set_epoch_deadline(u64::MAX);
     store
         .set_fuel(u64::from(fuel.unwrap_or(50_000_000)))
         .map_err(js_error)?;
@@ -51,9 +60,40 @@ pub fn execute_wat(source: String, fuel: Option<u32>) -> Result<i32> {
 
 type JsonHostCallback = Arc<ThreadsafeFunction<String, Promise<String>, String, Status, false>>;
 
+struct EpochDeadline {
+    cancel: Option<mpsc::Sender<()>>,
+}
+
+impl EpochDeadline {
+    fn new(engine: &Engine, timeout_ms: u32) -> Self {
+        let (cancel, receiver) = mpsc::channel();
+        let engine = engine.clone();
+        thread::spawn(move || {
+            if receiver
+                .recv_timeout(Duration::from_millis(u64::from(timeout_ms)))
+                .is_err()
+            {
+                engine.increment_epoch();
+            }
+        });
+        Self {
+            cancel: Some(cancel),
+        }
+    }
+}
+
+impl Drop for EpochDeadline {
+    fn drop(&mut self) {
+        if let Some(cancel) = self.cancel.take() {
+            let _ = cancel.send(());
+        }
+    }
+}
+
 struct QueuedState {
     table: ResourceTable,
     wasi: WasiCtx,
+    limits: StoreLimits,
 }
 
 impl WasiView for QueuedState {
@@ -71,6 +111,8 @@ pub async fn execute_queued_javascript(
     source: String,
     callback: JsonHostCallback,
     fuel: Option<u32>,
+    timeout_ms: Option<u32>,
+    memory_limit_mb: Option<u32>,
 ) -> Result<bool> {
     use queued::exports::pit::quickjs::runner::{Completion, PollState};
     use wasmtime::component::{Component, Linker};
@@ -82,11 +124,24 @@ pub async fn execute_queued_javascript(
     let component = Component::new(&engine, component.as_ref()).map_err(js_error)?;
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(js_error)?;
+    let memory_limit = usize::try_from(memory_limit_mb.unwrap_or(128))
+        .map_err(|_| Error::from_reason("Invalid memory limit"))?
+        .checked_mul(1024 * 1024)
+        .ok_or_else(|| Error::from_reason("Invalid memory limit"))?;
     let state = QueuedState {
         table: ResourceTable::new(),
         wasi: WasiCtx::builder().build(),
+        limits: StoreLimitsBuilder::new()
+            .memory_size(memory_limit)
+            .memories(8)
+            .tables(16)
+            .instances(32)
+            .build(),
     };
     let mut store = store(&engine, state, fuel)?;
+    store.limiter(|state| &mut state.limits);
+    store.set_epoch_deadline(1);
+    let _epoch = EpochDeadline::new(&engine, timeout_ms.unwrap_or(30_000));
     let guest =
         queued::QueuedGuest::instantiate(&mut store, &component, &linker).map_err(js_error)?;
     let runner = guest.pit_quickjs_runner();
