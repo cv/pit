@@ -9,9 +9,9 @@ afterEach(cleanupHarness);
 describe("session capability", () => {
   it("reports bounded session metadata and context usage", async () => {
     expect(
-      await value(`async ({ session }) => ({
-        info: await session.info(),
-        name: await session.getName(),
+      await value(`async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => ({
+        info: await sessionInfo(),
+        name: await sessionGetName(),
       })`),
     ).toEqual({
       info: {
@@ -33,8 +33,8 @@ describe("session capability", () => {
     const ctx = context({ getContextUsage: () => undefined });
     expect(
       await value(
-        `async ({ session }) => {
-        const info = await session.info();
+        `async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => {
+        const info = await sessionInfo();
         return {
           tokens: info.contextTokens ?? null,
           window: info.contextWindow ?? null,
@@ -48,17 +48,19 @@ describe("session capability", () => {
 
   it("sets and returns a normalized session display name", async () => {
     expect(
-      await value(`async ({ session }) => {
-        const set = await session.setName("  Capability work  ");
-        return { set, name: await session.getName() };
+      await value(`async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => {
+        const set = await sessionSetName("  Capability work  ");
+        return { set, name: await sessionGetName() };
       }`),
     ).toEqual({ set: { name: "Capability work" }, name: "Capability work" });
   });
 
   it("rejects an empty session display name", async () => {
-    await expect(run(`async ({ session }) => session.setName("   ")`)).rejects.toThrow(
-      "must not be empty",
-    );
+    await expect(
+      run(
+        `async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => sessionSetName("   ")`,
+      ),
+    ).rejects.toThrow("must not be empty");
   });
 
   it("awaits compaction and returns bounded metadata", async () => {
@@ -77,7 +79,10 @@ describe("session capability", () => {
       },
     });
     await expect(
-      value(`async ({ session }) => session.compact("  Focus on capability work.  ")`, ctx),
+      value(
+        `async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => sessionCompact("  Focus on capability work.  ")`,
+        ctx,
+      ),
     ).resolves.toEqual({
       firstKeptEntryId: "kept-entry",
       tokensBefore: 500_000,
@@ -90,9 +95,12 @@ describe("session capability", () => {
     const ctx = context({
       compact: (options: any) => queueMicrotask(() => options.onError(new Error("compact failed"))),
     });
-    await expect(run("async ({ session }) => session.compact()", ctx)).rejects.toThrow(
-      "compact failed",
-    );
+    await expect(
+      run(
+        "async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => sessionCompact()",
+        ctx,
+      ),
+    ).rejects.toThrow("compact failed");
   });
 
   it("ignores unknown internal dispatch", async () => {

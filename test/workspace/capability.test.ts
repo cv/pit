@@ -14,10 +14,11 @@ afterEach(cleanupHarness);
 describe("workspace read and edit", () => {
   it("reads hashed content by default and raw content explicitly", async () => {
     await writeFile(join(cwd, "hashed.txt"), "one\r\ntwo\r\n", "utf8");
-    const result = await value(`async ({ workspace }) => ({
-      hashed: await workspace.read("hashed.txt"),
-      raw: await workspace.read("hashed.txt", { format: "raw" }),
-      partial: await workspace.read("hashed.txt", { offset: 2, limit: 1 }),
+    const result =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => ({
+      hashed: await workspaceRead("hashed.txt"),
+      raw: await workspaceRead("hashed.txt", { format: "raw" }),
+      partial: await workspaceRead("hashed.txt", { offset: 2, limit: 1 }),
     })`);
     expect(result.hashed).toMatchObject({
       file: "hashed.txt",
@@ -45,10 +46,11 @@ describe("workspace read and edit", () => {
   it("bounds large reads and handles empty or out-of-range selections", async () => {
     await writeFile(join(cwd, "large.txt"), "x".repeat(5_000_000), "utf8");
     await writeFile(join(cwd, "empty.txt"), "", "utf8");
-    const result = await value(`async ({ workspace }) => ({
-      large: await workspace.read("large.txt"),
-      empty: await workspace.read("empty.txt"),
-      missingRange: await workspace.read("empty.txt", { offset: 2 }),
+    const result =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => ({
+      large: await workspaceRead("large.txt"),
+      empty: await workspaceRead("empty.txt"),
+      missingRange: await workspaceRead("empty.txt", { offset: 2 }),
     })`);
     expect(result.large).toMatchObject({ truncated: true, lines: 1 });
     expect(result.large).not.toHaveProperty("totalLines");
@@ -60,12 +62,15 @@ describe("workspace read and edit", () => {
   it("validates read arguments and supports @-prefixed paths", async () => {
     await writeFile(join(cwd, "at.txt"), "contents", "utf8");
     expect(
-      await value(`async ({ workspace }) => workspace.read("@at.txt", { format: "raw" })`),
+      await value(
+        `async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceRead("@at.txt", { format: "raw" })`,
+      ),
     ).toMatchObject({
       content: "contents",
     });
-    const errors = await value(`async ({ workspace }) => {
-      const raw = workspace as any;
+    const errors =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => {
+      const raw = { batch: workspaceBatch, read: workspaceRead, search: workspaceSearch } as any;
       const capture = async (options) => { try { await raw.read("at.txt", options); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture({ format: "lines" }),
@@ -82,14 +87,16 @@ describe("workspace read and edit", () => {
 
   it("creates, anchors, rewrites, and deletes through one edit method", async () => {
     const original = "one\ntwo\nthree";
-    const created = await value(`async ({ workspace }) => workspace.edit("single-edit.txt", {
+    const created =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceEdit("single-edit.txt", {
       revision: null,
       changes: [{ kind: "replaceFile", content: ${JSON.stringify(original)} }],
     })`);
     expect(created).toMatchObject({ file: "single-edit.txt", applied: 1, deleted: false });
 
     const next = "one\nsecond\nthree\nfour";
-    const anchored = await value(`async ({ workspace }) => workspace.edit("single-edit.txt", {
+    const anchored =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceEdit("single-edit.txt", {
       revision: ${JSON.stringify(fileRevision(original))},
       changes: [
         { kind: "replace", start: ${JSON.stringify(lineAnchor(2, "two"))}, content: "second" },
@@ -99,19 +106,21 @@ describe("workspace read and edit", () => {
     expect(await readFile(join(cwd, "single-edit.txt"), "utf8")).toBe(next);
     expect(anchored.revision).toBe(fileRevision(next));
 
-    const rewritten = await value(`async ({ workspace }) => workspace.edit("single-edit.txt", {
+    const rewritten =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceEdit("single-edit.txt", {
       revision: ${JSON.stringify(fileRevision(next))},
       changes: [{ kind: "replaceFile", content: "rewritten" }],
     })`);
     expect(rewritten.revision).toBe(fileRevision("rewritten"));
 
     await expect(
-      run(`async ({ workspace }) => workspace.edit("single-edit.txt", {
+      run(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceEdit("single-edit.txt", {
         revision: ${JSON.stringify(fileRevision(next))}, changes: [{ kind: "deleteFile" }],
       })`),
     ).rejects.toThrow(/Revision mismatch/);
 
-    const deleted = await value(`async ({ workspace }) => workspace.edit("single-edit.txt", {
+    const deleted =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceEdit("single-edit.txt", {
       revision: ${JSON.stringify(fileRevision("rewritten"))}, changes: [{ kind: "deleteFile" }],
     })`);
     expect(deleted).toMatchObject({ revision: null, deleted: true, bytes: 0 });
@@ -125,7 +134,7 @@ describe("workspace read and edit", () => {
     const outside = join(cwd, "..", outsideName);
     try {
       const result =
-        await value(`async ({ workspace }) => workspace.edit(${JSON.stringify(outside)}, {
+        await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceEdit(${JSON.stringify(outside)}, {
         revision: null, changes: [{ kind: "replaceFile", content: "outside" }],
       })`);
       expect(result.file).toBe(`../${outsideName}`);
@@ -152,8 +161,9 @@ describe("workspace read and edit", () => {
 describe("workspace batch", () => {
   it("runs concurrent reads with settled and fail-fast modes", async () => {
     await writeFile(join(cwd, "present.txt"), "present", "utf8");
-    const settled = await value(`async ({ workspace }) => {
-      const batch = await workspace.batch([
+    const settled =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => {
+      const batch = await workspaceBatch([
         { kind: "read", file: "present.txt", options: { format: "raw" } },
         { kind: "read", file: "missing.txt" },
       ], { failure: "settled" });
@@ -166,7 +176,7 @@ describe("workspace batch", () => {
     expect(settled.results[1].error).toContain("ENOENT");
 
     await expect(
-      run(`async ({ workspace }) => workspace.batch([
+      run(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceBatch([
         { kind: "read", file: "present.txt" }, { kind: "read", file: "missing.txt" },
       ])`),
     ).rejects.toThrow(/ENOENT/);
@@ -176,7 +186,8 @@ describe("workspace batch", () => {
     const first = "first";
     await writeFile(join(cwd, "delete.txt"), "delete", "utf8");
     await writeFile(join(cwd, "first.txt"), first, "utf8");
-    const result = await value(`async ({ workspace }) => workspace.batch([
+    const result =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceBatch([
       {
         kind: "edit", file: "first.txt",
         changes: {
@@ -229,7 +240,7 @@ describe("workspace batch", () => {
     await writeFile(join(cwd, "a.txt"), "a", "utf8");
     await writeFile(join(cwd, "b.txt"), "b", "utf8");
     await expect(
-      run(`async ({ workspace }) => workspace.batch([
+      run(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceBatch([
         {
           kind: "edit", file: "a.txt",
           changes: { revision: ${JSON.stringify(fileRevision("a"))}, changes: [{ kind: "replaceFile", content: "changed" }] },
@@ -244,7 +255,7 @@ describe("workspace batch", () => {
 
     await writeFile(join(cwd, "z-parent"), "not a directory", "utf8");
     await expect(
-      run(`async ({ workspace }) => workspace.batch([
+      run(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceBatch([
         {
           kind: "edit", file: "a.txt",
           changes: { revision: ${JSON.stringify(fileRevision("a"))}, changes: [{ kind: "replaceFile", content: "temporary" }] },
@@ -258,7 +269,7 @@ describe("workspace batch", () => {
     expect(await readFile(join(cwd, "a.txt"), "utf8")).toBe("a");
 
     await expect(
-      run(`async ({ workspace }) => workspace.batch([
+      run(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceBatch([
         {
           kind: "edit", file: "temporary.txt",
           changes: { revision: null, changes: [{ kind: "replaceFile", content: "temporary" }] },
@@ -275,8 +286,9 @@ describe("workspace batch", () => {
   });
 
   it("validates batch shapes, modes, and unique edit files", async () => {
-    const errors = await value(`async ({ workspace }) => {
-      const raw = workspace as any;
+    const errors =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => {
+      const raw = { batch: workspaceBatch, read: workspaceRead, search: workspaceSearch } as any;
       const capture = async (operations, options?) => { try { await (options === undefined ? raw.batch(operations) : raw.batch(operations, options)); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture([]),
@@ -309,13 +321,14 @@ describe("workspace discovery", () => {
     await writeFile(join(cwd, "second.txt"), "two", "utf8");
     await symlink(join(cwd, "existing.txt"), join(cwd, "link.txt"));
     await mkdir(join(cwd, "nested"));
-    const result = await value(`async ({ workspace }) => ({
-      list: await workspace.list(),
-      nestedList: await workspace.list("nested"),
-      glob: await workspace.glob("**/*.txt", { onlyFiles: true, limit: 1 }),
-      defaultGlob: await workspace.glob(),
-      filteredGlob: await workspace.glob(["**/*.txt"], { ignore: ["second.txt"] }),
-      stat: await workspace.stat("existing.txt"),
+    const result =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => ({
+      list: await workspaceList(),
+      nestedList: await workspaceList("nested"),
+      glob: await workspaceGlob("**/*.txt", { onlyFiles: true, limit: 1 }),
+      defaultGlob: await workspaceGlob(),
+      filteredGlob: await workspaceGlob(["**/*.txt"], { ignore: ["second.txt"] }),
+      stat: await workspaceStat("existing.txt"),
     })`);
     expect(result.list).toEqual(
       expect.arrayContaining([
@@ -332,8 +345,9 @@ describe("workspace discovery", () => {
   });
 
   it("validates glob limits", async () => {
-    const errors = await value(`async ({ workspace }) => {
-      const capture = async (limit) => { try { await workspace.glob("*", { limit }); return "ok"; } catch (error) { return error.message; } };
+    const errors =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => {
+      const capture = async (limit) => { try { await workspaceGlob("*", { limit }); return "ok"; } catch (error) { return error.message; } };
       return [await capture(0), await capture(10001)];
     }`);
     expect(errors.join("\n")).toContain("integer between 1 and 10000");
@@ -350,7 +364,8 @@ describe("workspace search", () => {
     await writeFile(join(cwd, "search/unreadable.txt"), "needle", "utf8");
     await chmod(join(cwd, "search/unreadable.txt"), 0o000);
 
-    const result = await value(`async ({ workspace }) => workspace.search("needle", {
+    const result =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceSearch("needle", {
       path: "search", glob: "**/*", caseSensitive: false, contextLines: 1, limit: 10,
     })`);
     expect(result.matches).toEqual([
@@ -369,7 +384,8 @@ describe("workspace search", () => {
     expect(result).toMatchObject({ truncated: false, filesSearched: 2, filesSkipped: 3 });
     await chmod(join(cwd, "search/unreadable.txt"), 0o600);
     await writeFile(join(cwd, "search/crlf.txt"), "Needle\r\nother", "utf8");
-    const filtered = await value(`async ({ workspace }) => workspace.search("Needle", {
+    const filtered =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceSearch("Needle", {
       glob: ["search/*.txt"], ignore: ["**/b.txt"], dot: true,
     })`);
     expect(filtered.matches[0]).toMatchObject({
@@ -378,18 +394,22 @@ describe("workspace search", () => {
       anchor: lineAnchor(1, "Needle"),
     });
 
-    const regex = await value(`async ({ workspace }) => workspace.search("^n.*e", {
+    const regex =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceSearch("^n.*e", {
       path: "search/a.txt", regex: true, caseSensitive: false, limit: 1,
     })`);
     expect(regex.matches[0]).toMatchObject({ line: 2, anchor: lineAnchor(2, "needle one") });
     expect(regex.truncated).toBe(true);
 
-    const zeroLength = await value(`async ({ workspace }) => workspace.search("^", {
+    const zeroLength =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceSearch("^", {
       path: "search/a.txt", regex: true, limit: 10,
     })`);
     expect(zeroLength.matches).toHaveLength(4);
 
-    const defaults = await value(`async ({ workspace }) => workspace.search("Alpha")`);
+    const defaults = await value(
+      `async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceSearch("Alpha")`,
+    );
     expect(defaults.matches[0]).toMatchObject({ file: "search/a.txt", line: 1 });
   });
 
@@ -397,13 +417,14 @@ describe("workspace search", () => {
     await writeFile(join(cwd, "regex.txt"), `${"a".repeat(30_000)}!`, "utf8");
     await expect(
       run(
-        `async ({ workspace }) => workspace.search("^(a+)+$", { path: "regex.txt", regex: true })`,
+        `async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => workspaceSearch("^(a+)+$", { path: "regex.txt", regex: true })`,
       ),
     ).rejects.toThrow(/Regex search exceeded 250ms/);
 
     execFileSync("mkfifo", [join(cwd, "search-pipe")]);
-    const errors = await value(`async ({ workspace }) => {
-      const raw = workspace as any;
+    const errors =
+      await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => {
+      const raw = { batch: workspaceBatch, read: workspaceRead, search: workspaceSearch } as any;
       const capture = async (query, options) => { try { await raw.search(query, options); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture("", {}),

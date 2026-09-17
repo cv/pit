@@ -37,7 +37,7 @@ describe("commands capability", () => {
       },
     ]);
 
-    expect(await value("async ({ commands }) => commands.list()")).toEqual({
+    expect(await value("async ({ commands: { list: commandList } }) => commandList()")).toEqual({
       commands: [
         {
           name: "review",
@@ -80,8 +80,8 @@ describe("commands capability", () => {
       })),
     );
     expect(
-      await value(`async ({ commands }) => {
-        const result = await commands.list();
+      await value(`async ({ commands: { list: commandList } }) => {
+        const result = await commandList();
         return { count: result.commands.length, truncated: result.truncated };
       }`),
     ).toEqual({ count: 200, truncated: true });
