@@ -6,7 +6,7 @@ import type { CapabilityTrace, FunctionExecutionContext } from "../execution/cap
 import type { FunctionScope } from "../functions/core.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
 import { SandboxLifecycle } from "./lifecycle.js";
-import { compileSandboxSource } from "./program.js";
+import { compileSandboxSource, compileUnifiedSandboxSource } from "./program.js";
 import {
   isCapabilityCallMessage,
   type SandboxWireError,
@@ -18,9 +18,11 @@ export interface SandboxOptions {
   memoryLimitMb?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  unifiedFunctions?: boolean;
   savedFunctions?: ReadonlyMap<string, string>;
   savedFunctionScopes?: ReadonlyMap<string, FunctionScope>;
   globalFunctions?: ReadonlyMap<string, string>;
+  userFunctions?: ReadonlyMap<string, string>;
   projectFunctions?: ReadonlyMap<string, string>;
   sessionFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
@@ -112,10 +114,12 @@ async function prepareSandboxRun(source: string, options: SandboxOptions) {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     throw new Error("timeoutMs must be positive");
   }
-  const compiled = await compileSandboxSource(source, {
+  const compile = options.unifiedFunctions ? compileUnifiedSandboxSource : compileSandboxSource;
+  const compiled = await compile(source, {
     ...(options.savedFunctions ? { savedFunctions: options.savedFunctions } : {}),
     ...(options.savedFunctionScopes ? { savedFunctionScopes: options.savedFunctionScopes } : {}),
     ...(options.globalFunctions ? { globalFunctions: options.globalFunctions } : {}),
+    ...(options.userFunctions ? { userFunctions: options.userFunctions } : {}),
     ...(options.projectFunctions ? { projectFunctions: options.projectFunctions } : {}),
     ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
     ...(options.input === undefined ? {} : { input: options.input }),
