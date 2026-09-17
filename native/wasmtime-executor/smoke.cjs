@@ -66,6 +66,30 @@ async function main() {
   assert.equal(concurrentExecuted, true);
   assert.equal(maximumActiveCalls, 2);
 
+  await assert.rejects(
+    executor.executeQueuedJavascript(
+      queuedGuest,
+      `while (true) {}`,
+      async () => JSON.stringify({ value: null }),
+      4_000_000_000,
+      25,
+      64,
+    ),
+    /epoch|interrupt|deadline/i,
+  );
+
+  await assert.rejects(
+    executor.executeQueuedJavascript(
+      queuedGuest,
+      `const oversized = new Uint8Array(128 * 1024 * 1024); void oversized;`,
+      async () => JSON.stringify({ value: null }),
+      4_000_000_000,
+      30_000,
+      32,
+    ),
+    /memory|allocation|limit|grow/i,
+  );
+
   let queuedPreparedResult;
   const queuedPreparedExecuted = await executor.executeQueuedJavascript(
     queuedGuest,
@@ -95,6 +119,8 @@ async function main() {
       inProcess: true,
       answer,
       fuelInterruption: true,
+      epochInterruption: true,
+      memoryLimit: true,
       restrictedWasi: true,
       preparedPitProgram: queuedPreparedExecuted,
       queuedRquickjsGuest: true,

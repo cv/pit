@@ -6,7 +6,8 @@ The smoke test proves:
 
 - a native N-API addon can host Wasmtime in-process;
 - a fresh store can execute an untrusted module;
-- finite fuel interrupts a runaway module;
+- finite fuel and epoch deadlines interrupt runaway modules;
+- Wasmtime store limits bound guest linear memory, tables, and instances;
 - a custom rquickjs component dynamically executes JavaScript;
 - `pitCall()` returns pending JavaScript Promises instead of suspending the component;
 - the host drains bounded JSON requests in batches of at most 32;
@@ -27,4 +28,4 @@ docker run --rm pit-wasmtime-smoke:issue-82
 
 The guest protocol is defined by `queued-guest/wit/world.wit`. JavaScript calls create pending Promises and enqueue requests. The Wasmtime host drains requests, executes each batch concurrently, delivers completions, and polls QuickJS until the program completes.
 
-Before this can replace the Node executor, the addon still needs epoch-based wall-clock interruption, explicit component memory limits, cancellation propagation, native artifact loading, structured failure conversion, and the full `FunctionExecutor` adapter.
+Before this can replace the Node executor, the addon still needs cancellation propagation, native artifact loading, structured failure conversion, and the full `FunctionExecutor` adapter.
