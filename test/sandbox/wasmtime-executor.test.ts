@@ -24,6 +24,7 @@ describe("createWasmtimeFunctionExecutor", () => {
               capability: "context",
               method: "get",
               args: [],
+              functionContext: { invocationId: 1, name: "inspect", scope: "session", depth: 1 },
             }),
           ),
         );
@@ -37,13 +38,26 @@ describe("createWasmtimeFunctionExecutor", () => {
       component: new Uint8Array([1, 2, 3]),
     });
     const handler = vi.fn(async () => ({ cwd: "/workspace" }));
+    const traces = vi.fn();
+    const controller = new AbortController();
 
-    await expect(executor.execute(program(["context.get"]), handler, options)).resolves.toEqual({
+    await expect(
+      executor.execute(program(["context.get"]), handler, {
+        ...options,
+        signal: controller.signal,
+        onCapabilityTrace: traces,
+      }),
+    ).resolves.toEqual({
       ok: true,
     });
     expect(handler).toHaveBeenCalledWith(
-      expect.objectContaining({ capability: "context", method: "get" }),
+      expect.objectContaining({
+        capability: "context",
+        method: "get",
+        functionContext: expect.objectContaining({ name: "inspect", scope: "session" }),
+      }),
     );
+    expect(traces).toHaveBeenCalled();
     expect(executeQueuedJavascript).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       expect.stringContaining("pitCall"),
@@ -79,10 +93,13 @@ describe("createWasmtimeFunctionExecutor", () => {
     );
   });
 
-  it("normalizes Wasmtime interrupt traps as execution timeouts", async () => {
+  it.each<{ name: string; failure: unknown }>([
+    { name: "Error", failure: new Error("wasm trap: interrupt") },
+    { name: "non-Error", failure: "wasm trap: interrupt" },
+  ])("normalizes $name Wasmtime interrupt traps as execution timeouts", async ({ failure }) => {
     const addon: WasmtimeAddon = {
       async executeQueuedJavascript() {
-        throw new Error("wasm trap: interrupt");
+        throw failure;
       },
     };
     const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
@@ -102,5 +119,32 @@ describe("createWasmtimeFunctionExecutor", () => {
       executor.execute(program([]), async () => null, { ...options, signal: controller.signal }),
     ).rejects.toThrow("cancelled");
     expect(addon.executeQueuedJavascript).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid guest protocol messages", async () => {
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript(_component, _source, callback) {
+        await callback(JSON.stringify({ type: "unknown" }));
+        return true;
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+    await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
+      "Invalid Pit guest request",
+    );
+  });
+
+  it("normalizes an externally aborted native failure as cancellation", async () => {
+    const controller = new AbortController();
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript() {
+        controller.abort();
+        throw new Error("wasm trap: interrupt");
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+    await expect(
+      executor.execute(program([]), async () => null, { ...options, signal: controller.signal }),
+    ).rejects.toThrow("TypeScript execution cancelled");
   });
 });

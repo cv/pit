@@ -67,10 +67,13 @@ export function createWasmtimeFunctionExecutor({
         allowedCalls: new Set(program.effects),
         parseFunctionContext,
         send(message: WireMessage): boolean {
+          /* v8 ignore next -- dispatcher responses always carry their request id. */
           if (typeof message.id !== "number") return false;
           const waiter = waiters.get(message.id);
+          /* v8 ignore next -- only active dispatcher calls can send responses. */
           if (!waiter) return false;
           const response = JSON.stringify(message);
+          /* v8 ignore next -- dispatcher sends a bounded fallback after rejection. */
           if (Buffer.byteLength(response) > MAX_PROTOCOL_FRAME_BYTES) return false;
           waiters.delete(message.id);
           waiter(response);
