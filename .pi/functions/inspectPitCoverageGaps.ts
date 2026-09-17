@@ -5,7 +5,7 @@
  * @param input.limit - Maximum uncovered markers. The default is 100.
  */
 async function inspectPitCoverageGaps(
-  { workspace },
+  { workspace: { read, search } },
   input: { files?: string[]; limit?: number } = {},
 ) {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 500));
@@ -13,21 +13,18 @@ async function inspectPitCoverageGaps(
   const paths =
     requested.length > 0 ? requested.map((file) => `coverage/${file}.html`) : ["coverage"];
   const [summaryResult, searchResults] = await Promise.all([
-    workspace
-      .read("coverage/coverage-summary.json", { format: "raw" })
+    read("coverage/coverage-summary.json", { format: "raw" })
       .then((result) => JSON.parse(result.content))
       .catch(() => undefined),
     Promise.all(
       paths.map((path) =>
-        workspace
-          .search("cbranch-no|cstat-no|fstat-no", {
-            path,
-            ...(path === "coverage" ? { glob: "**/*.ts.html" } : {}),
-            regex: true,
-            contextLines: 0,
-            limit,
-          })
-          .catch(() => undefined),
+        search("cbranch-no|cstat-no|fstat-no", {
+          path,
+          ...(path === "coverage" ? { glob: "**/*.ts.html" } : {}),
+          regex: true,
+          contextLines: 0,
+          limit,
+        }).catch(() => undefined),
       ),
     ),
   ]);

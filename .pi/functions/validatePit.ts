@@ -1,7 +1,10 @@
 /**
  * Runs Pit's standard static, test, coverage, and package gates.
  */
-async function validatePit({ npm }, input: { coverage?: boolean; packageCheck?: boolean } = {}) {
+async function validatePit(
+  { npm: { run, test } },
+  input: { coverage?: boolean; packageCheck?: boolean } = {},
+) {
   type GateResult = { name: string; code: number; stdout: string; stderr: string };
   const gate = (
     name: string,
@@ -30,21 +33,21 @@ async function validatePit({ npm }, input: { coverage?: boolean; packageCheck?: 
     truncate: "tail" as const,
   };
   const [checkResult, testResult] = await Promise.all([
-    npm.run("check", [], processOptions),
-    npm.test(processOptions),
+    run("check", [], processOptions),
+    test(processOptions),
   ]);
   const check = gate("check", checkResult);
   const tests = gate("tests", testResult);
   requireSuccess([check, tests]);
 
   const coverage = input.coverage
-    ? gate("coverage", await npm.run("coverage", [], processOptions))
+    ? gate("coverage", await run("coverage", [], processOptions))
     : undefined;
   if (coverage) {
     requireSuccess([coverage]);
   }
   const packageCheck = input.packageCheck
-    ? gate("package:check", await npm.run("package:check", [], processOptions))
+    ? gate("package:check", await run("package:check", [], processOptions))
     : undefined;
   if (packageCheck) {
     requireSuccess([packageCheck]);

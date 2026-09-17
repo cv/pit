@@ -3,11 +3,14 @@
  *
  * @param input.checkOnly - Check formatting without writing files.
  */
-async function formatPitChanges({ git, shell }, input: { checkOnly?: boolean } = {}) {
+async function formatPitChanges(
+  { git: { diff: gitDiff, status: gitStatus }, shell: { execFile } },
+  input: { checkOnly?: boolean } = {},
+) {
   const [unstaged, staged, status] = await Promise.all([
-    git.diff(["--name-only"]),
-    git.diff(["--cached", "--name-only"]),
-    git.status(["--porcelain", "--untracked-files=all"]),
+    gitDiff(["--name-only"]),
+    gitDiff(["--cached", "--name-only"]),
+    gitStatus(["--porcelain", "--untracked-files=all"]),
   ]);
   const candidates = [
     ...unstaged.stdout.split("\n"),
@@ -48,7 +51,7 @@ async function formatPitChanges({ git, shell }, input: { checkOnly?: boolean } =
     return { files, changed: false, message: "No changed Oxfmt-supported files" };
   }
   const args = ["oxfmt", input.checkOnly ? "--check" : "--write", ...files];
-  const result = await shell.execFile("npx", args, {
+  const result = await execFile("npx", args, {
     raise: false,
     timeoutMs: 120000,
     maxBytes: 30000,

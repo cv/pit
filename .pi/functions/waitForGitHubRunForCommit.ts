@@ -3,7 +3,7 @@
  *
  */
 async function waitForGitHubRunForCommit(
-  _capabilities,
+  { findGitHubRunForCommit, waitForGitHubRun },
   input: {
     repo: string;
     sha: string;
