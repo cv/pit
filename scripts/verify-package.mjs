@@ -10,6 +10,7 @@ const requiredRuntimeFiles = [
   "src/index.ts",
   "src/sandbox/run.ts",
   "src/sandbox/node-executor.ts",
+  "scripts/install-wasmtime.mjs",
   "src/sandbox/runner.mjs",
   "native/prebuilds/linux-arm64/pit_wasmtime_executor.node",
   "native/prebuilds/linux-arm64/pit_queued_quickjs_guest.wasm",
