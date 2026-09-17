@@ -39,26 +39,26 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Node 22.19 or newer. Pit v0.15.0 is tested with Pi 0.85.1; other Pi versions may work, but they are not part of this release's compatibility guarantee. Pit uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
+Pit requires Node 22.19 or newer. Pit v0.15.1 is tested with Pi 0.85.1; other Pi versions may work, but they are not part of this release's compatibility guarantee. Pit uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
 
 Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
 Install the pinned release globally:
 
 ```sh
-pi install git:github.com/cv/pit@v0.15.0
+pi install git:github.com/cv/pit@v0.15.1
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:github.com/cv/pit@v0.15.0
+pi install -l git:github.com/cv/pit@v0.15.1
 ```
 
 Use the pinned release one time without changing settings:
 
 ```sh
-pi -e git:github.com/cv/pit@v0.15.0
+pi -e git:github.com/cv/pit@v0.15.1
 ```
 
 Update an existing unpinned Git installation and reload extensions:
