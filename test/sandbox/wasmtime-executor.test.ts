@@ -73,7 +73,7 @@ describe("createWasmtimeFunctionExecutor", () => {
       expect.any(Uint8Array),
       expect.stringContaining("pitCall"),
       expect.any(Function),
-      4_000_000_000,
+      1_000_000_000_000,
       500,
       64,
       expect.any(String),
@@ -118,6 +118,19 @@ describe("createWasmtimeFunctionExecutor", () => {
 
     await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
       "TypeScript execution timed out after 500ms",
+    );
+  });
+
+  it("normalizes Wasmtime fuel exhaustion", async () => {
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript() {
+        throw new Error("wasm trap: all fuel consumed by WebAssembly");
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+
+    await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
+      "TypeScript execution exceeded its fuel limit",
     );
   });
 

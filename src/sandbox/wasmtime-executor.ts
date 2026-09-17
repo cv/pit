@@ -13,7 +13,7 @@ import { isCapabilityCallMessage } from "./wire.js";
 const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
 const MAX_CAPABILITY_CALLS = 1_024;
 const MAX_CONCURRENT_CAPABILITY_CALLS = 32;
-const DEFAULT_FUEL = 4_000_000_000;
+const DEFAULT_FUEL = 1_000_000_000_000;
 
 export interface WasmtimeAddon {
   interruptQueuedJavascript?(executionId: string): boolean;
@@ -118,6 +118,9 @@ export function createWasmtimeFunctionExecutor({
           throw new Error(`TypeScript execution timed out after ${options.timeoutMs}ms`, {
             cause: error,
           });
+        }
+        if (/all fuel consumed|out of fuel/i.test(message)) {
+          throw new Error("TypeScript execution exceeded its fuel limit", { cause: error });
         }
         throw error;
       } finally {

@@ -25,6 +25,8 @@ mod queued {
 const MAX_MESSAGE_BYTES: usize = 8_000_000;
 const MAX_CAPABILITY_CALLS: usize = 1_024;
 const MAX_CONCURRENT_CALLS: usize = 32;
+const DEFAULT_QUEUED_FUEL: f64 = 1_000_000_000_000.0;
+const MAX_SAFE_JAVASCRIPT_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 enum EpochSignal {
     Interrupt,
@@ -92,20 +94,26 @@ fn engine() -> Result<Engine> {
     Engine::new(&config).map_err(js_error)
 }
 
-fn store<T>(engine: &Engine, data: T, fuel: Option<u32>) -> Result<Store<T>> {
+fn store<T>(engine: &Engine, data: T, fuel: u64) -> Result<Store<T>> {
     let mut store = Store::new(engine, data);
     store.set_epoch_deadline(u64::MAX);
-    store
-        .set_fuel(u64::from(fuel.unwrap_or(50_000_000)))
-        .map_err(js_error)?;
+    store.set_fuel(fuel).map_err(js_error)?;
     Ok(store)
+}
+
+fn validated_queued_fuel(fuel: Option<f64>) -> Result<u64> {
+    let fuel = fuel.unwrap_or(DEFAULT_QUEUED_FUEL);
+    if !fuel.is_finite() || fuel < 1.0 || fuel > MAX_SAFE_JAVASCRIPT_INTEGER {
+        return Err(Error::from_reason("Invalid Wasmtime fuel limit"));
+    }
+    Ok(fuel as u64)
 }
 
 #[napi]
 pub fn execute_wat(source: String, fuel: Option<u32>) -> Result<i32> {
     let engine = engine()?;
     let module = Module::new(&engine, source).map_err(js_error)?;
-    let mut store = store(&engine, (), fuel.or(Some(100_000)))?;
+    let mut store = store(&engine, (), u64::from(fuel.unwrap_or(100_000)))?;
     let instance = Instance::new(&mut store, &module, &[]).map_err(js_error)?;
     let run = instance
         .get_typed_func::<(), i32>(&mut store, "run")
@@ -168,7 +176,7 @@ pub async fn execute_queued_javascript(
     component: Buffer,
     source: String,
     callback: JsonHostCallback,
-    fuel: Option<u32>,
+    fuel: Option<f64>,
     timeout_ms: Option<u32>,
     memory_limit_mb: Option<u32>,
     execution_id: Option<String>,
@@ -197,6 +205,7 @@ pub async fn execute_queued_javascript(
             .instances(32)
             .build(),
     };
+    let fuel = validated_queued_fuel(fuel)?;
     let mut store = store(&engine, state, fuel)?;
     store.limiter(|state| &mut state.limits);
     store.set_epoch_deadline(1);
