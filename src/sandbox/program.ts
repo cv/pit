@@ -148,10 +148,15 @@ function unifiedSourceDefinitions(options: SandboxProgramOptions): FunctionDefin
   return definitions;
 }
 
-export async function compileUnifiedSandboxSource(
+export interface PreparedUnifiedSandboxProgram {
+  compiled: string;
+  effects: string[];
+}
+
+export async function prepareUnifiedSandboxProgram(
   source: string,
   options: SandboxProgramOptions,
-): Promise<string> {
+): Promise<PreparedUnifiedSandboxProgram> {
   if (!isProgramExpression(source)) {
     throw new Error("unified function programs must be function expressions");
   }
@@ -163,5 +168,15 @@ export async function compileUnifiedSandboxSource(
   }
   validateTypeScript(source, effectiveSources, options.input, registry.identifiers());
   const graph = resolveFunctionGraph(source, registry);
-  return compileTypeScript(unifiedRuntimeProgram(source, graph));
+  return {
+    compiled: await compileTypeScript(unifiedRuntimeProgram(source, graph)),
+    effects: graph.effects,
+  };
+}
+
+export async function compileUnifiedSandboxSource(
+  source: string,
+  options: SandboxProgramOptions,
+): Promise<string> {
+  return (await prepareUnifiedSandboxProgram(source, options)).compiled;
 }
