@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { FunctionExecutionContext } from "../execution/capability-trace.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
 import type { FunctionExecutionOptions, FunctionExecutor } from "./executor.js";
@@ -11,6 +13,7 @@ const MAX_CONCURRENT_CAPABILITY_CALLS = 32;
 const DEFAULT_FUEL = 4_000_000_000;
 
 export interface WasmtimeAddon {
+  interruptQueuedJavascript?(executionId: string): boolean;
   executeQueuedJavascript(
     component: Uint8Array,
     source: string,
@@ -18,6 +21,7 @@ export interface WasmtimeAddon {
     fuel?: number,
     timeoutMs?: number,
     memoryLimitMb?: number,
+    executionId?: string,
   ): Promise<boolean>;
 }
 
@@ -33,10 +37,14 @@ function parseFunctionContext(value: unknown): FunctionExecutionContext | undefi
     !Number.isSafeInteger(context.invocationId) ||
     Number(context.invocationId) < 1 ||
     typeof context.name !== "string" ||
-    !["global", "project", "session"].includes(String(context.scope)) ||
+    !["global", "user", "project", "session"].includes(String(context.scope)) ||
     !Number.isSafeInteger(context.depth) ||
     Number(context.depth) < 1 ||
-    Number(context.depth) > 32
+    Number(context.depth) > 32 ||
+    !(
+      context.parentInvocationId === undefined ||
+      (Number.isSafeInteger(context.parentInvocationId) && Number(context.parentInvocationId) > 0)
+    )
   ) {
     return;
   }
@@ -100,6 +108,15 @@ export function createWasmtimeFunctionExecutor({
           dispatcher.handle(message);
         });
       };
+      const executionId = randomUUID();
+      const interrupt = (): void => {
+        try {
+          addon.interruptQueuedJavascript?.(executionId);
+        } catch {
+          // Native timeout interruption remains a bounded fallback if explicit cancellation fails.
+        }
+      };
+      options.signal?.addEventListener("abort", interrupt, { once: true });
       try {
         await addon.executeQueuedJavascript(
           component,
@@ -108,6 +125,7 @@ export function createWasmtimeFunctionExecutor({
           DEFAULT_FUEL,
           options.timeoutMs,
           options.memoryLimitMb,
+          executionId,
         );
       } catch (error) {
         if (options.signal?.aborted) {
@@ -120,6 +138,8 @@ export function createWasmtimeFunctionExecutor({
           });
         }
         throw error;
+      } finally {
+        options.signal?.removeEventListener("abort", interrupt);
       }
       if (!resultReceived) throw new Error("QuickJS guest completed without a result");
       return result;

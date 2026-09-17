@@ -79,6 +79,23 @@ async function main() {
     /epoch|interrupt|deadline/i,
   );
 
+  const cancellationId = "smoke-cancellation";
+  const cancelled = executor.executeQueuedJavascript(
+    queuedGuest,
+    `await pitCall(JSON.stringify({ type: "cancel" }));`,
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return JSON.stringify({ value: null });
+    },
+    4_000_000_000,
+    30_000,
+    64,
+    cancellationId,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(executor.interruptQueuedJavascript(cancellationId), false);
+  await assert.rejects(cancelled, /epoch|interrupt|deadline/i);
+
   await assert.rejects(
     executor.executeQueuedJavascript(
       queuedGuest,
@@ -118,6 +135,7 @@ async function main() {
       answer,
       fuelInterruption: true,
       epochInterruption: true,
+      explicitCancellation: true,
       memoryLimit: true,
       restrictedWasi: true,
       preparedPitProgram: true,
