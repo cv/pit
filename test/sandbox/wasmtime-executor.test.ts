@@ -73,7 +73,7 @@ describe("createWasmtimeFunctionExecutor", () => {
       expect.any(Uint8Array),
       expect.stringContaining("pitCall"),
       expect.any(Function),
-      1_000_000_000_000,
+      Number.MAX_SAFE_INTEGER,
       500,
       64,
       expect.any(String),

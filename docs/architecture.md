@@ -154,15 +154,15 @@ The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Pre
 
 Current defensive bounds are:
 
-| Resource                        | Effective host limit |
-| ------------------------------- | -------------------: |
-| Protocol frame                  |      8,000,000 bytes |
-| Capability calls per invocation |                1,024 |
-| Concurrent capability calls     |                   32 |
-| Saved-function nesting depth    |                   32 |
-| Default TypeScript wall time    |           30 seconds |
-| Default Wasmtime memory limit   |               128 MB |
-| Default Wasmtime fuel           |    1,000,000,000,000 |
+| Resource                        |  Effective host limit |
+| ------------------------------- | --------------------: |
+| Protocol frame                  |       8,000,000 bytes |
+| Capability calls per invocation |                 1,024 |
+| Concurrent capability calls     |                    32 |
+| Saved-function nesting depth    |                    32 |
+| Default TypeScript wall time    |            30 seconds |
+| Default Wasmtime memory limit   |                128 MB |
+| Default Wasmtime fuel           | 9,007,199,254,740,991 |
 
 Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs are registered race-safely: an abort arriving before native registration is queued and interrupts initialization once the epoch timer is installed. The same abort signal reaches cooperative host capability handlers. Each execution registration, epoch timer, store, and QuickJS runtime is discarded when the call settles.
 
