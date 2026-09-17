@@ -6,9 +6,10 @@ import {
   type FunctionScope,
   functionScopeRegistry,
   validateRegistryCapacity,
-  validateSavedFunctionName,
+  sessionFunctionId,
+  validateFunctionRegistryIdentifiers,
 } from "./core.js";
-import { getNamedFunctionName, getPersistentFunctionMetadata } from "./source.js";
+import { getPersistentFunctionMetadata } from "./source.js";
 import { effectiveRegistry, type FunctionState } from "./state.js";
 import { assertFunctionsAvailable } from "./storage/validation.js";
 
@@ -19,6 +20,7 @@ export interface SavedFunctionExecutionContext {
 
 export interface SavedFunctionPreparationRequest {
   source: string;
+  functionId?: string;
   input?: unknown;
   saveOnly?: boolean;
   project?: boolean;
@@ -65,6 +67,7 @@ function prepareProjectFunction(
   const candidateSession = new Map(state.session);
   candidateSession.delete(name);
   const registry = effectiveRegistry(candidateProject, candidateSession, state.user);
+  validateFunctionRegistryIdentifiers(registry.keys());
   validateTypeScript(request.source, registry, request.input);
   return { registry, candidateProject, candidateSession };
 }
@@ -86,9 +89,9 @@ export function prepareSavedFunctionExecution(
   state: FunctionState,
   request: SavedFunctionPreparationRequest,
 ): PreparedSavedFunctionExecution {
-  const name = getNamedFunctionName(request.source);
+  const name = sessionFunctionId(request.source, request.functionId);
   const projectMetadata = request.project
-    ? getPersistentFunctionMetadata(request.source)
+    ? getPersistentFunctionMetadata(request.source, name)
     : undefined;
   if (request.project && !projectMetadata) {
     throw new Error(
@@ -100,9 +103,6 @@ export function prepareSavedFunctionExecution(
   }
   if (request.saveOnly && request.input !== undefined) {
     throw new Error("saveOnly does not accept top-level params");
-  }
-  if (name) {
-    validateSavedFunctionName(name);
   }
 
   const prepared = !name

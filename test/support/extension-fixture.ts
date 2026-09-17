@@ -21,6 +21,7 @@ export interface RegisteredTool {
     properties: {
       label: { description?: string };
       code: { description?: string };
+      functionId: { description?: string };
       params: { description?: string };
       saveOnly: { description?: string };
       timeoutMs: { description?: string };

@@ -188,4 +188,25 @@ describe("tool rendering", () => {
       vi.useRealTimers();
     }
   });
+
+  it("renders the full namespaced identity without changing the declaration source", () => {
+    const code = "async function check({}) { return 1; }";
+    const compact = stripTerminalSequences(
+      renderToolCall(
+        { code, functionId: "company.check", saveOnly: true },
+        { expanded: false, argsComplete: true },
+      ),
+    );
+    expect(compact).toContain("Save company.check");
+    expect(compact).not.toContain("function check");
+    const expanded = stripTerminalSequences(
+      renderToolCall(
+        { code, functionId: "company.check", label: "Run checks" },
+        { expanded: true, argsComplete: true },
+      ),
+    );
+    expect(expanded).toContain("Run checks");
+    expect(expanded.split("\n")[1]?.trimEnd()).toBe("functionId: company.check");
+    expect(expanded).toContain("function check");
+  });
 });

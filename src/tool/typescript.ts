@@ -15,6 +15,7 @@ import type { CapabilityTrace } from "../execution/capability-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { functionDependencyBinding } from "../functions/identifier.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
@@ -29,6 +30,7 @@ import {
 } from "./failure-context.js";
 import {
   CODE_DESCRIPTION,
+  FUNCTION_ID_DESCRIPTION,
   createToolDescription,
   LABEL_DESCRIPTION,
   PARAMS_DESCRIPTION,
@@ -55,8 +57,8 @@ export function display(value: unknown): string {
 const MAX_SAVED_FUNCTION_CATALOG_BYTES = 1200;
 
 export function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): string {
-  const signatures = [...registry.values()]
-    .map((source) => getSavedFunctionCallSignature(source))
+  const signatures = [...registry]
+    .map(([id, source]) => getSavedFunctionCallSignature(source, id))
     .filter((signature): signature is string => signature !== undefined)
     .sort((a, b) => a.localeCompare(b));
   if (signatures.length === 0) {
@@ -99,6 +101,7 @@ interface TypeScriptToolServices {
 
 interface TypeScriptToolParams {
   code: string;
+  functionId?: string;
   params?: unknown;
   saveOnly?: boolean;
   timeoutMs?: number;
@@ -206,7 +209,7 @@ function buildToolResult(input: {
     ? getSavedFunctionCallSignature(input.functionState.effective.get(input.namedFunction) ?? "")
     : undefined;
   const invocationGuidance = savedSignature
-    ? `. Inject ${input.namedFunction} in the first parameter, then call ${savedSignature}`
+    ? `. Inject ${input.namedFunction?.includes(".") ? functionDependencyBinding(input.namedFunction) : input.namedFunction} in the first parameter, then call ${savedSignature}`
     : ".";
   const savedNotice = input.namedFunction
     ? input.saveOnly
@@ -242,6 +245,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
     const source = await formatTypeScriptSource(request.params.code);
     const preparedFunction = request.savedFunctionService.prepare({
       source,
+      ...(request.params.functionId === undefined ? {} : { functionId: request.params.functionId }),
       ...(request.params.params === undefined ? {} : { input: request.params.params }),
       ...(request.params.saveOnly ? { saveOnly: true } : {}),
       context: request.ctx,
@@ -288,6 +292,7 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     parameters: Type.Object({
       label: Type.Optional(Type.String({ description: LABEL_DESCRIPTION })),
       code: Type.String({ description: CODE_DESCRIPTION }),
+      functionId: Type.Optional(Type.String({ description: FUNCTION_ID_DESCRIPTION })),
       params: Type.Optional(Type.Unknown({ description: PARAMS_DESCRIPTION })),
       saveOnly: Type.Optional(Type.Boolean({ description: SAVE_ONLY_DESCRIPTION })),
       timeoutMs: Type.Optional(

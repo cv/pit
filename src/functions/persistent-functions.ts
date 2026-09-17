@@ -243,7 +243,7 @@ function persistentFunctionCatalog(
     }
     const isSessionOverride = sessionFunctions.has(entry.name);
     const effectiveSignature = isSessionOverride
-      ? getSavedFunctionCallSignature(sessionFunctions.get(entry.name) ?? "")
+      ? getSavedFunctionCallSignature(sessionFunctions.get(entry.name) ?? "", entry.name)
       : entry.signature;
     const addition = isSessionOverride
       ? [`- ${effectiveSignature ?? entry.name} — Session override of ${scope} function.`]

@@ -9,7 +9,12 @@ export function validateFunctionId(id: string): void {
   if (
     id.length === 0 ||
     id.length > MAX_FUNCTION_ID_LENGTH ||
-    segments.some((segment) => !FUNCTION_SEGMENT.test(segment) || RESERVED_SEGMENTS.has(segment))
+    segments.some(
+      (segment) =>
+        !FUNCTION_SEGMENT.test(segment) ||
+        RESERVED_SEGMENTS.has(segment) ||
+        segment.startsWith("__pit"),
+    )
   ) {
     throw new Error(
       "function identifier must contain non-reserved TypeScript identifiers separated by dots",
@@ -63,4 +68,11 @@ export function validateFunctionNamespaces(ids: Iterable<string>): void {
       }
     }
   }
+}
+
+export function functionDependencyBinding(id: string): string {
+  const segments = functionIdSegments(id);
+  let binding = segments.pop() as string;
+  for (const segment of segments.reverse()) binding = `${segment}: { ${binding} }`;
+  return `{ ${binding} }`;
 }

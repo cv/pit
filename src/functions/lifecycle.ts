@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { formatPitSkillsForPrompt } from "../skill-prompt.js";
 import { reconstructFunctions } from "./core.js";
+import { functionRelativePath } from "./identifier.js";
 import { registerFunctionManager } from "./manager.js";
 import { userFunctionCatalog, projectFunctionCatalog } from "./persistent-functions.js";
 import type { SavedFunctionService } from "./service.js";
@@ -59,7 +60,7 @@ function registerSavedFunctionManager({
     removeFromProject: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
         `Remove ${name} from project?`,
-        `Delete .pi/functions/${name}.ts?`,
+        `Delete .pi/functions/${functionRelativePath(name)}?`,
       );
       if (!confirmed) {
         return;

@@ -28,6 +28,7 @@ import {
   type FunctionEntry,
   type FunctionScope,
   validateRegistryCapacity,
+  validateFunctionRegistryIdentifiers,
 } from "./core.js";
 
 export interface PersistentFunctionPromotionRequest {
@@ -132,6 +133,7 @@ export class SavedFunctionService {
     }
     const prepared = this.prepare({
       source: promotedSource,
+      functionId: request.name,
       saveOnly: true,
 
       project: true,
@@ -163,7 +165,7 @@ export class SavedFunctionService {
       throw new Error(`Session function "${request.name}" was not found`);
     }
     const promotedSource = persistentFunctionSource(source, request.summary, "user");
-    const metadata = getPersistentFunctionMetadata(promotedSource);
+    const metadata = getPersistentFunctionMetadata(promotedSource, request.name);
     if (!metadata) {
       throw new Error(
         `Saved function "${request.name}" must be a top-level function declaration to save it to user scope`,
@@ -181,6 +183,7 @@ export class SavedFunctionService {
     await this.#commit(async () => {
       const currentUser = new Map(this.#state.user);
       currentUser.set(request.name, promotedSource);
+      validateFunctionRegistryIdentifiers(currentUser.keys());
       validateRegistryCapacity(this.#state.effective, request.name, promotedSource);
       assertFunctionsAvailable(promotedSource, currentUser, this.#state.invalidUser);
       validateTypeScript(promotedSource, currentUser);
@@ -260,6 +263,9 @@ export class SavedFunctionService {
         validateRegistryCapacity(this.#state.effective, name, source);
         const currentProject = new Map(this.#state.project);
         currentProject.set(name, source);
+        validateFunctionRegistryIdentifiers(
+          effectiveRegistry(currentProject, this.#state.session, this.#state.user).keys(),
+        );
         validateTypeScript(source, new Map([...this.#state.user, ...currentProject]), input);
         const currentSession = new Map(this.#state.session);
         currentSession.delete(name);
@@ -292,6 +298,9 @@ export class SavedFunctionService {
       validateRegistryCapacity(this.#state.effective, name, source);
       const currentSession = new Map(this.#state.session);
       currentSession.set(name, source);
+      validateFunctionRegistryIdentifiers(
+        effectiveRegistry(this.#state.project, currentSession, this.#state.user).keys(),
+      );
       validateTypeScript(
         source,
         effectiveRegistry(this.#state.project, currentSession, this.#state.user),

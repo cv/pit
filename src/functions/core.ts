@@ -1,6 +1,10 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
 
 import { validateTypeScript } from "../sandbox/validation.js";
+import { createLayeredFunctionRegistry } from "./definitions.js";
+import { getFunctionDependencies } from "./dependencies.js";
+import { validateFunctionId } from "./identifier.js";
+import { getNamedFunctionName } from "./source.js";
 
 const MAX_SAVED_FUNCTION_BYTES = 100_000;
 const MAX_SAVED_FUNCTIONS = 64;
@@ -134,6 +138,29 @@ export function validateSavedFunctionName(name: string): void {
   }
 }
 
+export function sessionFunctionId(source: string, functionId?: string): string | undefined {
+  const declarationName = getNamedFunctionName(source);
+  if (functionId !== undefined && !declarationName) {
+    throw new Error("functionId requires a named top-level function");
+  }
+  if (!declarationName) return;
+  validateSavedFunctionName(declarationName);
+  getFunctionDependencies(source);
+  const id = functionId ?? declarationName;
+  validateFunctionId(id);
+  if (id.split(".").at(-1) !== declarationName) {
+    throw new Error(`functionId must end with the declaration name "${declarationName}"`);
+  }
+  return id;
+}
+
+export function validateFunctionRegistryIdentifiers(ids: Iterable<string>): void {
+  const registry = createLayeredFunctionRegistry();
+  for (const id of ids) {
+    registry.set({ id, kind: "source", layer: "session", source: "" });
+  }
+}
+
 export function reconstructFunctions(
   registry: FunctionRegistry,
   entries: readonly unknown[],
@@ -158,7 +185,7 @@ export function reconstructFunctions(
       continue;
     }
     try {
-      validateSavedFunctionName(definition.name);
+      validateFunctionId(definition.name);
       if (definition.deleted === true) {
         registry.delete(definition.name);
         continue;
@@ -166,10 +193,12 @@ export function reconstructFunctions(
       if (typeof definition.source !== "string") {
         continue;
       }
+      sessionFunctionId(definition.source, definition.name);
       const capacityAvailable = new Map([...capacityBaseFunctions, ...registry]);
       validateRegistryCapacity(capacityAvailable, definition.name, definition.source);
       const available = new Map([...baseFunctions, ...registry]);
       available.set(definition.name, definition.source);
+      validateFunctionRegistryIdentifiers(available.keys());
       validateTypeScript(definition.source, available);
       registry.set(definition.name, definition.source);
     } catch {

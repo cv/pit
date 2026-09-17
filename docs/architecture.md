@@ -229,7 +229,7 @@ New definitions begin in the session layer. Promotion targets only `project` or 
 
 Persistence succeeds before session tombstones and live registry changes are committed. Atomic file replacement is not a transaction across filesystem storage and Pi's session journal. Removal is dependency-aware and targets only canonical files. Removing an invalid user definition also clears its unavailable-identifier diagnostic. Project access retains its trust and enablement checks; user access has no old global-enablement gate.
 
-The management API names user operations `listUser`, `getUser`, and `removeUser`; the old `*Global` user-storage aliases are removed. `/functions` labels user-owned source as user scope. Full global-definition inspection, namespaced session creation, signature-compatible overrides, and persistent `$next` integration remain follow-up work in #82.
+The management API names user operations `listUser`, `getUser`, and `removeUser`; the old `*Global` user-storage aliases are removed. `/functions` labels user-owned source as user scope. The `typescript` tool accepts `functionId` for named definitions; the leaf must match the declaration name. Session records, removal tombstones, catalogs, traces, and promotion use that full identifier. Preparation, replay, and commit reject namespace conflicts and overrides of sealed global functions. Full global-definition inspection, signature-compatible overrides, and persistent `$next` integration remain follow-up work in #82.
 
 ## Workspace consistency model
 
