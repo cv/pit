@@ -87,4 +87,22 @@ describe("LayeredFunctionRegistry", () => {
     ]);
     expect(registry.definitions()).toHaveLength(3);
   });
+
+  it("inspects exact layers and resolved chains", () => {
+    const registry = new LayeredFunctionRegistry<Definition>();
+    registry.set(definition("workspace.read", "global"));
+    registry.set(definition("workspace.read", "project"));
+
+    expect(registry.get("global", "workspace.read")?.layer).toBe("global");
+    expect(registry.resolved("workspace.read")).toEqual({
+      effective: expect.objectContaining({ layer: "project" }),
+      chain: [
+        expect.objectContaining({ layer: "project" }),
+        expect.objectContaining({ layer: "global" }),
+      ],
+    });
+    expect(registry.resolved("missing")).toBeUndefined();
+    expect(registry.chain("missing")).toEqual([]);
+    expect(registry.resolve("missing")).toBeUndefined();
+  });
 });

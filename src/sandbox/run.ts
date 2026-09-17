@@ -3,10 +3,9 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import type { CapabilityTrace, FunctionExecutionContext } from "../execution/capability-trace.js";
-import type { FunctionScope } from "../functions/core.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
 import { SandboxLifecycle } from "./lifecycle.js";
-import { compileSandboxSource, prepareUnifiedSandboxProgram } from "./program.js";
+import { prepareSandboxProgram } from "./program.js";
 import {
   isCapabilityCallMessage,
   type SandboxWireError,
@@ -18,10 +17,6 @@ export interface SandboxOptions {
   memoryLimitMb?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
-  unifiedFunctions?: boolean;
-  savedFunctions?: ReadonlyMap<string, string>;
-  savedFunctionScopes?: ReadonlyMap<string, FunctionScope>;
-  globalFunctions?: ReadonlyMap<string, string>;
   userFunctions?: ReadonlyMap<string, string>;
   projectFunctions?: ReadonlyMap<string, string>;
   sessionFunctions?: ReadonlyMap<string, string>;
@@ -114,20 +109,14 @@ async function prepareSandboxRun(source: string, options: SandboxOptions) {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     throw new Error("timeoutMs must be positive");
   }
-  const programOptions = {
-    ...(options.savedFunctions ? { savedFunctions: options.savedFunctions } : {}),
-    ...(options.savedFunctionScopes ? { savedFunctionScopes: options.savedFunctionScopes } : {}),
-    ...(options.globalFunctions ? { globalFunctions: options.globalFunctions } : {}),
+  const prepared = await prepareSandboxProgram(source, {
     ...(options.userFunctions ? { userFunctions: options.userFunctions } : {}),
     ...(options.projectFunctions ? { projectFunctions: options.projectFunctions } : {}),
     ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
     ...(options.input === undefined ? {} : { input: options.input }),
-  };
-  const prepared = options.unifiedFunctions
-    ? await prepareUnifiedSandboxProgram(source, programOptions)
-    : { compiled: await compileSandboxSource(source, programOptions), effects: undefined };
+  });
   const { compiled } = prepared;
-  const allowedCalls = prepared.effects ? new Set(prepared.effects) : undefined;
+  const allowedCalls = new Set(prepared.effects);
   const token = randomBytes(24).toString("base64url");
   const child = spawn(
     process.execPath,

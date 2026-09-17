@@ -172,11 +172,8 @@ async function executeSandboxValue({
     }),
     {
       ...(request.signal ? { signal: request.signal } : {}),
-      unifiedFunctions: true,
       timeoutMs: request.params.timeoutMs ?? 30_000,
-      savedFunctions: preparedFunction.registry,
-      savedFunctionScopes: preparedFunction.scopes,
-      globalFunctions: preparedFunction.globalFunctions,
+      userFunctions: preparedFunction.globalFunctions,
       projectFunctions: preparedFunction.projectFunctions,
       sessionFunctions: preparedFunction.sessionFunctions,
       ...(request.params.params === undefined ? {} : { input: request.params.params }),

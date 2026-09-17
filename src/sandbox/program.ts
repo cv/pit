@@ -1,6 +1,5 @@
 import { transform } from "esbuild";
 
-import type { FunctionScope } from "../functions/core.js";
 import {
   createLayeredFunctionRegistry,
   type FunctionDefinition,
@@ -8,13 +7,8 @@ import {
 import {
   clearSavedFunctionDependencyGraphCache,
   getSavedFunctionDependencyGraphCacheStats,
-  resolveSavedFunctionReferences,
 } from "../functions/graph.js";
 import { resolveFunctionGraph, sourceFunctionDefinition } from "../functions/resolved-graph.js";
-import {
-  scopedRuntimeProgram,
-  type ScopedFunctionRegistries,
-} from "../functions/scoped-runtime.js";
 import { isProgramExpression } from "../functions/source.js";
 import { unifiedRuntimeProgram } from "../functions/unified-runtime.js";
 import { clearValidationCache, getValidationCacheStats, validateTypeScript } from "./validation.js";
@@ -26,6 +20,7 @@ let compilationCacheHits = 0;
 function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
   cache.delete(key);
   cache.set(key, value);
+  /* v8 ignore next -- defensive cache capacity bound. */
   if (cache.size > MAX_CACHE_ENTRIES) {
     // oxlint-disable-next-line typescript/no-non-null-assertion
     cache.delete(cache.keys().next().value!);
@@ -47,6 +42,7 @@ export function getSandboxCacheStats() {
     ...getSavedFunctionDependencyGraphCacheStats(),
   };
 }
+
 async function compileTypeScript(source: string): Promise<string> {
   const cached = compilationCache.get(source);
   if (cached) {
@@ -62,61 +58,20 @@ async function compileTypeScript(source: string): Promise<string> {
   try {
     return await compilation;
   } catch (error) {
+    /* v8 ignore next -- malformed submissions fail semantic validation before compilation. */
     compilationCache.delete(source);
     throw error;
   }
 }
 
 export interface SandboxProgramOptions {
-  savedFunctions?: ReadonlyMap<string, string>;
-  savedFunctionScopes?: ReadonlyMap<string, FunctionScope>;
-  globalFunctions?: ReadonlyMap<string, string>;
   userFunctions?: ReadonlyMap<string, string>;
   projectFunctions?: ReadonlyMap<string, string>;
   sessionFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
 }
 
-export async function compileSandboxSource(
-  source: string,
-  options: SandboxProgramOptions,
-): Promise<string> {
-  const savedFunctions = options.savedFunctions ?? new Map<string, string>();
-  const scopes = options.savedFunctionScopes ?? new Map<string, FunctionScope>();
-  const referenced = resolveSavedFunctionReferences(source, savedFunctions);
-  const injectedFunctions = new Map(
-    referenced.map((reference) => [reference.name, reference.source]),
-  );
-  validateTypeScript(source, injectedFunctions, options.input, savedFunctions.keys());
-  const explicitRegistries =
-    options.globalFunctions || options.projectFunctions || options.sessionFunctions;
-  const registries: ScopedFunctionRegistries = explicitRegistries
-    ? {
-        global: options.globalFunctions ?? new Map(),
-        project: options.projectFunctions ?? new Map(),
-        session: options.sessionFunctions ?? new Map(),
-      }
-    : {
-        global: new Map([...savedFunctions].filter(([name]) => scopes.get(name) === "global")),
-        project: new Map([...savedFunctions].filter(([name]) => scopes.get(name) === "project")),
-        session: new Map(
-          [...savedFunctions].filter(
-            ([name]) => scopes.get(name) !== "global" && scopes.get(name) !== "project",
-          ),
-        ),
-      };
-  return await compileTypeScript(
-    scopedRuntimeProgram({
-      source,
-      programExpression: isProgramExpression(source),
-      effective: savedFunctions,
-      scopes,
-      registries,
-    }),
-  );
-}
-
-function unifiedSourceDefinitions(options: SandboxProgramOptions): FunctionDefinition[] {
+function sourceDefinitions(options: SandboxProgramOptions): FunctionDefinition[] {
   const definitions: FunctionDefinition[] = [];
   const add = (
     functions: ReadonlyMap<string, string>,
@@ -126,42 +81,25 @@ function unifiedSourceDefinitions(options: SandboxProgramOptions): FunctionDefin
       definitions.push(sourceFunctionDefinition(id, layer, source));
     }
   };
-  const explicit =
-    options.userFunctions ||
-    options.globalFunctions ||
-    options.projectFunctions ||
-    options.sessionFunctions;
-  if (explicit) {
-    add(options.userFunctions ?? options.globalFunctions ?? new Map(), "user");
-    add(options.projectFunctions ?? new Map(), "project");
-    add(options.sessionFunctions ?? new Map(), "session");
-    return definitions;
-  }
-
-  const saved = options.savedFunctions ?? new Map<string, string>();
-  const scopes = options.savedFunctionScopes ?? new Map<string, FunctionScope>();
-  for (const [id, source] of saved) {
-    const oldScope = scopes.get(id);
-    const layer = oldScope === "project" ? "project" : oldScope === "session" ? "session" : "user";
-    definitions.push(sourceFunctionDefinition(id, layer, source));
-  }
+  add(options.userFunctions ?? new Map(), "user");
+  add(options.projectFunctions ?? new Map(), "project");
+  add(options.sessionFunctions ?? new Map(), "session");
   return definitions;
 }
 
-export interface PreparedUnifiedSandboxProgram {
+export interface PreparedSandboxProgram {
   compiled: string;
   effects: string[];
 }
 
-export async function prepareUnifiedSandboxProgram(
+export async function prepareSandboxProgram(
   source: string,
   options: SandboxProgramOptions,
-): Promise<PreparedUnifiedSandboxProgram> {
+): Promise<PreparedSandboxProgram> {
   if (!isProgramExpression(source)) {
-    throw new Error("unified function programs must be function expressions");
+    throw new Error("TypeScript programs must be function expressions");
   }
-  const definitions = unifiedSourceDefinitions(options);
-  const registry = createLayeredFunctionRegistry(definitions);
+  const registry = createLayeredFunctionRegistry(sourceDefinitions(options));
   const effectiveSources = new Map<string, string>();
   for (const [id, definition] of registry.effective()) {
     if (definition.kind === "source") effectiveSources.set(id, definition.source);
@@ -174,9 +112,9 @@ export async function prepareUnifiedSandboxProgram(
   };
 }
 
-export async function compileUnifiedSandboxSource(
+export async function compileSandboxSource(
   source: string,
   options: SandboxProgramOptions,
 ): Promise<string> {
-  return (await prepareUnifiedSandboxProgram(source, options)).compiled;
+  return (await prepareSandboxProgram(source, options)).compiled;
 }

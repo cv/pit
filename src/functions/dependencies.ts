@@ -43,10 +43,12 @@ function functionLikeExpression(source: string): ts.FunctionLikeDeclaration {
     ts.ScriptKind.TS,
   );
   const statement = wrapped.statements[0];
+  /* v8 ignore next -- the fixed wrapper always produces one variable statement. */
   if (!statement || !ts.isVariableStatement(statement)) {
     throw new Error("expected a function declaration or expression");
   }
   const initializer = statement.declarationList.declarations[0]?.initializer;
+  /* v8 ignore next -- the fixed wrapper always gives its declaration an initializer. */
   if (!initializer) {
     throw new Error("expected a function declaration or expression");
   }
@@ -64,6 +66,7 @@ function propertySegment(element: ts.BindingElement): string {
     }
     return element.propertyName.text;
   }
+  /* v8 ignore next -- malformed shorthand object bindings are rejected by the parser. */
   if (!ts.isIdentifier(element.name)) {
     throw new Error("nested function dependency bindings require an explicit property name");
   }

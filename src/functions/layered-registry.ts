@@ -87,6 +87,7 @@ export class LayeredFunctionRegistry<Definition extends LayeredFunctionDefinitio
     return new Map(
       this.identifiers().flatMap((id) => {
         const definition = this.resolve(id);
+        /* v8 ignore next -- identifiers are collected from definitions in these same layers. */
         return definition ? [[id, definition] as const] : [];
       }),
     );

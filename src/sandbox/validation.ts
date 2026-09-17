@@ -17,7 +17,7 @@ const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
 const SAVED_CAPABILITY_HINT =
-  'There is no "saved" capability. Use async ({ functions }) => functions.listAll() to inspect saved functions; invoke one directly by name.';
+  'There is no "saved" namespace. Use async ({ functions: { listAll } }) => listAll() to inspect functions; inject a callable by name in the first parameter.';
 const MAX_CACHE_ENTRIES = 128;
 const validationCache = new Map<string, string | null>();
 let validationCacheHits = 0;
@@ -65,15 +65,6 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
 
 function savedEntries(savedFunctions: ReadonlyMap<string, string>) {
   return [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b));
-}
-
-function savedDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
-  return savedEntries(savedFunctions)
-    .map(
-      ([name], index) =>
-        `declare const ${name}: (input?: PitSavedInput<typeof __pit_signature_${index}>) => Promise<Awaited<ReturnType<typeof __pit_signature_${index}>>>;`,
-    )
-    .join("\n");
 }
 
 function injectedDependencyDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
@@ -135,8 +126,9 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
     ? `\n${SAVED_CAPABILITY_HINT}`
     : "";
   const savedHint =
-    diagnostics.some((diagnostic) => diagnostic.code === 2304) && names.length > 0
-      ? `\nAvailable saved functions: ${names.join(", ")}`
+    diagnostics.some((diagnostic) => diagnostic.code === 2304 || diagnostic.code === 2339) &&
+    names.length > 0
+      ? `\nAvailable functions: ${names.join(", ")}`
       : "";
   return (
     `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
@@ -196,7 +188,6 @@ export function validateTypeScript(
     [
       CONTRACT_FILE,
       `${CAPABILITY_CONTRACT + SANDBOX_GLOBALS}
-${savedDeclarations(savedFunctions)}
 ${injectedDependencyDeclarations(savedFunctions)}`,
     ],
     [PROGRAM_FILE, wrapped],

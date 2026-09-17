@@ -38,6 +38,11 @@ describe("getFunctionDependencies", () => {
 
   it.each([
     {
+      name: "non-function source",
+      source: "42",
+      error: "expected a function",
+    },
+    {
       name: "missing dependency parameter",
       source: "async function example() {}",
       error: "object first parameter",
