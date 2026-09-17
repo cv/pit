@@ -79,6 +79,19 @@ describe("createWasmtimeFunctionExecutor", () => {
     );
   });
 
+  it("normalizes Wasmtime interrupt traps as execution timeouts", async () => {
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript() {
+        throw new Error("wasm trap: interrupt");
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+
+    await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
+      "TypeScript execution timed out after 500ms",
+    );
+  });
+
   it("rejects already-cancelled executions before entering native code", async () => {
     const controller = new AbortController();
     controller.abort();
