@@ -8,7 +8,9 @@ The initial smoke test proves:
 - a fresh store can execute an untrusted module;
 - finite fuel interrupts a runaway module;
 - no WASI imports are linked;
-- an async Wasmtime host import can await a JavaScript Promise through a threadsafe N-API callback; and
+- an async Wasmtime host import can await a JavaScript Promise through a threadsafe N-API callback;
+- a custom Javy QuickJS guest has no WASI imports and dynamically compiles JavaScript;
+- top-level JavaScript `await` can call that asynchronous host bridge; and
 - Wasmtime trap causes survive the JavaScript boundary.
 
 Build and run it without installing Rust on the host:
@@ -18,4 +20,4 @@ docker build -f Dockerfile.wasmtime-smoke -t pit-wasmtime-smoke:issue-82 .
 docker run --rm pit-wasmtime-smoke:issue-82
 ```
 
-The next spike must preserve Pit's TypeScript authoring model. It will evaluate compiled JavaScript in a QuickJS/Javy WASM guest and connect that guest to the proven asynchronous host callback before this addon can implement `FunctionExecutor`.
+The next step is to replace the numeric smoke import with Pit's bounded JSON call protocol, return a JSON-compatible program result, and run the JavaScript emitted by `prepareSandboxProgram`. Concurrent `Promise.all` host calls still require a non-blocking guest API rather than the current synchronous `pitCall` wrapper.

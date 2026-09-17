@@ -1,5 +1,19 @@
 FROM rust:1.95-bookworm AS builder
 
+ARG JAVY_VERSION=v9.1.0
+ARG JAVY_ARM64_SHA256=826962f0e82354cf97d6e928ea36777872bbae76c626e326948e0367c4b55cb5
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libclang-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fL "https://github.com/bytecodealliance/javy/releases/download/${JAVY_VERSION}/javy-arm-linux-${JAVY_VERSION}.gz" -o /tmp/javy.gz \
+  && echo "${JAVY_ARM64_SHA256}  /tmp/javy.gz" | sha256sum -c - \
+  && gzip -dc /tmp/javy.gz > /usr/local/bin/javy \
+  && chmod 755 /usr/local/bin/javy \
+  && rm /tmp/javy.gz \
+  && rustup target add wasm32-wasip2
+
 WORKDIR /build
 COPY native/wasmtime-executor/Cargo.toml native/wasmtime-executor/Cargo.lock native/wasmtime-executor/build.rs ./
 COPY native/wasmtime-executor/src ./src
@@ -8,10 +22,20 @@ RUN --mount=type=cache,id=pit-cargo-registry,target=/usr/local/cargo/registry \
   cargo build --release --locked \
   && cp /build/target/release/libpit_wasmtime_executor.so /build/pit_wasmtime_executor.node
 
+COPY native/wasmtime-executor/guest/Cargo.toml native/wasmtime-executor/guest/Cargo.lock /guest/
+COPY native/wasmtime-executor/guest/src /guest/src
+COPY native/wasmtime-executor/guest/wit /guest/wit
+RUN --mount=type=cache,id=pit-cargo-registry,target=/usr/local/cargo/registry \
+  --mount=type=cache,id=pit-javy-guest-target,target=/guest/target \
+  BINDGEN_EXTRA_CLANG_ARGS="-isystem /usr/lib/llvm-14/lib/clang/14.0.6/include" \
+  cargo build --manifest-path /guest/Cargo.toml --target wasm32-wasip2 --release --locked \
+  && javy init-plugin /guest/target/wasm32-wasip2/release/pit_javy_guest.wasm -o /build/pit_javy_guest.wasm
+
 FROM node:24-bookworm-slim
 
 WORKDIR /smoke
 COPY --from=builder /build/pit_wasmtime_executor.node ./pit_wasmtime_executor.node
+COPY --from=builder /build/pit_javy_guest.wasm ./pit_javy_guest.wasm
 COPY native/wasmtime-executor/smoke.cjs ./smoke.cjs
 
 CMD ["node", "smoke.cjs"]
