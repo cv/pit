@@ -1,0 +1,27 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates git \
+  && rm -rf /var/lib/apt/lists/* \
+  && npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1 \
+  && npm cache clean --force
+
+ENV PI_SKIP_VERSION_CHECK=1 \
+  PI_TELEMETRY=0 \
+  TERM=xterm-256color
+
+WORKDIR /opt/pit
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev \
+  && npm cache clean --force
+COPY src ./src
+COPY prompts ./prompts
+COPY docs ./docs
+COPY README.md CHANGELOG.md SECURITY.md LICENSE ./
+
+RUN mkdir -p /workspace \
+  && printf '%s\n' '{"name":"pit-smoke-workspace","private":true}' > /workspace/package.json \
+  && printf '%s\n' '# Pit smoke workspace' > /workspace/README.md
+
+WORKDIR /workspace
+ENTRYPOINT ["pi", "-e", "/opt/pit"]
