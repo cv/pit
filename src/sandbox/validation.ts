@@ -76,6 +76,22 @@ function savedDeclarations(savedFunctions: ReadonlyMap<string, string>): string 
     .join("\n");
 }
 
+function injectedDependencyDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
+  const properties: string[] = [];
+  for (const [name] of savedEntries(savedFunctions)) {
+    if (!name.includes(".")) {
+      const index = savedEntries(savedFunctions).findIndex(([candidate]) => candidate === name);
+      properties.push(
+        `${JSON.stringify(name)}: PitInjectedFunction<typeof __pit_signature_${index}>;`,
+      );
+    }
+  }
+  if (properties.length === 0) return "";
+  return `type PitInjectedArguments<T extends (...args: any[]) => any> = Parameters<T> extends [any, ...infer Rest] ? Rest : [];
+type PitInjectedFunction<T extends (...args: any[]) => any> = (...args: PitInjectedArguments<T>) => Promise<Awaited<ReturnType<T>>>;
+interface PitCapabilities { ${properties.join(" ")} }`;
+}
+
 function savedSignatures(savedFunctions: ReadonlyMap<string, string>): string {
   const signatures = savedEntries(savedFunctions).map(
     ([, source], index) => `const __pit_signature_${index} = (${source}) satisfies PitProgram;`,
@@ -179,7 +195,9 @@ export function validateTypeScript(
   const sources = new Map([
     [
       CONTRACT_FILE,
-      `${CAPABILITY_CONTRACT + SANDBOX_GLOBALS}\n${savedDeclarations(savedFunctions)}`,
+      `${CAPABILITY_CONTRACT + SANDBOX_GLOBALS}
+${savedDeclarations(savedFunctions)}
+${injectedDependencyDeclarations(savedFunctions)}`,
     ],
     [PROGRAM_FILE, wrapped],
     [SIGNATURES_FILE, savedSignatures(savedFunctions)],
