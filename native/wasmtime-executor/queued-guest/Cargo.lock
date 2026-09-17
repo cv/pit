@@ -239,16 +239,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "javy-plugin-api"
-version = "7.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "354b2c35e84ad2c2aff099650ff844cd16aa9d0629f6853b52d986a0002cde57"
-dependencies = [
- "anyhow",
- "javy",
-]
-
-[[package]]
 name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,10 +300,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "pit-javy-guest"
+name = "pit-queued-quickjs-guest"
 version = "0.1.0"
 dependencies = [
- "javy-plugin-api",
+ "javy",
  "wit-bindgen",
 ]
 
