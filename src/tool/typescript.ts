@@ -11,6 +11,7 @@ import {
 import { Type } from "typebox";
 
 import { createCapabilities } from "../capabilities/host.js";
+import type { CapabilityTrace } from "../execution/capability-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -19,7 +20,8 @@ import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
-import { runInSandbox } from "../sandbox/run.js";
+import type { FunctionExecutor } from "../sandbox/executor.js";
+import { runInSandbox, runWithFunctionExecutor } from "../sandbox/run.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
@@ -92,6 +94,7 @@ interface TypeScriptToolServices {
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   savedFunctionService: SavedFunctionService;
+  functionExecutor?: FunctionExecutor;
 }
 
 interface TypeScriptToolParams {
@@ -159,27 +162,27 @@ async function executeSandboxValue({
   const onShellProgress = request.update
     ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
     : undefined;
-  return await runInSandbox(
-    preparedFunction.source,
-    createCapabilities({
-      pi: request.pi,
-      ctx: request.ctx,
-      functionState: request.functionState,
-      commitFunctionState: request.commitFunctionState,
-      activity: functionActivity,
-      promotionSuggestions,
-      ...(onShellProgress ? { onShellProgress } : {}),
-    }),
-    {
-      ...(request.signal ? { signal: request.signal } : {}),
-      timeoutMs: request.params.timeoutMs ?? 30_000,
-      userFunctions: preparedFunction.globalFunctions,
-      projectFunctions: preparedFunction.projectFunctions,
-      sessionFunctions: preparedFunction.sessionFunctions,
-      ...(request.params.params === undefined ? {} : { input: request.params.params }),
-      onCapabilityTrace: (trace) => executionProgress.recordTrace(trace),
-    },
-  );
+  const handler = createCapabilities({
+    pi: request.pi,
+    ctx: request.ctx,
+    functionState: request.functionState,
+    commitFunctionState: request.commitFunctionState,
+    activity: functionActivity,
+    promotionSuggestions,
+    ...(onShellProgress ? { onShellProgress } : {}),
+  });
+  const options = {
+    ...(request.signal ? { signal: request.signal } : {}),
+    timeoutMs: request.params.timeoutMs ?? 30_000,
+    userFunctions: preparedFunction.globalFunctions,
+    projectFunctions: preparedFunction.projectFunctions,
+    sessionFunctions: preparedFunction.sessionFunctions,
+    ...(request.params.params === undefined ? {} : { input: request.params.params }),
+    onCapabilityTrace: (trace: CapabilityTrace) => executionProgress.recordTrace(trace),
+  };
+  return request.functionExecutor
+    ? runWithFunctionExecutor(preparedFunction.source, handler, options, request.functionExecutor)
+    : runInSandbox(preparedFunction.source, handler, options);
 }
 
 function buildToolResult(input: {
