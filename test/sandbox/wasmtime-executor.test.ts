@@ -24,7 +24,13 @@ describe("createWasmtimeFunctionExecutor", () => {
               capability: "context",
               method: "get",
               args: [],
-              functionContext: { invocationId: 1, name: "inspect", scope: "session", depth: 1 },
+              functionContext: {
+                invocationId: 1,
+                name: "inspect",
+                scope: "user",
+                depth: 2,
+                parentInvocationId: 7,
+              },
             }),
           ),
         );
@@ -54,7 +60,12 @@ describe("createWasmtimeFunctionExecutor", () => {
       expect.objectContaining({
         capability: "context",
         method: "get",
-        functionContext: expect.objectContaining({ name: "inspect", scope: "session" }),
+        functionContext: expect.objectContaining({
+          name: "inspect",
+          scope: "user",
+          depth: 2,
+          parentInvocationId: 7,
+        }),
       }),
     );
     expect(traces).toHaveBeenCalled();
@@ -65,6 +76,7 @@ describe("createWasmtimeFunctionExecutor", () => {
       4_000_000_000,
       500,
       64,
+      expect.any(String),
     );
   });
 
@@ -136,7 +148,9 @@ describe("createWasmtimeFunctionExecutor", () => {
 
   it("normalizes an externally aborted native failure as cancellation", async () => {
     const controller = new AbortController();
+    const interruptQueuedJavascript = vi.fn(() => true);
     const addon: WasmtimeAddon = {
+      interruptQueuedJavascript,
       async executeQueuedJavascript() {
         controller.abort();
         throw new Error("wasm trap: interrupt");
@@ -146,5 +160,6 @@ describe("createWasmtimeFunctionExecutor", () => {
     await expect(
       executor.execute(program([]), async () => null, { ...options, signal: controller.signal }),
     ).rejects.toThrow("TypeScript execution cancelled");
+    expect(interruptQueuedJavascript).toHaveBeenCalledWith(expect.any(String));
   });
 });

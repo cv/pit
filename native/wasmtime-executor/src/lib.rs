@@ -1,5 +1,6 @@
 use std::{
-    sync::{Arc, mpsc},
+    collections::HashMap,
+    sync::{Arc, LazyLock, Mutex, mpsc},
     thread,
     time::Duration,
 };
@@ -24,6 +25,60 @@ mod queued {
 const MAX_MESSAGE_BYTES: usize = 8_000_000;
 const MAX_CAPABILITY_CALLS: usize = 1_024;
 const MAX_CONCURRENT_CALLS: usize = 32;
+
+enum EpochSignal {
+    Interrupt,
+    Stop,
+}
+
+static EXECUTIONS: LazyLock<Mutex<HashMap<String, Option<mpsc::Sender<EpochSignal>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+struct ExecutionRegistration {
+    id: String,
+}
+
+impl Drop for ExecutionRegistration {
+    fn drop(&mut self) {
+        if let Ok(mut executions) = EXECUTIONS.lock() {
+            executions.remove(&self.id);
+        }
+    }
+}
+
+fn register_execution(
+    execution_id: Option<String>,
+    interrupt: mpsc::Sender<EpochSignal>,
+) -> Result<Option<ExecutionRegistration>> {
+    let Some(id) = execution_id else {
+        return Ok(None);
+    };
+    let mut executions = EXECUTIONS
+        .lock()
+        .map_err(|_| Error::from_reason("Wasmtime execution registry is unavailable"))?;
+    if matches!(executions.remove(&id), Some(None)) {
+        interrupt
+            .send(EpochSignal::Interrupt)
+            .map_err(|_| Error::from_reason("Wasmtime execution interrupt is unavailable"))?;
+    }
+    executions.insert(id.clone(), Some(interrupt));
+    Ok(Some(ExecutionRegistration { id }))
+}
+
+#[napi]
+pub fn interrupt_queued_javascript(execution_id: String) -> Result<bool> {
+    let mut executions = EXECUTIONS
+        .lock()
+        .map_err(|_| Error::from_reason("Wasmtime execution registry is unavailable"))?;
+    if let Some(Some(interrupt)) = executions.get(&execution_id) {
+        interrupt
+            .send(EpochSignal::Interrupt)
+            .map_err(|_| Error::from_reason("Wasmtime execution interrupt is unavailable"))?;
+        return Ok(true);
+    }
+    executions.insert(execution_id, None);
+    Ok(false)
+}
 
 fn js_error(error: impl std::fmt::Display) -> Error {
     Error::from_reason(format!("{error:#}"))
@@ -61,31 +116,34 @@ pub fn execute_wat(source: String, fuel: Option<u32>) -> Result<i32> {
 type JsonHostCallback = Arc<ThreadsafeFunction<String, Promise<String>, String, Status, false>>;
 
 struct EpochDeadline {
-    cancel: Option<mpsc::Sender<()>>,
+    signal: Option<mpsc::Sender<EpochSignal>>,
 }
 
 impl EpochDeadline {
-    fn new(engine: &Engine, timeout_ms: u32) -> Self {
-        let (cancel, receiver) = mpsc::channel();
+    fn new(engine: &Engine, timeout_ms: u32) -> (Self, mpsc::Sender<EpochSignal>) {
+        let (signal, receiver) = mpsc::channel();
         let engine = engine.clone();
         thread::spawn(move || {
-            if receiver
-                .recv_timeout(Duration::from_millis(u64::from(timeout_ms)))
-                .is_err()
-            {
-                engine.increment_epoch();
+            match receiver.recv_timeout(Duration::from_millis(u64::from(timeout_ms))) {
+                Ok(EpochSignal::Interrupt) | Err(mpsc::RecvTimeoutError::Timeout) => {
+                    engine.increment_epoch();
+                }
+                Ok(EpochSignal::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {}
             }
         });
-        Self {
-            cancel: Some(cancel),
-        }
+        (
+            Self {
+                signal: Some(signal.clone()),
+            },
+            signal,
+        )
     }
 }
 
 impl Drop for EpochDeadline {
     fn drop(&mut self) {
-        if let Some(cancel) = self.cancel.take() {
-            let _ = cancel.send(());
+        if let Some(signal) = self.signal.take() {
+            let _ = signal.send(EpochSignal::Stop);
         }
     }
 }
@@ -113,6 +171,7 @@ pub async fn execute_queued_javascript(
     fuel: Option<u32>,
     timeout_ms: Option<u32>,
     memory_limit_mb: Option<u32>,
+    execution_id: Option<String>,
 ) -> Result<bool> {
     use queued::exports::pit::quickjs::runner::{Completion, PollState};
     use wasmtime::component::{Component, Linker};
@@ -141,7 +200,8 @@ pub async fn execute_queued_javascript(
     let mut store = store(&engine, state, fuel)?;
     store.limiter(|state| &mut state.limits);
     store.set_epoch_deadline(1);
-    let _epoch = EpochDeadline::new(&engine, timeout_ms.unwrap_or(30_000));
+    let (_epoch, interrupt) = EpochDeadline::new(&engine, timeout_ms.unwrap_or(30_000));
+    let _execution = register_execution(execution_id, interrupt)?;
     let guest =
         queued::QueuedGuest::instantiate(&mut store, &component, &linker).map_err(js_error)?;
     let runner = guest.pit_quickjs_runner();
