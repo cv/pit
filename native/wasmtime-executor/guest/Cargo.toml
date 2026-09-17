@@ -1,0 +1,13 @@
+[package]
+name = "pit-javy-guest"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+test = false
+
+[dependencies]
+javy-plugin-api = "7.1.0"
+wit-bindgen = "0.58.0"

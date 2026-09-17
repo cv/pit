@@ -1,9 +1,17 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const executor = require("./pit_wasmtime_executor.node");
 
 async function main() {
+  const guest = fs.readFileSync("./pit_javy_guest.wasm");
+  const guestModule = new WebAssembly.Module(guest);
+  const guestImports = WebAssembly.Module.imports(guestModule);
+  assert.equal(
+    guestImports.some(({ module }) => module.startsWith("wasi")),
+    false,
+  );
   const answer = executor.executeWat(`
     (module
       (func (export "run") (result i32)
@@ -55,6 +63,22 @@ async function main() {
   assert.equal(asyncAnswer, 42);
   assert.equal(callbackCalls, 1);
 
+  let javascriptCallbackCalls = 0;
+  const javascriptExecuted = await executor.executeJavascript(
+    guest,
+    `
+      const answer = await pitCall(41);
+      if (answer !== 42) throw new Error("unexpected host answer: " + answer);
+    `,
+    async (value) => {
+      javascriptCallbackCalls++;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return value + 1;
+    },
+  );
+  assert.equal(javascriptExecuted, true);
+  assert.equal(javascriptCallbackCalls, 1);
+
   console.log(
     JSON.stringify({
       backend: "wasmtime",
@@ -63,6 +87,8 @@ async function main() {
       fuelInterruption: true,
       wasiLinked: false,
       asyncHostCallback: true,
+      quickJsGuest: javascriptExecuted,
+      guestImports,
     }),
   );
 }
