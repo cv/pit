@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const executor = require("./pit_wasmtime_executor.node");
+const { createWasmtimeFunctionExecutor } = require("./wasmtime-adapter.cjs");
 
 async function main() {
   const answer = executor.executeWat(`
@@ -90,24 +91,21 @@ async function main() {
     /memory|allocation|limit|grow/i,
   );
 
-  let queuedPreparedResult;
-  const queuedPreparedExecuted = await executor.executeQueuedJavascript(
-    queuedGuest,
-    prepared.source,
-    async (rawRequest) => {
-      const request = JSON.parse(rawRequest);
-      if (request.type === "result") {
-        queuedPreparedResult = request.value;
-        return JSON.stringify({ value: null });
-      }
-      const effect = `${request.capability}.${request.method}`;
+  const functionExecutor = createWasmtimeFunctionExecutor({
+    addon: executor,
+    component: queuedGuest,
+  });
+  const queuedPreparedResult = await functionExecutor.execute(
+    prepared.program,
+    async ({ capability, method }) => {
+      const effect = `${capability}.${method}`;
       if (effect === "context.get") {
-        return JSON.stringify({ value: { cwd: "/queued", backend: "rquickjs" } });
+        return { cwd: "/queued", backend: "rquickjs" };
       }
-      return JSON.stringify({ value: null });
+      return null;
     },
+    { memoryLimitMb: 64, timeoutMs: 30_000, input: { value: 42 } },
   );
-  assert.equal(queuedPreparedExecuted, true);
   assert.deepEqual(queuedPreparedResult, {
     context: { cwd: "/queued", backend: "rquickjs" },
     input: { value: 42 },
@@ -122,7 +120,8 @@ async function main() {
       epochInterruption: true,
       memoryLimit: true,
       restrictedWasi: true,
-      preparedPitProgram: queuedPreparedExecuted,
+      preparedPitProgram: true,
+      functionExecutorAdapter: true,
       queuedRquickjsGuest: true,
       concurrentHostCalls: maximumActiveCalls,
     }),
