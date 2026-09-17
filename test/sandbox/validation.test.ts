@@ -111,4 +111,22 @@ describe("validateTypeScript", () => {
       /Promise<number>/,
     );
   });
+
+  it("contextually types explicitly injected custom functions", () => {
+    const functions = new Map([
+      [
+        "runTests",
+        "async function runTests({}, input: { coverage?: boolean } = {}) { return { code: input.coverage ? 1 : 0 }; }",
+      ],
+    ]);
+    expect(() =>
+      validateTypeScript(
+        "async ({ runTests }) => (await runTests({ coverage: true })).code",
+        functions,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateTypeScript("async ({ runTests }) => runTests({ coverage: 'yes' })", functions),
+    ).toThrow(/string.*boolean/);
+  });
 });
