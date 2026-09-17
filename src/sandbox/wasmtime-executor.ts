@@ -97,14 +97,27 @@ export function createWasmtimeFunctionExecutor({
           dispatcher.handle(message);
         });
       };
-      await addon.executeQueuedJavascript(
-        component,
-        source,
-        callback,
-        DEFAULT_FUEL,
-        options.timeoutMs,
-        options.memoryLimitMb,
-      );
+      try {
+        await addon.executeQueuedJavascript(
+          component,
+          source,
+          callback,
+          DEFAULT_FUEL,
+          options.timeoutMs,
+          options.memoryLimitMb,
+        );
+      } catch (error) {
+        if (options.signal?.aborted) {
+          throw new Error("TypeScript execution cancelled", { cause: error });
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        if (signal.aborted || /wasm trap: interrupt/i.test(message)) {
+          throw new Error(`TypeScript execution timed out after ${options.timeoutMs}ms`, {
+            cause: error,
+          });
+        }
+        throw error;
+      }
       if (!resultReceived) throw new Error("QuickJS guest completed without a result");
       return result;
     },

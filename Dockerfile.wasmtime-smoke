@@ -33,7 +33,35 @@ COPY native/wasmtime-executor/prepare-smoke.mts ./native/wasmtime-executor/prepa
 RUN npx tsx native/wasmtime-executor/prepare-smoke.mts /prepared-program.json \
   && npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=/wasmtime-adapter.cjs
 
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim AS pi-smoke
+
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1 \
+  && npm cache clean --force
+
+ENV PI_SKIP_VERSION_CHECK=1 \
+  PI_TELEMETRY=0 \
+  PIT_FUNCTION_EXECUTOR=wasmtime \
+  PIT_WASMTIME_ADDON=/opt/pit/native/pit_wasmtime_executor.node \
+  PIT_WASMTIME_COMPONENT=/opt/pit/native/pit_queued_quickjs_guest.wasm \
+  TERM=xterm-256color
+
+WORKDIR /opt/pit
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev \
+  && npm cache clean --force
+COPY src ./src
+COPY prompts ./prompts
+COPY --from=builder /build/pit_wasmtime_executor.node ./native/pit_wasmtime_executor.node
+COPY --from=builder /build/pit_queued_quickjs_guest.wasm ./native/pit_queued_quickjs_guest.wasm
+
+RUN mkdir -p /workspace \
+  && printf '%s\n' '{"name":"pit-wasmtime-workspace","private":true}' > /workspace/package.json \
+  && printf '%s\n' '# Pit Wasmtime workspace' > /workspace/README.md
+
+WORKDIR /workspace
+ENTRYPOINT ["pi", "--no-extensions", "-e", "/opt/pit/src/index.ts"]
+
+FROM node:24-bookworm-slim AS smoke
 
 WORKDIR /smoke
 COPY --from=builder /build/pit_wasmtime_executor.node ./pit_wasmtime_executor.node
