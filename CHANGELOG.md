@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-16
+
+### Fixed
+
+- Raise the bounded Vitest timeout to 15 seconds so compile-heavy project integration tests remain deterministic under CI coverage instrumentation.
+
 ## [0.15.0] - 2026-09-16
 
 ### Changed
@@ -65,7 +71,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/cv/pit/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/cv/pit/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/cv/pit/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/cv/pit/compare/v0.13.3...v0.14.0
