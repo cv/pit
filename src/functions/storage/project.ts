@@ -3,30 +3,26 @@ import { join } from "node:path";
 
 import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { validateTypeScript } from "../../sandbox/validation.js";
-import {
-  type FunctionRegistry,
-  validateSavedFunctionName,
-  validateSavedFunctionSource,
-} from "../core.js";
+import { type FunctionRegistry, validateSavedFunctionSource } from "../core.js";
 import { getSavedFunctionDependencyGraph } from "../graph.js";
+import { functionRelativePath } from "../identifier.js";
 import {
   getPersistentFunctionMetadata,
   type PersistentFunctionMetadataRegistry,
 } from "../source.js";
 import {
   isMissingFileError,
+  assertPersistentPath,
   readPersistentFunctionCandidates,
   removePersistentFunctionFile,
   writePersistentFunctionFile,
 } from "./files.js";
+import { validatePersistentFunction } from "./validation.js";
 
 const PROJECT_FUNCTION_DIRECTORY = ["functions"] as const;
-const LEGACY_PROJECT_FUNCTION_DIRECTORY = ["pit", "functions"] as const;
 
 export interface ProjectFunctionConfig {
   enabled: boolean;
-  globalEnabled?: boolean;
   error?: string;
 }
 
@@ -34,25 +30,16 @@ export function projectFunctionDirectory(cwd: string): string {
   return join(cwd, CONFIG_DIR_NAME, ...PROJECT_FUNCTION_DIRECTORY);
 }
 
-export function legacyProjectFunctionDirectory(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, ...LEGACY_PROJECT_FUNCTION_DIRECTORY);
-}
-
 function configPath(cwd: string): string {
   return join(cwd, CONFIG_DIR_NAME, "pit.json");
 }
 
 function pathFor(directory: string, name: string): string {
-  validateSavedFunctionName(name);
-  return join(directory, `${name}.ts`);
+  return join(directory, functionRelativePath(name));
 }
 
 function currentPathFor(cwd: string, name: string): string {
   return pathFor(projectFunctionDirectory(cwd), name);
-}
-
-function legacyPathFor(cwd: string, name: string): string {
-  return pathFor(legacyProjectFunctionDirectory(cwd), name);
 }
 
 export async function loadProjectFunctionConfig(
@@ -76,7 +63,7 @@ export async function loadProjectFunctionConfig(
       throw new Error("configuration must be a JSON object");
     }
     const values = config as Record<string, unknown>;
-    const enabledSection = (key: "globalFunctions" | "projectFunctions"): boolean | undefined => {
+    const enabledSection = (key: "projectFunctions"): boolean | undefined => {
       const section = values[key];
       if (section === undefined) {
         return;
@@ -94,10 +81,8 @@ export async function loadProjectFunctionConfig(
       return enabled;
     };
     const projectEnabled = enabledSection("projectFunctions") ?? false;
-    const globalEnabled = enabledSection("globalFunctions");
     return {
       enabled: projectEnabled,
-      ...(globalEnabled === undefined ? {} : { globalEnabled }),
     };
   } catch (error) {
     return {
@@ -111,60 +96,54 @@ export async function saveProjectFunction(
   cwd: string,
   name: string,
   source: string,
-  storage: FunctionRegistry | { registry: FunctionRegistry; global: ReadonlyMap<string, string> },
+  storage: FunctionRegistry | { registry: FunctionRegistry; user: ReadonlyMap<string, string> },
 ): Promise<boolean> {
   const registry = storage instanceof Map ? storage : storage.registry;
-  const global = storage instanceof Map ? new Map<string, string>() : storage.global;
+  const user = storage instanceof Map ? new Map<string, string>() : storage.user;
   validateSavedFunctionSource(source);
   const candidates = new Map(registry);
   candidates.set(name, source);
-  validateTypeScript(source, new Map([...global, ...candidates]));
+  validatePersistentFunction(name, source, new Map([...user, ...candidates]));
   const replaced = registry.has(name);
+  await assertPersistentPath(projectFunctionDirectory(cwd), name);
   await writePersistentFunctionFile(currentPathFor(cwd, name), source);
-  await removePersistentFunctionFile(legacyPathFor(cwd, name));
   registry.set(name, source);
   return replaced;
 }
 
 export async function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
-  const current = await removePersistentFunctionFile(currentPathFor(cwd, name));
-  const legacy = await removePersistentFunctionFile(legacyPathFor(cwd, name));
-  return current || legacy;
+  await assertPersistentPath(projectFunctionDirectory(cwd), name);
+  return removePersistentFunctionFile(currentPathFor(cwd, name));
 }
 
 export async function loadProjectFunctions(
   ctx: ExtensionContext,
   registry: FunctionRegistry,
   metadata: PersistentFunctionMetadataRegistry,
-  global: ReadonlyMap<string, string> = new Map(),
+  {
+    user = new Map(),
+    invalidDefinitions = new Map(),
+  }: {
+    user?: ReadonlyMap<string, string>;
+    invalidDefinitions?: Map<string, string>;
+  } = {},
 ): Promise<string[]> {
   registry.clear();
   metadata.clear();
+  invalidDefinitions.clear();
   if (!ctx.isProjectTrusted()) {
     return [];
   }
 
-  const [legacy, current] = await Promise.all([
-    readPersistentFunctionCandidates({
-      directory: legacyProjectFunctionDirectory(ctx.cwd),
-      metadata: getPersistentFunctionMetadata,
-    }),
-    readPersistentFunctionCandidates({
-      directory: projectFunctionDirectory(ctx.cwd),
-      metadata: getPersistentFunctionMetadata,
-    }),
-  ]);
-  for (const name of current.discoveredNames) {
-    legacy.candidates.delete(name);
-  }
-  const candidates = new Map([...legacy.candidates, ...current.candidates]);
-  const errors = [
-    ...legacy.errors.map((error) => `${CONFIG_DIR_NAME}/pit/functions/${error}`),
-    ...current.errors.map((error) => `${CONFIG_DIR_NAME}/functions/${error}`),
-  ];
+  const { candidates, errors, invalid } = await readPersistentFunctionCandidates({
+    directory: projectFunctionDirectory(ctx.cwd),
+    metadata: getPersistentFunctionMetadata,
+  });
+
+  for (const [id, error] of invalid) invalidDefinitions.set(id, error);
 
   const sources = new Map([
-    ...global,
+    ...user,
     ...[...candidates].map(([name, value]) => [name, value.source] as const),
   ]);
   const sourceGraph = getSavedFunctionDependencyGraph(sources);
@@ -174,27 +153,13 @@ export async function loadProjectFunctions(
         sourceGraph.resolve(value.source).map((reference) => [reference.name, reference.source]),
       );
       dependencies.set(name, value.source);
-      validateTypeScript(value.source, dependencies);
+      validatePersistentFunction(name, value.source, dependencies);
       registry.set(name, value.source);
       metadata.set(name, value.metadata);
     } catch (error) {
       errors.push(`${name}.ts: ${(error as Error).message}`);
+      invalidDefinitions.set(name, (error as Error).message);
     }
   }
-  let removedInvalidDependency = true;
-  while (removedInvalidDependency) {
-    removedInvalidDependency = false;
-    for (const [name, source] of registry) {
-      try {
-        validateTypeScript(source, new Map([...global, ...registry]));
-      } catch (error) {
-        registry.delete(name);
-        metadata.delete(name);
-        errors.push(`${name}.ts: ${(error as Error).message}`);
-        removedInvalidDependency = true;
-      }
-    }
-  }
-
   return errors;
 }

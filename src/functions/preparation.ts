@@ -10,6 +10,7 @@ import {
 } from "./core.js";
 import { getNamedFunctionName, getPersistentFunctionMetadata } from "./source.js";
 import { effectiveRegistry, type FunctionState } from "./state.js";
+import { assertFunctionsAvailable } from "./storage/validation.js";
 
 export interface SavedFunctionExecutionContext {
   cwd: string;
@@ -31,7 +32,7 @@ export interface PreparedSavedFunctionExecution {
   projectMetadata?: NonNullable<ReturnType<typeof getPersistentFunctionMetadata>>;
   registry: FunctionRegistry;
   scopes: Map<string, FunctionScope>;
-  globalFunctions: FunctionRegistry;
+  userFunctions: FunctionRegistry;
   projectFunctions: FunctionRegistry;
   sessionFunctions: FunctionRegistry;
   candidateProject?: FunctionRegistry;
@@ -60,14 +61,10 @@ function prepareProjectFunction(
   validateRegistryCapacity(state.effective, name, request.source);
   const candidateProject = new Map(state.project);
   candidateProject.set(name, request.source);
-  validateTypeScript(
-    request.source,
-    new Map([...state.global, ...candidateProject]),
-    request.input,
-  );
+  validateTypeScript(request.source, new Map([...state.user, ...candidateProject]), request.input);
   const candidateSession = new Map(state.session);
   candidateSession.delete(name);
-  const registry = effectiveRegistry(candidateProject, candidateSession, state.global);
+  const registry = effectiveRegistry(candidateProject, candidateSession, state.user);
   validateTypeScript(request.source, registry, request.input);
   return { registry, candidateProject, candidateSession };
 }
@@ -80,7 +77,7 @@ function prepareSessionFunction(
   validateRegistryCapacity(state.effective, name, request.source);
   const candidateSession = new Map(state.session);
   candidateSession.set(name, request.source);
-  const registry = effectiveRegistry(state.project, candidateSession, state.global);
+  const registry = effectiveRegistry(state.project, candidateSession, state.user);
   validateTypeScript(request.source, registry, request.input);
   return { registry, candidateSession };
 }
@@ -113,6 +110,11 @@ export function prepareSavedFunctionExecution(
     : projectMetadata
       ? prepareProjectFunction(state, request, name)
       : prepareSessionFunction(state, request, name);
+  assertFunctionsAvailable(
+    request.source,
+    prepared.registry,
+    new Map([...state.invalidUser, ...state.invalidProject]),
+  );
   const projectFunctions = prepared.candidateProject ?? state.project;
   const sessionFunctions = prepared.candidateSession ?? state.session;
   return {
@@ -123,11 +125,11 @@ export function prepareSavedFunctionExecution(
     registry: prepared.registry,
     scopes: functionScopeRegistry(
       prepared.registry,
-      state.global,
+      state.user,
       projectFunctions,
       sessionFunctions,
     ),
-    globalFunctions: state.global,
+    userFunctions: state.user,
     projectFunctions,
     sessionFunctions,
     ...(prepared.candidateProject ? { candidateProject: prepared.candidateProject } : {}),

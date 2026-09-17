@@ -7,7 +7,7 @@ export interface CapabilityArgumentSummary {
   size?: number;
 }
 
-export type FunctionExecutionScope = FunctionScope | "user";
+export type FunctionExecutionScope = FunctionScope;
 
 export interface FunctionExecutionContext {
   invocationId: number;

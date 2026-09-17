@@ -56,7 +56,7 @@ const MAX_SAVED_FUNCTION_CATALOG_BYTES = 1200;
 
 export function savedFunctionCatalogNotice(registry: ReadonlyMap<string, string>): string {
   const signatures = [...registry.values()]
-    .map(getSavedFunctionCallSignature)
+    .map((source) => getSavedFunctionCallSignature(source))
     .filter((signature): signature is string => signature !== undefined)
     .sort((a, b) => a.localeCompare(b));
   if (signatures.length === 0) {
@@ -174,7 +174,7 @@ async function executeSandboxValue({
   const options = {
     ...(request.signal ? { signal: request.signal } : {}),
     timeoutMs: request.params.timeoutMs ?? 30_000,
-    userFunctions: preparedFunction.globalFunctions,
+    userFunctions: preparedFunction.userFunctions,
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,
     ...(request.params.params === undefined ? {} : { input: request.params.params }),

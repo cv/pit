@@ -3,17 +3,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { formatPitSkillsForPrompt } from "../skill-prompt.js";
 import { reconstructFunctions } from "./core.js";
 import { registerFunctionManager } from "./manager.js";
-import { globalFunctionCatalog, projectFunctionCatalog } from "./persistent-functions.js";
+import { userFunctionCatalog, projectFunctionCatalog } from "./persistent-functions.js";
 import type { SavedFunctionService } from "./service.js";
 import type { FunctionState } from "./state.js";
 import { reconcileFunctionState, resetFunctionUsage } from "./state.js";
-import {
-  globalFunctionDirectory,
-  globalFunctionPath,
-  loadGlobalFunctionConfig,
-  loadGlobalFunctions,
-} from "./storage/global.js";
 import { loadProjectFunctionConfig, loadProjectFunctions } from "./storage/project.js";
+import { userFunctionDirectory, userFunctionPath, loadUserFunctions } from "./storage/user.js";
 
 interface FunctionManagerRegistration {
   pi: ExtensionAPI;
@@ -27,7 +22,7 @@ function registerSavedFunctionManager({
   savedFunctionService,
 }: FunctionManagerRegistration): void {
   registerFunctionManager(pi, functionState.session, {
-    globalFunctions: functionState.global,
+    userFunctions: functionState.user,
     projectFunctions: functionState.project,
     planSessionRemoval: (name) => savedFunctionService.planRemoval(name, "session"),
     removeSession: (name) => savedFunctionService.removeSession(name, { cascade: true }),
@@ -42,26 +37,29 @@ function registerSavedFunctionManager({
       await savedFunctionService.promoteToProject({ name, summary, context: ctx });
       ctx.ui.notify(`Saved function to project: ${name}`, "info");
     },
-    saveToGlobal: async (name, ctx) => {
-      const summary = await ctx.ui.input(`Save ${name} globally`, "Short global-function summary");
+    saveToUser: async (name, ctx) => {
+      const summary = await ctx.ui.input(
+        `Save ${name} to user scope`,
+        "Short user-function summary",
+      );
       if (summary === undefined) {
         return;
       }
       const confirmed = await ctx.ui.confirm(
-        `Save ${name} globally?`,
-        `Make ${name} available in every Pit project under ${globalFunctionDirectory()}?`,
+        `Save ${name} to user scope?`,
+        `Make ${name} available in every Pit project under ${userFunctionDirectory()}?`,
       );
       if (!confirmed) {
         return;
       }
-      await savedFunctionService.promoteToGlobal({ name, summary, context: ctx });
-      ctx.ui.notify(`Saved function globally: ${name}`, "info");
+      await savedFunctionService.promoteToUser({ name, summary, context: ctx });
+      ctx.ui.notify(`Saved function to user scope: ${name}`, "info");
     },
 
     removeFromProject: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
         `Remove ${name} from project?`,
-        `Delete .pi/functions/${name}.ts and any legacy copy?`,
+        `Delete .pi/functions/${name}.ts?`,
       );
       if (!confirmed) {
         return;
@@ -72,17 +70,17 @@ function registerSavedFunctionManager({
         removed ? "info" : "warning",
       );
     },
-    removeFromGlobal: async (name, ctx) => {
+    removeFromUser: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
-        `Remove ${name} globally?`,
-        `Delete ${globalFunctionPath(name)} for every project?`,
+        `Remove ${name} from user scope?`,
+        `Delete ${userFunctionPath(name)} for every project?`,
       );
       if (!confirmed) {
         return;
       }
-      const removed = await savedFunctionService.removeFromGlobal(name);
+      const removed = await savedFunctionService.removeFromUser(name);
       ctx.ui.notify(
-        removed ? `Removed global function: ${name}` : `Global function file was absent: ${name}`,
+        removed ? `Removed user function: ${name}` : `User function file was absent: ${name}`,
         removed ? "info" : "warning",
       );
     },
@@ -92,42 +90,35 @@ function registerSavedFunctionManager({
 function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionState): void {
   pi.on("session_start", async (_event, ctx) => {
     resetFunctionUsage(functionState);
-    const [globalConfig, projectConfig] = await Promise.all([
-      loadGlobalFunctionConfig(),
-      loadProjectFunctionConfig(ctx),
-    ]);
-    functionState.globalEnabled = globalConfig.enabled && projectConfig.globalEnabled !== false;
+    const projectConfig = await loadProjectFunctionConfig(ctx);
     functionState.projectEnabled = projectConfig.enabled;
-    const errors: string[] = [];
-    if (functionState.globalEnabled) {
-      errors.push(
-        ...(await loadGlobalFunctions(functionState.global, functionState.globalMetadata)),
-      );
-    } else {
-      functionState.global.clear();
-      functionState.globalMetadata.clear();
-    }
+    const errors = await loadUserFunctions(
+      functionState.user,
+      functionState.userMetadata,
+      functionState.invalidUser,
+    );
     if (projectConfig.enabled) {
       errors.push(
         ...(await loadProjectFunctions(
           ctx,
           functionState.projectCandidates,
           functionState.candidateMetadata,
-          functionState.global,
+          { user: functionState.user, invalidDefinitions: functionState.invalidProject },
         )),
       );
     } else {
+      functionState.invalidProject.clear();
       functionState.projectCandidates.clear();
       functionState.candidateMetadata.clear();
     }
     reconstructFunctions(
       functionState.session,
       ctx.sessionManager.getBranch(),
-      new Map([...functionState.global, ...functionState.projectCandidates]),
+      new Map([...functionState.user, ...functionState.projectCandidates]),
       new Map(),
     );
     errors.push(...reconcileFunctionState(functionState));
-    for (const error of [globalConfig.error, projectConfig.error].filter(Boolean)) {
+    for (const error of [projectConfig.error].filter(Boolean)) {
       if (ctx.hasUI) {
         ctx.ui.notify(error as string, "warning");
       }
@@ -144,7 +135,7 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
     reconstructFunctions(
       functionState.session,
       ctx.sessionManager.getBranch(),
-      new Map([...functionState.global, ...functionState.projectCandidates]),
+      new Map([...functionState.user, ...functionState.projectCandidates]),
       new Map(),
     );
     reconcileFunctionState(functionState);
@@ -157,11 +148,7 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       promptAlreadyHasSkills
         ? ""
         : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []),
-      globalFunctionCatalog(
-        functionState.globalMetadata,
-        functionState.project,
-        functionState.session,
-      ),
+      userFunctionCatalog(functionState.userMetadata, functionState.project, functionState.session),
       projectFunctionCatalog(functionState.metadata, functionState.session),
     ].filter(Boolean);
     if (additions.length > 0) {

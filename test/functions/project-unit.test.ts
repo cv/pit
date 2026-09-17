@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { functionRunScope, functionScopeRegistry } from "../../src/functions/core.js";
 import {
-  globalFunctionCatalog,
+  userFunctionCatalog,
   projectFunctionCatalog,
   reconcileProjectFunctionsForSession as reconcileProjectFunctionState,
   savedFunctionDependents,
@@ -32,7 +32,7 @@ function reconcileProjectFunctionsForSession(
   activeMetadata: Parameters<typeof reconcileProjectFunctionState>[0]["metadata"],
 ) {
   return reconcileProjectFunctionState({
-    global: new Map(),
+    user: new Map(),
     candidates,
     candidateMetadata,
     session,
@@ -44,17 +44,17 @@ function reconcileProjectFunctionsForSession(
 it("maps effective function scopes with override precedence", () => {
   const scopes = functionScopeRegistry(
     new Map([
-      ["globalOnly", "source"],
+      ["userOnly", "source"],
       ["projectOnly", "source"],
       ["overridden", "session source"],
       ["unattributed", "source"],
     ]),
-    new Map([["globalOnly", "source"]]),
+    new Map([["userOnly", "source"]]),
     new Map([["projectOnly", "source"]]),
     new Map([["overridden", "session source"]]),
   );
   expect([...scopes]).toEqual([
-    ["globalOnly", "global"],
+    ["userOnly", "user"],
     ["projectOnly", "project"],
     ["overridden", "session"],
     ["unattributed", "session"],
@@ -62,11 +62,11 @@ it("maps effective function scopes with override precedence", () => {
 });
 
 it("prefers attributed function scope and resolves registry fallbacks", () => {
-  const global = new Map([["globalOnly", "source"]]);
+  const user = new Map([["userOnly", "source"]]);
   const project = new Map([["projectOnly", "source"]]);
   const session = new Map([["sessionOnly", "source"]]);
-  const registries = { global, project, session };
-  expect(functionRunScope("globalOnly", registries)).toBe("global");
+  const registries = { user, project, session };
+  expect(functionRunScope("userOnly", registries)).toBe("user");
   expect(functionRunScope("projectOnly", registries)).toBe("project");
   expect(functionRunScope("sessionOnly", registries)).toBe("session");
   expect(functionRunScope("missing", registries)).toBe("session");
@@ -155,60 +155,21 @@ describe("project function storage", () => {
     expect(await removeProjectFunction(cwd, "saved")).toBe(false);
   });
 
-  it("prefers current functions and migrates legacy files on write", async () => {
+  it("ignores legacy project files and leaves them untouched on mutation", async () => {
     const legacyDirectory = join(cwd, ".pi/pit/functions");
-    const currentDirectory = join(cwd, ".pi/functions");
-    await Promise.all([
-      mkdir(legacyDirectory, { recursive: true }),
-      mkdir(currentDirectory, { recursive: true }),
-    ]);
-    const legacySource =
-      "/** Legacy helper. @pit project */ async function shared({}) { return 'legacy'; }";
-    const currentSource = "/** Current helper. */ async function shared({}) { return 'current'; }";
+    await mkdir(legacyDirectory, { recursive: true });
+    const legacySource = "/** Legacy helper. */ async function shared({}) { return 'legacy'; }";
     await writeFile(join(legacyDirectory, "shared.ts"), legacySource);
-
-    await writeFile(
-      join(legacyDirectory, "malformedLegacy.ts"),
-      "async function malformedLegacy({}) { return false; }",
-    );
-
+    await writeFile(join(legacyDirectory, "malformed.ts"), "invalid source");
     const functions = registry();
-    const docs = metadata();
-    const legacyErrors = await loadProjectFunctions(ctx(), functions, docs);
-    expect(legacyErrors.join("\n")).toContain(".pi/pit/functions/malformedLegacy.ts");
-    expect(functions.get("shared")).toBe(legacySource);
-
-    await rm(join(legacyDirectory, "malformedLegacy.ts"));
-
-    await writeFile(join(currentDirectory, "shared.ts"), currentSource);
-    expect(await loadProjectFunctions(ctx(), functions, docs)).toEqual([]);
-    expect(functions.get("shared")).toBe(currentSource);
-
-    await writeFile(
-      join(currentDirectory, "shared.ts"),
-      "async function shared({}) { return 'invalid'; }",
-    );
-    const errors = await loadProjectFunctions(ctx(), functions, docs);
-    expect(functions.has("shared")).toBe(false);
-    expect(errors.join("\n")).toContain(".pi/functions/shared.ts");
-
-    await rm(join(currentDirectory, "shared.ts"));
-    await saveProjectFunction(cwd, "shared", currentSource, functions);
-    await expect(readFile(join(currentDirectory, "shared.ts"), "utf8")).resolves.toBe(
-      `${currentSource}\n`,
-    );
-    await expect(readFile(join(legacyDirectory, "shared.ts"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-
-    await writeFile(join(legacyDirectory, "shared.ts"), legacySource);
+    expect(await loadProjectFunctions(ctx(), functions, metadata())).toEqual([]);
+    expect(functions.size).toBe(0);
+    const source = "/** Canonical helper. */ async function shared({}) { return 'current'; }";
+    await saveProjectFunction(cwd, "shared", source, functions);
+    expect(await loadProjectFunctions(ctx(), functions, metadata())).toEqual([]);
+    expect(functions.get("shared")).toBe(source + "\n");
     expect(await removeProjectFunction(cwd, "shared")).toBe(true);
-    await expect(readFile(join(currentDirectory, "shared.ts"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await expect(readFile(join(legacyDirectory, "shared.ts"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(await readFile(join(legacyDirectory, "shared.ts"), "utf8")).toBe(legacySource);
   });
 
   it("does not impose an aggregate quota on project storage alone", async () => {
@@ -643,10 +604,10 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     expect(missingOverrideCatalog).toContain("- alpha — Session override of project function.");
     expect(missingOverrideCatalog).not.toContain("alpha(");
 
-    const globalCatalog = globalFunctionCatalog(docs, new Map(), new Map());
-    expect(globalCatalog).toContain("## Global TypeScript functions");
-    expect(globalCatalog).toContain("1 more; use functions.listGlobal()");
-    expect(globalFunctionCatalog(docs, new Map([["alpha", "project"]]), new Map())).not.toContain(
+    const userCatalog = userFunctionCatalog(docs, new Map(), new Map());
+    expect(userCatalog).toContain("## User TypeScript functions");
+    expect(userCatalog).toContain("1 more; use functions.listUser()");
+    expect(userFunctionCatalog(docs, new Map([["alpha", "project"]]), new Map())).not.toContain(
       "alpha(input",
     );
   });

@@ -61,8 +61,8 @@ The function state is intentionally explicit rather than hidden in module global
 On session start, `src/functions/lifecycle.ts`:
 
 1. clears in-memory usage counts and promotion suggestions;
-2. loads global and project configuration in parallel;
-3. enables global definitions only when user configuration allows them and the project has not opted out;
+2. loads user functions automatically from the active Pi agent directory;
+3. makes package-owned global definitions available independently of persistent configuration;
 4. enables project definitions only for a trusted project with `.pi/pit.json` opt-in;
 5. loads and validates persistent candidates;
 6. reconstructs session definitions from the active Pi branch's custom entries;
@@ -79,7 +79,7 @@ When branch navigation changes the active session tree, Pit reconstructs session
 Before an agent turn starts, Pit augments the system prompt with:
 
 - discovered skills when the incoming Pi prompt does not already contain them;
-- global function signatures, summaries, and parameter descriptions; and
+- user function signatures, summaries, and parameter descriptions; and
 - project function signatures, summaries, and parameter descriptions.
 
 Persistent function source is not copied into the prompt. Session overrides are identified as overrides, and the full source closure is injected only during compilation when submitted code references a saved function.
@@ -89,7 +89,7 @@ Persistent function source is not copied into the prompt. Session overrides are 
 `src/tool/typescript.ts` is the application adapter between Pi's tool API and Pit's internal services. A normal invocation follows this order:
 
 1. **Canonicalize source.** Pit asks Oxfmt to format the completed submission with a fixed configuration. Formatting is best-effort: formatter failure does not replace the more useful validation path.
-2. **Prepare candidate state.** `SavedFunctionService.prepare()` classifies the source as anonymous or as a named top-level function. A named direct submission is always prepared as a session definition. Project or global persistence requires an explicit promotion path.
+2. **Prepare candidate state.** `SavedFunctionService.prepare()` classifies the source as anonymous or as a named top-level function. A named direct submission is always prepared as a session definition. Project or user persistence requires an explicit promotion path.
 3. **Validate the candidate registry.** The new definition is evaluated against the registry that would exist after a successful commit. This makes the definition available to its own first execution without mutating live state prematurely.
 4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh Wasmtime store, and dispatches capability calls.
 5. **Commit only after success.** A named direct submission is appended to Pi's session history and installed in memory only after execution succeeds. Failed definitions do not become active. With `saveOnly`, execution is skipped but the same validated commit path is used.
@@ -126,19 +126,11 @@ The graph supports:
 
 Only definitions reachable from the submitted source are compiled into a guest program. The complete transitive closure is resolved with cycle-safe traversal; generated declarations and deferred wrappers allow mutually referential definitions to be assembled without depending on assignment order.
 
-### Scope-aware runtime generation
+### Layered runtime generation
 
-`src/functions/scoped-runtime.ts` generates a separate runtime definition keyed by `scope:name`, not merely by name. That distinction preserves lexical scope rules when the same name exists in multiple registries:
+`src/functions/unified-runtime.ts` generates wrappers for concrete resolved definitions. Explicit dependencies resolve virtually against session, project, user, and package-owned global definitions. This replaces the former scope-pinned lexical runtime; multi-function dependency cycles are rejected.
 
-| Calling definition | Definitions visible to its dependencies     |
-| ------------------ | ------------------------------------------- |
-| Global             | Global only                                 |
-| Project            | Project, then global fallback               |
-| Session            | Session, then project, then global fallback |
-
-For example, a session override named `helper` does not silently alter what an already-persisted project function means when that project function calls `helper`. The project definition resolves dependencies in project scope. The submitted session program can still resolve the session override as its own root binding.
-
-Generated wrappers also attach function name, scope, parent invocation, and depth to capability calls. Saved-function failures are wrapped with the function name while retaining the original cause.
+Only direct declared dependencies are injected. The trusted host grants the resolved transitive private-effect closure. Generated wrappers attach function identity and scope to host calls; trace scope uses `user` directly without translation to the old `global` name.
 
 ### Compilation
 
@@ -212,57 +204,32 @@ This writes `src/generated/capability-contract.d.ts`. `npm run capabilities:chec
 
 ### Registries and precedence
 
-`FunctionState` holds distinct registries:
+`FunctionState` holds user source, trusted project candidates, active project source, branch-local session source, and the effective source view. Pit's native-backed globals come from `globalFunctionDefinitions()` and are not user-owned storage. Compilation resolves `session > project > user > global`.
 
-- `global`: validated user-global definitions;
-- `projectCandidates`: all validated project files before per-session reconciliation;
-- `project`: project definitions active for the current session closure;
-- `session`: definitions reconstructed from the current Pi branch; and
-- `effective`: the merged view used by submitted code.
-
-Effective precedence is:
-
-```text
-session overrides project overrides global
-```
-
-Metadata has parallel global, project-candidate, and active-project registries. Source and prompt metadata are separate because runtime injection needs complete source while prompts need only bounded signatures and summaries.
-
-`projectCandidates` and active `project` are intentionally different. Reconciliation selects dependency closures that fit the effective registry and respect session overrides. Invalid or over-capacity definitions can be excluded without losing knowledge that their files exist.
+Invalid user and project definitions are retained separately by identifier. Preparation checks reachable explicit dependencies against these diagnostics, preventing silent fallback through an invalid persisted override. Unrelated functions remain usable. Source quotas apply to authored functions, not native built-ins.
 
 ### Storage and enablement
 
-| Scope                | Source of truth                                  | Enablement                                         |
-| -------------------- | ------------------------------------------------ | -------------------------------------------------- |
-| Session              | Pi custom branch entries of type `pit-functions` | Available for the loaded session                   |
-| Project              | `.pi/functions/<name>.ts`                        | Trusted project and `.pi/pit.json` opt-in          |
-| Project, legacy read | `.pi/pit/functions/<name>.ts`                    | Same as project                                    |
-| Global               | `~/.pi/agent/pit/functions/<name>.ts`            | `~/.pi/agent/pit.json` opt-in; project may opt out |
+| Scope   | Source of truth                              | Enablement                                            |
+| ------- | -------------------------------------------- | ----------------------------------------------------- |
+| Global  | Package-owned definitions                    | Always                                                |
+| User    | `${PI_CODING_AGENT_DIR}/functions/`          | Automatic                                             |
+| Project | `.pi/functions/`                             | Trusted project and `projectFunctions.enabled` opt-in |
+| Session | Pi `pit-function-definitions` branch entries | Active branch                                         |
 
-Storage location determines persistent scope. `@pit project` and `@pit global` source markers have no runtime meaning.
+The default user directory is `~/.pi/agent/functions/`; Pi's `getAgentDir()` determines it. The old user `pit.json` enablement configuration is no longer read. Legacy user/project function directories and `pit-functions` session entries are ignored, never migrated or deleted.
 
-When both project paths contain the same filename, `.pi/functions/` wins even if the winning file later fails validation; the legacy copy does not resurface under that name. Saving a project function writes the current path and removes its same-name legacy file. Removing a project function clears both paths.
+Persistent identifiers come from canonical relative file paths: `company/check.ts` declares `check` and defines `company.check`. Each file contains one documented top-level function declaration. Dotted filenames, case-only collisions, reserved filesystem names, namespace collisions, and declaration mismatches are rejected. Discovery visits at most 2,048 entries and reads at most 100,000 bytes per file, with a 4 MB aggregate source budget. Symlinked directories are not traversed; symlinked definition files are invalid. An absent directory is empty and is not created by loading.
 
-Persistent files must contain one documented top-level function declaration whose name matches the filename. Loading proceeds in deterministic filename order. Each candidate is validated with its reachable dependencies, then the complete registry is repeatedly validated so functions with invalid dependencies are removed as well.
-
-Writes use a per-path mutation queue, a temporary file, and rename. In-memory registries are updated only after the filesystem operation succeeds. Project and global state mutations additionally pass through the extension-level function commit queue.
-
-### Session history
-
-Setting a session function appends its complete source to Pi's session history. Removal or promotion appends a deletion tombstone. Reconstruction replays entries in branch order and ignores malformed, stale, or over-capacity entries. This event-log design makes branch navigation deterministic and avoids storing session definitions in separate files.
+Writes use a per-path mutation queue, a sibling temporary file, and rename. User/project mutation paths reject symlinks. External edits are picked up at session start or reload; there is no watcher. Other Pi processes reload independently—there is no cross-process registry transaction.
 
 ### Promotion and removal
 
-Promotion is explicit:
+New definitions begin in the session layer. Promotion targets only `project` or `user`; `global` is not a writable alias. User promotion requires confirmation and rejects project/session-only dependencies. Dependencies resolve virtually during invocation, including compatible higher-layer replacements of a portable dependency.
 
-- project promotion requires a trusted, enabled project;
-- global promotion requires global enablement and rejects dependencies that are not already global;
-- promotion writes the persistent file, appends a session tombstone, removes the session override, and reconciles effective state; and
-- promotion creates ordinary marker-free TypeScript with a normalized documentation summary.
+Persistence succeeds before session tombstones and live registry changes are committed. Atomic file replacement is not a transaction across filesystem storage and Pi's session journal. Removal is dependency-aware and targets only canonical files. Removing an invalid user definition also clears its unavailable-identifier diagnostic. Project access retains its trust and enablement checks; user access has no old global-enablement gate.
 
-Removal is dependency-aware. Planning computes direct and transitive dependents before mutation. Persistent removal is blocked while saved dependents remain. Session removal requires an explicit cascade when dependent session definitions would also be removed. The `/functions` UI adds confirmation around persistent and global mutations.
-
-Current saved-function capacity bounds are 64 effective definitions, 100,000 bytes per source, and 1,000,000 bytes of combined source. Prompt catalogs are separately bounded so a valid registry cannot consume an unbounded system prompt.
+The management API names user operations `listUser`, `getUser`, and `removeUser`; the old `*Global` user-storage aliases are removed. `/functions` labels user-owned source as user scope. Full global-definition inspection, namespaced session creation, signature-compatible overrides, and persistent `$next` integration remain follow-up work in #82.
 
 ## Workspace consistency model
 
@@ -317,7 +284,7 @@ The TypeScript tool returns two views:
 Pit is organized around feature boundaries:
 
 - `src/capabilities/` defines the model-facing contract, registry, host composition, command preparation, and Pi control handlers.
-- `src/functions/` owns session, project, and user-global saved functions, including state, persistence, dependency analysis, promotion, removal, and scoped runtime generation.
+- `src/functions/` owns session, project, and user saved functions, including state, persistence, dependency analysis, promotion, removal, and scoped runtime generation.
 - `src/sandbox/` owns validation, compilation, wire protocol, process lifecycle, dispatch, and restricted execution.
 - `src/tool/` is the application adapter for TypeScript tool orchestration, rendering, source formatting, timing, metadata, and failure context.
 - `src/process/` owns host-process execution, bounded process results, and process-runner behavior.
@@ -342,17 +309,17 @@ Files directly under `src/` are composition entry points or true cross-domain ad
 
 ## Where to make a change
 
-| Change                              | Start here                                       | Usually also inspect                                             |
-| ----------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
-| Add or change a capability          | `src/capabilities/<name>.ts`                     | `registry.ts`, `host.ts`, handlers, generated contract, renderer |
-| Change TypeScript request semantics | `src/tool/typescript.ts`                         | preparation, sandbox run, result renderers                       |
-| Change validation or compilation    | `src/sandbox/validation.ts` or `program.ts`      | generated contract, function graph, scoped runtime               |
-| Change guest isolation or protocol  | `src/sandbox/wasmtime-executor.ts` and `native/` | guest source, dispatcher, prebuilds, security tests              |
-| Change saved-function scope         | `src/functions/state.ts` and `scoped-runtime.ts` | preparation, reconciliation, graph, removal                      |
-| Change persistent storage           | `src/functions/storage/`                         | lifecycle, service, project integration tests                    |
-| Change workspace edits              | `src/workspace/hashline.ts` and `capability.ts`  | read/search, concurrency tests                                   |
-| Change process behavior             | `src/process/`                                   | capability host, progress, process renderer                      |
-| Change partial/final presentation   | `src/execution/` and `src/renderers/`            | tool adapter and extension smoke tests                           |
+| Change                              | Start here                                        | Usually also inspect                                             |
+| ----------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
+| Add or change a capability          | `src/capabilities/<name>.ts`                      | `registry.ts`, `host.ts`, handlers, generated contract, renderer |
+| Change TypeScript request semantics | `src/tool/typescript.ts`                          | preparation, sandbox run, result renderers                       |
+| Change validation or compilation    | `src/sandbox/validation.ts` or `program.ts`       | generated contract, function graph, scoped runtime               |
+| Change guest isolation or protocol  | `src/sandbox/wasmtime-executor.ts` and `native/`  | guest source, dispatcher, prebuilds, security tests              |
+| Change saved-function scope         | `src/functions/state.ts` and `unified-runtime.ts` | preparation, reconciliation, graph, removal                      |
+| Change persistent storage           | `src/functions/storage/`                          | lifecycle, service, project integration tests                    |
+| Change workspace edits              | `src/workspace/hashline.ts` and `capability.ts`   | read/search, concurrency tests                                   |
+| Change process behavior             | `src/process/`                                    | capability host, progress, process renderer                      |
+| Change partial/final presentation   | `src/execution/` and `src/renderers/`             | tool adapter and extension smoke tests                           |
 
 ## Tests and architecture gates
 

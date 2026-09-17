@@ -30,11 +30,11 @@ const RESERVED_FUNCTION_NAMES = new Set([
 ]);
 
 export type FunctionRegistry = Map<string, string>;
-export type FunctionScope = "global" | "project" | "session";
+export type FunctionScope = "global" | "user" | "project" | "session";
 
 export function functionScopeRegistry(
   effective: ReadonlyMap<string, string>,
-  global: ReadonlyMap<string, string>,
+  user: ReadonlyMap<string, string>,
   project: ReadonlyMap<string, string>,
   session: ReadonlyMap<string, string>,
 ): Map<string, FunctionScope> {
@@ -44,8 +44,8 @@ export function functionScopeRegistry(
         ? "session"
         : project.has(name)
           ? "project"
-          : global.has(name)
-            ? "global"
+          : user.has(name)
+            ? "user"
             : "session";
       return [name, scope];
     }),
@@ -53,7 +53,7 @@ export function functionScopeRegistry(
 }
 
 export interface FunctionScopeRegistries {
-  global: ReadonlyMap<string, string>;
+  user: ReadonlyMap<string, string>;
   project: ReadonlyMap<string, string>;
   session: ReadonlyMap<string, string>;
 }
@@ -66,9 +66,9 @@ export function functionRunScope(
   if (attributedScope) return attributedScope;
   if (registries.session.has(name)) return "session";
   if (registries.project.has(name)) return "project";
-  return registries.global.has(name) ? "global" : "session";
+  return registries.user.has(name) ? "user" : "session";
 }
-export const FUNCTION_ENTRY_TYPE = "pit-functions";
+export const FUNCTION_ENTRY_TYPE = "pit-function-definitions";
 export type FunctionEntry =
   | { name: string; source: string; deleted?: never }
   | { name: string; deleted: true; source?: never };

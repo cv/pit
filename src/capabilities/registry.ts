@@ -166,7 +166,7 @@ type PitPersistentFunctionMetadata = {
   parameters: Array<{ name: string; description?: string }>;
 };
 
-type PitFunctionScope = "global" | "project" | "session";
+type PitFunctionScope = "user" | "project" | "session";
 
 type PitSavedFunctionMetadata = {
   name: string;
@@ -177,7 +177,7 @@ type PitSavedFunctionMetadata = {
   directDependencies: string[];
   directDependents: string[];
   overridesProject: boolean;
-  overridesGlobal: boolean;
+  overridesUser: boolean;
 };
 
 type PitSavedFunctionRemovalPlan = {
@@ -190,7 +190,7 @@ type PitSavedFunctionRemovalPlan = {
   blocked: boolean;
 };
 
-type PitPromotionOptions = { to?: "global" | "project" };
+type PitPromotionOptions = { to?: "user" | "project" };
 
 type PitRemoveOptions = { cascade?: boolean };
 type PitRemoveResult = { name: string; removed: string[] };`;

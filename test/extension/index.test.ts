@@ -51,9 +51,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain('kind: "read", file, options?');
     expect(tool.description).toContain("workspace.search(query");
     expect(tool.description).toContain("shell.execFile(program, args");
-    expect(tool.description).toContain(
-      "functions: project list/get/remove; global list/get/remove;",
-    );
+    expect(tool.description).toContain("functions: project list/get/remove; user list/get/remove;");
     expect(tool.parameters.properties.label.description).toContain("15 words");
     expect(tool.parameters.properties.code.description).toContain("named function definition");
     expect(tool.parameters.properties.code.description).toContain("do not import");
@@ -147,7 +145,7 @@ describe("pit extension", () => {
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         type: "custom",
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: expect.objectContaining({
           name: "greet",
           source: `async function greet({}, input) {\n  return { greeting: "Hello, " + (input?.name ?? "world") + "!" };\n}`,
@@ -198,7 +196,7 @@ describe("pit extension", () => {
     expect(saved.content[0].text).toContain("[Session functions: deferred()]");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: { name: "deferred", source: canonicalSource },
       }),
     );
@@ -411,19 +409,19 @@ describe("pit extension", () => {
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: { name: "baseTask", deleted: true },
       }),
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: { name: "composedTask", deleted: true },
       }),
     );
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
-        customType: "pit-functions",
+        customType: "pit-function-definitions",
         data: { name: "transitiveTask", deleted: true },
       }),
     );

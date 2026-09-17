@@ -7,16 +7,12 @@ import {
 import type { CAPABILITY_METHODS } from "../capabilities/registry.js";
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
-import { validateSavedFunctionName } from "./core.js";
 import { getSavedFunctionDependencyGraph } from "./graph.js";
+import { validateFunctionId as validateSavedFunctionName } from "./identifier.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./service.js";
 import { getSavedFunctionCallSignature } from "./source.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
-import {
-  globalFunctionConfigPath,
-  globalFunctionDirectory,
-  globalFunctionPath,
-} from "./storage/global.js";
+import { userFunctionDirectory, userFunctionPath } from "./storage/user.js";
 
 type FunctionMethod = (typeof CAPABILITY_METHODS)["functions"][number];
 type FunctionMethodHandler = (args: unknown[]) => unknown | Promise<unknown>;
@@ -37,8 +33,8 @@ function requiredName(args: unknown[]): string {
 
 function functionScope(value: unknown): FunctionScope | undefined {
   const scope = value === undefined ? undefined : string(value, "function scope");
-  if (scope !== undefined && scope !== "global" && scope !== "project" && scope !== "session") {
-    throw new Error('function scope must be "global", "project", or "session"');
+  if (scope !== undefined && scope !== "user" && scope !== "project" && scope !== "session") {
+    throw new Error('function scope must be "user", "project", or "session"');
   }
   return scope;
 }
@@ -58,7 +54,7 @@ function removalCascade(value: unknown): boolean {
   return options.cascade === true;
 }
 
-function promotionTarget(value: unknown): "global" | "project" {
+function promotionTarget(value: unknown): "user" | "project" {
   if (value === undefined) {
     return "project";
   }
@@ -68,8 +64,8 @@ function promotionTarget(value: unknown): "global" | "project" {
     throw new Error(`promotion options contain unknown fields: ${unknown.join(", ")}`);
   }
   const target = options.to === undefined ? "project" : string(options.to, "promotion options.to");
-  if (target !== "global" && target !== "project") {
-    throw new Error('promotion options.to must be "global" or "project"');
+  if (target !== "user" && target !== "project") {
+    throw new Error('promotion options.to must be "user" or "project"');
   }
   return target;
 }
@@ -83,11 +79,11 @@ function sourceForScope(
     ? state.session.get(name)
     : scope === "project"
       ? state.project.get(name)
-      : state.global.get(name);
+      : state.user.get(name);
 }
 
 function effectiveScope(state: FunctionState, name: string): FunctionScope {
-  return state.session.has(name) ? "session" : state.project.has(name) ? "project" : "global";
+  return state.session.has(name) ? "session" : state.project.has(name) ? "project" : "user";
 }
 
 interface SavedMetadataInput {
@@ -110,31 +106,25 @@ function savedMetadata({
     scope === "session"
       ? functionState.effective
       : scope === "project"
-        ? new Map([...functionState.global, ...functionState.project])
-        : functionState.global,
+        ? new Map([...functionState.user, ...functionState.project])
+        : functionState.user,
   );
   const plan = service.planRemoval(name, scope);
   return {
     name,
     scope,
     /* v8 ignore next -- saved registries contain validated named function declarations. */
-    signature: getSavedFunctionCallSignature(source) ?? `${name}()`,
+    signature: getSavedFunctionCallSignature(source, name) ?? `${name}()`,
     lines: source.split("\n").length,
     bytes: Buffer.byteLength(source),
     directDependencies: [...graph.directDependencies(name)],
     directDependents: plan.directDependents,
     overridesProject: scope === "session" && functionState.project.has(name),
-    overridesGlobal: (scope === "session" || scope === "project") && functionState.global.has(name),
+    overridesUser: (scope === "session" || scope === "project") && functionState.user.has(name),
   };
 }
 
-type PersistentFunctionMethod =
-  | "list"
-  | "get"
-  | "remove"
-  | "listGlobal"
-  | "getGlobal"
-  | "removeGlobal";
+type PersistentFunctionMethod = "list" | "get" | "remove" | "listUser" | "getUser" | "removeUser";
 
 interface PersistentFunctionHandlerServices {
   ctx: ExtensionContext;
@@ -143,7 +133,6 @@ interface PersistentFunctionHandlerServices {
   activity: FunctionActivity[];
   service: SavedFunctionService;
   requireProjectAccess(): void;
-  requireGlobalAccess(): void;
 }
 
 function createPersistentFunctionHandlers({
@@ -153,7 +142,6 @@ function createPersistentFunctionHandlers({
   activity,
   service,
   requireProjectAccess,
-  requireGlobalAccess,
 }: PersistentFunctionHandlerServices): Pick<
   Record<FunctionMethod, FunctionMethodHandler>,
   PersistentFunctionMethod
@@ -187,37 +175,33 @@ function createPersistentFunctionHandlers({
         return { name, removed };
       });
     },
-    listGlobal: () => {
-      requireGlobalAccess();
-      return [...functionState.globalMetadata.values()].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
+    listUser: () => {
+      return [...functionState.userMetadata.values()].sort((a, b) => a.name.localeCompare(b.name));
     },
-    getGlobal: (args) => {
-      requireGlobalAccess();
+    getUser: (args) => {
       const name = requiredName(args);
-      const source = functionState.global.get(name);
+      const source = functionState.user.get(name);
       if (!source) {
-        throw new Error(`Global function "${name}" is unavailable`);
+        const detail = functionState.invalidUser.get(name);
+        throw new Error(`User function "${name}" is unavailable${detail ? `: ${detail}` : ""}`);
       }
-      return { ...functionState.globalMetadata.get(name), source };
+      return { ...functionState.userMetadata.get(name), source };
     },
-    removeGlobal: async (args) => {
-      requireGlobalAccess();
+    removeUser: async (args) => {
       const name = requiredName(args);
       if (!ctx.hasUI) {
-        throw new Error("Global function removal requires interactive confirmation");
+        throw new Error("User function removal requires interactive confirmation");
       }
       const confirmed = await ctx.ui.confirm(
-        `Remove global function ${name}?`,
-        `Delete ${globalFunctionPath(name)} for every project?`,
+        `Remove user function ${name}?`,
+        `Delete ${userFunctionPath(name)} for every project?`,
       );
       if (!confirmed) {
-        throw new Error("Global function removal was cancelled");
+        throw new Error("User function removal was cancelled");
       }
-      const removed = await service.removeFromGlobal(name);
+      const removed = await service.removeFromUser(name);
       if (removed) {
-        activity.push({ action: "remove", name, scope: "global" });
+        activity.push({ action: "remove", name, scope: "user" });
       }
       return { name, removed };
     },
@@ -246,13 +230,6 @@ export function createFunctionCapabilityMethods({
       );
     }
   };
-  const requireGlobalAccess = (): void => {
-    if (!functionState.globalEnabled) {
-      throw new Error(
-        `Global functions are disabled. Enable them in ${globalFunctionConfigPath()}`,
-      );
-    }
-  };
 
   return {
     ...createPersistentFunctionHandlers({
@@ -262,7 +239,6 @@ export function createFunctionCapabilityMethods({
       activity,
       service,
       requireProjectAccess,
-      requireGlobalAccess,
     }),
     listAll: () =>
       [...functionState.effective.entries()]
@@ -292,18 +268,17 @@ export function createFunctionCapabilityMethods({
         requireProjectAccess();
         await service.promoteToProject({ name, summary, context: ctx, activity });
       } else {
-        requireGlobalAccess();
         if (!ctx.hasUI) {
-          throw new Error("Global function promotion requires interactive confirmation");
+          throw new Error("User function promotion requires interactive confirmation");
         }
         const confirmed = await ctx.ui.confirm(
-          `Save ${name} globally?`,
-          `Make ${name} available in every Pit project under ${globalFunctionDirectory()}?`,
+          `Save ${name} to user scope?`,
+          `Make ${name} available in every Pit project under ${userFunctionDirectory()}?`,
         );
         if (!confirmed) {
-          throw new Error("Global function promotion was cancelled");
+          throw new Error("User function promotion was cancelled");
         }
-        await service.promoteToGlobal({ name, summary, context: ctx, activity });
+        await service.promoteToUser({ name, summary, context: ctx, activity });
       }
       return { name, promoted: true as const, scope: target };
     },

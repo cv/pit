@@ -75,14 +75,34 @@ describe("function registry handler", () => {
     reconstructFunctions(functions, [
       null,
       { type: "custom", customType: "other", data: {} },
-      { type: "custom", customType: "pit-functions", data: null },
-      { type: "custom", customType: "pit-functions", data: { name: "bad name", source } },
-      { type: "custom", customType: "pit-functions", data: { name: 42, source } },
-      { type: "custom", customType: "pit-functions", data: { name: "missing-source", source: 42 } },
-      { type: "custom", customType: "pit-functions", data: { name: "stale", source: "() => 1n" } },
-      { type: "custom", customType: "pit-functions", data: { name: "active", source } },
-      { type: "custom", customType: "pit-functions", data: { name: "active", deleted: true } },
-      { type: "custom", customType: "pit-functions", data: { name: "remaining", source } },
+      { type: "custom", customType: "pit-function-definitions", data: null },
+      {
+        type: "custom",
+        customType: "pit-function-definitions",
+        data: { name: "bad name", source },
+      },
+      { type: "custom", customType: "pit-function-definitions", data: { name: 42, source } },
+      {
+        type: "custom",
+        customType: "pit-function-definitions",
+        data: { name: "missing-source", source: 42 },
+      },
+      {
+        type: "custom",
+        customType: "pit-function-definitions",
+        data: { name: "stale", source: "() => 1n" },
+      },
+      { type: "custom", customType: "pit-function-definitions", data: { name: "active", source } },
+      {
+        type: "custom",
+        customType: "pit-function-definitions",
+        data: { name: "active", deleted: true },
+      },
+      {
+        type: "custom",
+        customType: "pit-function-definitions",
+        data: { name: "remaining", source },
+      },
     ]);
     expect([...functions.keys()]).toEqual(["remaining"]);
   });
