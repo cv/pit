@@ -3,7 +3,7 @@
  *
  */
 async function findGitHubRunForCommit(
-  { gh },
+  { gh: { runList } },
   input: { repo: string; sha: string; limit?: number },
 ) {
   const sha = input.sha.trim().toLowerCase();
@@ -11,7 +11,7 @@ async function findGitHubRunForCommit(
     throw new Error("sha must be a 7-40 character hexadecimal commit prefix");
   }
   const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
-  const result = await gh.runList({
+  const result = await runList({
     repo: input.repo,
     limit,
     maxLines: 100,

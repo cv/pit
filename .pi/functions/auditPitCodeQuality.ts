@@ -3,12 +3,12 @@
  *
  */
 async function auditPitCodeQuality(
-  { context, shell },
+  { context: { get }, shell: { execFile } },
   input: { limit?: number; kinds?: string[] } = {},
 ) {
-  const runtime = await context.get();
+  const runtime = await get();
   const limit = Math.max(1, Math.min(input.limit ?? 30, 100));
-  const result = await shell.execFile("node", ["scripts/audit-code-size.mjs", "--json"], {
+  const result = await execFile("node", ["scripts/audit-code-size.mjs", "--json"], {
     cwd: runtime.cwd,
     timeoutMs: 30000,
     maxLines: 1000,

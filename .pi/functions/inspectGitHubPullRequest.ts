@@ -2,7 +2,10 @@
  * Returns a bounded review summary for a GitHub pull request.
  *
  */
-async function inspectGitHubPullRequest({ gh }, input: { number: number; repo?: string }) {
+async function inspectGitHubPullRequest(
+  { gh: { api, prView } },
+  input: { number: number; repo?: string },
+) {
   interface ReviewActor {
     login?: string;
   }
@@ -33,8 +36,8 @@ async function inspectGitHubPullRequest({ gh }, input: { number: number; repo?: 
   }
   const endpoint = `/repos/${repo}/pulls/${input.number}`;
   const [view, metadata, commits, files] = await Promise.all([
-    gh.prView(input.number, { repo, maxLines: 240, maxBytes: 32000, raise: true }),
-    gh.api(
+    prView(input.number, { repo, maxLines: 240, maxBytes: 32000, raise: true }),
+    api(
       endpoint,
       [
         "--jq",
@@ -42,12 +45,12 @@ async function inspectGitHubPullRequest({ gh }, input: { number: number; repo?: 
       ],
       { maxLines: 20, maxBytes: 5000, raise: true },
     ),
-    gh.api(
+    api(
       `${endpoint}/commits`,
       ["--jq", "[.[] | {sha: .sha[0:7], message: .commit.message, author: .commit.author.name}]"],
       { maxLines: 160, maxBytes: 20000, raise: true },
     ),
-    gh.api(
+    api(
       `${endpoint}/files`,
       ["--jq", "[.[] | {filename, status, additions, deletions, changes}]"],
       { maxLines: 240, maxBytes: 30000, raise: true },

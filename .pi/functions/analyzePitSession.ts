@@ -2,10 +2,10 @@
  * Audits a Pi session for recurring tool-call failures and workflow smells.
  */
 async function analyzePitSession(
-  { context, shell },
+  { context: { get }, shell: { execFile } },
   input: { file?: string; examples?: number } = {},
 ) {
-  const runtime = await context.get();
+  const runtime = await get();
   const file = input.file ?? runtime.sessionFile;
   if (!file) {
     throw new Error("No Pi session file is available");
@@ -94,7 +94,7 @@ console.log(JSON.stringify({
   recommendations,
 }, null, 2));
 `;
-  const result = await shell.execFile("node", ["-e", script, file, String(examples)], {
+  const result = await execFile("node", ["-e", script, file, String(examples)], {
     timeoutMs: 30000,
     maxBytes: 50000,
     maxLines: 1000,

@@ -3,7 +3,7 @@
  *
  * @param input.files - Test files under test/ with names that end in .test.ts.
  */
-async function runPitTargetedTests({ shell }, input: { files: string[] }) {
+async function runPitTargetedTests({ shell: { execFile } }, input: { files: string[] }) {
   const files = [...new Set(input.files)];
   if (files.length === 0 || files.length > 20) {
     throw new Error("Provide between 1 and 20 targeted test files");
@@ -19,7 +19,7 @@ async function runPitTargetedTests({ shell }, input: { files: string[] }) {
   if (invalid.length > 0) {
     throw new Error(`Targeted tests must be safe test/*.test.ts paths: ${invalid.join(", ")}`);
   }
-  const result = await shell.execFile("npx", ["vitest", "run", ...files], {
+  const result = await execFile("npx", ["vitest", "run", ...files], {
     raise: false,
     timeoutMs: 150000,
     maxBytes: 30000,

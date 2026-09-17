@@ -1,11 +1,11 @@
 /**
  * Reports bounded Git delivery readiness without rerunning validation.
  */
-async function preparePitDelivery({ git }) {
+async function preparePitDelivery({ git: { diff: gitDiff, status: gitStatus } }) {
   const [status, diffCheck, stagedDiffCheck] = await Promise.all([
-    git.status(["--short", "--branch"]),
-    git.diff(["--check"]),
-    git.diff(["--cached", "--check"]),
+    gitStatus(["--short", "--branch"]),
+    gitDiff(["--check"]),
+    gitDiff(["--cached", "--check"]),
   ]);
   const unstaged = (diffCheck.stdout || diffCheck.stderr).trim();
   const staged = (stagedDiffCheck.stdout || stagedDiffCheck.stderr).trim();

@@ -3,17 +3,17 @@
  *
  */
 async function managePullRequestWorktree(
-  { context, shell, workspace },
+  { context: { get }, shell: { execFile }, workspace: { stat } },
   input:
     | { action: "create"; number: number; remote?: string; path?: string }
     | { action: "remove"; path: string },
 ) {
-  const runtime = await context.get();
+  const runtime = await get();
   if (input.action === "remove") {
     if (!input.path.startsWith("/tmp/pit-pr-review-")) {
       throw new Error("refusing to remove a worktree outside /tmp/pit-pr-review-");
     }
-    const removed = await shell.execFile("git", ["worktree", "remove", "--force", input.path], {
+    const removed = await execFile("git", ["worktree", "remove", "--force", input.path], {
       cwd: runtime.cwd,
       timeoutMs: 120000,
       maxLines: 40,
@@ -35,28 +35,30 @@ async function managePullRequestWorktree(
     throw new Error("review worktrees must use /tmp/pit-pr-review-");
   }
   const ref = `refs/remotes/${remote}/pr-${input.number}`;
-  await shell.execFile("git", ["fetch", remote, `+pull/${input.number}/head:${ref}`], {
+  await execFile("git", ["fetch", remote, `+pull/${input.number}/head:${ref}`], {
     cwd: runtime.cwd,
     timeoutMs: 120000,
     maxLines: 60,
     maxBytes: 8000,
     raise: true,
   });
-  await shell.execFile(
-    "git",
-    ["worktree", "add", "--detach", path, `${remote}/pr-${input.number}`],
-    { cwd: runtime.cwd, timeoutMs: 120000, maxLines: 60, maxBytes: 8000, raise: true },
-  );
-  const modules = await workspace.stat(`${runtime.cwd}/node_modules`).catch(() => undefined);
+  await execFile("git", ["worktree", "add", "--detach", path, `${remote}/pr-${input.number}`], {
+    cwd: runtime.cwd,
+    timeoutMs: 120000,
+    maxLines: 60,
+    maxBytes: 8000,
+    raise: true,
+  });
+  const modules = await stat(`${runtime.cwd}/node_modules`).catch(() => undefined);
   if (modules?.directory) {
-    await shell.execFile("ln", ["-s", `${runtime.cwd}/node_modules`, `${path}/node_modules`], {
+    await execFile("ln", ["-s", `${runtime.cwd}/node_modules`, `${path}/node_modules`], {
       timeoutMs: 30000,
       maxLines: 20,
       maxBytes: 3000,
       raise: true,
     });
   }
-  const head = await shell.execFile("git", ["log", "-1", "--oneline", "--decorate"], {
+  const head = await execFile("git", ["log", "-1", "--oneline", "--decorate"], {
     cwd: path,
     maxLines: 20,
     maxBytes: 3000,

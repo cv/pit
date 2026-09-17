@@ -5,15 +5,15 @@
  * @param input.examples - Repeated failure labels retained per session. The default is 5.
  */
 async function analyzePitSessions(
-  { context, shell },
+  { context: { get }, shell: { execFile }, analyzePitSession },
   input: { limit?: number; examples?: number } = {},
 ) {
-  const runtime = await context.get();
+  const runtime = await get();
   if (!runtime.sessionFile) {
     throw new Error("No current session file is available");
   }
   const directory = runtime.sessionFile.slice(0, runtime.sessionFile.lastIndexOf("/"));
-  const listed = await shell.execFile(
+  const listed = await execFile(
     "find",
     [directory, "-maxdepth", "1", "-type", "f", "-name", "*.jsonl", "-print"],
     { raise: true, maxBytes: 50000, maxLines: 500 },

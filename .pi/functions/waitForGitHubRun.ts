@@ -7,7 +7,7 @@
  * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
  */
 async function waitForGitHubRun(
-  { gh },
+  { gh: { runView } },
   input: {
     id: number;
     repo: string;
@@ -28,7 +28,7 @@ async function waitForGitHubRun(
     await new Promise<void>((resolve) => setTimeout(resolve, initialDelayMs));
   }
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const result = await gh.runView(input.id, { repo: input.repo, raise: true });
+    const result = await runView(input.id, { repo: input.repo, raise: true });
     const run = JSON.parse(result.stdout);
     if (run.status === "completed") {
       const summary = {
