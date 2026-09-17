@@ -513,7 +513,7 @@ Do not report suspected vulnerabilities in public issues. Follow [SECURITY.md](S
 
 ## Development
 
-See [`docs/architecture.md`](docs/architecture.md) for source boundaries, dependency rules, generated artifacts, and test organization.
+See [`docs/architecture.md`](docs/architecture.md) for the runtime request flow, trust boundaries, saved-function model, capability composition, source boundaries, and implementation invariants.
 
 Use the local source:
 
