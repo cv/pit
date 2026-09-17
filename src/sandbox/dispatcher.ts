@@ -21,6 +21,7 @@ interface CapabilityDispatcherOptions {
   signal: AbortSignal;
   maximumCalls: number;
   maximumConcurrentCalls: number;
+  allowedCalls?: ReadonlySet<string>;
   send(message: WireMessage): boolean;
   parseFunctionContext(value: unknown): FunctionExecutionContext | undefined;
   onTrace?(trace: CapabilityTrace): void;
@@ -53,6 +54,21 @@ export class CapabilityDispatcher {
     this.#report(trace);
     const finishTrace = (status: "succeeded" | "failed" | "rejected") =>
       this.#report(finishCapabilityTrace(trace, status));
+
+    const call = `${capability}.${method}`;
+    if (
+      capability !== "__pit" &&
+      this.options.allowedCalls &&
+      !this.options.allowedCalls.has(call)
+    ) {
+      this.options.send({
+        type: "response",
+        id,
+        error: `Function grant does not allow ${call}`,
+      });
+      finishTrace("rejected");
+      return;
+    }
 
     if (this.#callCount > this.options.maximumCalls) {
       this.options.send({

@@ -6,7 +6,7 @@ import type { CapabilityTrace, FunctionExecutionContext } from "../execution/cap
 import type { FunctionScope } from "../functions/core.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
 import { SandboxLifecycle } from "./lifecycle.js";
-import { compileSandboxSource, compileUnifiedSandboxSource } from "./program.js";
+import { compileSandboxSource, prepareUnifiedSandboxProgram } from "./program.js";
 import {
   isCapabilityCallMessage,
   type SandboxWireError,
@@ -114,8 +114,7 @@ async function prepareSandboxRun(source: string, options: SandboxOptions) {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
     throw new Error("timeoutMs must be positive");
   }
-  const compile = options.unifiedFunctions ? compileUnifiedSandboxSource : compileSandboxSource;
-  const compiled = await compile(source, {
+  const programOptions = {
     ...(options.savedFunctions ? { savedFunctions: options.savedFunctions } : {}),
     ...(options.savedFunctionScopes ? { savedFunctionScopes: options.savedFunctionScopes } : {}),
     ...(options.globalFunctions ? { globalFunctions: options.globalFunctions } : {}),
@@ -123,7 +122,12 @@ async function prepareSandboxRun(source: string, options: SandboxOptions) {
     ...(options.projectFunctions ? { projectFunctions: options.projectFunctions } : {}),
     ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
     ...(options.input === undefined ? {} : { input: options.input }),
-  });
+  };
+  const prepared = options.unifiedFunctions
+    ? await prepareUnifiedSandboxProgram(source, programOptions)
+    : { compiled: await compileSandboxSource(source, programOptions), effects: undefined };
+  const { compiled } = prepared;
+  const allowedCalls = prepared.effects ? new Set(prepared.effects) : undefined;
   const token = randomBytes(24).toString("base64url");
   const child = spawn(
     process.execPath,
@@ -139,7 +143,7 @@ async function prepareSandboxRun(source: string, options: SandboxOptions) {
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
-  return { timeoutMs, compiled, token, child };
+  return { timeoutMs, compiled, token, child, allowedCalls };
 }
 
 /**
@@ -152,7 +156,10 @@ export async function runInSandbox(
   handler: CapabilityHandler,
   options: SandboxOptions = {},
 ): Promise<unknown> {
-  const { timeoutMs, compiled, token, child } = await prepareSandboxRun(source, options);
+  const { timeoutMs, compiled, token, child, allowedCalls } = await prepareSandboxRun(
+    source,
+    options,
+  );
 
   return await new Promise<unknown>((resolve, reject) => {
     let stderr = "";
@@ -182,6 +189,7 @@ export async function runInSandbox(
       signal: lifecycle.capabilitySignal,
       maximumCalls: MAX_CAPABILITY_CALLS,
       maximumConcurrentCalls: MAX_CONCURRENT_CAPABILITY_CALLS,
+      ...(allowedCalls ? { allowedCalls } : {}),
       send,
       parseFunctionContext: parseFunctionExecutionContext,
       ...(options.onCapabilityTrace ? { onTrace: options.onCapabilityTrace } : {}),

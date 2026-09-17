@@ -41,4 +41,28 @@ describe("CapabilityDispatcher", () => {
     dispatcher.handle({ type: "call", id: 1, capability: "context", method: "get", args: [] });
     expect(sent).toEqual([{ type: "response", id: 1, error: "RPC call limit exceeded (0)" }]);
   });
+
+  it("rejects calls outside the resolved function grant", () => {
+    const sent: unknown[] = [];
+    const traces: CapabilityTrace[] = [];
+    const dispatcher = new CapabilityDispatcher({
+      handler: async () => null,
+      signal: new AbortController().signal,
+      maximumCalls: 10,
+      maximumConcurrentCalls: 2,
+      allowedCalls: new Set(["workspace.read"]),
+      send: (message) => {
+        sent.push(message);
+        return true;
+      },
+      parseFunctionContext: () => undefined,
+      onTrace: (trace) => traces.push(trace),
+    });
+
+    dispatcher.handle({ type: "call", id: 1, capability: "shell", method: "exec", args: [] });
+    expect(sent).toEqual([
+      { type: "response", id: 1, error: "Function grant does not allow shell.exec" },
+    ]);
+    expect(traces.map(({ status }) => status)).toEqual(["running", "rejected"]);
+  });
 });
