@@ -23,3 +23,7 @@ docker run --rm pit-wasmtime-smoke:issue-82
 ```
 
 Concurrent `Promise.all` host calls are now the main blocker: the current synchronous QuickJS `pitCall` wrapper suspends the Wasm instance for each host request, so calls cannot overlap. A production guest needs a queued non-blocking API or Component Model async task support.
+
+## Queued rquickjs guest
+
+The replacement guest is defined by [queued-guest.wit](queued-guest.wit). It has no imports. JavaScript calls create pending Promises and enqueue requests; the Wasmtime host drains requests, executes them concurrently, delivers completions, and polls QuickJS until the program completes.
