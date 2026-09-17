@@ -297,28 +297,24 @@ describe("user function storage", () => {
   it("removes a dependent when its required user definition exceeds capacity", async () => {
     const directory = userFunctionDirectory();
     await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, "aConsumer.ts"),
-      "/** Consumer. */ async function aConsumer({ zBase }) { return zBase(); }",
-    );
+    const sizedSource = (name: string, dependency?: string): string => {
+      const prefix = `/** Quota fixture. */ async function ${name}({ ${dependency ?? ""} }) { /*`;
+      const suffix = `*/ return ${dependency ? `${dependency}()` : "1"}; }`;
+      return prefix + "x".repeat(99_000 - Buffer.byteLength(prefix + suffix)) + suffix;
+    };
+    await writeFile(join(directory, "aConsumer.ts"), sizedSource("aConsumer", "zBase"));
     await Promise.all(
-      Array.from({ length: 63 }, (_, index) =>
-        writeFile(
-          join(directory, `b${index}.ts`),
-          `/** Filler. */ async function b${index}({}) { return 1; }`,
-        ),
+      Array.from({ length: 9 }, (_, index) =>
+        writeFile(join(directory, `b${index}.ts`), sizedSource(`b${index}`)),
       ),
     );
-    await writeFile(
-      join(directory, "zBase.ts"),
-      "/** Base. */ async function zBase({}) { return 1; }",
-    );
+    await writeFile(join(directory, "zBase.ts"), sizedSource("zBase"));
     const registry = new Map<string, string>();
     const invalid = new Map<string, string>();
     await loadUserFunctions(registry, new Map(), invalid);
     expect(registry.has("aConsumer")).toBe(false);
     expect(invalid.has("aConsumer")).toBe(true);
-    expect(invalid.has("zBase")).toBe(true);
+    expect(invalid.get("zBase")).toContain("total source");
   });
 
   it("keeps global definitions immutable and permits removal of invalid definitions", () => {
