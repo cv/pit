@@ -25,7 +25,6 @@ describe("sandbox caches", () => {
       compilationHits: 1,
       dependencyGraphEntries: 1,
       dependencyGraphHits: 3,
-      dependencyReferenceEntries: 0,
       dependencyReferenceHits: 0,
     });
     clearSandboxCaches();
@@ -36,7 +35,6 @@ describe("sandbox caches", () => {
       compilationHits: 0,
       dependencyGraphEntries: 0,
       dependencyGraphHits: 0,
-      dependencyReferenceEntries: 0,
       dependencyReferenceHits: 0,
     });
   });
@@ -44,20 +42,28 @@ describe("sandbox caches", () => {
   it("reuses dependency graphs and invalidates changed registries", () => {
     clearSandboxCaches();
     const saved = new Map([
-      ["base", "async function base() { return 1; }"],
-      ["composed", "async function composed() { return base() + 1; }"],
+      ["base", "async function base({}) { return 1; }"],
+      ["composed", "async function composed({ base }) { return base() + 1; }"],
     ]);
     const initial = getSavedFunctionDependencyGraph(saved);
-    expect(initial.resolve("composed()").map(({ name }) => name)).toEqual(["base", "composed"]);
+    expect(initial.resolve("async ({ composed }) => composed()").map(({ name }) => name)).toEqual([
+      "base",
+      "composed",
+    ]);
 
     const reloaded = getSavedFunctionDependencyGraph(new Map(saved));
     expect(reloaded).toBe(initial);
-    expect(reloaded.resolve("composed()").map(({ name }) => name)).toEqual(["base", "composed"]);
+    expect(reloaded.resolve("async ({ composed }) => composed()").map(({ name }) => name)).toEqual([
+      "base",
+      "composed",
+    ]);
 
-    saved.set("composed", "async function composed() { return 2; }");
+    saved.set("composed", "async function composed({}) { return 2; }");
     const replaced = getSavedFunctionDependencyGraph(saved);
     expect(replaced).not.toBe(initial);
-    expect(replaced.resolve("composed()").map(({ name }) => name)).toEqual(["composed"]);
+    expect(replaced.resolve("async ({ composed }) => composed()").map(({ name }) => name)).toEqual([
+      "composed",
+    ]);
 
     saved.delete("base");
     expect(getSavedFunctionDependencyGraph(saved)).not.toBe(replaced);

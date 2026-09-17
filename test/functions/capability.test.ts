@@ -35,42 +35,44 @@ describe("functions capability", () => {
     await Promise.all([
       writeProjectFunction(
         "betaProject",
-        "/** Beta. */ async function betaProject() { return true; }",
+        "/** Beta. */ async function betaProject({}) { return true; }",
       ),
       writeProjectFunction(
         "alphaProject",
-        "/** Alpha. */ async function alphaProject() { return true; }",
+        "/** Alpha. */ async function alphaProject({}) { return true; }",
       ),
     ]);
     await sessionStart({}, context());
 
     expect(
-      await value(`async ({ functions }) => {
-        const listed = await functions.list();
-        const found = await functions.get("alphaProject");
+      await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => {
+        const listed = await functionList();
+        const found = await functionGet("alphaProject");
         return { names: listed.map((item) => item.name), source: found.source };
       }`),
     ).toEqual({
       names: ["alphaProject", "betaProject"],
-      source: "/** Alpha. */ async function alphaProject() { return true; }",
+      source: "/** Alpha. */ async function alphaProject({}) { return true; }",
     });
   });
 
   it("manages effective and session functions", async () => {
     await writeProjectFunction(
       "capabilityProject",
-      "/** Capability project. */ async function capabilityProject() { return 'project'; }",
+      "/** Capability project. */ async function capabilityProject({}) { return 'project'; }",
     );
     await sessionStart({}, context());
-    await run("async function capabilitySession() { return 'session'; }");
-    await run("async function removableSession() { return 1; }");
-    await run("async function removableDependent() { return (await removableSession()) + 1; }");
+    await run("async function capabilitySession({}) { return 'session'; }");
+    await run("async function removableSession({}) { return 1; }");
+    await run(
+      "async function removableDependent({ removableSession }) { return (await removableSession()) + 1; }",
+    );
 
     expect(
-      await value(`async ({ functions }) => {
-          const listed = await functions.listAll();
-          const session = await functions.getSaved("capabilitySession");
-          const project = await functions.getSaved("capabilityProject");
+      await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => {
+          const listed = await listAll();
+          const session = await getSaved("capabilitySession");
+          const project = await getSaved("capabilityProject");
           return { listed, session, project };
         }`),
     ).toMatchObject({
@@ -109,7 +111,7 @@ describe("functions capability", () => {
 
     await expect(
       value(
-        `async ({ functions }) => functions.promote("capabilitySession", "Promoted through the capability.")`,
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => promote("capabilitySession", "Promoted through the capability.")`,
       ),
     ).resolves.toEqual({ name: "capabilitySession", promoted: true, scope: "project" });
     await expect(
@@ -117,9 +119,9 @@ describe("functions capability", () => {
     ).resolves.toContain("Promoted through the capability.");
 
     expect(
-      await value(`async ({ functions }) => ({
-        session: await functions.planRemoval("removableSession"),
-        project: await functions.planRemoval("capabilityProject", "project"),
+      await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => ({
+        session: await planRemoval("removableSession"),
+        project: await planRemoval("capabilityProject", "project"),
       })`),
     ).toEqual({
       session: {
@@ -142,21 +144,23 @@ describe("functions capability", () => {
       },
     });
     await expect(
-      run(`async ({ functions }) => functions.removeSession("removableSession")`),
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => removeSession("removableSession")`,
+      ),
     ).rejects.toThrow("without explicit cascade");
-    expect((await value("async ({ context }) => context.get()")).sessionFunctions).toEqual([
+    expect((await value("async ({ context: { get } }) => get()")).sessionFunctions).toEqual([
       "removableDependent",
       "removableSession",
     ]);
     await expect(
       value(
-        `async ({ functions }) => functions.removeSession("removableSession", { cascade: true })`,
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => removeSession("removableSession", { cascade: true })`,
       ),
     ).resolves.toEqual({
       name: "removableSession",
       removed: ["removableDependent", "removableSession"],
     });
-    expect(await value("async ({ context }) => context.get()")).toMatchObject({
+    expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
       projectFunctions: ["capabilityProject", "capabilitySession"],
       sessionFunctions: [],
     });
@@ -165,33 +169,38 @@ describe("functions capability", () => {
   it("reports session overrides and blocked project removal plans", async () => {
     await writeProjectFunction(
       "sharedPlan",
-      "/** Shared plan helper. */ async function sharedPlan() { return 'project'; }",
+      "/** Shared plan helper. */ async function sharedPlan({}) { return 'project'; }",
     );
     await sessionStart({}, context());
-    await run("async function sharedPlan() { return 'session'; }");
-    const override = await value(`async ({ functions }) => ({
-      metadata: (await functions.listAll()).find(({ name }) => name === "sharedPlan"),
-      plan: await functions.planRemoval("sharedPlan"),
+    await run("async function sharedPlan({}) { return 'session'; }");
+    const override =
+      await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => ({
+      metadata: (await listAll()).find(({ name }) => name === "sharedPlan"),
+      plan: await planRemoval("sharedPlan"),
     })`);
     expect(override).toMatchObject({
       metadata: { scope: "session", overridesProject: true },
       plan: { scope: "session", blocked: false, removalClosure: ["sharedPlan"] },
     });
-    await value(`async ({ functions }) => functions.removeSession("sharedPlan")`);
+    await value(
+      `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => removeSession("sharedPlan")`,
+    );
 
     await Promise.all([
       writeProjectFunction(
         "projectPlanBase",
-        "/** Plan base. */ async function projectPlanBase() { return 1; }",
+        "/** Plan base. */ async function projectPlanBase({}) { return 1; }",
       ),
       writeProjectFunction(
         "projectPlanDependent",
-        "/** Plan dependent. */ async function projectPlanDependent() { return projectPlanBase(); }",
+        "/** Plan dependent. */ async function projectPlanDependent({ projectPlanBase }) { return projectPlanBase(); }",
       ),
     ]);
     await sessionStart({}, context());
     expect(
-      await value(`async ({ functions }) => functions.planRemoval("projectPlanBase", "project")`),
+      await value(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => planRemoval("projectPlanBase", "project")`,
+      ),
     ).toEqual({
       name: "projectPlanBase",
       scope: "project",
@@ -202,40 +211,52 @@ describe("functions capability", () => {
       blocked: true,
     });
     await expect(
-      run(`async ({ functions }) => functions.remove("projectPlanBase")`),
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => removeProject("projectPlanBase")`,
+      ),
     ).rejects.toThrow("dependent saved functions remain");
     await expect(
-      value(`async ({ functions }) => functions.get("projectPlanBase")`),
+      value(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => functionGet("projectPlanBase")`,
+      ),
     ).resolves.toMatchObject({ name: "projectPlanBase" });
   }, 15_000);
 
   it("rejects unavailable and unknown operations", async () => {
-    await expect(run(`async ({ functions }) => functions.get("missing")`)).rejects.toThrow(
-      "is unavailable",
-    );
     await expect(
-      run(`async ({ functions }) => functions.promote("missingDefault", "Summary", {})`),
-    ).rejects.toThrow("was not found");
-    await expect(run(`async ({ functions }) => functions.getSaved("missing")`)).rejects.toThrow(
-      "is unavailable",
-    );
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => functionGet("missing")`,
+      ),
+    ).rejects.toThrow("is unavailable");
     await expect(
-      run(`async ({ functions }) => functions.removeSession("missing")`),
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => promote("missingDefault", "Summary", {})`,
+      ),
     ).rejects.toThrow("was not found");
     await expect(
-      run(`async ({ functions }) => (functions as any).planRemoval("missing", "invalid")`),
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => getSaved("missing")`,
+      ),
+    ).rejects.toThrow("is unavailable");
+    await expect(
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => removeSession("missing")`,
+      ),
+    ).rejects.toThrow("was not found");
+    await expect(
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (planRemoval as any)("missing", "invalid")`,
+      ),
     ).rejects.toThrow('function scope must be "global", "project", or "session"');
     await expect(
       run(
-        `async ({ functions }) => (functions as any).removeSession("missing", { cascade: "yes" })`,
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (removeSession as any)("missing", { cascade: "yes" })`,
       ),
     ).rejects.toThrow("options.cascade must be a boolean");
     await expect(
-      run(`async ({ functions }) => (functions as any).removeSession("missing", { extra: true })`),
+      run(
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (removeSession as any)("missing", { extra: true })`,
+      ),
     ).rejects.toThrow("unknown fields: extra");
-
-    await expect(
-      run(`async ({ functions }) => (functions as any).unknown("value")`),
-    ).rejects.toThrow("Unknown capability or method: functions.unknown");
   });
 });

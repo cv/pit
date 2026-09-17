@@ -75,10 +75,10 @@ it("prefers attributed function scope and resolves registry fallbacks", () => {
 
 it("orders multiple transitive project dependents", () => {
   const project = new Map([
-    ["base", "async function base() { return 1; }"],
-    ["direct", "async function direct() { return base(); }"],
-    ["transitiveB", "async function transitiveB() { return direct(); }"],
-    ["transitiveA", "async function transitiveA() { return direct(); }"],
+    ["base", "async function base({}) { return 1; }"],
+    ["direct", "async function direct({ base }) { return base(); }"],
+    ["transitiveB", "async function transitiveB({ direct }) { return direct(); }"],
+    ["transitiveA", "async function transitiveA({ direct }) { return direct(); }"],
   ]);
   expect(savedFunctionDependents(project, new Map(), project, "base")).toEqual({
     direct: ["direct"],
@@ -87,19 +87,19 @@ it("orders multiple transitive project dependents", () => {
 });
 
 function sizedProjectFunction(name: string, bytes: number): string {
-  const prefix = `/** ${name} helper. */ async function ${name}() { /*`;
+  const prefix = `/** ${name} helper. */ async function ${name}({}) { /*`;
   const suffix = "*/ return true; }";
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
 
 function sizedProjectDependent(name: string, dependency: string, bytes: number): string {
-  const prefix = `/** ${name} helper. */ async function ${name}() { /*`;
+  const prefix = `/** ${name} helper. */ async function ${name}({ ${dependency} }) { /*`;
   const suffix = `*/ return ${dependency}(); }`;
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
 
 function sizedInvalidProjectFunction(name: string, bytes: number): string {
-  const prefix = `/** ${name} invalid helper. */ async function ${name}() { /*`;
+  const prefix = `/** ${name} invalid helper. */ async function ${name}({}) { /*`;
   const suffix = "*/ return 1n; }";
   return prefix + "x".repeat(bytes - Buffer.byteLength(prefix + suffix)) + suffix;
 }
@@ -147,7 +147,7 @@ describe("project function storage", () => {
 
   it("saves, replaces, and removes files", async () => {
     const functions = registry();
-    const source = "/** Summary. */ async function saved() { return true; }";
+    const source = "/** Summary. */ async function saved({}) { return true; }";
     expect(await saveProjectFunction(cwd, "saved", source, functions)).toBe(false);
     expect(await readFile(join(cwd, ".pi/functions/saved.ts"), "utf8")).toBe(source + "\n");
     expect(await saveProjectFunction(cwd, "saved", source + "\n", functions)).toBe(true);
@@ -163,13 +163,13 @@ describe("project function storage", () => {
       mkdir(currentDirectory, { recursive: true }),
     ]);
     const legacySource =
-      "/** Legacy helper. @pit project */ async function shared() { return 'legacy'; }";
-    const currentSource = "/** Current helper. */ async function shared() { return 'current'; }";
+      "/** Legacy helper. @pit project */ async function shared({}) { return 'legacy'; }";
+    const currentSource = "/** Current helper. */ async function shared({}) { return 'current'; }";
     await writeFile(join(legacyDirectory, "shared.ts"), legacySource);
 
     await writeFile(
       join(legacyDirectory, "malformedLegacy.ts"),
-      "async function malformedLegacy() { return false; }",
+      "async function malformedLegacy({}) { return false; }",
     );
 
     const functions = registry();
@@ -186,7 +186,7 @@ describe("project function storage", () => {
 
     await writeFile(
       join(currentDirectory, "shared.ts"),
-      "async function shared() { return 'invalid'; }",
+      "async function shared({}) { return 'invalid'; }",
     );
     const errors = await loadProjectFunctions(ctx(), functions, docs);
     expect(functions.has("shared")).toBe(false);
@@ -238,24 +238,24 @@ describe("project function storage", () => {
       writeFile(join(directory, "ignored.txt"), "ignored"),
       writeFile(
         join(directory, "alpha.ts"),
-        "/** Alpha helper. */ async function alpha() { return true; }",
+        "/** Alpha helper. */ async function alpha({}) { return true; }",
       ),
       writeFile(
         join(directory, "beta.ts"),
-        "/** Beta helper. */ async function beta() { return alpha(); }",
+        "/** Beta helper. */ async function beta({ alpha }) { return alpha(); }",
       ),
       writeFile(
         join(directory, "gamma.ts"),
-        "/** Gamma helper. */ async function gamma() { return (await alpha()).missing; }",
+        "/** Gamma helper. */ async function gamma({ alpha }) { return (await alpha()).missing; }",
       ),
-      writeFile(join(directory, "missing.ts"), "async function missing() { return null; }"),
+      writeFile(join(directory, "missing.ts"), "async function missing({}) { return null; }"),
       writeFile(
         join(directory, "wrong.ts"),
-        "/** Wrong file. */ async function other() { return null; }",
+        "/** Wrong file. */ async function other({}) { return null; }",
       ),
       writeFile(
         join(directory, "invalid.ts"),
-        "/** Invalid. */ async function invalid() { return 1n; }",
+        "/** Invalid. */ async function invalid({}) { return 1n; }",
       ),
       writeFile(join(directory, "oversized.ts"), "x".repeat(100_001)),
     ]);
@@ -311,7 +311,7 @@ describe("project function storage", () => {
         return [name, sizedProjectFunction(name, index === 10 ? 20_000 : 99_000)] as const;
       }),
     );
-    const overrideSource = `async function quotaProject00() { return "session override"; }`;
+    const overrideSource = `async function quotaProject00({}) { return "session override"; }`;
     const session = new Map([["quotaProject00", overrideSource]]);
     const active = registry();
     const activeDocs = metadata();
@@ -409,7 +409,7 @@ describe("project function storage", () => {
     const session = new Map([
       [
         "sessionQuotaDependent",
-        "async function sessionQuotaDependent() { return zSessionDependency(); }",
+        "async function sessionQuotaDependent({ zSessionDependency }) { return zSessionDependency(); }",
       ],
     ]);
     expect(
@@ -439,7 +439,7 @@ describe("project function storage", () => {
     const candidates = new Map(
       Array.from({ length: 65 }, (_, index) => {
         const name = `countBoundary${String(index).padStart(2, "0")}`;
-        return [name, `async function ${name}() { return true; }`] as const;
+        return [name, `async function ${name}({}) { return true; }`] as const;
       }),
     );
     const active = registry();
@@ -457,9 +457,9 @@ describe("project function storage", () => {
 
   it("admits cyclic project dependencies as one closure", () => {
     const candidates = new Map([
-      ["cycleA", "async function cycleA() { return cycleB() + cycleLeaf(); }"],
-      ["cycleB", "async function cycleB() { return cycleA(); }"],
-      ["cycleLeaf", "async function cycleLeaf() { return 1; }"],
+      ["cycleA", "async function cycleA({ cycleB, cycleLeaf }) { return cycleB() + cycleLeaf(); }"],
+      ["cycleB", "async function cycleB({ cycleA }) { return cycleA(); }"],
+      ["cycleLeaf", "async function cycleLeaf({}) { return 1; }"],
     ]);
     const active = registry();
 
@@ -471,13 +471,13 @@ describe("project function storage", () => {
 
   it("uses a session override while sorting multiple required project roots", () => {
     const candidates = new Map([
-      ["zShared", "async function zShared() { return 1; }"],
-      ["aWrapper", "async function aWrapper() { return zShared(); }"],
-      ["betaRoot", "async function betaRoot() { return 2; }"],
+      ["zShared", "async function zShared({}) { return 1; }"],
+      ["aWrapper", "async function aWrapper({ zShared }) { return zShared(); }"],
+      ["betaRoot", "async function betaRoot({}) { return 2; }"],
     ]);
-    const override = "async function zShared() { return 10; }";
+    const override = "async function zShared({}) { return 10; }";
     const consumer =
-      "async function sessionConsumer() { return (await aWrapper()) + (await betaRoot()) + (await zShared()); }";
+      "async function sessionConsumer({ aWrapper, betaRoot, zShared }) { return (await aWrapper()) + (await betaRoot()) + (await zShared()); }";
     const session = new Map([
       ["zShared", override],
       ["sessionConsumer", consumer],
@@ -508,8 +508,11 @@ describe("project function storage", () => {
       }
     }
     const candidates = new ExpiringDependencyMap([
-      ["dependent", "async function dependent() { return missingDependency(); }"],
-      ["missingDependency", "async function missingDependency() { return true; }"],
+      [
+        "dependent",
+        "async function dependent({ missingDependency }) { return missingDependency(); }",
+      ],
+      ["missingDependency", "async function missingDependency({}) { return true; }"],
     ]);
     const active = registry();
 
@@ -533,7 +536,7 @@ describe("project function storage", () => {
 
   it("surfaces storage errors and cleans failed temporary writes", async () => {
     await mkdir(join(cwd, ".pi/functions/blocked.ts"), { recursive: true });
-    const source = "/** Blocked. */ async function blocked() { return null; }";
+    const source = "/** Blocked. */ async function blocked({}) { return null; }";
     await expect(saveProjectFunction(cwd, "blocked", source, registry())).rejects.toThrow();
     await rm(join(cwd, ".pi"), { recursive: true });
     await mkdir(join(cwd, ".pi/pit"), { recursive: true });
@@ -546,9 +549,9 @@ describe("project function storage", () => {
 
   it("derives no-input, required-input, and optional-input signatures", () => {
     const signatures = [
-      "/** No input. */ async function noInput() {}",
-      "/** Required input. */ async function required(_capabilities, input: { value: string }) {}",
-      "/** Optional input. */ async function optional(_capabilities, input?: number) {}",
+      "/** No input. */ async function noInput({}) {}",
+      "/** Required input. */ async function required({}, input: { value: string }) {}",
+      "/** Optional input. */ async function optional({}, input?: number) {}",
     ].map((source) => getPersistentFunctionMetadata(source)?.signature);
     expect(signatures).toEqual([
       "noInput()",
@@ -564,7 +567,7 @@ describe("project function storage", () => {
  *
  * @param input.name - Name to greet.
  */
-async function projectGreeting(_capabilities, input: { name?: string } = {}) {
+async function projectGreeting({}, input: { name?: string } = {}) {
   return { greeting: "Hello, " + (input.name ?? "project") };
 }`;
     const parsed = getPersistentFunctionMetadata(source);
@@ -584,7 +587,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
 
     const differentlyShaped = projectFunctionCatalog(
       docs,
-      new Map([["projectGreeting", 'async function projectGreeting() { return "session"; }']]),
+      new Map([["projectGreeting", 'async function projectGreeting({}) { return "session"; }']]),
     );
     expect(differentlyShaped).toContain(
       "projectGreeting() — Session override of project function.",
@@ -597,7 +600,7 @@ async function projectGreeting(_capabilities, input: { name?: string } = {}) {
       new Map([
         [
           "projectGreeting",
-          "async function projectGreeting(_capabilities, input: { name?: string } = {}) { return input.name; }",
+          "async function projectGreeting({}, input: { name?: string } = {}) { return input.name; }",
         ],
       ]),
     );

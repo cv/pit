@@ -94,7 +94,7 @@ describe("function registry handler", () => {
     };
 
     const sessionFunctions = new Map([
-      ["sessionOnly", "async function sessionOnly() { return true; }"],
+      ["sessionOnly", "async function sessionOnly({}) { return true; }"],
     ]);
     registerFunctionManager(pi as any, sessionFunctions, {
       planSessionRemoval: (name) => ({
@@ -119,7 +119,7 @@ describe("function registry handler", () => {
 
     registerFunctionManager(pi as any, new Map(), {
       projectFunctions: new Map([
-        ["projectOnly", "/** Project only. */ async function projectOnly() {}"],
+        ["projectOnly", "/** Project only. */ async function projectOnly({}) {}"],
       ]),
       planSessionRemoval: (name) => ({
         directDependents: [],

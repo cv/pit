@@ -172,6 +172,7 @@ async function executeSandboxValue({
     }),
     {
       ...(request.signal ? { signal: request.signal } : {}),
+      unifiedFunctions: true,
       timeoutMs: request.params.timeoutMs ?? 30_000,
       savedFunctions: preparedFunction.registry,
       savedFunctionScopes: preparedFunction.scopes,
@@ -201,7 +202,9 @@ function buildToolResult(input: {
   const savedSignature = input.namedFunction
     ? getSavedFunctionCallSignature(input.functionState.effective.get(input.namedFunction) ?? "")
     : undefined;
-  const invocationGuidance = savedSignature ? `. Invoke later with: ${savedSignature}` : ".";
+  const invocationGuidance = savedSignature
+    ? `. Inject ${input.namedFunction} in the first parameter, then call ${savedSignature}`
+    : ".";
   const savedNotice = input.namedFunction
     ? input.saveOnly
       ? `\n[Saved ${input.projectFunction ? "project " : ""}function "${input.namedFunction}" without executing it${invocationGuidance}]`
