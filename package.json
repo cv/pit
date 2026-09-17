@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "src",
+    "native/prebuilds",
     "prompts",
     "docs",
     "README.md",
@@ -26,7 +27,8 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "quality:audit": "node scripts/audit-code-size.mjs",
-    "package:check": "node scripts/verify-package.mjs"
+    "package:check": "node scripts/verify-package.mjs",
+    "wasmtime:build": "docker build -f Dockerfile.wasmtime-smoke --target artifacts --output type=local,dest=native/prebuilds/linux-arm64 ."
   },
   "pi": {
     "extensions": [

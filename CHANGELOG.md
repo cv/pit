@@ -4,6 +4,20 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- Ship Linux ARM64 prebuilds for the in-process Wasmtime N-API executor and queued QuickJS component.
+- Propagate external cancellation into Wasmtime through race-safe execution IDs and epoch interruption.
+
+### Changed
+
+- Make Wasmtime the default TypeScript function executor.
+- Retain the permission-restricted Node child only as the deprecated `PIT_FUNCTION_EXECUTOR=node` fallback.
+
+### Security
+
+- Run each submitted program in a fresh fuel-, time-, memory-, call-, and protocol-bounded Wasmtime store with a non-inheriting WASI Preview 2 context.
+
 ## [0.15.1] - 2026-09-16
 
 ### Fixed

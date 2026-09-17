@@ -25,7 +25,6 @@ export default function pit(pi: ExtensionAPI) {
     functionState,
     commitFunctionState,
     savedFunctionService,
-    /* v8 ignore next -- opt-in native branch is exercised by the Docker Pi smoke target. */
-    ...(functionExecutor ? { functionExecutor } : {}),
+    functionExecutor,
   });
 }

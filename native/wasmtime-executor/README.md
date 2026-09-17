@@ -1,31 +1,49 @@
-# Wasmtime executor spike
+# Wasmtime executor
 
-This Linux ARM64 spike embeds Wasmtime in Pi's Node process through N-API. It is not yet a production executor.
+Pit executes submitted JavaScript in-process through a Linux ARM64 N-API addon, a fresh Wasmtime store, and a custom QuickJS component. Wasmtime is the default function executor. The permission-restricted Node child remains a deprecated diagnostic fallback selected with `PIT_FUNCTION_EXECUTOR=node`.
 
-The smoke test proves:
+Each invocation receives:
 
-- a native N-API addon can host Wasmtime in-process;
-- a fresh store can execute an untrusted module;
-- finite fuel and epoch deadlines interrupt runaway modules;
-- Wasmtime store limits bound guest linear memory, tables, and instances;
-- a custom rquickjs component dynamically executes JavaScript;
-- `pitCall()` returns pending JavaScript Promises instead of suspending the component;
-- the host drains bounded JSON requests in batches of at most 32;
-- independent host Promises execute concurrently;
-- JavaScript emitted by `prepareSandboxProgram` executes and returns a JSON-compatible result; and
-- Wasmtime trap causes survive the JavaScript boundary.
+- a fresh Wasmtime store and QuickJS runtime;
+- finite fuel and an epoch deadline;
+- bounded linear memory, tables, and instances;
+- at most 1,024 host calls in batches of at most 32;
+- bounded 8 MB JSON protocol frames; and
+- explicit execution-ID cancellation routed through the epoch timer.
 
-The rquickjs component imports WASI Preview 2 runtime interfaces required by the Javy runtime crate. The host links those imports to a fresh `WasiCtx` with no inherited filesystem, environment, network, arguments, or stdio. Removing those runtime imports remains a hardening goal.
+The component imports WASI Preview 2 runtime interfaces required by Javy. The host links them to a fresh `WasiCtx` with no inherited filesystem, environment, network, arguments, or stdio.
 
-Build and run it without installing Rust on the host:
+## Queued QuickJS protocol
+
+The guest protocol is defined in `queued-guest/wit/world.wit` and mirrored for the Wasmtime host in `wit/queued-guest.wit`. JavaScript `pitCall()` calls return pending Promises and enqueue requests. The host drains each batch, executes independent callbacks concurrently, delivers completions, and polls QuickJS until the program completes.
+
+## Build and smoke test
+
+Build the checked-in Linux ARM64 prebuilds:
 
 ```sh
-docker build -f Dockerfile.wasmtime-smoke -t pit-wasmtime-smoke:issue-82 .
-docker run --rm pit-wasmtime-smoke:issue-82
+npm run wasmtime:build
 ```
 
-## Queued rquickjs guest
+The command requires Docker on a Linux ARM64 host and writes:
 
-The guest protocol is defined by `queued-guest/wit/world.wit`. JavaScript calls create pending Promises and enqueue requests. The Wasmtime host drains requests, executes each batch concurrently, delivers completions, and polls QuickJS until the program completes.
+```text
+native/prebuilds/linux-arm64/pit_wasmtime_executor.node
+native/prebuilds/linux-arm64/pit_queued_quickjs_guest.wasm
+```
 
-Before this can replace the Node executor, the addon still needs cancellation propagation, native artifact loading, structured failure conversion, and the full `FunctionExecutor` adapter.
+Build and run the bounded smoke harness:
+
+```sh
+docker build -f Dockerfile.wasmtime-smoke --target smoke -t pit-wasmtime-smoke .
+docker run --rm pit-wasmtime-smoke
+```
+
+Build the interactive Pi target with the default backend:
+
+```sh
+docker build -f Dockerfile.wasmtime-smoke --target pi-smoke -t pit-wasmtime-pi .
+docker run --rm -it pit-wasmtime-pi
+```
+
+The smoke harness covers fuel and epoch interruption, explicit cancellation, memory limits, restricted WASI, prepared Pit programs, concurrent Promise host calls, and the TypeScript `FunctionExecutor` adapter.

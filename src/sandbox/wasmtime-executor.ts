@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import type { FunctionExecutionContext } from "../execution/capability-trace.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
-import type { FunctionExecutionOptions, FunctionExecutor } from "./executor.js";
+import {
+  parseFunctionExecutionContext,
+  type FunctionExecutionOptions,
+  type FunctionExecutor,
+} from "./executor.js";
 import { createWasmtimeGuestSource } from "./wasmtime-source.js";
 import type { WireMessage } from "./wire.js";
 import { isCapabilityCallMessage } from "./wire.js";
@@ -30,27 +33,6 @@ export interface WasmtimeFunctionExecutorOptions {
   component: Uint8Array;
 }
 
-function parseFunctionContext(value: unknown): FunctionExecutionContext | undefined {
-  if (!(value && typeof value === "object" && !Array.isArray(value))) return;
-  const context = value as Record<string, unknown>;
-  if (
-    !Number.isSafeInteger(context.invocationId) ||
-    Number(context.invocationId) < 1 ||
-    typeof context.name !== "string" ||
-    !["global", "user", "project", "session"].includes(String(context.scope)) ||
-    !Number.isSafeInteger(context.depth) ||
-    Number(context.depth) < 1 ||
-    Number(context.depth) > 32 ||
-    !(
-      context.parentInvocationId === undefined ||
-      (Number.isSafeInteger(context.parentInvocationId) && Number(context.parentInvocationId) > 0)
-    )
-  ) {
-    return;
-  }
-  return context as unknown as FunctionExecutionContext;
-}
-
 function executionSignal(options: FunctionExecutionOptions): AbortSignal {
   const timeout = AbortSignal.timeout(options.timeoutMs);
   return options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
@@ -73,7 +55,7 @@ export function createWasmtimeFunctionExecutor({
         maximumCalls: MAX_CAPABILITY_CALLS,
         maximumConcurrentCalls: MAX_CONCURRENT_CAPABILITY_CALLS,
         allowedCalls: new Set(program.effects),
-        parseFunctionContext,
+        parseFunctionContext: parseFunctionExecutionContext,
         send(message: WireMessage): boolean {
           /* v8 ignore next -- dispatcher responses always carry their request id. */
           if (typeof message.id !== "number") return false;

@@ -16,3 +16,8 @@ wasmtime-wasi = "48.0.2"
 
 [build-dependencies]
 napi-build = "2.4.3"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"

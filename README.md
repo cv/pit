@@ -39,7 +39,7 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Node 22.19 or newer. Pit v0.15.1 is tested with Pi 0.85.1; other Pi versions may work, but they are not part of this release's compatibility guarantee. Pit uses the Node permission model and Pi's structured system-prompt API to preserve discovered skills while replacing the active tools.
+Pit requires Linux ARM64 and Node 22.19 or newer. The current compatibility target is Pi 0.85.1; other Pi versions may work, but they are not part of the release guarantee. Submitted programs run in the packaged in-process Wasmtime/QuickJS executor by default. The old permission-restricted Node executor remains available temporarily with `PIT_FUNCTION_EXECUTOR=node`.
 
 Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
@@ -303,12 +303,12 @@ Pit completes these steps for each call:
 
 1. It contextually type-checks the submitted TypeScript.
 2. It compiles the TypeScript to JavaScript.
-3. It starts a fresh Node process with restricted permissions.
-4. It injects local proxies for the requested host capabilities.
-5. It sends capability calls to the trusted extension process through bounded RPC.
+3. It creates a fresh Wasmtime store and QuickJS runtime inside the extension process.
+4. It injects only the resolved function dependencies and queues requested host effects.
+5. It dispatches bounded host requests concurrently and returns their completions to QuickJS.
 6. It returns the resolved JSON-compatible value to the model.
 
-The child process cannot directly read workspace files, access the network, or start subprocesses. It must use an injected capability for these effects.
+The Wasm guest receives no inherited filesystem, environment, network, arguments, or stdio. It must use an injected function for host effects.
 
 Failed TypeScript calls still use Pi's required thrown-error path and remain `isError: true`. Pit enriches the final result through `tool_result` middleware with a bounded root error, saved-function path, function activity, and redacted capability traces. Expanded TUI failures show the function path and execution dashboard. Non-function failures keep an empty path and concise error text.
 
@@ -330,23 +330,21 @@ Display formatting changes only the TUI. It does not change the serialized tool 
 
 ## Security model
 
-Submitted TypeScript runs in a new Node process with these restrictions:
+Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store:
 
-- The process can read only the fixed sandbox runner directly.
-- The process has no direct network access.
-- The process cannot start subprocesses or workers.
-- The process cannot load native addons.
-- The process cannot use the inspector or WASI.
-- The process receives a minimal environment without host credentials.
-- The process has a memory limit and a wall-clock timeout.
+- The Wasm component has no inherited filesystem, environment, network, arguments, or stdio.
+- The guest cannot start subprocesses, workers, or native addons.
+- Each invocation receives a fresh store, QuickJS runtime, fuel budget, memory limit, and wall-clock deadline.
+- Explicit cancellation advances the execution epoch and interrupts guest code.
+- Guest requests, host responses, total calls, and concurrent calls are bounded.
 
-Filesystem, command, HTTP, and UI effects are available only through RPC capabilities. Calls and protocol frames have size and concurrency limits. Timeout and cancellation signals propagate to cooperative host operations.
+Filesystem, command, HTTP, and UI effects are available only through host-authorized injected functions. Calls and protocol frames have size and concurrency limits. Timeout and cancellation signals propagate to both Wasmtime and cooperative host operations.
 
 The sandbox restricts direct access. It does not make host capabilities harmless. The `git` and `shell` capabilities run commands with the permissions of the Pi process. Git hooks and Git network operations can have external effects. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach.
 
 Capability destructuring makes intent visible. It is not an approval boundary. Review generated calls before execution when an operation can affect sensitive data or systems.
 
-This isolation is stronger than `node:vm`, which is not a security boundary. It does not replace a container, virtual machine, or operating-system sandbox. If you use a hostile model or a multi-tenant workload, use an additional operating-system boundary.
+This isolation is stronger than `node:vm`, which is not a security boundary. Wasmtime runs through a native addon in Pi's process, so a native runtime defect can still crash the host. It does not replace a container, virtual machine, or operating-system sandbox. If you use a hostile model or a multi-tenant workload, use an additional operating-system boundary.
 
 Report suspected vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
@@ -467,7 +465,7 @@ Output is bounded. Read metadata uses sparse defaults:
 
 ## Limitations
 
-- Pit depends on the Node permission model and requires Node 22.19 or newer.
+- The default Wasmtime executor currently supports Linux ARM64 only; set `PIT_FUNCTION_EXECUTOR=node` to use the deprecated fallback elsewhere. Pit still requires Node 22.19 or newer as the Pi extension host.
 - Session functions belong to one session branch.
 - Global functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
 - Workspace paths are not restricted to the current project.

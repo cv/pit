@@ -144,6 +144,7 @@ export async function setupHarness(): Promise<void> {
   initTheme("dark");
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
   vi.stubEnv("PI_CODING_AGENT_DIR", join(cwd, "agent"));
+  vi.stubEnv("PIT_FUNCTION_EXECUTOR", "node");
   branchEntries = [];
   sessionName = undefined;
   slashCommands = [];
@@ -196,5 +197,6 @@ export async function setupHarness(): Promise<void> {
 
 export async function cleanupHarness(): Promise<void> {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   await rm(cwd, { recursive: true, force: true });
 }

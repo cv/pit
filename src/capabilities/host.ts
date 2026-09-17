@@ -281,7 +281,7 @@ export function createCapabilities({
           project: functionState.project,
           session: functionState.session,
         },
-        functionContext?.scope,
+        functionContext?.scope === "user" ? "global" : functionContext?.scope,
       );
       activity.push({ action: "run", name, scope });
       if (

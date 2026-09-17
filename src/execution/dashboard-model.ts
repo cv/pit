@@ -1,5 +1,9 @@
 import type { FunctionActivity, FunctionScope } from "../functions/core.js";
-import type { CapabilityTrace, CapabilityTraceStatus } from "./capability-trace.js";
+import type {
+  CapabilityTrace,
+  CapabilityTraceStatus,
+  FunctionExecutionScope,
+} from "./capability-trace.js";
 import type { ExecutionProgressSnapshot } from "./types.js";
 
 interface ExecutionDashboardDetails extends ExecutionProgressSnapshot {
@@ -27,7 +31,7 @@ export interface DashboardCall {
 export interface DashboardFunction {
   kind: "function";
   id: number;
-  scope: FunctionScope;
+  scope: FunctionExecutionScope;
   name: string;
   events: DashboardEvent[];
 }
