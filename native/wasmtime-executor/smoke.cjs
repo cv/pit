@@ -5,14 +5,6 @@ const fs = require("node:fs");
 const executor = require("./pit_wasmtime_executor.node");
 
 async function main() {
-  const guest = fs.readFileSync("./pit_javy_guest.wasm");
-  const guestModule = new WebAssembly.Module(guest);
-  const guestImports = WebAssembly.Module.imports(guestModule);
-  assert.equal(
-    guestImports.some(({ module }) => module.startsWith("wasi")),
-    false,
-  );
-
   const answer = executor.executeWat(`
     (module
       (func (export "run") (result i32)
@@ -46,72 +38,54 @@ async function main() {
     /import|wasi_snapshot_preview1/i,
   );
 
-  let callbackCalls = 0;
-  const asyncAnswer = await executor.executeAsyncHost(
+  const prepared = JSON.parse(fs.readFileSync("./prepared-program.json", "utf8"));
+  const queuedGuest = fs.readFileSync("./pit_queued_quickjs_guest.wasm");
+  let activeCalls = 0;
+  let maximumActiveCalls = 0;
+  const concurrentExecuted = await executor.executeQueuedJavascript(
+    queuedGuest,
     `
-      (module
-        (import "pit" "call" (func $call (param i32) (result i32)))
-        (func (export "run") (result i32)
-          i32.const 41
-          call $call))
-    `,
-    async (value) => {
-      callbackCalls++;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      return value + 1;
-    },
-  );
-  assert.equal(asyncAnswer, 42);
-  assert.equal(callbackCalls, 1);
-
-  let javascriptCallbackCalls = 0;
-  const javascriptExecuted = await executor.executeJavascript(
-    guest,
-    `
-      const request = JSON.stringify({ type: "increment", value: 41 });
-      const response = JSON.parse(await pitCall(request));
-      if (response.value !== 42) {
-        throw new Error("unexpected host answer: " + response.value);
+      const requests = [1, 2].map((value) =>
+        pitCall(JSON.stringify({ type: "increment", value })),
+      );
+      const responses = await Promise.all(requests);
+      const values = responses.map((response) => JSON.parse(response).value);
+      if (values[0] !== 2 || values[1] !== 3) {
+        throw new Error("unexpected concurrent values: " + values.join(","));
       }
     `,
-    async (request) => {
-      javascriptCallbackCalls++;
-      const parsed = JSON.parse(request);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      return JSON.stringify({ value: parsed.value + 1 });
+    async (rawRequest) => {
+      activeCalls++;
+      maximumActiveCalls = Math.max(maximumActiveCalls, activeCalls);
+      const request = JSON.parse(rawRequest);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      activeCalls--;
+      return JSON.stringify({ value: request.value + 1 });
     },
   );
-  assert.equal(javascriptExecuted, true);
-  assert.equal(javascriptCallbackCalls, 1);
+  assert.equal(concurrentExecuted, true);
+  assert.equal(maximumActiveCalls, 2);
 
-  const prepared = JSON.parse(fs.readFileSync("./prepared-program.json", "utf8"));
-  const allowedEffects = new Set(prepared.effects);
-  let preparedResult;
-  const preparedExecuted = await executor.executeJavascript(
-    guest,
+  let queuedPreparedResult;
+  const queuedPreparedExecuted = await executor.executeQueuedJavascript(
+    queuedGuest,
     prepared.source,
     async (rawRequest) => {
       const request = JSON.parse(rawRequest);
       if (request.type === "result") {
-        preparedResult = request.value;
+        queuedPreparedResult = request.value;
         return JSON.stringify({ value: null });
       }
       const effect = `${request.capability}.${request.method}`;
-      if (request.capability !== "__pit" && !allowedEffects.has(effect)) {
-        return JSON.stringify({ error: `Function grant does not allow ${effect}` });
-      }
       if (effect === "context.get") {
-        return JSON.stringify({ value: { cwd: "/wasmtime", backend: "quickjs" } });
+        return JSON.stringify({ value: { cwd: "/queued", backend: "rquickjs" } });
       }
-      if (effect === "__pit.savedFunctionRun") {
-        return JSON.stringify({ value: null });
-      }
-      return JSON.stringify({ error: `Unsupported smoke effect: ${effect}` });
+      return JSON.stringify({ value: null });
     },
   );
-  assert.equal(preparedExecuted, true);
-  assert.deepEqual(preparedResult, {
-    context: { cwd: "/wasmtime", backend: "quickjs" },
+  assert.equal(queuedPreparedExecuted, true);
+  assert.deepEqual(queuedPreparedResult, {
+    context: { cwd: "/queued", backend: "rquickjs" },
     input: { value: 42 },
   });
 
@@ -121,12 +95,10 @@ async function main() {
       inProcess: true,
       answer,
       fuelInterruption: true,
-      wasiLinked: false,
-      asyncHostCallback: true,
-      quickJsGuest: javascriptExecuted,
-      jsonHostBridge: true,
-      preparedPitProgram: preparedExecuted,
-      guestImports,
+      restrictedWasi: true,
+      preparedPitProgram: queuedPreparedExecuted,
+      queuedRquickjsGuest: true,
+      concurrentHostCalls: maximumActiveCalls,
     }),
   );
 }

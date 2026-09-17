@@ -1,5 +1,5 @@
 [package]
-name = "pit-javy-guest"
+name = "pit-queued-quickjs-guest"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -9,5 +9,5 @@ crate-type = ["cdylib"]
 test = false
 
 [dependencies]
-javy-plugin-api = "7.1.0"
+javy = "8.1.0"
 wit-bindgen = "0.58.0"
