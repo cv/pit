@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: wasmtime-prebuilds-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   guest:
     name: QuickJS Wasm guest
@@ -21,6 +25,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache Rust guest build
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/wasmtime-executor/queued-guest/target
+          key: wasmtime-guest-${{ hashFiles('native/wasmtime-executor/queued-guest/Cargo.lock', 'native/wasmtime-executor/queued-guest/src/**') }}
+          restore-keys: wasmtime-guest-
       - name: Install native build dependencies
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libclang-dev
       - name: Install Rust toolchain
@@ -84,11 +97,20 @@ jobs:
       - name: Install Rust toolchain
         shell: bash
         run: rustup toolchain install 1.95.0 --profile minimal
+      - name: Cache Rust addon build
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/wasmtime-executor/target
+          key: wasmtime-addon-${{ matrix.target }}-${{ hashFiles('native/wasmtime-executor/Cargo.lock', 'native/wasmtime-executor/src/**') }}
+          restore-keys: wasmtime-addon-${{ matrix.target }}-
       - name: Build native addon
         shell: bash
         run: cargo +1.95.0 build --manifest-path native/wasmtime-executor/Cargo.toml --release --locked
       - name: Download QuickJS component
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: wasmtime-guest
           path: dist
@@ -97,6 +119,7 @@ jobs:
         run: |
           cp "${{ matrix.library }}" dist/pit_wasmtime_executor.node
           cp "${{ matrix.library }}" "dist/pit-wasmtime-${{ matrix.target }}.node"
+          cp dist/pit-queued-quickjs-guest.wasm dist/pit_queued_quickjs_guest.wasm
           cp native/wasmtime-executor/smoke.cjs dist/smoke.cjs
           npx tsx native/wasmtime-executor/prepare-smoke.mts dist/prepared-program.json
           npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=dist/wasmtime-adapter.cjs
