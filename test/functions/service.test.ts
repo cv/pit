@@ -33,7 +33,7 @@ function fixture() {
 describe("SavedFunctionService", () => {
   it("prepares and commits session definitions atomically", async () => {
     const { state, entries, service } = fixture();
-    const source = "async function sessionHelper() { return 1; }";
+    const source = "async function sessionHelper({}) { return 1; }";
     const prepared = service.prepare({
       source,
       context: { cwd: "/tmp", isProjectTrusted: () => true },
@@ -60,7 +60,7 @@ describe("SavedFunctionService", () => {
     ).toThrow("top-level function declaration");
     expect(() =>
       service.prepare({
-        source: "/** Documented helper. */ async function documented() { return true; }",
+        source: "/** Documented helper. */ async function documented({}) { return true; }",
         project: true,
         context: { cwd: "/tmp", isProjectTrusted: () => false },
       }),
@@ -71,12 +71,12 @@ describe("SavedFunctionService", () => {
     const cwd = await mkdtemp(join(tmpdir(), "pit-service-"));
     directories.push(cwd);
     const { state, service } = fixture();
-    const source = "/** Project helper. */\nasync function projectHelper() { return 2; }";
+    const source = "/** Project helper. */\nasync function projectHelper({}) { return 2; }";
     expect(() =>
       service.prepare({ source, project: true, context: { cwd, isProjectTrusted: () => true } }),
     ).toThrow("Project functions are disabled");
     state.projectEnabled = true;
-    state.session.set("projectHelper", "async function projectHelper() { return 1; }");
+    state.session.set("projectHelper", "async function projectHelper({}) { return 1; }");
     const prepared = service.prepare({
       source,
 
@@ -98,7 +98,7 @@ describe("SavedFunctionService", () => {
     const cwd = await mkdtemp(join(tmpdir(), "pit-service-"));
     directories.push(cwd);
     const { state, entries, service } = fixture();
-    const source = "async function promotedHelper() { return 3; }";
+    const source = "async function promotedHelper({}) { return 3; }";
     const prepared = service.prepare({
       source,
       context: { cwd, isProjectTrusted: () => true },
@@ -127,7 +127,7 @@ describe("SavedFunctionService", () => {
   it("rejects invalid session-function promotions", async () => {
     const { state, service } = fixture();
     state.projectEnabled = true;
-    state.session.set("summaryRequired", "async function summaryRequired() { return true; }");
+    state.session.set("summaryRequired", "async function summaryRequired({}) { return true; }");
     await expect(
       service.promoteToProject({
         name: "summaryRequired",
@@ -144,7 +144,7 @@ describe("SavedFunctionService", () => {
       }),
     ).rejects.toThrow('Saved function "missing" was not found');
 
-    state.session.set("wrapped", "((async function wrapped() { return true; }))");
+    state.session.set("wrapped", "((async function wrapped({}) { return true; }))");
     await expect(
       service.promoteToProject({
         name: "wrapped",
@@ -185,14 +185,14 @@ describe("SavedFunctionService", () => {
 
   it("plans, guards, and serializes dependency-aware session removals", async () => {
     const { state, entries, service } = fixture();
-    state.session.set("baseHelper", "async function baseHelper() { return 1; }");
+    state.session.set("baseHelper", "async function baseHelper({}) { return 1; }");
     state.session.set(
       "dependentHelper",
-      "async function dependentHelper() { return (await baseHelper()) + 1; }",
+      "async function dependentHelper({ baseHelper }) { return (await baseHelper()) + 1; }",
     );
     state.session.set(
       "transitiveHelper",
-      "async function transitiveHelper() { return (await dependentHelper()) + 1; }",
+      "async function transitiveHelper({ dependentHelper }) { return (await dependentHelper()) + 1; }",
     );
     refreshEffectiveFunctions(state);
 
@@ -243,7 +243,7 @@ describe("SavedFunctionService", () => {
     );
     expect(() =>
       service.prepare({
-        source: "async function helper() {}",
+        source: "async function helper({}) {}",
         input: {},
         saveOnly: true,
         context,

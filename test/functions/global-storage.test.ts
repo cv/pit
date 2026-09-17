@@ -58,8 +58,8 @@ describe("global function storage", () => {
 
   it("saves, replaces, and removes global source files", async () => {
     const registry = new Map<string, string>();
-    const first = "/** Stored global. */ async function storedGlobal() { return 1; }";
-    const second = "/** Stored global two. */ async function storedGlobal() { return 2; }\n";
+    const first = "/** Stored global. */ async function storedGlobal({}) { return 1; }";
+    const second = "/** Stored global two. */ async function storedGlobal({}) { return 2; }\n";
 
     await expect(saveGlobalFunction("storedGlobal", first, registry)).resolves.toBe(false);
     await expect(
@@ -79,20 +79,20 @@ describe("global function storage", () => {
     await writeFile(join(directory, "ignored.txt"), "ignored");
     await writeFile(
       join(directory, "globalBase.ts"),
-      "/** Global base. @pit global */ async function globalBase() { return 1; }",
+      "/** Global base. @pit global */ async function globalBase({}) { return 1; }",
     );
     await writeFile(
       join(directory, "globalDependent.ts"),
-      "/** Global dependent. */ async function globalDependent() { return globalBase(); }",
+      "/** Global dependent. */ async function globalDependent({ globalBase }) { return globalBase(); }",
     );
-    await writeFile(join(directory, "missingMarker.ts"), "async function missingMarker() {};");
+    await writeFile(join(directory, "missingMarker.ts"), "async function missingMarker({}) {};");
     await writeFile(
       join(directory, "wrongName.ts"),
-      "/** Wrong name. */ async function actualName() { return true; }",
+      "/** Wrong name. */ async function actualName({}) { return true; }",
     );
     await writeFile(
       join(directory, "missingDependency.ts"),
-      "/** Missing dependency. */ async function missingDependency() { return absentGlobal(); }",
+      "/** Missing dependency. */ async function missingDependency({ absentGlobal }) { return absentGlobal(); }",
     );
 
     const registry = new Map<string, string>();
@@ -109,13 +109,13 @@ describe("global function storage", () => {
     const registry = new Map(
       Array.from({ length: 64 }, (_, index) => [
         `global${index}`,
-        `async function global${index}() { return ${index}; }`,
+        `async function global${index}({}) { return ${index}; }`,
       ]),
     );
     await expect(
       saveGlobalFunction(
         "overflowGlobal",
-        "/** Overflow. */ async function overflowGlobal() { return true; }",
+        "/** Overflow. */ async function overflowGlobal({}) { return true; }",
         registry,
       ),
     ).rejects.toThrow("limited to 64 functions");

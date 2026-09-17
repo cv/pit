@@ -7,7 +7,7 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 const MAX_FAILURE_BYTES = 8_000;
 const MAX_FAILURE_LINES = 24;
 const MAX_FUNCTION_PATH = 32;
-const SAVED_FAILURE_PREFIX = /^Saved function "([^"]+)" failed: /;
+const FUNCTION_FAILURE_PREFIX = /^(?:Saved function|Function) "([^"]+)" failed: /;
 const CANCELLED_FAILURE = /abort|cancel/i;
 const TIMEOUT_FAILURE = /timed? out|timeout/i;
 const CAPABILITY_FAILURE = /command failed|capability|unknown capability/i;
@@ -52,7 +52,7 @@ export function structureTypeScriptFailure(
   }
   const functionPath: string[] = [];
   for (;;) {
-    const match = rootError.match(SAVED_FAILURE_PREFIX);
+    const match = rootError.match(FUNCTION_FAILURE_PREFIX);
     const name = match?.[1];
     if (!(match && name)) {
       break;

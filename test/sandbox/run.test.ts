@@ -139,8 +139,7 @@ describe("runInSandbox", () => {
 
   it("injects saved functions as capability-bound expressions", async () => {
     const savedFunctions = new Map([
-      ["answer", "async function answer(_capabilities, input) { return { answer: input.value }; }"],
-      ["unrelated", "42"],
+      ["answer", "async function answer({}, input) { return { answer: input.value }; }"],
     ]);
     const handler = vi.fn(async ({ capability, method }: CapabilityRequest) => {
       if (capability === "__pit" && method === "savedFunctionRun") {
@@ -148,7 +147,10 @@ describe("runInSandbox", () => {
       }
       throw new Error("unexpected capability call");
     });
-    const result = await runInSandbox("answer({ value: 42 })", handler, { savedFunctions });
+    const result = await runInSandbox("async ({ answer }) => answer({ value: 42 })", handler, {
+      unifiedFunctions: true,
+      sessionFunctions: savedFunctions,
+    });
     expect(result).toEqual({ answer: 42 });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -164,53 +166,43 @@ describe("runInSandbox", () => {
         }),
       }),
     );
-    await expect(runInSandbox("unrelated()", handler, { savedFunctions })).rejects.toThrow(
-      /number.*PitProgram/,
-    );
   });
 
   it.each([
-    { name: "global", scope: "global" as const },
+    { name: "user", scope: "user" as const },
     { name: "project", scope: "project" as const },
     { name: "session", scope: "session" as const },
   ])("supports an explicit $name registry without the other scopes", async ({ name, scope }) => {
     const functionName = `${name}Only`;
-    const source = `async function ${functionName}() { return "${name}"; }`;
+    const source = `async function ${functionName}({}) { return "${name}"; }`;
     const savedFunctions = new Map([[functionName, source]]);
-    const savedFunctionScopes = new Map([[functionName, scope]]);
     const options = {
-      savedFunctions,
-      savedFunctionScopes,
-      ...(scope === "global" ? { globalFunctions: savedFunctions } : {}),
+      unifiedFunctions: true,
+      ...(scope === "user" ? { userFunctions: savedFunctions } : {}),
       ...(scope === "project" ? { projectFunctions: savedFunctions } : {}),
       ...(scope === "session" ? { sessionFunctions: savedFunctions } : {}),
     };
-    await expect(runInSandbox(`${functionName}()`, async () => null, options)).resolves.toBe(name);
+    await expect(
+      runInSandbox(`async ({ ${functionName} }) => ${functionName}()`, async () => null, options),
+    ).resolves.toBe(name);
   });
 
   it("rejects an effective root missing from its declared scope", async () => {
-    const savedFunctions = new Map([["missingScoped", "async function missingScoped() {}"]]);
     await expect(
-      runInSandbox("missingScoped()", async () => null, {
-        savedFunctions,
-        savedFunctionScopes: new Map([["missingScoped", "global"]]),
-        globalFunctions: new Map(),
+      runInSandbox("async ({ missingScoped }) => missingScoped()", async () => null, {
+        unifiedFunctions: true,
       }),
-    ).rejects.toThrow("missingScoped is not defined");
+    ).rejects.toThrow("Property 'missingScoped' does not exist");
   });
 
   it("attributes nested and concurrent saved-function capability calls", async () => {
     const savedFunctions = new Map([
-      ["outer", "async function outer(_capabilities, input) { return inner(input); }"],
-      ["inner", "async function inner({ context }, input) { await context.get(); return input; }"],
-    ]);
-    const savedFunctionScopes = new Map<string, "project" | "session">([
-      ["outer", "project"],
-      ["inner", "session"],
+      ["outer", "async function outer({ inner }, input) { return inner(input); }"],
+      ["inner", "async function inner({ context: { get } }, input) { await get(); return input; }"],
     ]);
     const traces: CapabilityTrace[] = [];
     await runInSandbox(
-      'async () => Promise.all([outer("nested"), inner("direct")])',
+      'async ({ outer, inner }) => Promise.all([outer("nested"), inner("direct")])',
       async ({ capability, method }) => {
         if (capability === "__pit" && method === "savedFunctionRun") {
           return null;
@@ -220,7 +212,12 @@ describe("runInSandbox", () => {
         }
         throw new Error("unexpected capability call");
       },
-      { savedFunctions, savedFunctionScopes, onCapabilityTrace: (trace) => traces.push(trace) },
+      {
+        unifiedFunctions: true,
+        projectFunctions: new Map([["outer", savedFunctions.get("outer") as string]]),
+        sessionFunctions: new Map([["inner", savedFunctions.get("inner") as string]]),
+        onCapabilityTrace: (trace) => traces.push(trace),
+      },
     );
 
     const completed = traces.filter((trace) => trace.status === "succeeded");
@@ -249,34 +246,42 @@ describe("runInSandbox", () => {
     const savedFunctions = new Map([
       [
         "runTests",
-        `async function runTests(_capabilities, input: { coverage?: boolean } = {}) {
+        `async function runTests({}, input: { coverage?: boolean } = {}) {
         return { code: input.coverage ? 1 : 0, output: "done" };
       }`,
       ],
     ]);
-    expect(() => validateTypeScript("runTests({ coverage: true })", savedFunctions)).not.toThrow();
-    expect(() => validateTypeScript(`runTests({ coverage: "yes" })`, savedFunctions)).toThrow(
-      /string.*boolean/,
-    );
     expect(() =>
-      validateTypeScript("async () => (await runTests()).missing", savedFunctions),
+      validateTypeScript("async ({ runTests }) => runTests({ coverage: true })", savedFunctions),
+    ).not.toThrow();
+    expect(() =>
+      validateTypeScript(`async ({ runTests }) => runTests({ coverage: "yes" })`, savedFunctions),
+    ).toThrow(/string.*boolean/);
+    expect(() =>
+      validateTypeScript("async ({ runTests }) => (await runTests()).missing", savedFunctions),
     ).toThrow(/Property 'missing' does not exist/);
   });
 
-  it("annotates saved function failures and limits cross-function recursion", async () => {
+  it("annotates function failures and rejects multi-function cycles", async () => {
     const handler = async () => null;
-    const failed = new Map([["broken", `async function broken() { throw new Error("boom"); }`]]);
-    await expect(runInSandbox("broken()", handler, { savedFunctions: failed })).rejects.toThrow(
-      'Saved function "broken" failed: boom',
-    );
+    const failed = new Map([["broken", `async function broken({}) { throw new Error("boom"); }`]]);
+    await expect(
+      runInSandbox("async ({ broken }) => broken()", handler, {
+        unifiedFunctions: true,
+        sessionFunctions: failed,
+      }),
+    ).rejects.toThrow('Function "broken" failed: boom');
 
     const recursive = new Map([
-      ["first", "async function first() { return second(); }"],
-      ["second", "async function second() { return first(); }"],
+      ["first", "async function first({ second }) { return second(); }"],
+      ["second", "async function second({ first }) { return first(); }"],
     ]);
-    await expect(runInSandbox("first()", handler, { savedFunctions: recursive })).rejects.toThrow(
-      "Saved function call depth exceeded 32",
-    );
+    await expect(
+      runInSandbox("async ({ first }) => first()", handler, {
+        unifiedFunctions: true,
+        sessionFunctions: recursive,
+      }),
+    ).rejects.toThrow("function dependency cycle: first -> second -> first");
   });
 
   it("returns bounded structured remote diagnostics without enumerable stack frames", async () => {
