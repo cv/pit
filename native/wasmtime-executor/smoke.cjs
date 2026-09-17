@@ -12,6 +12,7 @@ async function main() {
     guestImports.some(({ module }) => module.startsWith("wasi")),
     false,
   );
+
   const answer = executor.executeWat(`
     (module
       (func (export "run") (result i32)
@@ -67,13 +68,17 @@ async function main() {
   const javascriptExecuted = await executor.executeJavascript(
     guest,
     `
-      const answer = await pitCall(41);
-      if (answer !== 42) throw new Error("unexpected host answer: " + answer);
+      const request = JSON.stringify({ type: "increment", value: 41 });
+      const response = JSON.parse(await pitCall(request));
+      if (response.value !== 42) {
+        throw new Error("unexpected host answer: " + response.value);
+      }
     `,
-    async (value) => {
+    async (request) => {
       javascriptCallbackCalls++;
+      const parsed = JSON.parse(request);
       await new Promise((resolve) => setTimeout(resolve, 10));
-      return value + 1;
+      return JSON.stringify({ value: parsed.value + 1 });
     },
   );
   assert.equal(javascriptExecuted, true);
@@ -88,6 +93,7 @@ async function main() {
       wasiLinked: false,
       asyncHostCallback: true,
       quickJsGuest: javascriptExecuted,
+      jsonHostBridge: true,
       guestImports,
     }),
   );
