@@ -2,15 +2,21 @@ import { transform } from "esbuild";
 
 import type { FunctionScope } from "../functions/core.js";
 import {
+  createLayeredFunctionRegistry,
+  type FunctionDefinition,
+} from "../functions/definitions.js";
+import {
   clearSavedFunctionDependencyGraphCache,
   getSavedFunctionDependencyGraphCacheStats,
   resolveSavedFunctionReferences,
 } from "../functions/graph.js";
+import { resolveFunctionGraph, sourceFunctionDefinition } from "../functions/resolved-graph.js";
 import {
   scopedRuntimeProgram,
   type ScopedFunctionRegistries,
 } from "../functions/scoped-runtime.js";
 import { isProgramExpression } from "../functions/source.js";
+import { unifiedRuntimeProgram } from "../functions/unified-runtime.js";
 import { clearValidationCache, getValidationCacheStats, validateTypeScript } from "./validation.js";
 
 const MAX_CACHE_ENTRIES = 128;
@@ -65,6 +71,7 @@ export interface SandboxProgramOptions {
   savedFunctions?: ReadonlyMap<string, string>;
   savedFunctionScopes?: ReadonlyMap<string, FunctionScope>;
   globalFunctions?: ReadonlyMap<string, string>;
+  userFunctions?: ReadonlyMap<string, string>;
   projectFunctions?: ReadonlyMap<string, string>;
   sessionFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
@@ -107,4 +114,54 @@ export async function compileSandboxSource(
       registries,
     }),
   );
+}
+
+function unifiedSourceDefinitions(options: SandboxProgramOptions): FunctionDefinition[] {
+  const definitions: FunctionDefinition[] = [];
+  const add = (
+    functions: ReadonlyMap<string, string>,
+    layer: "user" | "project" | "session",
+  ): void => {
+    for (const [id, source] of functions) {
+      definitions.push(sourceFunctionDefinition(id, layer, source));
+    }
+  };
+  const explicit =
+    options.userFunctions ||
+    options.globalFunctions ||
+    options.projectFunctions ||
+    options.sessionFunctions;
+  if (explicit) {
+    add(options.userFunctions ?? options.globalFunctions ?? new Map(), "user");
+    add(options.projectFunctions ?? new Map(), "project");
+    add(options.sessionFunctions ?? new Map(), "session");
+    return definitions;
+  }
+
+  const saved = options.savedFunctions ?? new Map<string, string>();
+  const scopes = options.savedFunctionScopes ?? new Map<string, FunctionScope>();
+  for (const [id, source] of saved) {
+    const oldScope = scopes.get(id);
+    const layer = oldScope === "project" ? "project" : oldScope === "session" ? "session" : "user";
+    definitions.push(sourceFunctionDefinition(id, layer, source));
+  }
+  return definitions;
+}
+
+export async function compileUnifiedSandboxSource(
+  source: string,
+  options: SandboxProgramOptions,
+): Promise<string> {
+  if (!isProgramExpression(source)) {
+    throw new Error("unified function programs must be function expressions");
+  }
+  const definitions = unifiedSourceDefinitions(options);
+  const registry = createLayeredFunctionRegistry(definitions);
+  const effectiveSources = new Map<string, string>();
+  for (const [id, definition] of registry.effective()) {
+    if (definition.kind === "source") effectiveSources.set(id, definition.source);
+  }
+  validateTypeScript(source, effectiveSources, options.input, registry.identifiers());
+  const graph = resolveFunctionGraph(source, registry);
+  return compileTypeScript(unifiedRuntimeProgram(source, graph));
 }
