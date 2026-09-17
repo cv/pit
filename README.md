@@ -228,6 +228,28 @@ The effective registry resolves session, then project, then user, then immutable
 Successful tool results include a compact, compaction-safe catalog of active session-function signatures. Effective user and project functions are documented in the system prompt instead of being repeated in every result. Catalogs contain only complete signatures and report omitted entries when they reach the output budget. `context.get().savedFunctions` also lists all effective names.
 Pit tracks only in-memory invocation counts by function name; it does not retain arguments, source, or results as usage telemetry. After five invocations in one loaded branch lifecycle, a non-temporary session function receives one bounded suggestion to use `functions.promote(name, summary)`. User functions, project functions, session overrides, and names that look temporary are excluded. Reload and session-tree navigation reset counts and suggestion state.
 
+### Namespaced session functions
+
+Set the optional `functionId` tool parameter to give a named definition a dotted identity:
+
+```json
+{
+  "functionId": "company.check",
+  "code": "async function check({}, input: { value: number }) { return input.value * 2; }",
+  "params": { "value": 21 }
+}
+```
+
+The final identifier segment must match the declaration name. Anonymous submissions cannot set `functionId`. Omitting it keeps the declaration name as the identity. Namespace collisions, reserved segments, and attempts to override sealed registry-management functions are rejected before saving.
+
+Invoke the definition with nested injection:
+
+```ts
+async ({ company: { check } }) => check({ value: 21 })
+```
+
+`company.check` and `other.check` are separate definitions even though both declare `check`. Use the full identifier for inspection, removal, and promotion. Promoting `company.check` writes `company/check.ts` in the selected persistent directory without renaming the declaration. Reload and branch navigation preserve the full identity.
+
 ### Reuse user functions
 
 User functions load automatically from `${PI_CODING_AGENT_DIR}/functions/` (default `~/.pi/agent/functions/`). No user enablement flag is required, and project configuration does not disable user functions. Global functions are immutable built-ins owned by Pit, not files owned by the user.

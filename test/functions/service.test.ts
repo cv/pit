@@ -252,4 +252,24 @@ describe("SavedFunctionService", () => {
     const prepared = service.prepare({ source: "1 + 1", context });
     await expect(service.commit(prepared, { cwd: "/tmp" }, [])).resolves.toBeUndefined();
   });
+
+  it("rechecks namespace conflicts against the live state before committing", async () => {
+    const { state, entries, service } = fixture();
+    const context = { cwd: "/tmp", isProjectTrusted: () => true };
+    const nested = service.prepare({
+      source: "async function check({}) { return 1; }",
+      functionId: "company.check",
+      saveOnly: true,
+      context,
+    });
+    const leaf = service.prepare({
+      source: "async function company({}) { return 2; }",
+      saveOnly: true,
+      context,
+    });
+    await service.commit(leaf, context, []);
+    await expect(service.commit(nested, context, [])).rejects.toThrow("namespace conflict");
+    expect([...state.session.keys()]).toEqual(["company"]);
+    expect(entries).toHaveLength(1);
+  });
 });

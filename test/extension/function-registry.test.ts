@@ -71,7 +71,7 @@ describe("function registry handler", () => {
   });
   it("reconstructs valid branch-local function mutations", () => {
     const functions = new Map<string, string>();
-    const source = `() => "saved"`;
+    const source = `async function active({}) { return "saved"; }`;
     reconstructFunctions(functions, [
       null,
       { type: "custom", customType: "other", data: {} },
@@ -90,7 +90,7 @@ describe("function registry handler", () => {
       {
         type: "custom",
         customType: "pit-function-definitions",
-        data: { name: "stale", source: "() => 1n" },
+        data: { name: "stale", source: "async function stale({}) { return 1n; }" },
       },
       { type: "custom", customType: "pit-function-definitions", data: { name: "active", source } },
       {
@@ -101,7 +101,7 @@ describe("function registry handler", () => {
       {
         type: "custom",
         customType: "pit-function-definitions",
-        data: { name: "remaining", source },
+        data: { name: "remaining", source: source.replace("active", "remaining") },
       },
     ]);
     expect([...functions.keys()]).toEqual(["remaining"]);

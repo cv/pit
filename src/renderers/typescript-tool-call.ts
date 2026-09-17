@@ -17,6 +17,7 @@ interface RenderTheme {
 interface ToolCallArgs {
   label?: unknown;
   code?: unknown;
+  functionId?: unknown;
   saveOnly?: unknown;
 }
 
@@ -70,19 +71,14 @@ function normalizedLabel(value: unknown): string | undefined {
   return label || undefined;
 }
 
-function describeCall(
-  label: unknown,
-  code: string,
-  saveOnly: boolean,
-  registry: FunctionRegistry,
-): string {
-  const supplied = normalizedLabel(label);
+function describeCall(args: ToolCallArgs, code: string, registry: FunctionRegistry): string {
+  const supplied = normalizedLabel(args.label);
   if (supplied) {
     return supplied;
   }
   const named = getNamedFunctionName(code);
   if (named) {
-    return `${saveOnly ? "Save" : "Define and run"} ${named}`;
+    return `${args.saveOnly === true ? "Save" : "Define and run"} ${normalizedLabel(args.functionId) ?? named}`;
   }
   const direct = resolveSavedFunctionReferences(code, registry).find(
     (reference) => reference.direct,
@@ -101,7 +97,7 @@ export function renderTypeScriptToolCall(
 ) {
   const code = typeof args.code === "string" ? args.code : "";
   const displayedCode = formattedDisplaySource(code, context);
-  const callLabel = describeCall(args.label, code, args.saveOnly === true, registry);
+  const callLabel = describeCall(args, code, registry);
   const lines = displayedCode ? highlightCode(displayedCode, "typescript") : [];
   const shown = context.expanded ? lines : [];
   const generation = generationTiming(context);
@@ -117,6 +113,8 @@ export function renderTypeScriptToolCall(
   if (args.saveOnly === true) {
     text += theme.fg("accent", " save-only");
   }
+  const functionId = normalizedLabel(args.functionId);
+  if (context.expanded && functionId) text += `\n${theme.fg("dim", `functionId: ${functionId}`)}`;
   if (context.expanded && shown.length > 0) {
     text += `\n${shown.join("\n")}`;
   } else if (context.expanded) {

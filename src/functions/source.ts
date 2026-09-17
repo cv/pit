@@ -77,6 +77,7 @@ function functionCallSignature(
 
 export function getPersistentFunctionMetadata(
   source: string,
+  id?: string,
 ): PersistentFunctionMetadata | undefined {
   const file = ts.createSourceFile(
     "/pit/persistent-function.ts",
@@ -114,8 +115,8 @@ export function getPersistentFunctionMetadata(
       return parameter;
     });
   return {
-    name: declaration.name.text,
-    signature: functionCallSignature(declaration.name.text, declaration.parameters),
+    name: id ?? declaration.name.text,
+    signature: functionCallSignature(id ?? declaration.name.text, declaration.parameters),
     summary,
     parameters,
   };

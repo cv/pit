@@ -28,6 +28,9 @@ export const CODE_DESCRIPTION =
 export const PARAMS_DESCRIPTION =
   "Optional JSON input passed after the injected dependency object. Use it for large patches, file contents, or quote-heavy data; annotate the input parameter.";
 
+export const FUNCTION_ID_DESCRIPTION =
+  "Optional dotted identifier for a named function, such as company.check. Its final segment must match the declaration name; anonymous functions cannot set it.";
+
 export const SAVE_ONLY_DESCRIPTION =
   "Validate and save a named top-level function without executing it; top-level params are not accepted.";
 
@@ -58,6 +61,8 @@ export function createToolDescription(maxOutputBytes: number): string {
     "}",
     "",
     "Use saveOnly: true to save without running. To call an available function, inject it explicitly: async ({ runTests }) => runTests({ coverage: true }). Add input modes or compose helpers instead of creating overlapping variants.",
+    "",
+    'Set functionId: "company.check" for a named function check. Invoke it with async ({ company: { check } }) => check().',
     "",
     "HASHED EDIT WORKFLOW",
     "",
