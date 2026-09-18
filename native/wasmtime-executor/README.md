@@ -25,7 +25,7 @@ Pi runs `npm install` for Git packages. `scripts/install-wasmtime.mjs` downloads
 
 ## Local build and smoke test
 
-Build Linux artifacts for the Docker host's architecture:
+Build Linux ARM64 artifacts on a Linux ARM64 Docker host (other release targets are built by the CI matrix):
 
 ```sh
 npm run wasmtime:build
