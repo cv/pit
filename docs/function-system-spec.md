@@ -1,6 +1,6 @@
 # Unified function system
 
-- Status: Accepted; implementation in progress
+- Status: Implemented; interactive acceptance completed
 - Target: Pit 0.16.0
 - Tracking: [#82](https://github.com/cv/pit/issues/82)
 

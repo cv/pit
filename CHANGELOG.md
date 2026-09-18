@@ -4,19 +4,20 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-18
+
 ### Added
 
 - Inspect native globals, shadowed definitions, provenance, signatures, `$next`, and effect closures through one paginated registry API and read-only-aware function manager.
-
 - Enforce signature-compatible layered overrides and support typed `$next` in session, user, and project definitions, including named execution, promotion, reload, and safe fallback removal.
-
 - Add `functionId` for namespaced session definitions, preserving full identifiers through replay, promotion, catalogs, and traces.
-
 - Build and smoke-test Linux, macOS, and Windows ARM64/x64 Wasmtime addons in CI, attach them to tagged releases, and install only the matching checksum-verified prebuild during Git package installation.
 - Propagate external cancellation into Wasmtime through race-safe execution IDs and epoch interruption.
 
 ### Breaking changes
 
+- Require explicit method-level dependency injection for built-ins and saved functions; lexical saved-function calls and whole-namespace capture are removed.
+- `functions.listAll()` now returns a paginated registry result; `getSaved()` includes native globals and may have no authored source.
 - User-owned functions use `user` scope and `${PI_CODING_AGENT_DIR}/functions/`, loaded automatically without enablement configuration.
 - Remove legacy user/project path readers and user-global management aliases; user APIs are `listUser`, `getUser`, and `removeUser`, with promotion `{ to: "user" }`.
 - Ignore pre-upgrade `pit-functions` session entries. New definitions use branch-local `pit-function-definitions` entries.
@@ -26,11 +27,15 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 ### Changed
 
 - Make Wasmtime the default TypeScript function executor.
-- Retain the permission-restricted Node child only as the deprecated `PIT_FUNCTION_EXECUTOR=node` fallback.
+- Retain the deprecated permission-restricted Node fallback for unavailable or unloadable implicit prebuilds; explicit Wasmtime requests remain strict.
 
 ### Security
 
 - Run each submitted program in a fresh fuel-, time-, memory-, call-, and protocol-bounded Wasmtime store with a non-inheriting WASI Preview 2 context.
+
+### Known limitations
+
+- Function-viewer metadata can have low contrast on dark themes; tracked for a follow-up release in [#90](https://github.com/cv/pit/issues/90).
 
 ## [0.15.1] - 2026-09-16
 
@@ -99,7 +104,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/cv/pit/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/cv/pit/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/cv/pit/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/cv/pit/compare/v0.14.0...v0.14.1
