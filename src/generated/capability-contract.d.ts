@@ -147,18 +147,56 @@ type PitPersistentFunctionMetadata = {
   parameters: Array<{ name: string; description?: string }>;
 };
 
-type PitFunctionScope = "user" | "project" | "session";
+type PitFunctionScope = "global" | "user" | "project" | "session";
 
-type PitSavedFunctionMetadata = {
+type PitFunctionReference = {
   name: string;
   scope: PitFunctionScope;
+  kind: "native" | "source" | "invalid";
+  available: boolean;
+};
+
+type PitFunctionSummary = PitFunctionReference & {
+  effective: boolean;
+  effectiveScope: PitFunctionScope;
+  readOnly: boolean;
+  sealed: boolean;
   signature: string;
+  summary: string;
+  origin: string;
   lines: number;
   bytes: number;
   directDependencies: string[];
   directDependents: string[];
   overridesProject: boolean;
   overridesUser: boolean;
+  overridesGlobal: boolean;
+  error?: string;
+};
+
+type PitFunctionInspection = PitFunctionSummary & {
+  overrideChain: Array<
+    PitFunctionReference & { origin: string; effective: boolean; sealed: boolean }
+  >;
+  resolvedDependencies: Array<{ name: string; scope?: PitFunctionScope; available: boolean }>;
+  next?: PitFunctionReference;
+  directEffects: string[];
+  effects: string[];
+  documentation: string;
+} & ({ kind: "source"; source: string } | { kind: "native" | "invalid"; source?: never });
+
+type PitFunctionListOptions = {
+  scope?: PitFunctionScope;
+  allDefinitions?: boolean;
+  offset?: number;
+  limit?: number;
+};
+
+type PitFunctionListResult = {
+  functions: PitFunctionSummary[];
+  total: number;
+  offset: number;
+  nextOffset?: number;
 };
 
 type PitSavedFunctionRemovalPlan = {
@@ -346,6 +384,7 @@ interface PitContextCapability {
     thinkingLevel: string;
     sessionFile: string | undefined;
     savedFunctions: string[];
+    globalFunctions: string[];
     userFunctions: string[];
     projectFunctions: string[];
     sessionFunctions: string[];
@@ -411,12 +450,9 @@ interface PitFunctionsCapability {
 
   removeUser(name: string): Promise<{ name: string; removed: boolean }>;
 
-  listAll(): Promise<PitSavedFunctionMetadata[]>;
+  listAll(options?: PitFunctionListOptions): Promise<PitFunctionListResult>;
 
-  getSaved(
-    name: string,
-    scope?: PitFunctionScope,
-  ): Promise<PitSavedFunctionMetadata & { source: string }>;
+  getSaved(name: string, scope?: PitFunctionScope): Promise<PitFunctionInspection>;
 
   planRemoval(name: string, scope?: PitFunctionScope): Promise<PitSavedFunctionRemovalPlan>;
 

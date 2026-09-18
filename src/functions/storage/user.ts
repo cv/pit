@@ -14,7 +14,11 @@ import {
   removePersistentFunctionFile,
   writePersistentFunctionFile,
 } from "./files.js";
-import { assertFunctionsAvailable, validatePersistentFunction } from "./validation.js";
+import {
+  assertFunctionsAvailable,
+  validatePersistentFunction,
+  filterPersistentIdentifiers,
+} from "./validation.js";
 
 const USER_FUNCTION_DIRECTORY = ["functions"] as const;
 
@@ -64,7 +68,9 @@ export async function loadUserFunctions(
   for (const [id, error] of invalid) invalidDefinitions.set(id, error);
 
   const sources = new Map([...candidates].map(([name, value]) => [name, value.source]));
+  filterPersistentIdentifiers(sources, { layer: "user", invalidDefinitions, errors });
   for (const [name, value] of candidates) {
+    if (!sources.has(name)) continue;
     try {
       validatePersistentFunction(name, value.source, sources, {
         invalidDefinitions,

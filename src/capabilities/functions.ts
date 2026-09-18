@@ -3,7 +3,7 @@ import { defineCapability } from "./core.js";
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",
   promptSummary:
-    "project list/get/remove; user list/get/remove; effective listAll/getSaved/planRemoval/promote/removeSession",
+    "project list/get/remove; user list/get/remove; layered listAll/getSaved/planRemoval/promote/removeSession",
   methods: {
     list: {
       callDescription: "List project functions",
@@ -50,21 +50,19 @@ export const functionsCapability = defineCapability({
       maximumArguments: 1,
     },
     listAll: {
-      callDescription: "List all saved functions",
-      declaration: "listAll(): Promise<PitSavedFunctionMetadata[]>;",
+      callDescription: "List function definitions",
+      declaration: "listAll(options?: PitFunctionListOptions): Promise<PitFunctionListResult>;",
       documentation:
-        "functions.listAll() lists effective functions with scope, dependencies, dependents, and override state",
+        "functions.listAll({ scope?, allDefinitions?, offset?, limit? }?) -> { functions, total, offset, nextOffset? }",
       minimumArguments: 0,
-      maximumArguments: 0,
+      maximumArguments: 1,
     },
     getSaved: {
-      callDescription: "Inspect a saved function",
-      declaration: `getSaved(
-  name: string,
-  scope?: PitFunctionScope,
-): Promise<PitSavedFunctionMetadata & { source: string }>;`,
+      callDescription: "Inspect a function definition",
+      declaration:
+        "getSaved(name: string, scope?: PitFunctionScope): Promise<PitFunctionInspection>;",
       documentation:
-        "functions.getSaved(name, scope?) returns effective or explicitly scoped saved source and dependency metadata",
+        "functions.getSaved(name, scope?) inspects source/native metadata, chains, next, and effects",
       minimumArguments: 1,
       maximumArguments: 2,
     },

@@ -3,6 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
 import { createFunctionCapabilityHandler } from "../functions/capability-handler.js";
 import { type FunctionActivity, functionRunScope } from "../functions/core.js";
+import { globalFunctionDefinitions } from "../functions/definitions.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { createProcessRunner, formatProcessCommand } from "../process/runner.js";
 import type { CapabilityHandler } from "../sandbox/dispatcher.js";
@@ -249,6 +250,9 @@ export function createCapabilities({
       thinkingLevel: ctx.thinkingLevel,
       sessionFile: ctx.sessionManager.getSessionFile(),
       savedFunctions: [...functionState.effective.keys()].sort(),
+      globalFunctions: globalFunctionDefinitions()
+        .map((definition) => definition.id)
+        .sort(),
       userFunctions: [...functionState.user.keys()].sort(),
       projectFunctions: [...functionState.project.keys()].sort(),
       sessionFunctions: [...functionState.session.keys()].sort(),

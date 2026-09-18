@@ -40,7 +40,8 @@ export function resolveFunctionGraph(
 
   const visit = (definition: FunctionDefinition): string => {
     const invalid = options.invalidDefinitions?.get(definition.id);
-    if (invalid) throw new Error(`Function "${definition.id}" is unavailable: ${invalid}`);
+    if (invalid && !definition.sealed)
+      throw new Error(`Function "${definition.id}" is unavailable: ${invalid}`);
     const key = definitionKey(definition);
     if (nodes.has(key)) return key;
     const cycleAt = visiting.indexOf(key);
@@ -112,8 +113,9 @@ export function resolveFunctionGraph(
   }
   const roots = rootDeclaration.dependencies.map((dependency) => {
     const invalid = options.invalidDefinitions?.get(dependency.id);
-    if (invalid) throw new Error(`Function "${dependency.id}" is unavailable: ${invalid}`);
     const target = registry.resolve(dependency.id);
+    if (invalid && !target?.sealed)
+      throw new Error(`Function "${dependency.id}" is unavailable: ${invalid}`);
     if (!target) {
       throw new Error(`submitted program requires unavailable function "${dependency.id}"`);
     }

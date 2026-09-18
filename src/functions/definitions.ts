@@ -11,6 +11,9 @@ export interface NativeFunctionDefinition extends LayeredFunctionDefinition {
   capability: string;
   method: string;
   effect: string;
+  signature: string;
+  summary: string;
+  documentation: string;
 }
 
 export interface SourceFunctionDefinition extends LayeredFunctionDefinition {
@@ -23,13 +26,16 @@ export type FunctionDefinition = NativeFunctionDefinition | SourceFunctionDefini
 
 export function globalFunctionDefinitions(): NativeFunctionDefinition[] {
   return Object.entries(CAPABILITY_REGISTRY).flatMap(([capability, definition]) =>
-    Object.keys(definition.methods).map((method) => ({
+    Object.entries(definition.methods).map(([method, metadata]) => ({
       id: `${capability}.${method}`,
       layer: "global" as const,
       kind: "native" as const,
       capability,
       method,
       effect: `${capability}.${method}`,
+      signature: `${capability}.${metadata.declaration.trim().replace(/\s+/g, " ").replace(/;$/, "")}`,
+      summary: metadata.callDescription,
+      documentation: metadata.documentation,
       sealed: capability === "functions",
     })),
   );
@@ -46,4 +52,10 @@ export function createLayeredFunctionRegistry(
     registry.set(definition);
   }
   return registry;
+}
+
+export function isSealedGlobalFunction(id: string): boolean {
+  return globalFunctionDefinitions().some(
+    (definition) => definition.id === id && definition.sealed,
+  );
 }
