@@ -4,6 +4,16 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- Consolidate model-facing guidance and catalog prose while documenting layered resolution, promotion, `$next`, paginated inspection, and portable guest constraints.
+- Measure all prompt parameter descriptions and compile emitted examples in regression tests.
+
+### Fixed
+
+- Stop advertising Node's unavailable `process` global in the portable authoring contract, while preserving direct Node executor security tests.
+- Make Wasmtime console methods explicit no-ops, avoiding the native WASI stdio runtime panic without inheriting host output streams. Return diagnostics instead of logging them.
+
 ## [0.16.0] - 2026-09-18
 
 ### Added

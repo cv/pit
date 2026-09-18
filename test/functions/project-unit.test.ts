@@ -605,7 +605,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     expect(missingOverrideCatalog).not.toContain("alpha(");
 
     const userCatalog = userFunctionCatalog(docs, new Map(), new Map());
-    expect(userCatalog).toContain("## User TypeScript functions");
+    expect(userCatalog).toContain("## User functions");
     expect(userCatalog).toContain("1 more; use functions.listUser()");
     expect(userFunctionCatalog(docs, new Map([["alpha", "project"]]), new Map())).not.toContain(
       "alpha(input",

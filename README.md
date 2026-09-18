@@ -384,6 +384,8 @@ Display formatting changes only the TUI. It does not change the serialized tool 
 
 ## Security model
 
+Authored functions use a portable JavaScript contract: standard language globals, bounded `setTimeout`, and `console.log/warn/error`. Node globals such as `process`, `require`, and `Buffer` are not part of that contract, including when using the Node fallback; use injected functions for host operations. Wasmtime discards console output without accessing host stdio—return structured diagnostics when they need to be visible.
+
 Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store:
 
 - The Wasm component has no inherited filesystem, environment, network, arguments, or stdio.

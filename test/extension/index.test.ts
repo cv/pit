@@ -33,51 +33,9 @@ beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
 describe("pit extension", () => {
-  it("registers compact model-facing usage metadata and activates the tool", async () => {
+  it("registers the TypeScript tool and activates it", async () => {
     expect(tool.label).toBe("TypeScript Workspace");
     expect(tool.promptSnippet).toContain("explicit");
-    expect(tool.description).toContain("async ({ workspace: { read }");
-    expect(tool.description).toContain("Promise.all");
-    expect(tool.description).toContain("Promise.allSettled");
-    expect(tool.description).toContain("contextually type-checked");
-    expect(tool.description).toContain("REUSABLE AND COMPOSED FUNCTIONS");
-    expect(tool.description).toContain("Prefer named functions");
-    expect(tool.description).toContain("explicitly");
-    expect(tool.description).toContain("available function");
-    expect(tool.description).toContain("inject $next");
-    expect(tool.description).toContain("HASHED EDIT WORKFLOW");
-    expect(tool.description).toContain('kind: "replace"');
-    expect(tool.description).toContain("discard every prior revision and anchor");
-    expect(tool.description).toContain("missing totalLines means lines");
-    expect(tool.description).toContain('kind: "read", file, options?');
-    expect(tool.description).toContain("workspace.search(query");
-    expect(tool.description).toContain("shell.execFile(program, args");
-    expect(tool.description).toContain("functions: project list/get/remove; user list/get/remove;");
-    expect(tool.parameters.properties.label.description).toContain("15 words");
-    expect(tool.parameters.properties.code.description).toContain("named function definition");
-    expect(tool.parameters.properties.code.description).toContain("do not import");
-    expect(tool.parameters.properties.params.description).toContain("injected dependency object");
-    expect(tool.parameters.properties.timeoutMs.description).toContain("30000");
-    expect(tool.parameters.properties.saveOnly.description).toContain("without executing");
-    expect(tool.promptGuidelines).toHaveLength(11);
-    const guidelines = tool.promptGuidelines?.join("\n") ?? "";
-    expect(guidelines).toContain("prefer git.status/diff/log");
-    expect(guidelines).toContain("prefer npm.run/test/install");
-    expect(guidelines).toContain("validate one minimal call");
-    expect(guidelines).toContain("one tool invocation per step");
-    expect(guidelines).toContain("successful edit invalidates");
-    expect(guidelines).toContain("one parameterized function per intent");
-    expect(tool.promptGuidelines?.every((guideline) => guideline.includes("typescript"))).toBe(
-      true,
-    );
-    const metadataChars =
-      tool.description.length +
-      (tool.promptSnippet?.length ?? 0) +
-      guidelines.length +
-      (tool.parameters.properties.code.description?.length ?? 0) +
-      (tool.parameters.properties.params.description?.length ?? 0);
-    expect(metadataChars).toBeLessThan(7100);
-
     await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
   });

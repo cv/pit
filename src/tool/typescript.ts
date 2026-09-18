@@ -311,8 +311,7 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
         Type.Integer({
           minimum: 1,
           maximum: 300_000,
-          description:
-            "Maximum wall-clock time for the entire invocation in milliseconds (default: 30000).",
+          description: "Invocation timeout in ms: 1–300000; default 30000.",
         }),
       ),
     }),

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { nodeFunctionExecutor } from "../../src/sandbox/run.js";
+import { nodeFunctionExecutor, runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import {
   configuredFunctionExecutor,
   WASMTIME_PREBUILT_TARGETS,
@@ -167,19 +167,21 @@ describe("configuredFunctionExecutor", () => {
     "executes through the packaged default prebuild",
     async () => {
       const executor = configuredFunctionExecutor({});
+      expect(executor).not.toBe(nodeFunctionExecutor);
       await expect(
-        executor.execute(
-          {
-            compiled:
-              "async () => await new Promise((resolve) => setTimeout(() => resolve(42), 10))",
-            effects: [],
-          },
+        runWithFunctionExecutor(
+          `async ({}) => {
+            console.log("diagnostic"); console.warn("warning"); console.error("error");
+            await new Promise<void>(resolve => setTimeout(resolve, 10));
+            return { answer: 42, process: typeof (globalThis as any).process };
+          }`,
           async () => {
             throw new Error("unexpected capability call");
           },
           { memoryLimitMb: 64, timeoutMs: 5_000 },
+          executor,
         ),
-      ).resolves.toBe(42);
+      ).resolves.toEqual({ answer: 42, process: "undefined" });
     },
   );
 

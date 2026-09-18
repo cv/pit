@@ -10,8 +10,35 @@ import {
   sandboxFatalError,
 } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
+import { runRawNodeProgram } from "../support/node-executor.js";
 
 describe("runInSandbox", () => {
+  it.each<{ name: string; source: string }>([
+    { name: "process", source: "async ({}) => process.env.HOME" },
+    { name: "require", source: 'async ({}) => require("node:fs")' },
+    { name: "Buffer", source: 'async ({}) => Buffer.from("data")' },
+  ])("rejects non-portable $name before invoking an executor", async ({ name, source }) => {
+    const execute = vi.fn();
+    const handler = vi.fn();
+    await expect(runWithFunctionExecutor(source, handler, {}, { execute })).rejects.toThrow(
+      `Cannot find name '${name}'`,
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("keeps supported console, timers, and undefined returns portable", async () => {
+    await expect(
+      runInSandbox(
+        `async ({}) => {
+      console.log("diagnostic"); console.warn("warning"); console.error("error");
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }`,
+        async () => null,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("executes TypeScript and returns a copied value", async () => {
     const result = await runInSandbox(
       "async ({}): Promise<{ answer: number }> => ({ answer: 6 * 7 })",
@@ -402,15 +429,14 @@ describe("runInSandbox", () => {
 
   it("cannot read arbitrary files directly", async () => {
     await expect(
-      runInSandbox(
+      runRawNodeProgram(
         `async ({}) => process.getBuiltinModule("node:fs").readFileSync("/etc/passwd", "utf8")`,
-        async () => null,
       ),
     ).rejects.toThrow(/permission|access|denied|ERR_ACCESS_DENIED/i);
   });
 
   it("isolates the environment and tolerates untrusted process output", async () => {
-    const result = await runInSandbox(
+    const result = await runRawNodeProgram(
       `async ({}) => {
         console.log("diagnostic");
         process.stdout.write("not json\\n");
@@ -418,16 +444,14 @@ describe("runInSandbox", () => {
         await new Promise(resolve => setTimeout(resolve, 10));
         return { secret: process.env.HOME };
       }`,
-      async () => null,
     );
     expect(result).toEqual({});
   });
 
   it("bounds protocol frames in both directions", async () => {
     await expect(
-      runInSandbox(
+      runRawNodeProgram(
         `async ({}) => { process.stdout.write("x".repeat(8_000_001)); return null; }`,
-        async () => null,
       ),
     ).rejects.toThrow(/RPC frame exceeds/);
 
@@ -507,15 +531,13 @@ describe("runInSandbox", () => {
   });
 
   it("reports a child that exits without a result", async () => {
-    await expect(runInSandbox("({}) => process.exit(7)", async () => null)).rejects.toThrow(
-      /exit 7/,
-    );
+    await expect(runRawNodeProgram("({}) => process.exit(7)")).rejects.toThrow(/exit 7/);
   });
 
   it("reports a child terminated by a signal", async () => {
-    await expect(
-      runInSandbox(`({}) => process.kill(process.pid, "SIGTERM")`, async () => null),
-    ).rejects.toThrow(/SIGTERM/);
+    await expect(runRawNodeProgram(`({}) => process.kill(process.pid, "SIGTERM")`)).rejects.toThrow(
+      /SIGTERM/,
+    );
   });
 
   it("handles non-Error capability failures", async () => {

@@ -8,6 +8,10 @@ let __pit_next_id = 1;
 let __pit_next_invocation_id = 1;
 let __pit_function_context;
 
+// The guest has no inherited stdio. Do not enter Javy's WASI-backed console:
+// synchronous WASI stream calls cannot run inside the addon's async runtime.
+globalThis.console = { log() {}, warn() {}, error() {} };
+
 globalThis.setTimeout = (handler, timeout = 0, ...args) => {
   if (typeof handler !== "function") throw new TypeError("setTimeout handler must be a function");
   const requested = Number(timeout);

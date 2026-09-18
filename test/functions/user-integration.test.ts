@@ -166,7 +166,7 @@ describe("user functions", () => {
     );
     await sessionStart({}, context());
     const prompt = beforeAgentStart({ systemPrompt: "base" });
-    expect(prompt.systemPrompt).toContain("## User TypeScript functions");
+    expect(prompt.systemPrompt).toContain("## User functions");
     expect(prompt.systemPrompt).toContain("catalogUser()");
 
     const inspectContext = context({ mode: "tui" });
