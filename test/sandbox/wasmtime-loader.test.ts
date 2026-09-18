@@ -182,4 +182,38 @@ describe("configuredFunctionExecutor", () => {
       ).resolves.toBe(42);
     },
   );
+
+  it.each<{ name: string; failure: unknown }>([
+    { name: "ABI error", failure: new Error("incompatible native ABI") },
+    { name: "non-Error failure", failure: "native load refused" },
+  ])("falls back for an implicit prebuild $name", ({ failure }) => {
+    const operations = availableOperations();
+    operations.loadAddon.mockImplementation(() => {
+      throw failure;
+    });
+    expect(configuredFunctionExecutor({ platform: "linux", architecture: "x64" }, operations)).toBe(
+      nodeFunctionExecutor,
+    );
+    expect(operations.warn).toHaveBeenCalledWith(expect.stringContaining("could not be loaded"));
+  });
+
+  it("does not hide load failures when Wasmtime was explicitly requested", () => {
+    const operations = availableOperations();
+    operations.readComponent.mockImplementation(() => {
+      throw new Error("component read failed");
+    });
+    expect(() =>
+      configuredFunctionExecutor(
+        { backend: "wasmtime", platform: "linux", architecture: "x64" },
+        operations,
+      ),
+    ).toThrow("component read failed");
+    expect(() =>
+      configuredFunctionExecutor(
+        { addonPath: "custom.node", componentPath: "custom.wasm" },
+        operations,
+      ),
+    ).toThrow("component read failed");
+    expect(operations.warn).not.toHaveBeenCalled();
+  });
 });
