@@ -4,9 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-09-18
+
 ### Changed
 
-- Consolidate model-facing guidance and catalog prose while documenting layered resolution, promotion, `$next`, paginated inspection, and portable guest constraints.
+- Reduce fixed model-facing prompt prose from 7,536 to 5,968 characters (20.8%) while documenting layered resolution, promotion, `$next`, paginated inspection, and portable guest constraints.
+- Keep calling guidance engine-agnostic and remove repeated tutorials from function catalogs without dropping signatures or useful parameter documentation.
 - Measure all prompt parameter descriptions and compile emitted examples in regression tests.
 
 ### Fixed
@@ -114,7 +117,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/cv/pit/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/cv/pit/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/cv/pit/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/cv/pit/compare/v0.14.1...v0.15.0
