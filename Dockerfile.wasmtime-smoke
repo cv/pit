@@ -32,7 +32,7 @@ FROM node:24-bookworm-slim AS program
 
 WORKDIR /pit
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY src ./src
 COPY native/wasmtime-executor/prepare-smoke.mts ./native/wasmtime-executor/prepare-smoke.mts
 RUN npx tsx native/wasmtime-executor/prepare-smoke.mts /prepared-program.json \
@@ -49,7 +49,7 @@ ENV PI_SKIP_VERSION_CHECK=1 \
 
 WORKDIR /opt/pit
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev \
+RUN npm ci --ignore-scripts --omit=dev \
   && npm cache clean --force
 COPY src ./src
 COPY prompts ./prompts
