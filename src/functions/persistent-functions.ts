@@ -1,5 +1,6 @@
 import { validateTypeScript } from "../sandbox/validation.js";
 import { type FunctionRegistry, validateEffectiveRegistryCapacity } from "./core.js";
+import { getFunctionDependencies } from "./dependencies.js";
 import { getSavedFunctionDependencyGraph } from "./graph.js";
 import {
   getSavedFunctionCallSignature,
@@ -166,16 +167,15 @@ export function reconcileProjectFunctionsForSession({
   metadata.clear();
   const errors: string[] = [];
 
+  const proposedProject = (additions: readonly string[]): FunctionRegistry => {
+    const project = new Map(registry);
+    for (const name of additions) project.set(name, requiredProjectSource(candidates, name));
+    return project;
+  };
   const proposedEffective = (
     additions: readonly string[],
     sessionFunctions: ReadonlyMap<string, string>,
-  ): FunctionRegistry => {
-    const project = new Map(registry);
-    for (const name of additions) {
-      project.set(name, requiredProjectSource(candidates, name));
-    }
-    return new Map([...user, ...project, ...sessionFunctions]);
-  };
+  ): FunctionRegistry => new Map([...user, ...proposedProject(additions), ...sessionFunctions]);
 
   const commitProjects = (names: readonly string[]): void => {
     for (const name of names) {
@@ -194,10 +194,19 @@ export function reconcileProjectFunctionsForSession({
       const roots = availableGraph
         .directReferences(source)
         .filter((reference) => !proposedSession.has(reference) && candidates.has(reference));
-      const additions = projectClosure(closureContext, roots, proposedSession);
+      if (getFunctionDependencies(source).usesNext && candidates.has(name)) roots.push(name);
+      const additions = projectClosure(closureContext, roots, proposedSession, true);
       const effective = proposedEffective(additions, proposedSession);
       validateEffectiveRegistryCapacity(effective);
-      validateTypeScript(source, effective);
+      validateTypeScript(source, effective, undefined, {
+        environment: {
+          userFunctions: user,
+          projectFunctions: proposedProject(additions),
+          sessionFunctions: proposedSession,
+        },
+        definition: { id: name, layer: "session" },
+        checkAll: false,
+      });
       commitProjects(additions);
       session.set(name, source);
     } catch (error) {

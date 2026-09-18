@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { type FunctionRegistry, validateSavedFunctionSource } from "../core.js";
-import { getSavedFunctionDependencyGraph } from "../graph.js";
 import { functionRelativePath } from "../identifier.js";
 import {
   getPersistentFunctionMetadata,
@@ -103,7 +102,7 @@ export async function saveProjectFunction(
   validateSavedFunctionSource(source);
   const candidates = new Map(registry);
   candidates.set(name, source);
-  validatePersistentFunction(name, source, new Map([...user, ...candidates]));
+  validatePersistentFunction(name, source, candidates, { layer: "project", userFunctions: user });
   const replaced = registry.has(name);
   await assertPersistentPath(projectFunctionDirectory(cwd), name);
   await writePersistentFunctionFile(currentPathFor(cwd, name), source);
@@ -123,9 +122,11 @@ export async function loadProjectFunctions(
   {
     user = new Map(),
     invalidDefinitions = new Map(),
+    invalidUser = new Map(),
   }: {
     user?: ReadonlyMap<string, string>;
     invalidDefinitions?: Map<string, string>;
+    invalidUser?: ReadonlyMap<string, string>;
   } = {},
 ): Promise<string[]> {
   registry.clear();
@@ -142,18 +143,15 @@ export async function loadProjectFunctions(
 
   for (const [id, error] of invalid) invalidDefinitions.set(id, error);
 
-  const sources = new Map([
-    ...user,
-    ...[...candidates].map(([name, value]) => [name, value.source] as const),
-  ]);
-  const sourceGraph = getSavedFunctionDependencyGraph(sources);
+  const sources = new Map([...candidates].map(([id, value]) => [id, value.source]));
   for (const [name, value] of candidates) {
     try {
-      const dependencies = new Map(
-        sourceGraph.resolve(value.source).map((reference) => [reference.name, reference.source]),
-      );
-      dependencies.set(name, value.source);
-      validatePersistentFunction(name, value.source, dependencies);
+      validatePersistentFunction(name, value.source, sources, {
+        layer: "project",
+        userFunctions: user,
+        invalidDefinitions: new Map([...invalidUser, ...invalidDefinitions]),
+        checkAll: false,
+      });
       registry.set(name, value.source);
       metadata.set(name, value.metadata);
     } catch (error) {

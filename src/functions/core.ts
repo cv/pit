@@ -3,6 +3,7 @@ import { formatSize } from "@earendil-works/pi-coding-agent";
 import { validateTypeScript } from "../sandbox/validation.js";
 import { createLayeredFunctionRegistry } from "./definitions.js";
 import { getFunctionDependencies } from "./dependencies.js";
+import type { FunctionEnvironment } from "./environment.js";
 import { validateFunctionId } from "./identifier.js";
 import { getNamedFunctionName } from "./source.js";
 
@@ -166,7 +167,13 @@ export function reconstructFunctions(
   entries: readonly unknown[],
   baseFunctions: ReadonlyMap<string, string> = new Map(),
 
-  capacityBaseFunctions: ReadonlyMap<string, string> = baseFunctions,
+  {
+    capacityBaseFunctions = baseFunctions,
+    environment = { userFunctions: baseFunctions },
+  }: {
+    capacityBaseFunctions?: ReadonlyMap<string, string>;
+    environment?: FunctionEnvironment;
+  } = {},
 ): void {
   registry.clear();
   for (const raw of entries) {
@@ -199,7 +206,14 @@ export function reconstructFunctions(
       const available = new Map([...baseFunctions, ...registry]);
       available.set(definition.name, definition.source);
       validateFunctionRegistryIdentifiers(available.keys());
-      validateTypeScript(definition.source, available);
+      validateTypeScript(definition.source, available, undefined, {
+        environment: {
+          ...environment,
+          sessionFunctions: new Map([...registry, [definition.name, definition.source]]),
+        },
+        definition: { id: definition.name, layer: "session" },
+        checkAll: false,
+      });
       registry.set(definition.name, definition.source);
     } catch {
       // Ignore stale or malformed persisted definitions.

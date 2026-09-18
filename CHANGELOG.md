@@ -6,6 +6,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Added
 
+- Enforce signature-compatible layered overrides and support typed `$next` in session, user, and project definitions, including named execution, promotion, reload, and safe fallback removal.
+
 - Add `functionId` for namespaced session definitions, preserving full identifiers through replay, promotion, catalogs, and traces.
 
 - Build and smoke-test Linux, macOS, and Windows ARM64/x64 Wasmtime addons in CI, attach them to tagged releases, and install only the matching checksum-verified prebuild during Git package installation.

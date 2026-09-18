@@ -36,7 +36,7 @@ export const SAVE_ONLY_DESCRIPTION =
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
-    "Run contextually type-checked TypeScript in a fresh restricted process.",
+    "Run contextually type-checked TypeScript in an isolated executor.",
     "",
     "EXPLICIT FUNCTION DEPENDENCIES",
     "",
@@ -60,9 +60,11 @@ export function createToolDescription(maxOutputBytes: number): string {
     "  return test({ coverage: input.coverage, raise: true });",
     "}",
     "",
-    "Use saveOnly: true to save without running. To call an available function, inject it explicitly: async ({ runTests }) => runTests({ coverage: true }). Add input modes or compose helpers instead of creating overlapping variants.",
+    "Use saveOnly: true to save without running. To call an available function, inject it explicitly: async ({ runTests }) => runTests({ coverage: true }). Extend or compose existing helpers.",
     "",
     'Set functionId: "company.check" for a named function check. Invoke it with async ({ company: { check } }) => check().',
+    "",
+    "Overrides must preserve lower call signatures. Named overrides can inject $next to call the next lower definition.",
     "",
     "HASHED EDIT WORKFLOW",
     "",

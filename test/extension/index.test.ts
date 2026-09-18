@@ -44,6 +44,7 @@ describe("pit extension", () => {
     expect(tool.description).toContain("Prefer named functions");
     expect(tool.description).toContain("explicitly");
     expect(tool.description).toContain("available function");
+    expect(tool.description).toContain("inject $next");
     expect(tool.description).toContain("HASHED EDIT WORKFLOW");
     expect(tool.description).toContain('kind: "replace"');
     expect(tool.description).toContain("discard every prior revision and anchor");
