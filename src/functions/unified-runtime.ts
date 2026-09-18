@@ -92,12 +92,19 @@ export function unifiedRuntimeProgram(source: string, graph: ResolvedFunctionGra
       ? renderNativeAssignment(index, node.definition)
       : renderSourceAssignment(index, node, indexes),
   );
-  const rootDependencies = renderDependencyTree(dependencyTree(graph.roots), indexes);
+  const rootDependencies = renderDependencyTree(
+    dependencyTree(graph.roots, graph.nextKey),
+    indexes,
+  );
+  const invocation = `__pit_submission(${rootDependencies}, __pit_input)`;
+  const execution = graph.definition
+    ? `__pit_run_saved(${JSON.stringify(graph.definition.id)}, ${JSON.stringify(graph.definition.layer)}, () => ${invocation})`
+    : invocation;
   return `async (__pit_capabilities, __pit_input, __pit_run_saved) => {
     const __pit_dependency_object = (__pit_values) => Object.freeze(Object.assign(Object.create(null), __pit_values));
     ${declarations.join("\n")}
     ${assignments.join("\n")}
     const __pit_submission = (${source});
-    return await __pit_submission(${rootDependencies}, __pit_input);
+    return await ${execution};
   }`;
 }

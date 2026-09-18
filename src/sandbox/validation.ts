@@ -3,8 +3,15 @@ import { fileURLToPath } from "node:url";
 
 import * as ts from "typescript";
 
+import {
+  functionRegistry,
+  type FunctionEnvironment,
+  type FunctionDefinitionReference,
+} from "../functions/environment.js";
+import { resolveFunctionGraph } from "../functions/resolved-graph.js";
 import { isProgramExpression } from "../functions/source.js";
 import { SANDBOX_GLOBALS } from "./contract.js";
+import { functionTypeModel } from "./function-types.js";
 
 const CAPABILITY_CONTRACT = readFileSync(
   fileURLToPath(new URL("../generated/capability-contract.d.ts", import.meta.url)),
@@ -63,53 +70,6 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic): string {
   return `${location} ${message}\n  ${sourceLine}\n  ${caret}`;
 }
 
-function savedEntries(savedFunctions: ReadonlyMap<string, string>) {
-  return [...savedFunctions.entries()].sort(([a], [b]) => a.localeCompare(b));
-}
-
-interface DependencyTypeNode {
-  signature?: number;
-  children: Map<string, DependencyTypeNode>;
-}
-
-function injectedDependencyDeclarations(savedFunctions: ReadonlyMap<string, string>): string {
-  const root: DependencyTypeNode = { children: new Map() };
-  savedEntries(savedFunctions).forEach(([id], index) => {
-    let node = root;
-    for (const segment of id.split(".")) {
-      let child = node.children.get(segment);
-      if (!child) {
-        child = { children: new Map() };
-        node.children.set(segment, child);
-      }
-      node = child;
-    }
-    node.signature = index;
-  });
-  const render = (node: DependencyTypeNode, base: string): string => {
-    if (node.signature !== undefined)
-      return `PitInjectedFunction<typeof __pit_signature_${node.signature}>`;
-    if (!node.children.size) return base;
-    const keys = [...node.children.keys()].map((key) => JSON.stringify(key)).join(" | ");
-    const properties = [...node.children].map(([key, child]) => {
-      const quoted = JSON.stringify(key);
-      return `${quoted}: ${render(child, `PitProperty<${base}, ${quoted}>`)};`;
-    });
-    return `Omit<${base}, ${keys}> & { ${properties.join(" ")} }`;
-  };
-  return `type PitInjectedArguments<T extends (...args: any[]) => any> = Parameters<T> extends [any, ...infer Rest] ? Rest : [];
-type PitInjectedFunction<T extends (...args: any[]) => any> = (...args: PitInjectedArguments<T>) => Promise<Awaited<ReturnType<T>>>;
-type PitProperty<T, K extends PropertyKey> = K extends keyof T ? T[K] : {};
-type PitCapabilities = ${render(root, "PitBuiltinCapabilities")};`;
-}
-
-function savedSignatures(savedFunctions: ReadonlyMap<string, string>): string {
-  const signatures = savedEntries(savedFunctions).map(
-    ([, source], index) => `const __pit_signature_${index} = (${source}) satisfies PitProgram;`,
-  );
-  return signatures.length > 0 ? signatures.join("\n") : "void 0;";
-}
-
 function programDiagnostics(program: ts.Program): readonly ts.Diagnostic[] {
   const syntactic = program.getSyntacticDiagnostics();
   const diagnostics =
@@ -157,23 +117,43 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
   );
 }
 
-/** Semantically validate model code against the capability contract. */
+export interface TypeScriptValidationOptions {
+  environment?: FunctionEnvironment;
+  definition?: FunctionDefinitionReference;
+  checkAll?: boolean;
+  availableNames?: Iterable<string>;
+}
+
+/** Semantically validate a submission and its concrete layered source definitions. */
 export function validateTypeScript(
   source: string,
   savedFunctions: ReadonlyMap<string, string> = new Map(),
   input?: unknown,
-  availableNames: Iterable<string> = savedFunctions.keys(),
+  validation: TypeScriptValidationOptions = {},
 ): void {
   const programExpression = isProgramExpression(source);
-  const entries = savedEntries(savedFunctions);
-  const names = [...availableNames].sort();
-  const registryKey = entries.map(([name, savedSource]) => `${name}\0${savedSource}`).join("\0");
+  const registry = functionRegistry(validation.environment ?? { sessionFunctions: savedFunctions });
+  const names = [
+    ...(validation.availableNames ??
+      (validation.environment ? registry.identifiers() : savedFunctions.keys())),
+  ].sort();
+  const registryKey = JSON.stringify(registry.definitions());
   const availableKey = names.join("\0");
   const inputSource = input === undefined ? "" : JSON.stringify(input);
   if (input !== undefined && !programExpression) {
     throw new Error("Top-level params can only be passed to a function expression");
   }
-  const cacheKey = `${programExpression ? "program" : "expression"}\0${registryKey}\0${availableKey}\0${inputSource}\0${source}`;
+  const cacheKey = JSON.stringify([
+    programExpression,
+    registryKey,
+    availableKey,
+    inputSource,
+    source,
+    validation.definition,
+    validation.checkAll,
+    Boolean(validation.environment),
+    [...(validation.environment?.invalidDefinitions ?? [])],
+  ]);
   if (validationCache.has(cacheKey)) {
     validationCacheHits++;
     const cachedError = validationCache.get(cacheKey);
@@ -183,12 +163,21 @@ export function validateTypeScript(
     return;
   }
 
+  const model = functionTypeModel(source, registry, {
+    ...validation,
+    checkAll: validation.checkAll ?? true,
+    checkCompatibility: Boolean(validation.environment),
+  });
+  const rootType = validation.definition
+    ? `PitSourceProgram<${model.rootDependencies}>`
+    : "PitProgram";
+
   const invocation =
     input === undefined || !programExpression
       ? ""
-      : `program({} as PitCapabilities, ${inputSource});\n`;
+      : `program({} as ${model.rootDependencies}, ${inputSource});\n`;
   const wrapped = programExpression
-    ? `const program = (\n${source}\n) satisfies PitProgram;\nvoid program;\n${invocation}`
+    ? `const program = (\n${source}\n ) satisfies ${rootType};\nvoid program;\n${invocation}`
     : `${EXPRESSION_PREFIX}${source}\n);\nvoid program;\n`;
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
@@ -207,10 +196,10 @@ export function validateTypeScript(
     [
       CONTRACT_FILE,
       `${CAPABILITY_CONTRACT.replaceAll("PitCapabilities", "PitBuiltinCapabilities").replace("capabilities: PitBuiltinCapabilities", "capabilities: PitCapabilities") + SANDBOX_GLOBALS}
-${injectedDependencyDeclarations(savedFunctions)}`,
+${model.declarations}`,
     ],
     [PROGRAM_FILE, wrapped],
-    [SIGNATURES_FILE, savedSignatures(savedFunctions)],
+    [SIGNATURES_FILE, model.signatures],
   ]);
   const host: ts.CompilerHost = {
     ...baseHost,
@@ -229,6 +218,9 @@ ${injectedDependencyDeclarations(savedFunctions)}`,
     const error = validationError(diagnostics, names);
     cacheSet(cacheKey, error);
     throw new Error(error);
+  }
+  if (validation.environment) {
+    resolveFunctionGraph(source, registry, { ...validation, ...validation.environment });
   }
   cacheSet(cacheKey, null);
 }

@@ -62,13 +62,6 @@ const __pit_run_saved = async (name, scope, callback) => {
   };
   __pit_function_context = context;
   try {
-    await __pit_rpc({
-      type: "call",
-      id: __pit_next_id++,
-      capability: "__pit",
-      method: "savedFunctionRun",
-      args: [name],
-    });
     return await callback();
   } finally {
     __pit_function_context = parent;

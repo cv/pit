@@ -1,14 +1,15 @@
 import { transform } from "esbuild";
 
 import {
-  createLayeredFunctionRegistry,
-  type FunctionDefinition,
-} from "../functions/definitions.js";
+  functionRegistry,
+  type FunctionEnvironment,
+  type FunctionDefinitionReference,
+} from "../functions/environment.js";
 import {
   clearSavedFunctionDependencyGraphCache,
   getSavedFunctionDependencyGraphCacheStats,
 } from "../functions/graph.js";
-import { resolveFunctionGraph, sourceFunctionDefinition } from "../functions/resolved-graph.js";
+import { resolveFunctionGraph } from "../functions/resolved-graph.js";
 import { isProgramExpression } from "../functions/source.js";
 import { unifiedRuntimeProgram } from "../functions/unified-runtime.js";
 import { clearValidationCache, getValidationCacheStats, validateTypeScript } from "./validation.js";
@@ -64,27 +65,9 @@ async function compileTypeScript(source: string): Promise<string> {
   }
 }
 
-export interface SandboxProgramOptions {
-  userFunctions?: ReadonlyMap<string, string>;
-  projectFunctions?: ReadonlyMap<string, string>;
-  sessionFunctions?: ReadonlyMap<string, string>;
+export interface SandboxProgramOptions extends FunctionEnvironment {
   input?: unknown;
-}
-
-function sourceDefinitions(options: SandboxProgramOptions): FunctionDefinition[] {
-  const definitions: FunctionDefinition[] = [];
-  const add = (
-    functions: ReadonlyMap<string, string>,
-    layer: "user" | "project" | "session",
-  ): void => {
-    for (const [id, source] of functions) {
-      definitions.push(sourceFunctionDefinition(id, layer, source));
-    }
-  };
-  add(options.userFunctions ?? new Map(), "user");
-  add(options.projectFunctions ?? new Map(), "project");
-  add(options.sessionFunctions ?? new Map(), "session");
-  return definitions;
+  definition?: FunctionDefinitionReference;
 }
 
 export interface PreparedSandboxProgram {
@@ -99,13 +82,13 @@ export async function prepareSandboxProgram(
   if (!isProgramExpression(source)) {
     throw new Error("TypeScript programs must be function expressions");
   }
-  const registry = createLayeredFunctionRegistry(sourceDefinitions(options));
-  const effectiveSources = new Map<string, string>();
-  for (const [id, definition] of registry.effective()) {
-    if (definition.kind === "source") effectiveSources.set(id, definition.source);
-  }
-  validateTypeScript(source, effectiveSources, options.input, registry.identifiers());
-  const graph = resolveFunctionGraph(source, registry);
+  const registry = functionRegistry(options);
+  validateTypeScript(source, new Map(), options.input, {
+    environment: options,
+    ...(options.definition ? { definition: options.definition } : {}),
+    checkAll: false,
+  });
+  const graph = resolveFunctionGraph(source, registry, options);
   return {
     compiled: await compileTypeScript(unifiedRuntimeProgram(source, graph)),
     effects: graph.effects,

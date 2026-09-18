@@ -12,7 +12,7 @@ describe("createWasmtimeGuestSource", () => {
     const source = createWasmtimeGuestSource(program, { value: 42 });
 
     expect(source).toContain("pitCall(JSON.stringify");
-    expect(source).toContain('capability: "__pit"');
+    expect(source).not.toContain('method: "savedFunctionRun"');
     expect(source).toContain('type: "result"');
     expect(source).toContain('{"value":42}');
     expect(source).toContain(JSON.stringify(program.compiled));
