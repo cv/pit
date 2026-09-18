@@ -171,4 +171,85 @@ describe("function registry handler", () => {
     expect(many).toContain("heavily reused session functions");
     expect(many).toContain("… 1 more");
   });
+
+  it("does not offer user removal without a mutation callback", async () => {
+    let command: any;
+    registerFunctionManager(
+      {
+        registerCommand: (_name: string, value: unknown) => {
+          command = value;
+        },
+      } as any,
+      new Map(),
+      {
+        userFunctions: new Map([
+          ["userOnly", "/** User helper. */ async function userOnly({}) { return 1; }"],
+        ]),
+        planSessionRemoval: (name) => ({
+          directDependents: [],
+          transitiveDependents: [],
+          removalClosure: [name],
+        }),
+        removeSession: async (name) => [name],
+      },
+    );
+    const ctx = context({ mode: "tui" });
+    ctx.ui.select
+      .mockImplementationOnce(async (_title, options) =>
+        options.find((option) => option.startsWith("userOnly [user]")),
+      )
+      .mockImplementationOnce(async (_title, options) => {
+        expect(options).toEqual(["Inspect source", "Close"]);
+        return "Close";
+      });
+    await command.handler("", ctx);
+  });
+
+  it("reports planning failures without prompting for deletion", async () => {
+    let command: any;
+    registerFunctionManager(
+      {
+        registerCommand: (_name: string, value: unknown) => {
+          command = value;
+        },
+      } as any,
+      new Map([["blocked", "async function blocked({}) { return 1; }"]]),
+      {
+        planSessionRemoval: () => {
+          throw new Error("planning refused");
+        },
+        removeSession: vi.fn(),
+      },
+    );
+    const ctx = context();
+    await command.handler("delete blocked", ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith("planning refused", "error");
+    expect(ctx.ui.confirm).not.toHaveBeenCalled();
+  });
+
+  it("reports a deletion failure after confirmation", async () => {
+    let command: any;
+    registerFunctionManager(
+      {
+        registerCommand: (_name: string, value: unknown) => {
+          command = value;
+        },
+      } as any,
+      new Map([["blocked", "async function blocked({}) { return 1; }"]]),
+      {
+        planSessionRemoval: (name) => ({
+          directDependents: [],
+          transitiveDependents: [],
+          removalClosure: [name],
+        }),
+        removeSession: async () => {
+          throw new Error("deletion refused");
+        },
+      },
+    );
+    const ctx = context();
+    await command.handler("delete blocked", ctx);
+    expect(ctx.ui.confirm).toHaveBeenCalledOnce();
+    expect(ctx.ui.notify).toHaveBeenCalledWith("deletion refused", "error");
+  });
 });

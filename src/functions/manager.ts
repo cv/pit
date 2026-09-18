@@ -1,84 +1,43 @@
-import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { formatSize, highlightCode } from "@earendil-works/pi-coding-agent";
-import {
-  matchesKey,
-  truncateToWidth,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { formatSize } from "@earendil-works/pi-coding-agent";
 
 import type { FunctionRegistry, FunctionScope, SessionFunctionRemovalPlan } from "./core.js";
+import { FunctionInspector, type FunctionSummary, type FunctionListOptions } from "./inspection.js";
+import { FUNCTION_LAYERS } from "./layered-registry.js";
+import { FunctionViewer } from "./viewer.js";
 
 const COMMAND_ARGUMENTS_PATTERN = /\s+/;
+const FILTER_LABEL = "Filter scope…";
+const ALL_LABEL = "Show all definitions";
+const EFFECTIVE_LABEL = "Show effective definitions";
 
-interface FunctionSummary {
-  name: string;
-  source: string;
-  scope: FunctionScope;
-  scopeLabel: string;
-  lines: number;
-  bytes: number;
+function scopeValue(value: string | undefined): FunctionScope | undefined {
+  return value && FUNCTION_LAYERS.includes(value as FunctionScope)
+    ? (value as FunctionScope)
+    : undefined;
+}
+
+function entryLabel(entry: FunctionSummary): string {
+  const override = entry.overridesProject || entry.overridesUser || entry.overridesGlobal;
+  const scope = entry.scope + (override ? " override" : "") + (entry.effective ? "" : " shadowed");
+  const detail =
+    entry.kind === "source"
+      ? `${entry.lines} lines, ${formatSize(entry.bytes)}`
+      : `${entry.kind}, read-only${entry.sealed ? ", sealed" : ""}`;
+  return `${entry.name} [${scope}] — ${detail}`;
 }
 
 export interface FunctionManagerOptions {
   userFunctions?: FunctionRegistry;
   projectFunctions?: FunctionRegistry;
+  invalidUser?: ReadonlyMap<string, string>;
+  invalidProject?: ReadonlyMap<string, string>;
   planSessionRemoval(name: string): SessionFunctionRemovalPlan;
   removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
   saveToUser?: (name: string, ctx: ExtensionContext) => Promise<void>;
   removeFromProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
   removeFromUser?: (name: string, ctx: ExtensionContext) => Promise<void>;
-}
-
-class SavedFunctionViewer {
-  private lines: string[] = [];
-  private omitted = 0;
-
-  constructor(
-    private readonly name: string,
-    private readonly source: string,
-    private readonly theme: Theme,
-    private readonly close: () => void,
-  ) {
-    this.rebuildHighlighting();
-  }
-
-  private rebuildHighlighting(): void {
-    const sourceLines = this.source.split("\n");
-    const highlighted = wrapTextWithAnsi(
-      highlightCode(this.source, "typescript").join("\n"),
-      Math.max(1, ...sourceLines.map((line) => visibleWidth(line))),
-    );
-    this.lines = highlighted.slice(0, 500);
-    this.omitted = highlighted.length - this.lines.length;
-  }
-
-  render(width: number): string[] {
-    return [
-      truncateToWidth(this.theme.fg("toolTitle", this.theme.bold(this.name)), width),
-      "",
-      ...this.lines.map((line) => truncateToWidth(line, width)),
-      ...(this.omitted ? [this.theme.fg("muted", `… ${this.omitted} source lines omitted`)] : []),
-      "",
-      truncateToWidth(this.theme.fg("dim", "Enter/Esc/q to close"), width),
-    ];
-  }
-
-  invalidate(): void {
-    this.rebuildHighlighting();
-  }
-
-  handleInput(data: string): void {
-    if (
-      matchesKey(data, "enter") ||
-      matchesKey(data, "escape") ||
-      matchesKey(data, "ctrl+c") ||
-      data === "q"
-    ) {
-      this.close();
-    }
-  }
 }
 
 class SavedFunctionManager {
@@ -95,63 +54,47 @@ class SavedFunctionManager {
 
   register(pi: ExtensionAPI): void {
     pi.registerCommand("functions", {
-      description: "List and manage saved TypeScript functions",
+      description: "Inspect layered functions and manage writable definitions",
       handler: (args, ctx) => this.handleCommand(args, ctx),
     });
   }
 
-  private summaries(): FunctionSummary[] {
-    const effective = new Map(this.#userFunctions);
-    for (const [name, source] of this.#projectFunctions) {
-      effective.set(name, source);
-    }
-    for (const [name, source] of this.savedFunctions) {
-      effective.set(name, source);
-    }
-    return [...effective.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, source]) => {
-        const scope: FunctionScope = this.savedFunctions.has(name)
-          ? "session"
-          : this.#projectFunctions.has(name)
-            ? "project"
-            : "user";
-        const overridesLower =
-          scope === "session"
-            ? this.#projectFunctions.has(name) || this.#userFunctions.has(name)
-            : scope === "project" && this.#userFunctions.has(name);
-        return {
-          name,
-          source,
-          scope,
-          scopeLabel: overridesLower ? `${scope} override` : scope,
-          lines: source.split("\n").length,
-          bytes: Buffer.byteLength(source),
-        };
-      });
+  private inspector(ctx: ExtensionContext): FunctionInspector {
+    return new FunctionInspector(
+      {
+        user: this.#userFunctions,
+        project: this.#projectFunctions,
+        session: this.savedFunctions,
+        ...(this.options.invalidUser ? { invalidUser: this.options.invalidUser } : {}),
+        ...(this.options.invalidProject ? { invalidProject: this.options.invalidProject } : {}),
+      },
+      ctx.cwd,
+    );
+  }
+
+  private summaries(ctx: ExtensionContext, options: FunctionListOptions = {}): FunctionSummary[] {
+    return this.inspector(ctx)
+      .summaries(options)
+      .sort(
+        (a, b) =>
+          Number(a.scope === "global") - Number(b.scope === "global") ||
+          a.name.localeCompare(b.name),
+      );
   }
 
   private async inspect(name: string, ctx: ExtensionContext, scope?: FunctionScope): Promise<void> {
-    const source =
-      scope === "user"
-        ? this.#userFunctions.get(name)
-        : scope === "project"
-          ? this.#projectFunctions.get(name)
-          : (this.savedFunctions.get(name) ??
-            this.#projectFunctions.get(name) ??
-            this.#userFunctions.get(name));
-    if (source === undefined) {
-      ctx.ui.notify(`Saved function "${name}" was not found`, "error");
-      return;
+    try {
+      const definition = this.inspector(ctx).inspect(name, scope);
+      if (ctx.mode !== "tui") {
+        ctx.ui.notify("Function inspection requires TUI mode", "error");
+        return;
+      }
+      await ctx.ui.custom<void>(
+        (_tui, theme, _keybindings, done) => new FunctionViewer(definition, theme, () => done()),
+      );
+    } catch (error) {
+      ctx.ui.notify((error as Error).message, "error");
     }
-    if (ctx.mode !== "tui") {
-      ctx.ui.notify("Saved source inspection requires TUI mode", "error");
-      return;
-    }
-    await ctx.ui.custom<void>(
-      (_tui, theme, _keybindings, done) =>
-        new SavedFunctionViewer(name, source, theme, () => done()),
-    );
   }
 
   private async delete(name: string, ctx: ExtensionContext): Promise<boolean> {
@@ -198,21 +141,23 @@ class SavedFunctionManager {
     }
   }
 
-  private list(ctx: ExtensionContext): void {
-    const entries = this.summaries();
-    const message =
-      entries.length > 0
-        ? entries
-            .map(
-              (entry) =>
-                `${entry.name} [${entry.scopeLabel}] — ${entry.lines} lines, ${formatSize(entry.bytes)}`,
-            )
-            .join("\n")
-        : "No saved functions";
-    ctx.ui.notify(message, "info");
+  private list(ctx: ExtensionContext, options: FunctionListOptions = {}): void {
+    const entries = this.summaries(ctx, options);
+    const shown = entries.slice(0, 50);
+    const message = shown.length
+      ? shown.map(entryLabel).join("\n")
+      : "No functions match this view";
+    ctx.ui.notify(
+      message +
+        (shown.length < entries.length
+          ? `\n… ${entries.length - shown.length} more; use /functions for pagination and scope filters`
+          : ""),
+      "info",
+    );
   }
 
   private actions(entry: FunctionSummary): string[] {
+    if (entry.readOnly) return ["Inspect definition", "Close"];
     if (entry.scope === "session") {
       return [
         "Inspect source",
@@ -237,11 +182,13 @@ class SavedFunctionManager {
   }
 
   private async handleAction(entry: FunctionSummary, ctx: ExtensionContext): Promise<boolean> {
-    const action = await ctx.ui.select(entry.name, this.actions(entry));
+    const allowed = this.actions(entry);
+    const action = await ctx.ui.select(entry.name, allowed);
     if (action === "Close" || action === undefined) {
       return true;
     }
-    if (action === "Inspect source") {
+    if (!allowed.includes(action)) return false;
+    if (action === "Inspect source" || action === "Inspect definition") {
       await this.inspect(entry.name, ctx, entry.scope);
     } else if (action === "Save to project" && this.options.saveToProject) {
       await this.runProjectAction(() => this.options.saveToProject?.(entry.name, ctx), ctx);
@@ -269,45 +216,80 @@ class SavedFunctionManager {
   }
 
   private async interactive(ctx: ExtensionContext): Promise<void> {
+    let options: FunctionListOptions = {};
+    let offset = 0;
     for (;;) {
-      const entries = this.summaries();
-      if (entries.length === 0) {
-        ctx.ui.notify("No saved functions", "info");
-        return;
-      }
-      const labels = entries.map(
-        (summary) =>
-          `${summary.name} [${summary.scopeLabel}] — ${summary.lines} lines, ${formatSize(summary.bytes)}`,
-      );
-      const selected = await ctx.ui.select("Saved functions", labels);
-      if (selected === undefined) {
-        return;
-      }
-      const entry = entries[labels.indexOf(selected)];
-      if (!entry || (await this.handleAction(entry, ctx))) {
-        return;
+      const entries = this.summaries(ctx, options);
+      const page = entries.slice(offset, offset + 50);
+      const toggle = options.allDefinitions ? EFFECTIVE_LABEL : ALL_LABEL;
+      const labels = [
+        ...page.map(entryLabel),
+        ...(offset ? ["Previous page"] : []),
+        ...(offset + page.length < entries.length ? ["Next page"] : []),
+        FILTER_LABEL,
+        toggle,
+      ];
+      if (!entries.length) ctx.ui.notify("No functions match this view", "info");
+      const selected = await ctx.ui.select("Functions", labels);
+      if (selected === undefined) return;
+      if (selected === FILTER_LABEL) {
+        const scope = await ctx.ui.select("Function scope", ["All scopes", ...FUNCTION_LAYERS]);
+        if (scope === undefined) continue;
+        options = {
+          ...(options.allDefinitions ? { allDefinitions: true } : {}),
+          ...(scopeValue(scope) ? { scope: scopeValue(scope) as FunctionScope } : {}),
+        };
+        offset = 0;
+      } else if (selected === toggle) {
+        options = { ...options, allDefinitions: !options.allDefinitions };
+        offset = 0;
+      } else if (selected === "Next page") {
+        offset += 50;
+      } else if (selected === "Previous page") {
+        offset = Math.max(0, offset - 50);
+      } else {
+        const entry = page[labels.indexOf(selected)];
+        if (!entry || (await this.handleAction(entry, ctx))) return;
+        offset = 0;
       }
     }
   }
 
   private async handleCommand(args: string, ctx: ExtensionContext): Promise<void> {
-    const [action = "", name] = args.trim().split(COMMAND_ARGUMENTS_PATTERN, 2);
+    const [action = "", name, requestedScope, extra] = args.trim().split(COMMAND_ARGUMENTS_PATTERN);
+    const scope = scopeValue(requestedScope);
     if (!action) {
-      if (ctx.mode === "tui") {
-        await this.interactive(ctx);
-      } else {
-        this.list(ctx);
-      }
+      if (ctx.mode === "tui") await this.interactive(ctx);
+      else this.list(ctx);
       return;
     }
-    if (action === "list") {
-      this.list(ctx);
-    } else if (action === "show" && name) {
-      await this.inspect(name, ctx);
-    } else if (action === "delete" && name) {
+    if (action === "list" && !requestedScope && (!name || name === "all" || scopeValue(name))) {
+      this.list(
+        ctx,
+        name === "all"
+          ? { allDefinitions: true }
+          : name
+            ? { scope: scopeValue(name) as FunctionScope }
+            : {},
+      );
+    } else if (action === "show" && name && !extra && (!requestedScope || scope)) {
+      await this.inspect(name, ctx, scope);
+    } else if (action === "delete" && name && !requestedScope) {
+      if (
+        !this.savedFunctions.has(name) &&
+        this.inspector(ctx)
+          .summaries({ scope: "global" })
+          .some((entry) => entry.name === name)
+      ) {
+        ctx.ui.notify("Global functions are immutable", "error");
+        return;
+      }
       await this.delete(name, ctx);
     } else {
-      ctx.ui.notify("Usage: /functions [list | show <name> | delete <name>]", "error");
+      ctx.ui.notify(
+        "Usage: /functions [list [all|scope] | show <name> [scope] | delete <name>]",
+        "error",
+      );
     }
   }
 }

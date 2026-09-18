@@ -8,7 +8,7 @@ Review the work completed in this session, focusing on ${ARGUMENTS:-the entire s
 Work through this process:
 
 1. Reconstruct the important work performed in the session from the conversation, tool calls, failures, corrections, and repeated operations already in context. Focus on workflows that actually occurred or are strongly likely to recur.
-2. Inspect the effective function registry with `async ({ functions }) => functions.listAll()`. For relevant candidates, inspect source and dependency metadata with `async ({ functions }) => functions.getSaved(name)` so output stays bounded.
+2. Use `functions.listAll()` through explicit injection: `async ({ functions: { listAll } }) => listAll({ limit: 20 })`. Read the returned `functions` page and follow `nextOffset` only as needed; use scope filters to narrow it. For relevant candidates, use `functions.getSaved(name)` via `async ({ functions: { getSaved } }) => getSaved(name)` to inspect the override chain, dependencies, and effects. Only `kind: "source"` has authored source; native globals are read-only.
 3. Compare session workflows with the registry. For each candidate, decide whether to:
    - reuse an existing function unchanged;
    - extend the closest function with a parameter or explicit mode;
@@ -20,7 +20,7 @@ Work through this process:
 6. Implement only high-confidence improvements now:
    - keep unproven helpers session-scoped;
    - use `functions.promote(name, summary)` only for stable, project-specific workflows in an enabled, trusted project;
-   - use `functions.promote(name, summary, { to: "global" })` only for stable, project-independent workflows after explicit user confirmation;
+   - use `functions.promote(name, summary, { to: "user" })` only for stable, project-independent workflows after explicit user confirmation;
    - update a project function only when project persistence is clearly intentional;
    - use `saveOnly: true` when validation should not trigger external effects;
    - otherwise execute a representative low-risk case before retaining the function.
