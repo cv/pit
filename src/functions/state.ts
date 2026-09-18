@@ -1,4 +1,5 @@
 import type { FunctionRegistry } from "./core.js";
+import type { FunctionEnvironment } from "./environment.js";
 import { reconcileProjectFunctionsForSession } from "./persistent-functions.js";
 import type { PersistentFunctionMetadataRegistry } from "./source.js";
 
@@ -87,4 +88,17 @@ export function effectiveRegistry(
   user: ReadonlyMap<string, string> = new Map(),
 ): FunctionRegistry {
   return new Map([...user, ...project, ...session]);
+}
+
+export function stateFunctionEnvironment(
+  state: FunctionState,
+  overrides: FunctionEnvironment = {},
+): FunctionEnvironment {
+  return {
+    userFunctions: state.user,
+    projectFunctions: state.project,
+    sessionFunctions: state.session,
+    invalidDefinitions: new Map([...state.invalidUser, ...state.invalidProject]),
+    ...overrides,
+  };
 }

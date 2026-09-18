@@ -495,13 +495,10 @@ async function markedSession({}) {
       "/** Quota project. */ async function quotaProject({}) { return true; }",
     );
     setBranchEntries([
-      sessionFunctionEntry(
-        "quotaProject",
-        'async function quotaProject({}) { return "session override"; }',
-      ),
+      sessionFunctionEntry("quotaProject", "async function quotaProject({}) { return false; }"),
     ]);
     await sessionStart({}, context());
-    expect(await value("async ({ quotaProject }) => quotaProject()")).toBe("session override");
+    expect(await value("async ({ quotaProject }) => quotaProject()")).toBe(false);
 
     await functionsCommand.handler("delete quotaProject", context());
     expect(await value("async ({ quotaProject }) => quotaProject()")).toBe(true);

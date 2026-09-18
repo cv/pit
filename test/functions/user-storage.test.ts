@@ -182,7 +182,7 @@ describe("user function storage", () => {
       name: "namespace capture",
       file: "bad.ts",
       source: "/** Bad. */ async function bad({ workspace }) { return workspace.read('a'); }",
-      error: "unavailable function",
+      error: "does not exist",
     },
   ])("rejects $name and retains its diagnostic", async ({ file, source, error }) => {
     const directory = join(root, "functions");

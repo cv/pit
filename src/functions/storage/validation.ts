@@ -1,14 +1,18 @@
 import { validateTypeScript } from "../../sandbox/validation.js";
-import { createLayeredFunctionRegistry } from "../definitions.js";
 import { getFunctionDependencies } from "../dependencies.js";
 import { functionIdSegments, functionRelativePath } from "../identifier.js";
-import { resolveFunctionGraph, sourceFunctionDefinition } from "../resolved-graph.js";
 import { getPersistentFunctionMetadata } from "../source.js";
 
 export function validatePersistentFunction(
   id: string,
   source: string,
   sources: ReadonlyMap<string, string>,
+  options: {
+    layer?: "user" | "project";
+    userFunctions?: ReadonlyMap<string, string>;
+    invalidDefinitions?: ReadonlyMap<string, string>;
+    checkAll?: boolean;
+  } = {},
 ): void {
   const name = functionIdSegments(id).at(-1);
   const metadata = getPersistentFunctionMetadata(source);
@@ -22,11 +26,17 @@ export function validatePersistentFunction(
       throw new Error(`case-insensitive function collision: ${previous} and ${key}`);
     paths.set(key.toLowerCase(), key);
   }
-  const registry = createLayeredFunctionRegistry(
-    [...sources].map(([key, value]) => sourceFunctionDefinition(key, "user", value)),
-  );
-  resolveFunctionGraph(source, registry);
-  validateTypeScript(source, sources);
+  const layer = options.layer ?? "user";
+  validateTypeScript(source, sources, undefined, {
+    environment: {
+      ...(layer === "user"
+        ? { userFunctions: sources }
+        : { userFunctions: options.userFunctions ?? new Map(), projectFunctions: sources }),
+      ...(options.invalidDefinitions ? { invalidDefinitions: options.invalidDefinitions } : {}),
+    },
+    definition: { id, layer },
+    checkAll: options.checkAll ?? true,
+  });
 }
 
 /** Invalid persisted definitions reserve their identifiers until explicitly fixed or removed. */

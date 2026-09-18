@@ -2,7 +2,6 @@ import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 
 import { validateTypeScript } from "../sandbox/validation.js";
 import { getSavedFunctionDependencyGraph } from "./graph.js";
-import { savedFunctionDependents } from "./persistent-functions.js";
 import {
   prepareSavedFunctionExecution,
   type PreparedSavedFunctionExecution,
@@ -15,6 +14,7 @@ import { assertFunctionsAvailable } from "./storage/validation.js";
 export type { PreparedSavedFunctionExecution } from "./preparation.js";
 import {
   effectiveRegistry,
+  stateFunctionEnvironment,
   type FunctionState,
   type FunctionStateCommit,
   reconcileFunctionState,
@@ -81,17 +81,14 @@ export function removeProjectFunctionFromState(
 ): Promise<boolean> {
   const { cwd, name, state, commit } = request;
   return commit(async () => {
-    if (state.projectCandidates.has(name)) {
-      const dependents = savedFunctionDependents(
-        state.projectCandidates,
-        state.session,
-        state.effective,
-        name,
-      );
-      if (dependents.direct.length > 0 || dependents.transitive.length > 0) {
+    if (state.projectCandidates.has(name) || state.invalidProject.has(name)) {
+      const plan = planSavedFunctionRemoval(state, name, "project");
+      if (plan.blocked) {
         const details = [
-          dependents.direct.length > 0 ? `direct: ${dependents.direct.join(", ")}` : "",
-          dependents.transitive.length > 0 ? `transitive: ${dependents.transitive.join(", ")}` : "",
+          plan.directDependents.length ? `direct: ${plan.directDependents.join(", ")}` : "",
+          plan.transitiveDependents.length
+            ? `transitive: ${plan.transitiveDependents.join(", ")}`
+            : "",
         ].filter(Boolean);
         throw new Error(
           `Cannot remove project function "${name}"; dependent saved functions remain (${details.join("; ")})`,
@@ -186,12 +183,23 @@ export class SavedFunctionService {
       validateFunctionRegistryIdentifiers(currentUser.keys());
       validateRegistryCapacity(this.#state.effective, request.name, promotedSource);
       assertFunctionsAvailable(promotedSource, currentUser, this.#state.invalidUser);
-      validateTypeScript(promotedSource, currentUser);
+      validateTypeScript(promotedSource, currentUser, undefined, {
+        environment: { userFunctions: currentUser },
+        definition: { id: request.name, layer: "user" },
+      });
       const currentSession = new Map(this.#state.session);
       currentSession.delete(request.name);
       validateTypeScript(
         promotedSource,
         effectiveRegistry(this.#state.project, currentSession, currentUser),
+        undefined,
+        {
+          environment: stateFunctionEnvironment(this.#state, {
+            userFunctions: currentUser,
+            sessionFunctions: currentSession,
+          }),
+          definition: { id: request.name, layer: "user" },
+        },
       );
       const replaced = this.#state.user.has(request.name);
       await saveUserFunction(request.name, promotedSource, this.#state.user);
@@ -230,6 +238,8 @@ export class SavedFunctionService {
   removeSession(name: string, options: SessionFunctionRemovalOptions = {}): Promise<string[]> {
     return this.#commit(() => {
       const plan = this.planRemoval(name, "session");
+      if (plan.blocked)
+        throw new Error(`Cannot remove session function "${name}"; persistent dependents remain`);
       if (plan.requiresCascade && options.cascade !== true) {
         const dependents = [...plan.directDependents, ...plan.transitiveDependents];
         throw new Error(
@@ -266,13 +276,23 @@ export class SavedFunctionService {
         validateFunctionRegistryIdentifiers(
           effectiveRegistry(currentProject, this.#state.session, this.#state.user).keys(),
         );
-        validateTypeScript(source, new Map([...this.#state.user, ...currentProject]), input);
+        validateTypeScript(source, new Map(), input, {
+          environment: { userFunctions: this.#state.user, projectFunctions: currentProject },
+          definition: { id: name, layer: "project" },
+        });
         const currentSession = new Map(this.#state.session);
         currentSession.delete(name);
         validateTypeScript(
           source,
           effectiveRegistry(currentProject, currentSession, this.#state.user),
           input,
+          {
+            environment: stateFunctionEnvironment(this.#state, {
+              projectFunctions: currentProject,
+              sessionFunctions: currentSession,
+            }),
+            definition: { id: name, layer: "project" },
+          },
         );
 
         const replaced = this.#state.project.has(name);
@@ -305,6 +325,10 @@ export class SavedFunctionService {
         source,
         effectiveRegistry(this.#state.project, currentSession, this.#state.user),
         input,
+        {
+          environment: stateFunctionEnvironment(this.#state, { sessionFunctions: currentSession }),
+          definition: { id: name, layer: "session" },
+        },
       );
       const replaced = this.#state.session.has(name);
       this.#appendEntry(FUNCTION_ENTRY_TYPE, { name, source });

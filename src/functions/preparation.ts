@@ -10,7 +10,7 @@ import {
   validateFunctionRegistryIdentifiers,
 } from "./core.js";
 import { getPersistentFunctionMetadata } from "./source.js";
-import { effectiveRegistry, type FunctionState } from "./state.js";
+import { effectiveRegistry, stateFunctionEnvironment, type FunctionState } from "./state.js";
 import { assertFunctionsAvailable } from "./storage/validation.js";
 
 export interface SavedFunctionExecutionContext {
@@ -63,12 +63,21 @@ function prepareProjectFunction(
   validateRegistryCapacity(state.effective, name, request.source);
   const candidateProject = new Map(state.project);
   candidateProject.set(name, request.source);
-  validateTypeScript(request.source, new Map([...state.user, ...candidateProject]), request.input);
+  validateTypeScript(request.source, new Map(), request.input, {
+    environment: { userFunctions: state.user, projectFunctions: candidateProject },
+    definition: { id: name, layer: "project" },
+  });
   const candidateSession = new Map(state.session);
   candidateSession.delete(name);
   const registry = effectiveRegistry(candidateProject, candidateSession, state.user);
   validateFunctionRegistryIdentifiers(registry.keys());
-  validateTypeScript(request.source, registry, request.input);
+  validateTypeScript(request.source, registry, request.input, {
+    environment: stateFunctionEnvironment(state, {
+      projectFunctions: candidateProject,
+      sessionFunctions: candidateSession,
+    }),
+    definition: { id: name, layer: "project" },
+  });
   return { registry, candidateProject, candidateSession };
 }
 
@@ -81,7 +90,10 @@ function prepareSessionFunction(
   const candidateSession = new Map(state.session);
   candidateSession.set(name, request.source);
   const registry = effectiveRegistry(state.project, candidateSession, state.user);
-  validateTypeScript(request.source, registry, request.input);
+  validateTypeScript(request.source, registry, request.input, {
+    environment: stateFunctionEnvironment(state, { sessionFunctions: candidateSession }),
+    definition: { id: name, layer: "session" },
+  });
   return { registry, candidateSession };
 }
 

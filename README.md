@@ -250,6 +250,26 @@ async ({ company: { check } }) => check({ value: 21 })
 
 `company.check` and `other.check` are separate definitions even though both declare `check`. Use the full identifier for inspection, removal, and promotion. Promoting `company.check` writes `company/check.ts` in the selected persistent directory without renaming the declaration. Reload and branch navigation preserve the full identity.
 
+### Compatible overrides and `$next`
+
+An override must accept the lower definition's arguments and return a compatible result. Pit checks the public call signature without the first dependency parameter, including optional/rest argument requirements. Incompatible definitions fail before a session entry or persistent file is changed. Use a new identifier for a breaking contract; annotate generic return types when preserving a type-parameter relationship is important.
+
+Declare `$next` to invoke the next lower implementation of the same identifier:
+
+```json
+{
+  "functionId": "context.get",
+  "code": "async function get({ $next }) { const result = await $next(); return { ...result, cwd: result.cwd + '/decorated' }; }",
+  "saveOnly": true
+}
+```
+
+`$next` is definition-relative: session → project → user → global, skipping absent layers. Its arguments and result are typed from the lower implementation. An anonymous program cannot declare `$next`, and a definition with no lower implementation is invalid. Ordinary dependencies remain virtual and use the active highest-layer definition.
+
+Persistent files may declare `$next` too. Promotion re-resolves it relative to the destination: moving a session decorator to project storage changes its next target from the old project definition to the user/global definition. If no valid lower target remains, promotion is rejected without replacing the file or removing the session definition.
+
+Removing an override reveals a lower definition only if the resulting chain remains valid. A required `$next` target cannot be deleted out from under a dependent override. Host grants include only effects reachable at execution; a lower implementation used solely for signature checking does not add authority.
+
 ### Reuse user functions
 
 User functions load automatically from `${PI_CODING_AGENT_DIR}/functions/` (default `~/.pi/agent/functions/`). No user enablement flag is required, and project configuration does not disable user functions. Global functions are immutable built-ins owned by Pit, not files owned by the user.

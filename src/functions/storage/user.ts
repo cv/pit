@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 import { type FunctionRegistry, validateRegistryCapacity } from "../core.js";
-import { getSavedFunctionDependencyGraph } from "../graph.js";
 import { functionRelativePath } from "../identifier.js";
 import {
   getPersistentFunctionMetadata,
@@ -65,14 +64,12 @@ export async function loadUserFunctions(
   for (const [id, error] of invalid) invalidDefinitions.set(id, error);
 
   const sources = new Map([...candidates].map(([name, value]) => [name, value.source]));
-  const graph = getSavedFunctionDependencyGraph(sources);
   for (const [name, value] of candidates) {
     try {
-      const dependencies = new Map(
-        graph.resolve(value.source).map((reference) => [reference.name, reference.source]),
-      );
-      dependencies.set(name, value.source);
-      validatePersistentFunction(name, value.source, dependencies);
+      validatePersistentFunction(name, value.source, sources, {
+        invalidDefinitions,
+        checkAll: false,
+      });
       validateRegistryCapacity(registry, name, value.source);
       registry.set(name, value.source);
       metadata.set(name, value.metadata);

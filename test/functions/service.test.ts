@@ -272,4 +272,77 @@ describe("SavedFunctionService", () => {
     expect([...state.session.keys()]).toEqual(["company"]);
     expect(entries).toHaveLength(1);
   });
+
+  it("rejects a prepared override if its lower signature changes before commit", async () => {
+    const { state, entries, service } = fixture();
+    state.user.set(
+      "calculate",
+      "async function calculate({}, value: number): Promise<number> { return value; }",
+    );
+    refreshEffectiveFunctions(state);
+    const context = { cwd: "/tmp", isProjectTrusted: () => true };
+    const prepared = service.prepare({
+      source:
+        "async function calculate({ $next }, value: number): Promise<number> { return $next(value); }",
+      saveOnly: true,
+      context,
+    });
+    state.user.set(
+      "calculate",
+      "async function calculate({}, value: string): Promise<string> { return value; }",
+    );
+    refreshEffectiveFunctions(state);
+    await expect(service.commit(prepared, context, [])).rejects.toThrow(
+      "TypeScript validation failed",
+    );
+    expect(state.session.size).toBe(0);
+    expect(entries).toEqual([]);
+  });
+
+  it("requires a cascade for session callers relying on a broader override", async () => {
+    const { state, service } = fixture();
+    state.user.set(
+      "calculate",
+      "async function calculate({}, value: number): Promise<number> { return value; }",
+    );
+    state.session.set(
+      "calculate",
+      "async function calculate({}, value: string | number): Promise<number> { return Number(value); }",
+    );
+    state.session.set("caller", 'async function caller({ calculate }) { return calculate("42"); }');
+    state.session.set("unrelated", "async function unrelated({}) { return true; }");
+    refreshEffectiveFunctions(state);
+    expect(service.planRemoval("calculate", "session")).toMatchObject({
+      blocked: false,
+      requiresCascade: true,
+      removalClosure: ["calculate", "caller"],
+    });
+    await expect(service.removeSession("calculate")).rejects.toThrow("explicit cascade");
+    await expect(service.removeSession("calculate", { cascade: true })).resolves.toEqual([
+      "calculate",
+      "caller",
+    ]);
+    expect([...state.session.keys()]).toEqual(["unrelated"]);
+    expect(state.user.has("calculate")).toBe(true);
+  });
+
+  it("does not cascade session removal into persistent dependents", async () => {
+    const { state, entries, service } = fixture();
+    state.user.set(
+      "calculate",
+      "async function calculate({}, value: number): Promise<number> { return value; }",
+    );
+    state.session.set(
+      "calculate",
+      "async function calculate({}, value: string | number): Promise<number> { return Number(value); }",
+    );
+    state.project.set("caller", 'async function caller({ calculate }) { return calculate("42"); }');
+    refreshEffectiveFunctions(state);
+    expect(service.planRemoval("calculate", "session")).toMatchObject({ blocked: true });
+    await expect(service.removeSession("calculate", { cascade: true })).rejects.toThrow(
+      "persistent dependents remain",
+    );
+    expect(state.session.has("calculate")).toBe(true);
+    expect(entries).toEqual([]);
+  });
 });

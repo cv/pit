@@ -177,6 +177,18 @@ async function executeSandboxValue({
   const options = {
     ...(request.signal ? { signal: request.signal } : {}),
     timeoutMs: request.params.timeoutMs ?? 30_000,
+    ...(preparedFunction.name
+      ? {
+          definition: {
+            id: preparedFunction.name,
+            layer: preparedFunction.projectMetadata ? ("project" as const) : ("session" as const),
+          },
+        }
+      : {}),
+    invalidDefinitions: new Map([
+      ...request.functionState.invalidUser,
+      ...request.functionState.invalidProject,
+    ]),
     userFunctions: preparedFunction.userFunctions,
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,

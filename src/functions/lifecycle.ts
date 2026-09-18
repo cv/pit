@@ -7,7 +7,7 @@ import { registerFunctionManager } from "./manager.js";
 import { userFunctionCatalog, projectFunctionCatalog } from "./persistent-functions.js";
 import type { SavedFunctionService } from "./service.js";
 import type { FunctionState } from "./state.js";
-import { reconcileFunctionState, resetFunctionUsage } from "./state.js";
+import { reconcileFunctionState, resetFunctionUsage, stateFunctionEnvironment } from "./state.js";
 import { loadProjectFunctionConfig, loadProjectFunctions } from "./storage/project.js";
 import { userFunctionDirectory, userFunctionPath, loadUserFunctions } from "./storage/user.js";
 
@@ -104,7 +104,11 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
           ctx,
           functionState.projectCandidates,
           functionState.candidateMetadata,
-          { user: functionState.user, invalidDefinitions: functionState.invalidProject },
+          {
+            user: functionState.user,
+            invalidDefinitions: functionState.invalidProject,
+            invalidUser: functionState.invalidUser,
+          },
         )),
       );
     } else {
@@ -116,7 +120,12 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       functionState.session,
       ctx.sessionManager.getBranch(),
       new Map([...functionState.user, ...functionState.projectCandidates]),
-      new Map(),
+      {
+        capacityBaseFunctions: new Map(),
+        environment: stateFunctionEnvironment(functionState, {
+          projectFunctions: functionState.projectCandidates,
+        }),
+      },
     );
     errors.push(...reconcileFunctionState(functionState));
     for (const error of [projectConfig.error].filter(Boolean)) {
@@ -137,7 +146,12 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       functionState.session,
       ctx.sessionManager.getBranch(),
       new Map([...functionState.user, ...functionState.projectCandidates]),
-      new Map(),
+      {
+        capacityBaseFunctions: new Map(),
+        environment: stateFunctionEnvironment(functionState, {
+          projectFunctions: functionState.projectCandidates,
+        }),
+      },
     );
     reconcileFunctionState(functionState);
   });
