@@ -216,3 +216,16 @@ For each migrated function:
 5. use `$next` when wrapping a lower definition;
 6. inspect its transitive effects in `/functions`;
 7. invoke it in a fresh session before deleting the old copy.
+
+## Complete registry inspection
+
+`functions.listAll()` now includes built-in globals and returns a page object instead of a bare array:
+
+```ts
+async ({ functions: { listAll } }) => {
+  const page = await listAll({ scope: "session", limit: 20 });
+  return { names: page.functions.map(fn => fn.name), nextOffset: page.nextOffset };
+}
+```
+
+Use `offset: page.nextOffset` to continue, `scope` to select a layer, and `allDefinitions: true` to include shadowed definitions. `functions.getSaved(name, scope?)` now inspects any definition, including `global`. Check `kind` before accessing `source`: native globals have metadata but no authored source; invalid entries have diagnostics. Native globals are read-only, and registry-management globals are sealed. There are no old user-global aliases.

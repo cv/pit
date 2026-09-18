@@ -313,21 +313,34 @@ Pit loads project source only after explicit opt-in and Pi's project-trust check
 
 Use `functions.list()`, `functions.get(name)`, and `functions.remove(name)` to manage project definitions. Use `functions.listUser()`, `functions.getUser(name)`, and confirmed `functions.removeUser(name)` for user definitions. Use `functions.listAll()` and `functions.getSaved(name, scope?)` to inspect effective or explicitly scoped functions, including dependencies, dependents, and override state. Use `functions.planRemoval(name, scope?)` to inspect an exact removal closure without mutation. Session removal rejects dependent cascades unless `functions.removeSession(name, { cascade: true })` explicitly opts in. Use `functions.promote(name, summary)` to save a session function to the project or pass `{ to: "user" }` for confirmed user persistence. Persistent removal remains blocked when saved functions depend on the target. Disabling project functions does not delete existing source files. User functions load automatically.
 
-### Manage saved functions
+### Manage all function definitions
 
-Run `/functions` without arguments to open the interactive TUI manager. The manager lists session and project functions with their scope. These direct commands are also available:
+Run `/functions` to open the interactive manager. It includes built-in globals as well as user, project, and session definitions. Authored definitions appear first; **Filter scope…**, **Show all definitions**, and page controls expose lower, shadowed definitions without flooding the display.
 
 ```text
 /functions list
-/functions show runTests
+/functions list global
+/functions list all
+/functions show workspace.read global
+/functions show company.check user
 /functions delete runTests
 ```
 
-Select a session function to inspect it, save it to the project, or delete it. **Save to project** asks for a short summary, writes the documented project function to `.pi/functions/`, and removes the session definition. This action requires an enabled, trusted project.
+Inspection shows implementation kind, effective scope, origin, public signature, override-chain paths, resolved dependencies, `$next`, and direct/transitive effects. Native globals show package-owned metadata—not invented source—and have no mutation actions. All registry-management `functions.*` globals are sealed. Invalid persisted definitions show loading diagnostics; fix their files and reload. Invalid attempts to override sealed globals do not disable those management functions.
 
-Select a project function to inspect it or remove it from the project. Project removal fails when a project or session function depends on the target.
+Select a session definition to inspect it, promote it, or delete it. Project and user removal act on the selected writable scope, never on a global beneath it. `/functions delete` remains a session-only, confirmed branch-local deletion with explicit dependent-cascade handling.
 
-`/functions delete` creates a branch-local tombstone. After confirmation, it also deletes session dependents.
+Programmatic inspection uses the same registry:
+
+```ts
+async ({ functions: { listAll, getSaved } }) => {
+  const page = await listAll({ scope: "global", limit: 10 });
+  const read = await getSaved("workspace.read", "global");
+  return { total: page.total, nextOffset: page.nextOffset, names: page.functions.map(fn => fn.name), read };
+}
+```
+
+`listAll()` returns `{ functions, total, offset, nextOffset? }`, not an array. Its default page size is 50, with a maximum of 200. By default it lists effective definitions; `allDefinitions: true` includes shadowed layers. A scope filter selects definitions from that scope, whether effective or shadowed.
 
 ### Reflect on reusable work
 
@@ -483,8 +496,8 @@ UI methods require a mode that provides a UI.
 - `listUser()` lists user functions.
 - `getUser(name)` returns user function metadata and source.
 - `removeUser(name)` removes a user function after interactive confirmation when no function depends on it.
-- `listAll()` lists effective functions with scope, dependencies, dependents, and override state.
-- `getSaved(name, scope?)` returns effective or explicitly scoped source and dependency metadata.
+- `listAll({ scope?, allDefinitions?, offset?, limit? }?)` returns `{ functions, total, offset, nextOffset? }`. The default is 50 entries; limit is 1–200. Scope filters include shadowed definitions; `allDefinitions` lists complete chains.
+- `getSaved(name, scope?)` inspects an effective or scoped definition, including native globals, provenance, signatures, dependencies, override chains, `$next`, and effects. Check `kind`: only `source` definitions include authored `source`; invalid definitions include diagnostics.
 - `planRemoval(name, scope?)` returns the exact removal closure and blockers without mutation.
 - `promote(name, summary, options?)` saves a session function to the trusted project by default or to user scope with `{ to: "user" }` after confirmation.
 - `removeSession(name, options?)` removes a branch-local function; dependent cascades require `{ cascade: true }`.

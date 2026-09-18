@@ -360,23 +360,20 @@ describe("pit extension", () => {
   it("handles empty, missing, non-TUI, and cancelled function management", async () => {
     const nonTui = context();
     await functionsCommand.handler("", nonTui);
-    expect(nonTui.ui.notify).toHaveBeenCalledWith("No saved functions", "info");
+    expect(nonTui.ui.notify).toHaveBeenCalledWith(expect.stringContaining("[global]"), "info");
     await functionsCommand.handler("show missing", nonTui);
-    expect(nonTui.ui.notify).toHaveBeenCalledWith(
-      `Saved function "missing" was not found`,
-      "error",
-    );
+    expect(nonTui.ui.notify).toHaveBeenCalledWith(`function "missing" is unavailable`, "error");
 
     const tui = context({ mode: "tui" });
     await functionsCommand.handler("", tui);
-    expect(tui.ui.notify).toHaveBeenCalledWith("No saved functions", "info");
+    expect(tui.ui.select).toHaveBeenCalledWith(
+      "Functions",
+      expect.arrayContaining([expect.stringContaining("[global]")]),
+    );
 
     await run("async function solo({}) { return true; }");
     await functionsCommand.handler("show solo", nonTui);
-    expect(nonTui.ui.notify).toHaveBeenCalledWith(
-      "Saved source inspection requires TUI mode",
-      "error",
-    );
+    expect(nonTui.ui.notify).toHaveBeenCalledWith("Function inspection requires TUI mode", "error");
 
     const entriesBeforeCancellation = branchEntries.length;
     nonTui.ui.confirm = vi.fn(async () => false);
@@ -492,7 +489,7 @@ describe("pit extension", () => {
       .mockResolvedValueOnce("Close");
     await functionsCommand.handler("", ctx);
     expect(ctx.ui.select).toHaveBeenCalledWith(
-      "Saved functions",
+      "Functions",
       expect.arrayContaining([expect.stringContaining("inspectMe")]),
     );
     expect(ctx.ui.custom).toHaveBeenCalledTimes(3);

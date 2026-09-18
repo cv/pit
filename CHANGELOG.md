@@ -6,6 +6,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Added
 
+- Inspect native globals, shadowed definitions, provenance, signatures, `$next`, and effect closures through one paginated registry API and read-only-aware function manager.
+
 - Enforce signature-compatible layered overrides and support typed `$next` in session, user, and project definitions, including named execution, promotion, reload, and safe fallback removal.
 
 - Add `functionId` for namespaced session definitions, preserving full identifiers through replay, promotion, catalogs, and traces.
