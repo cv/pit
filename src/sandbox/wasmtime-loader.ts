@@ -111,8 +111,17 @@ export function configuredFunctionExecutor(
     if (config.backend === "wasmtime") throw new Error(message);
     return fallbackToNode(message, operations);
   }
-  return createWasmtimeFunctionExecutor({
-    addon: operations.loadAddon(paths.addonPath),
-    component: operations.readComponent(paths.componentPath),
-  });
+  try {
+    return createWasmtimeFunctionExecutor({
+      addon: operations.loadAddon(paths.addonPath),
+      component: operations.readComponent(paths.componentPath),
+    });
+  } catch (error) {
+    if (config.backend === "wasmtime") throw error;
+    const detail = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+    return fallbackToNode(
+      `Pit Wasmtime prebuild for ${target} could not be loaded: ${detail}`,
+      operations,
+    );
+  }
 }
