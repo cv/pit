@@ -238,11 +238,7 @@ function persistentFunctionCatalog(
     return "";
   }
   const title = scope === "user" ? "User" : "Project";
-  const lines = [
-    `## ${title} TypeScript functions`,
-    "",
-    `These ${scope}-persisted functions are available as explicit dependencies in the typescript tool's first parameter:`,
-  ];
+  const lines = [`## ${title} functions`];
   const entries = [...metadata.values()].sort((a, b) => a.name.localeCompare(b.name));
   let shown = 0;
   for (const entry of entries) {
@@ -276,10 +272,6 @@ function persistentFunctionCatalog(
       `- … ${entries.length - shown} more; use functions.${method}() for the complete catalog.`,
     );
   }
-  lines.push(
-    "",
-    "Inject them by name, for example: async ({ runTests }) => runTests({ coverage: true }).",
-  );
   return lines.join("\n");
 }
 

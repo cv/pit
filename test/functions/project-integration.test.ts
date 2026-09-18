@@ -108,7 +108,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     expect(promptWithResources).toContain("projectGreeting(input?: { name?: string })");
     expect(promptWithResources).toContain("<name>delivery</name>");
     expect(promptWithResources.indexOf("<available_skills>")).toBeLessThan(
-      promptWithResources.indexOf("Project TypeScript functions"),
+      promptWithResources.indexOf("Project functions"),
     );
 
     setBranchEntries([]);

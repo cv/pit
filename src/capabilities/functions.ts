@@ -3,7 +3,7 @@ import { defineCapability } from "./core.js";
 export const functionsCapability = defineCapability({
   interfaceName: "PitFunctionsCapability",
   promptSummary:
-    "project list/get/remove; user list/get/remove; layered listAll/getSaved/planRemoval/promote/removeSession",
+    'list/get/remove: project; listUser/getUser/removeUser: user. listAll({scope?, allDefinitions?, offset?, limit?}?) -> {functions, total, offset, nextOffset?}; limit 1–200, default 50. Effective by default; scope includes shadowed entries; allDefinitions: every layer. getSaved(name, scope?) -> native/source/invalid metadata (signature, dependencies, chain, next, effects); source only for kind: "source". promote(name, summary, {to: "user"}) persists session to user after confirmation; default target: project. planRemoval(name, scope?) previews blockers; removeSession(name, {cascade: true}) explicitly removes dependents',
   methods: {
     list: {
       callDescription: "List project functions",
