@@ -7,10 +7,9 @@ import {
 import type { CAPABILITY_METHODS } from "../capabilities/registry.js";
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
-import { getSavedFunctionDependencyGraph } from "./graph.js";
 import { validateFunctionId as validateSavedFunctionName } from "./identifier.js";
+import { FunctionInspector, type FunctionListOptions } from "./inspection.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./service.js";
-import { getSavedFunctionCallSignature } from "./source.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
 import { userFunctionDirectory, userFunctionPath } from "./storage/user.js";
 
@@ -33,8 +32,14 @@ function requiredName(args: unknown[]): string {
 
 function functionScope(value: unknown): FunctionScope | undefined {
   const scope = value === undefined ? undefined : string(value, "function scope");
-  if (scope !== undefined && scope !== "user" && scope !== "project" && scope !== "session") {
-    throw new Error('function scope must be "user", "project", or "session"');
+  if (
+    scope !== undefined &&
+    scope !== "global" &&
+    scope !== "user" &&
+    scope !== "project" &&
+    scope !== "session"
+  ) {
+    throw new Error('function scope must be "global", "user", "project", or "session"');
   }
   return scope;
 }
@@ -70,57 +75,28 @@ function promotionTarget(value: unknown): "user" | "project" {
   return target;
 }
 
-function sourceForScope(
-  state: FunctionState,
-  name: string,
-  scope: FunctionScope,
-): string | undefined {
-  return scope === "session"
-    ? state.session.get(name)
-    : scope === "project"
-      ? state.project.get(name)
-      : state.user.get(name);
-}
-
-function effectiveScope(state: FunctionState, name: string): FunctionScope {
-  return state.session.has(name) ? "session" : state.project.has(name) ? "project" : "user";
-}
-
-interface SavedMetadataInput {
-  functionState: FunctionState;
-  service: SavedFunctionService;
-  name: string;
-  source: string;
-  requestedScope?: FunctionScope;
-}
-
-function savedMetadata({
-  functionState,
-  service,
-  name,
-  source,
-  requestedScope,
-}: SavedMetadataInput) {
-  const scope = requestedScope ?? effectiveScope(functionState, name);
-  const graph = getSavedFunctionDependencyGraph(
-    scope === "session"
-      ? functionState.effective
-      : scope === "project"
-        ? new Map([...functionState.user, ...functionState.project])
-        : functionState.user,
+function listOptions(value: unknown): FunctionListOptions {
+  if (value === undefined) return {};
+  const options = record(value, "function list options");
+  const unknown = Object.keys(options).filter(
+    (key) => !["scope", "allDefinitions", "offset", "limit"].includes(key),
   );
-  const plan = service.planRemoval(name, scope);
+  if (unknown.length)
+    throw new Error(`function list options contain unknown fields: ${unknown.join(", ")}`);
+  const scope = functionScope(options.scope);
+  if (options.allDefinitions !== undefined && typeof options.allDefinitions !== "boolean")
+    throw new Error("allDefinitions must be a boolean");
+  for (const key of ["offset", "limit"] as const) {
+    if (options[key] !== undefined && typeof options[key] !== "number")
+      throw new Error(`function list ${key} must be a number`);
+  }
   return {
-    name,
-    scope,
-    /* v8 ignore next -- saved registries contain validated named function declarations. */
-    signature: getSavedFunctionCallSignature(source, name) ?? `${name}()`,
-    lines: source.split("\n").length,
-    bytes: Buffer.byteLength(source),
-    directDependencies: [...graph.directDependencies(name)],
-    directDependents: plan.directDependents,
-    overridesProject: scope === "session" && functionState.project.has(name),
-    overridesUser: (scope === "session" || scope === "project") && functionState.user.has(name),
+    ...(scope ? { scope } : {}),
+    ...(options.allDefinitions === undefined
+      ? {}
+      : { allDefinitions: options.allDefinitions as boolean }),
+    ...(options.offset === undefined ? {} : { offset: options.offset as number }),
+    ...(options.limit === undefined ? {} : { limit: options.limit as number }),
   };
 }
 
@@ -240,26 +216,18 @@ export function createFunctionCapabilityMethods({
       service,
       requireProjectAccess,
     }),
-    listAll: () =>
-      [...functionState.effective.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, source]) => savedMetadata({ functionState, service, name, source })),
-    getSaved: (args) => {
+    listAll: (args) => new FunctionInspector(functionState, ctx.cwd).list(listOptions(args[0])),
+    getSaved: (args) =>
+      new FunctionInspector(functionState, ctx.cwd).inspect(
+        string(args[0], "function name"),
+        functionScope(args[1]),
+      ),
+    planRemoval: (args) => {
       const name = requiredName(args);
-      const requestedScope = functionScope(args[1]);
-      const scope = requestedScope ?? effectiveScope(functionState, name);
-      const source = sourceForScope(functionState, name, scope);
-      if (!source) {
-        throw new Error(
-          `${requestedScope ? `${scope[0]?.toUpperCase()}${scope.slice(1)} ` : ""}saved function "${name}" is unavailable`,
-        );
-      }
-      return {
-        ...savedMetadata({ functionState, service, name, source, requestedScope: scope }),
-        source,
-      };
+      const scope =
+        functionScope(args[1]) ?? new FunctionInspector(functionState, ctx.cwd).inspect(name).scope;
+      return service.planRemoval(name, scope);
     },
-    planRemoval: (args) => service.planRemoval(requiredName(args), functionScope(args[1])),
     promote: async (args) => {
       const name = requiredName(args);
       const summary = string(args[1], "summary");

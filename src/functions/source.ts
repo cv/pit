@@ -62,17 +62,18 @@ function jsDocText(value: string | ts.NodeArray<ts.JSDocComment> | undefined): s
     .join("");
 }
 
-function functionCallSignature(
-  name: string,
-  parameters: ts.NodeArray<ts.ParameterDeclaration>,
-): string {
-  const input = parameters[1];
-  if (!input) {
-    return `${name}()`;
-  }
-  const optional = input.questionToken || input.initializer ? "?" : "";
-  const type = (input.type?.getText() ?? "unknown").replace(SIGNATURE_WHITESPACE, " ");
-  return `${name}(input${optional}: ${type})`;
+function functionCallSignature(name: string, declaration: ts.FunctionLikeDeclaration): string {
+  const parameters = declaration.parameters.slice(1).map((parameter) => {
+    const optional = parameter.questionToken || parameter.initializer ? "?" : "";
+    const rest = parameter.dotDotDotToken ? "..." : "";
+    const type = (parameter.type?.getText() ?? "unknown").replace(SIGNATURE_WHITESPACE, " ");
+    return `${rest}${parameter.name.getText()}${optional}: ${type}`;
+  });
+  const generics = declaration.typeParameters?.length
+    ? `<${declaration.typeParameters.map((parameter) => parameter.getText()).join(", ")}>`
+    : "";
+  const result = declaration.type ? `: ${declaration.type.getText()}` : "";
+  return `${name}${generics}(${parameters.join(", ")})${result}`.replace(SIGNATURE_WHITESPACE, " ");
 }
 
 export function getPersistentFunctionMetadata(
@@ -116,7 +117,7 @@ export function getPersistentFunctionMetadata(
     });
   return {
     name: id ?? declaration.name.text,
-    signature: functionCallSignature(id ?? declaration.name.text, declaration.parameters),
+    signature: functionCallSignature(id ?? declaration.name.text, declaration),
     summary,
     parameters,
   };
@@ -127,7 +128,7 @@ export function getSavedFunctionCallSignature(source: string, id?: string): stri
   if (!(expression && ts.isFunctionExpression(expression) && expression.name)) {
     return;
   }
-  return functionCallSignature(id ?? expression.name.text, expression.parameters);
+  return functionCallSignature(id ?? expression.name.text, expression);
 }
 
 export function getFunctionTypeParameters(source: string): {

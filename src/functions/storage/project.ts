@@ -16,7 +16,7 @@ import {
   removePersistentFunctionFile,
   writePersistentFunctionFile,
 } from "./files.js";
-import { validatePersistentFunction } from "./validation.js";
+import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
 const PROJECT_FUNCTION_DIRECTORY = ["functions"] as const;
 
@@ -144,7 +144,14 @@ export async function loadProjectFunctions(
   for (const [id, error] of invalid) invalidDefinitions.set(id, error);
 
   const sources = new Map([...candidates].map(([id, value]) => [id, value.source]));
+  filterPersistentIdentifiers(sources, {
+    layer: "project",
+    userFunctions: user,
+    invalidDefinitions,
+    errors,
+  });
   for (const [name, value] of candidates) {
+    if (!sources.has(name)) continue;
     try {
       validatePersistentFunction(name, value.source, sources, {
         layer: "project",

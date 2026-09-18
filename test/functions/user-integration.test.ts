@@ -236,7 +236,7 @@ describe("user functions", () => {
       value(
         'async ({ functions: { getUser, getSaved, listUser, planRemoval, promote, removeUser } }) => getSaved("missingUser", "user")',
       ),
-    ).rejects.toThrow("User saved function");
+    ).rejects.toThrow("User function");
     await expect(
       value(
         'async ({ functions: { getUser, getSaved, listUser, planRemoval, promote, removeUser } }) => (promote as any)("confirmedUser", "Summary", { unknown: true })',

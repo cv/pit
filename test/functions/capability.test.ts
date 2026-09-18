@@ -70,7 +70,7 @@ describe("functions capability", () => {
 
     expect(
       await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => {
-          const listed = await listAll();
+          const listed = (await listAll({ limit: 200 })).functions.filter(entry => entry.kind === "source");
           const session = await getSaved("capabilitySession");
           const project = await getSaved("capabilityProject");
           return { listed, session, project };
@@ -175,7 +175,7 @@ describe("functions capability", () => {
     await run("async function sharedPlan({}) { return 'session'; }");
     const override =
       await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => ({
-      metadata: (await listAll()).find(({ name }) => name === "sharedPlan"),
+      metadata: (await listAll({ scope: "session" })).functions.find(({ name }) => name === "sharedPlan"),
       plan: await planRemoval("sharedPlan"),
     })`);
     expect(override).toMatchObject({
@@ -247,7 +247,7 @@ describe("functions capability", () => {
       run(
         `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (planRemoval as any)("missing", "invalid")`,
       ),
-    ).rejects.toThrow('function scope must be "user", "project", or "session"');
+    ).rejects.toThrow('function scope must be "global", "user", "project", or "session"');
     await expect(
       run(
         `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => (removeSession as any)("missing", { cascade: "yes" })`,

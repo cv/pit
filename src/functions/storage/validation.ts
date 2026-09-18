@@ -1,5 +1,7 @@
 import { validateTypeScript } from "../../sandbox/validation.js";
+import { isSealedGlobalFunction } from "../definitions.js";
 import { getFunctionDependencies } from "../dependencies.js";
+import { functionRegistry } from "../environment.js";
 import { functionIdSegments, functionRelativePath } from "../identifier.js";
 import { getPersistentFunctionMetadata } from "../source.js";
 
@@ -50,7 +52,8 @@ export function assertFunctionsAvailable(
   const visit = (implementation: string): void => {
     for (const { id } of getFunctionDependencies(implementation).dependencies) {
       const error = invalid.get(id);
-      if (error) throw new Error(`Function "${id}" is unavailable: ${error}`);
+      if (error && !isSealedGlobalFunction(id))
+        throw new Error(`Function "${id}" is unavailable: ${error}`);
       if (visiting.has(id)) continue;
       visiting.add(id);
       const dependency = sources.get(id);
@@ -58,4 +61,28 @@ export function assertFunctionsAvailable(
     }
   };
   visit(source);
+}
+
+export function filterPersistentIdentifiers(
+  sources: Map<string, string>,
+  options: {
+    layer: "user" | "project";
+    userFunctions?: ReadonlyMap<string, string>;
+    invalidDefinitions: Map<string, string>;
+    errors: string[];
+  },
+): void {
+  const registry = functionRegistry(
+    options.layer === "project" ? { userFunctions: options.userFunctions ?? new Map() } : {},
+  );
+  for (const [id, source] of sources) {
+    try {
+      registry.set({ id, source, kind: "source", layer: options.layer });
+    } catch (error) {
+      const message = (error as Error).message;
+      sources.delete(id);
+      options.invalidDefinitions.set(id, message);
+      options.errors.push(`${functionRelativePath(id)}: ${message}`);
+    }
+  }
 }

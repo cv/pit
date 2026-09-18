@@ -36,7 +36,7 @@ export const SAVE_ONLY_DESCRIPTION =
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
-    "Run contextually type-checked TypeScript in an isolated executor.",
+    "Run contextually type-checked TypeScript in isolation.",
     "",
     "EXPLICIT FUNCTION DEPENDENCIES",
     "",
