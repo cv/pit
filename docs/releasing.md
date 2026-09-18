@@ -11,6 +11,7 @@ Pit is distributed only through tagged GitHub releases. Keep `private: true` in 
 5. Confirm installation examples reference the exact tag.
 6. Run a full-history secret scan before the first public release or after adding substantial generated/session artifacts.
 7. Review the dry-run package file list and size.
+8. Confirm the reusable Wasmtime prebuild workflow has successfully built and smoke-tested Linux, macOS, and Windows on ARM64/x64 before tagging.
 
 ## Validate
 
@@ -36,8 +37,9 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
    git push origin vX.Y.Z
    ```
 
-4. The Release workflow validates the tag and creates the GitHub release.
-5. Verify the release targets the tagged commit and contains no unintended assets.
+4. The Release workflow builds and smoke-tests all six addons and the shared QuickJS component, validates the package/tag, and publishes them with a versioned SHA-256 manifest.
+5. Verify the release targets the tagged commit and contains exactly six `.node` assets, one `.wasm` component, and `pit-wasmtime-checksums.json`.
+6. Test the installer against the published release with strict checksum verification before declaring delivery complete.
 
 ## Install and smoke-test the tag
 
@@ -45,13 +47,13 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
 pi install git:github.com/cv/pit@vX.Y.Z
 ```
 
-Run `/reload`, then test:
+Restart Pi after a native addon update (Node caches loaded `.node` modules). For source-only updates, `/reload` is sufficient. Then test:
 
 - a one-shot TypeScript call;
 - hashed read and edit behavior;
 - shell success, failure, cancellation, and timeout;
 - expanded partial and final TUI rendering;
-- session, project, and global saved-function behavior;
+- session, project, and user saved-function behavior, plus read-only global inspection;
 - model refresh and selection;
 - package update from the exact tag.
 

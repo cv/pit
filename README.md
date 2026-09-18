@@ -20,10 +20,10 @@ For a detailed experience report, see [I Wasn't Trying to Build an App](docs/cas
 One call can inspect files and Git state in parallel, then return only the useful summary:
 
 ```ts
-async ({ workspace, git }) => {
+async ({ workspace: { read }, git: { status: gitStatus } }) => {
   const [manifest, status] = await Promise.all([
-    workspace.read("package.json", { format: "raw" }),
-    git.status(["--short"]),
+    read("package.json", { format: "raw" }),
+    gitStatus(["--short"]),
   ]);
 
   const pkg = JSON.parse(manifest.content);
@@ -46,19 +46,19 @@ Pit is distributed from public, tagged GitHub releases and intentionally remains
 Install the pinned release to user scope:
 
 ```sh
-pi install git:github.com/cv/pit@v0.15.1
+pi install git:github.com/cv/pit@v0.16.0
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:github.com/cv/pit@v0.15.1
+pi install -l git:github.com/cv/pit@v0.16.0
 ```
 
 Use the pinned release one time without changing settings:
 
 ```sh
-pi -e git:github.com/cv/pit@v0.15.1
+pi -e git:github.com/cv/pit@v0.16.0
 ```
 
 Update an existing unpinned Git installation and reload extensions:
@@ -103,8 +103,8 @@ Submitted code must be a TypeScript expression. It cannot contain imports.
 Use an anonymous function for one-time work:
 
 ```ts
-async ({ workspace, shell }) => {
-  return jsonSerializableValue;
+async ({ context: { get } }) => {
+  return { cwd: (await get()).cwd };
 }
 ```
 
@@ -116,7 +116,7 @@ Use top-level `params` for large patches, generated file contents, commit messag
 
 ```json
 {
-  "code": "async ({ workspace }, input: { file: string; contents: string }) => workspace.edit(input.file, { revision: null, changes: [{ kind: 'replaceFile', content: input.contents }] })",
+  "code": "async ({ workspace: { edit } }, input: { file: string; contents: string }) => edit(input.file, { revision: null, changes: [{ kind: 'replaceFile', content: input.contents }] })",
   "params": {
     "file": "src/generated.ts",
     "contents": "export const generated = true;\n"
@@ -135,12 +135,14 @@ Use `Promise.all` when all independent operations must succeed. Use `Promise.all
 This call preserves the successful Git result when an optional file does not exist:
 
 ```ts
-async ({ workspace, git }) => {
-  const [config, status] = await Promise.allSettled([
-    workspace.read("optional.config.json", { format: "raw" }),
-    git.status(["--short"]),
+async ({ workspace: { read }, git: { status: gitStatus } }) => {
+  const results = await Promise.allSettled([
+    read("optional.config.json", { format: "raw" }),
+    gitStatus(["--short"]),
   ]);
-  return { config, status };
+  return results.map(result => result.status === "fulfilled"
+    ? { ok: true, value: result.value }
+    : { ok: false, error: String(result.reason) });
 }
 ```
 
@@ -159,7 +161,7 @@ Hashed reads are the default. Each selected line contains a line number, a short
 An edit must use the current revision and current line anchors from `workspace.read` or `workspace.search`:
 
 ```ts
-await workspace.edit("src/example.ts", {
+async ({ workspace: { edit } }) => edit("src/example.ts", {
   revision: "J8xM2pQa7vL4",
   changes: [
     { kind: "replace", start: "42:7Qa2m", content: "  return false;" },
@@ -194,7 +196,7 @@ Set `saveOnly` to `true` to validate and save a function without execution. A sa
 
 ```json
 {
-  "code": "async function runChecks({ npm }) { return npm.test({ raise: true }); }",
+  "code": "async function runChecks({ npm: { test } }) { return test({ raise: true }); }",
   "saveOnly": true
 }
 ```
@@ -203,7 +205,7 @@ Supply top-level `params` when the first execution needs input:
 
 ```json
 {
-  "code": "async function inspect({ workspace }, input: { file: string }) { return workspace.read(input.file, { format: 'raw' }); }",
+  "code": "async function inspect({ workspace: { read } }, input: { file: string }) { return read(input.file, { format: 'raw' }); }",
   "params": { "file": "README.md" }
 }
 ```
@@ -212,6 +214,9 @@ Call a saved function through explicit dependency injection:
 
 ```ts
 async ({ runTests }) => runTests()
+```
+
+```ts
 async ({ runTests }) => runTests({ coverage: true })
 ```
 
@@ -566,7 +571,7 @@ Use the local source:
 
 ```sh
 npm install
-pi -e ./src/index.ts
+pi --no-extensions -e ./src/index.ts
 ```
 
 Run the project checks:
