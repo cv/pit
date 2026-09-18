@@ -46,19 +46,19 @@ Pit is distributed from public, tagged GitHub releases and intentionally remains
 Install the pinned release to user scope:
 
 ```sh
-pi install git:github.com/cv/pit@v0.16.0
+pi install git:github.com/cv/pit@v0.16.1
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:github.com/cv/pit@v0.16.0
+pi install -l git:github.com/cv/pit@v0.16.1
 ```
 
 Use the pinned release one time without changing settings:
 
 ```sh
-pi -e git:github.com/cv/pit@v0.16.0
+pi -e git:github.com/cv/pit@v0.16.1
 ```
 
 Update an existing unpinned Git installation and reload extensions:

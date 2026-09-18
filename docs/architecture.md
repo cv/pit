@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes Pit 0.16.0's runtime. It is a maintainer's map, not a promise that every internal interface is stable. User-facing behavior belongs in the [README](../README.md); release procedure belongs in [releasing.md](releasing.md).
+This document describes Pit 0.16.1's runtime. It is a maintainer's map, not a promise that every internal interface is stable. User-facing behavior belongs in the [README](../README.md); release procedure belongs in [releasing.md](releasing.md).
 
 Pit presents one `typescript` tool to the model. Submitted TypeScript is formatted and type-checked in the trusted extension host, compiled into a self-contained program, and evaluated by QuickJS inside a fresh bounded Wasmtime store. The Wasm component has no useful ambient authority. It requests effects from the host through explicitly injected functions such as `workspace.read`, `git.status`, and `http.request`.
 
@@ -110,6 +110,8 @@ The execution pipeline deliberately separates **prepare**, **run**, and **commit
 - the submitted program wrapper.
 
 Validation uses strict ES2022 compiler settings without emitting JavaScript. Diagnostics are deduplicated, bounded, and rewritten to locations in the submitted source. The actual serialized `params` value is included in validation so obvious input-shape mismatches fail before guest execution starts.
+
+The authoring contract exposes portable language globals, bounded `setTimeout`, and `console.log/warn/error`, but not Node's `process`, `require`, or `Buffer`. The Wasmtime wrapper installs no-op console methods rather than entering Javy's WASI-backed stdio from the addon's asynchronous runtime. Visible diagnostics must be returned as data.
 
 Validation results use a bounded 128-entry cache keyed by source, effective function sources, available names, execution form, and input. Both successful and failed validations are cached.
 
