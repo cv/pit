@@ -61,7 +61,7 @@ const invariants: Array<{ name: string; pattern: RegExp }> = [
     name: "repeated failure recovery",
     pattern: /after two similar failures, inspect the contract\/state/,
   },
-  { name: "portable runtime", pattern: /Wasmtime\/QuickJS.*no imports or Node globals/ },
+  { name: "portable authoring constraints", pattern: /no imports or Node globals/ },
   { name: "async injection", pattern: /Injected functions are async/ },
   {
     name: "session commit semantics",
@@ -125,6 +125,16 @@ describe("emitted Pit prompt", () => {
   it.each(invariants)("explains $name", ({ pattern }) => {
     const emitted = [tool.description, ...(tool.promptGuidelines ?? [])].join("\n");
     expect(emitted).toMatch(pattern);
+  });
+
+  it("describes the callable contract without execution-engine branding", () => {
+    const emitted = [
+      tool.description,
+      tool.promptSnippet ?? "",
+      ...(tool.promptGuidelines ?? []),
+      ...schemaDescriptions(tool.parameters),
+    ].join("\n");
+    expect(emitted).not.toMatch(/wasmtime|quickjs/i);
   });
 
   it("registers the measured description and keeps schema constraints", () => {

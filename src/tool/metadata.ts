@@ -31,7 +31,7 @@ export const SAVE_ONLY_DESCRIPTION =
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
-    "Contextually type-checked TypeScript; default Wasmtime/QuickJS. Injected functions are async; no imports or Node globals.",
+    "Contextually type-checked TypeScript. Injected functions are async; no imports or Node globals.",
     "",
     "```ts",
     "async ({ workspace: { stat }, git: { status: gitStatus } }) => Promise.all([",
