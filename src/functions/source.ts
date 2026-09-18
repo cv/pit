@@ -129,3 +129,21 @@ export function getSavedFunctionCallSignature(source: string, id?: string): stri
   }
   return functionCallSignature(id ?? expression.name.text, expression.parameters);
 }
+
+export function getFunctionTypeParameters(source: string): {
+  declaration: string;
+  arguments: string;
+} {
+  const expression = submissionExpression(source);
+  if (
+    !expression ||
+    !(ts.isFunctionExpression(expression) || ts.isArrowFunction(expression)) ||
+    !expression.typeParameters?.length
+  ) {
+    return { declaration: "", arguments: "" };
+  }
+  return {
+    declaration: `<${expression.typeParameters.map((parameter) => parameter.getText()).join(", ")}>`,
+    arguments: `<${expression.typeParameters.map((parameter) => parameter.name.text).join(", ")}>`,
+  };
+}

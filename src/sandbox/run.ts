@@ -1,4 +1,5 @@
 import type { CapabilityTrace } from "../execution/capability-trace.js";
+import type { FunctionEnvironment, FunctionDefinitionReference } from "../functions/environment.js";
 import type { CapabilityHandler } from "./dispatcher.js";
 import {
   parseFunctionExecutionContext,
@@ -15,13 +16,11 @@ export {
   sandboxFatalError,
 };
 
-export interface SandboxOptions {
+export interface SandboxOptions extends FunctionEnvironment {
+  definition?: FunctionDefinitionReference;
   memoryLimitMb?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
-  userFunctions?: ReadonlyMap<string, string>;
-  projectFunctions?: ReadonlyMap<string, string>;
-  sessionFunctions?: ReadonlyMap<string, string>;
   input?: unknown;
   onCapabilityTrace?: (trace: CapabilityTrace) => void;
 }
@@ -52,6 +51,8 @@ export async function runWithFunctionExecutor(
 ): Promise<unknown> {
   const execution = executionOptions(options);
   const program = await prepareSandboxProgram(source, {
+    ...(options.definition ? { definition: options.definition } : {}),
+    ...(options.invalidDefinitions ? { invalidDefinitions: options.invalidDefinitions } : {}),
     ...(options.userFunctions ? { userFunctions: options.userFunctions } : {}),
     ...(options.projectFunctions ? { projectFunctions: options.projectFunctions } : {}),
     ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
