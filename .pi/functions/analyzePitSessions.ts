@@ -5,21 +5,29 @@
  * @param input.examples - Repeated failure labels retained per session. The default is 5.
  */
 async function analyzePitSessions(
-  { context: { get }, shell: { execFile }, analyzePitSession },
+  { context: { get }, workspace: { glob }, analyzePitSession },
   input: { limit?: number; examples?: number } = {},
 ) {
+  for (const [name, value] of Object.entries(input)) {
+    if (value !== undefined && !Number.isInteger(value))
+      throw new Error(`${name} must be an integer`);
+  }
   const runtime = await get();
   if (!runtime.sessionFile) {
     throw new Error("No current session file is available");
   }
-  const directory = runtime.sessionFile.slice(0, runtime.sessionFile.lastIndexOf("/"));
-  const listed = await execFile(
-    "find",
-    [directory, "-maxdepth", "1", "-type", "f", "-name", "*.jsonl", "-print"],
-    { raise: true, maxBytes: 50000, maxLines: 500 },
-  );
+  const slash = runtime.sessionFile.lastIndexOf("/");
+  const directory = slash < 0 ? "." : runtime.sessionFile.slice(0, slash) || "/";
+  const escaped = directory.replace(/([*?[\]{}()!+@\\])/g, "\\$1");
+  const listed = await glob(`${escaped === "/" ? "" : escaped}/*.jsonl`, {
+    onlyFiles: true,
+    dot: true,
+    limit: 10000,
+  });
+  if (listed.truncated)
+    throw new Error("Session discovery was truncated; refusing an incomplete selection");
   const limit = Math.max(1, Math.min(input.limit ?? 12, 20));
-  const files = listed.stdout.trim().split("\n").filter(Boolean).sort().reverse().slice(0, limit);
+  const files = [...listed.entries].sort().reverse().slice(0, limit);
   const audits: Array<Awaited<ReturnType<typeof analyzePitSession>>> = [];
   for (let offset = 0; offset < files.length; offset += 4) {
     const batch = files.slice(offset, offset + 4);
@@ -29,28 +37,31 @@ async function analyzePitSessions(
       )),
     );
   }
-  const categories: Record<string, number> = {};
-  const programs: Record<string, number> = {};
-  const labels: Record<string, number> = {};
+  const categories = new Map<string, number>();
+  const programs = new Map<string, number>();
+  const labels = new Map<string, number>();
   const recommendations = new Set<string>();
   for (const audit of audits) {
     for (const [name, count] of Object.entries(audit.categories ?? {})) {
-      categories[name] = (categories[name] ?? 0) + Number(count);
+      categories.set(name, (categories.get(name) ?? 0) + count);
     }
     for (const [name, count] of Object.entries(audit.execFilePrograms ?? {})) {
-      programs[name] = (programs[name] ?? 0) + Number(count);
+      programs.set(name, (programs.get(name) ?? 0) + count);
     }
     for (const [label, count] of audit.repeatedWorkflowFailureLabels ?? []) {
       if (label) {
-        labels[label] = (labels[label] ?? 0) + Number(count);
+        labels.set(label, (labels.get(label) ?? 0) + count);
       }
     }
     for (const recommendation of audit.recommendations ?? []) {
       recommendations.add(recommendation);
     }
   }
-  const total = (field: string) =>
-    audits.reduce((sum, audit) => sum + Number(audit[field] ?? 0), 0);
+  if (recommendations.size > 1)
+    recommendations.delete("No recurring workflow failure needs action.");
+  const total = (
+    field: "toolCalls" | "failures" | "workflowFailures" | "gateFailures" | "expectedFailures",
+  ) => audits.reduce((sum, audit) => sum + audit[field], 0);
   const toolCalls = total("toolCalls");
   const workflowFailures = total("workflowFailures");
   return {
@@ -64,11 +75,9 @@ async function analyzePitSessions(
     workflowFailureRatePercent: Number(
       ((100 * workflowFailures) / Math.max(1, toolCalls)).toFixed(1),
     ),
-    categories,
-    execFilePrograms: programs,
-    repeatedWorkflowFailureLabels: Object.entries(labels)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 12),
+    categories: Object.fromEntries(categories),
+    execFilePrograms: Object.fromEntries(programs),
+    repeatedWorkflowFailureLabels: [...labels].sort((a, b) => b[1] - a[1]).slice(0, 12),
     recommendations: [...recommendations],
     perSession: audits.map((audit) => ({
       file: audit.file.split("/").at(-1),

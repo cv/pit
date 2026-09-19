@@ -19,25 +19,15 @@ async function waitForGitHubRunForCommit(
 ) {
   const discoveryAttempts = Math.max(1, Math.min(input.discoveryAttempts ?? 3, 12));
   const discoveryIntervalMs = Math.max(1000, Math.min(input.discoveryIntervalMs ?? 5000, 30000));
-  let match:
-    | {
-        id: number;
-        headSha: string;
-        name: string;
-        status: string;
-        conclusion: string;
-        url: string;
-      }
-    | undefined;
+  let match: Awaited<ReturnType<typeof findGitHubRunForCommit>>["matches"][number] | undefined;
   for (let attempt = 1; attempt <= discoveryAttempts; attempt++) {
     const found = await findGitHubRunForCommit({
       repo: input.repo,
       sha: input.sha,
       limit: input.limit,
+      runName: input.runName,
     });
-    match = input.runName
-      ? found.matches.find(({ name }) => name === input.runName)
-      : found.matches[0];
+    match = found.matches[0];
     if (match) break;
     if (attempt < discoveryAttempts) {
       await new Promise<void>((resolve) => setTimeout(resolve, discoveryIntervalMs));

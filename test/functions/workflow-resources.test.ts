@@ -15,6 +15,9 @@ const functionFiles = [
   ["findGitHubRunForCommit", ".pi/functions/findGitHubRunForCommit.ts"],
   ["inspectPitCoverageGaps", ".pi/functions/inspectPitCoverageGaps.ts"],
   ["inspectGitHubPullRequest", ".pi/functions/inspectGitHubPullRequest.ts"],
+  ["jq", ".pi/functions/jq.ts"],
+  ["readPitSessionEvents", ".pi/functions/readPitSessionEvents.ts"],
+  ["listChangedGitFiles", ".pi/functions/listChangedGitFiles.ts"],
   ["managePullRequestWorktree", ".pi/functions/managePullRequestWorktree.ts"],
   ["preparePitDelivery", ".pi/functions/preparePitDelivery.ts"],
   ["reviewPitChanges", ".pi/functions/reviewPitChanges.ts"],
@@ -67,7 +70,7 @@ describe("project agent workflow resources", () => {
     expect(targeted).toContain("Targeted tests must be safe");
     expect(targeted).toContain("raise: false");
     expect(coverage).toContain("cbranch-no|cstat-no|fstat-no");
-    expect(review).toContain('["--cached", "--check"]');
+    expect(review).toContain("preparePitDelivery");
     expect(format).toContain('"--write"');
     expect(format).toContain("oxfmt");
     expect(format).toContain("anchorsInvalidated");

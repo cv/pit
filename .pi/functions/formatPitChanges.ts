@@ -4,22 +4,10 @@
  * @param input.checkOnly - Check formatting without writing files.
  */
 async function formatPitChanges(
-  { git: { diff: gitDiff, status: gitStatus }, shell: { execFile } },
+  { listChangedGitFiles, shell: { execFile } },
   input: { checkOnly?: boolean } = {},
 ) {
-  const [unstaged, staged, status] = await Promise.all([
-    gitDiff(["--name-only"]),
-    gitDiff(["--cached", "--name-only"]),
-    gitStatus(["--porcelain", "--untracked-files=all"]),
-  ]);
-  const candidates = [
-    ...unstaged.stdout.split("\n"),
-    ...staged.stdout.split("\n"),
-    ...status.stdout
-      .split("\n")
-      .filter((line) => line.startsWith("?? "))
-      .map((line) => line.slice(3)),
-  ];
+  const { files: candidates } = await listChangedGitFiles();
   const supportedExtensions = [
     ".ts",
     ".tsx",
@@ -41,16 +29,18 @@ async function formatPitChanges(
     ".scss",
     ".less",
   ];
-  const files = [...new Set(candidates.map((file) => file.trim()).filter(Boolean))]
-    .filter(
-      (file) =>
-        supportedExtensions.some((extension) => file.endsWith(extension)) && !file.includes(" -> "),
-    )
-    .slice(0, 100);
+  const files = candidates.filter((file) =>
+    supportedExtensions.some((extension) => file.endsWith(extension)),
+  );
+  if (files.length > 100) {
+    throw new Error(
+      "More than 100 formattable files; narrow the worktree instead of formatting a partial list",
+    );
+  }
   if (files.length === 0) {
     return { files, changed: false, message: "No changed Oxfmt-supported files" };
   }
-  const args = ["oxfmt", input.checkOnly ? "--check" : "--write", ...files];
+  const args = ["oxfmt", input.checkOnly ? "--check" : "--write", "--", ...files];
   const result = await execFile("npx", args, {
     raise: false,
     timeoutMs: 120000,
@@ -60,7 +50,9 @@ async function formatPitChanges(
   });
   const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
   if (result.code !== 0 && !input.checkOnly) {
-    throw new Error(`Formatting failed with exit ${result.code}:\n\n${output}`);
+    throw new Error(
+      `Formatting failed with exit ${result.code}; re-read all attempted files before editing:\n\n${output}`,
+    );
   }
   return {
     files,

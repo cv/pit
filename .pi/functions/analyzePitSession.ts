@@ -1,104 +1,118 @@
 /**
  * Audits a Pi session for recurring tool-call failures and workflow smells.
+ * Processes compact pages, keeping correlation and classification in TypeScript.
  */
 async function analyzePitSession(
-  { context: { get }, shell: { execFile } },
+  { context: { get }, readPitSessionEvents },
   input: { file?: string; examples?: number } = {},
 ) {
-  const runtime = await get();
-  const file = input.file ?? runtime.sessionFile;
-  if (!file) {
-    throw new Error("No Pi session file is available");
+  const file = input.file ?? (await get()).sessionFile;
+  if (!file) throw new Error("No Pi session file is available");
+  if (input.examples !== undefined && !Number.isInteger(input.examples)) {
+    throw new Error("examples must be an integer");
   }
   const examples = Math.max(1, Math.min(input.examples ?? 12, 30));
-  const script = String.raw`
-const fs = require("fs");
-const calls = new Map();
-const records = [];
-const failures = [];
-for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
-  if (!line) continue;
-  let row;
-  try { row = JSON.parse(line); } catch { continue; }
-  const message = row.message;
-  if (!message) continue;
-  for (const part of message.content || []) {
-    if (part.type !== "toolCall") continue;
-    const args = part.arguments || {};
-    const call = { id: part.id, label: args.label || "", code: args.code || "" };
-    calls.set(part.id, call);
-    records.push(call);
+  type Page = Awaited<ReturnType<typeof readPitSessionEvents>>;
+  type Failure = NonNullable<Page["events"][number]["failure"]>;
+  const classifyFailure = (label: string, error: string) => {
+    if (
+      /^(?:Expect failure:|Trigger .*?(?:failure|timeout)|Verify .*?(?:reject|fail))/i.test(label)
+    )
+      return "expected";
+    if (/Anchor mismatch|anchor references line/i.test(error)) return "anchor";
+    if (/Revision mismatch/i.test(error)) return "revision";
+    if (/TypeScript validation failed/i.test(error)) return "typescript";
+    if (
+      /validation|coverage|static checks?|tests?|package|CI run/i.test(label) &&
+      /Command failed|(?:Saved function|Function) .* failed/i.test(error)
+    )
+      return "gate";
+    return /Command failed/i.test(error) ? "command" : "logic";
+  };
+  const increment = (counts: Map<string, number>, key: string) =>
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  const calls = new Map<string, string>();
+  const categories = new Map<string, number>();
+  const programs = new Map<string, number>();
+  const labels = new Map<string, number>();
+  const recent: Array<Failure & { label: string; category: string }> = [];
+  let toolCalls = 0;
+  let failures = 0;
+  let workflowFailures = 0;
+  let shellExecCalls = 0;
+  let promiseAllCalls = 0;
+  let workspaceBatchCalls = 0;
+  let afterLine = 0;
+  for (let pageNumber = 0; ; pageNumber++) {
+    if (pageNumber === 200)
+      throw new Error("Session exceeds 40000 lines; refusing an incomplete audit");
+    const page = await readPitSessionEvents({ file, afterLine, limit: 200 });
+    for (const event of page.events) {
+      for (const call of event.calls) {
+        calls.set(call.id, call.label);
+        toolCalls++;
+        for (const program of call.programs) increment(programs, program);
+        shellExecCalls += Number(call.shellExec);
+        promiseAllCalls += Number(call.promiseAll);
+        workspaceBatchCalls += Number(call.workspaceBatch);
+      }
+      const failure = event.failure;
+      if (!failure || !calls.has(failure.id)) continue;
+      const label = calls.get(failure.id) ?? "";
+      const kind = classifyFailure(label, failure.error);
+      failures++;
+      increment(categories, kind);
+      if (kind !== "gate" && kind !== "expected") {
+        workflowFailures++;
+        increment(labels, label);
+      }
+      recent.push({ ...failure, label, category: kind });
+      if (recent.length > examples) recent.shift();
+    }
+    if (!page.hasMore) break;
+    if (page.nextLine <= afterLine) throw new Error("Session page cursor did not advance");
+    afterLine = page.nextLine;
   }
-  if (message.role !== "toolResult") continue;
-  const call = calls.get(message.toolCallId);
-  const text = (message.content || []).map((part) => part.text || "").join("\n");
-  const structured = message.details && message.details.failure;
-  if (call && (message.isError || /^(Error:|TypeScript validation failed:|Command failed)/.test(text))) {
-    failures.push({
-      ...call,
-      error: structured && structured.rootError || text.split("\n")[0],
-      functionPath: structured && structured.functionPath || [],
-      failureKind: structured && structured.kind,
-    });
-  }
-}
-const gateLabel = /validation|coverage|static checks?|tests?|package|CI run/i;
-const expectedLabel = /^(?:Expect failure:|Trigger .*?(?:failure|timeout)|Verify .*?(?:reject|fail))/i;
-const category = (failure) =>
-  expectedLabel.test(failure.label) ? "expected" :
-  /Anchor mismatch|anchor references line/i.test(failure.error) ? "anchor" :
-  /Revision mismatch/i.test(failure.error) ? "revision" :
-  /TypeScript validation failed/i.test(failure.error) ? "typescript" :
-  gateLabel.test(failure.label) && /Command failed|Saved function .* failed/i.test(failure.error) ? "gate" :
-  /Command failed/i.test(failure.error) ? "command" : "logic";
-const categories = {};
-for (const failure of failures) categories[category(failure)] = (categories[category(failure)] || 0) + 1;
-const workflowFailures = failures.filter((failure) => !["gate", "expected"].includes(category(failure)));
-const execFilePrograms = {};
-for (const record of records) {
-  for (const match of record.code.matchAll(/shell\.execFile\(\s*["']([^"']+)/g)) {
-    execFilePrograms[match[1]] = (execFilePrograms[match[1]] || 0) + 1;
-  }
-}
-const labels = {};
-for (const failure of workflowFailures) labels[failure.label] = (labels[failure.label] || 0) + 1;
-const recommendations = [];
-if (categories.gate) recommendations.push("Use targeted tests and npm.run(\"check\") before the final validatePit gate.");
-if (categories.typescript) recommendations.push("After a TypeScript submission failure, inspect declared types and numeric bounds, then simplify the next call.");
-if (categories.anchor || categories.revision) recommendations.push("Make a fresh read/search of every edit target the immediately preceding workspace operation.");
-if (Object.values(labels).some((count) => count > 1)) recommendations.push("Split workflows that repeat the same failing label.");
-if (recommendations.length === 0) recommendations.push("No recurring workflow failure needs action.");
-const limit = Number(process.argv[2]);
-console.log(JSON.stringify({
-  file: process.argv[1],
-  toolCalls: records.length,
-  failures: failures.length,
-  failureRatePercent: Number((100 * failures.length / Math.max(1, records.length)).toFixed(1)),
-  workflowFailures: workflowFailures.length,
-  workflowFailureRatePercent: Number((100 * workflowFailures.length / Math.max(1, records.length)).toFixed(1)),
-  gateFailures: categories.gate || 0,
-  expectedFailures: categories.expected || 0,
-  categories,
-  execFilePrograms,
-  shellExecCalls: records.filter((record) => /shell\.exec\(/.test(record.code)).length,
-  promiseAllCalls: records.filter((record) => /Promise\.all/.test(record.code)).length,
-  workspaceBatchCalls: records.filter((record) => /workspace\.batch\(/.test(record.code)).length,
-  repeatedWorkflowFailureLabels: Object.entries(labels).sort((a, b) => b[1] - a[1]).slice(0, limit),
-  recentFailureExamples: failures.slice(-limit).map((failure) => ({
-    category: category(failure),
-    label: failure.label,
-    error: failure.error,
-    functionPath: failure.functionPath,
-    failureKind: failure.failureKind,
-  })),
-  recommendations,
-}, null, 2));
-`;
-  const result = await execFile("node", ["-e", script, file, String(examples)], {
-    timeoutMs: 30000,
-    maxBytes: 50000,
-    maxLines: 1000,
-    raise: true,
-  });
-  return JSON.parse(result.stdout);
+  const recommendations: string[] = [];
+  if (categories.has("gate"))
+    recommendations.push(
+      'Use targeted tests and npm.run("check") before the final validatePit gate.',
+    );
+  if (categories.has("typescript"))
+    recommendations.push(
+      "After a TypeScript submission failure, inspect declared types and numeric bounds, then simplify the next call.",
+    );
+  if (categories.has("anchor") || categories.has("revision"))
+    recommendations.push(
+      "Make a fresh read/search of every edit target the immediately preceding workspace operation.",
+    );
+  if ([...labels.values()].some((count) => count > 1))
+    recommendations.push("Split workflows that repeat the same failing label.");
+  if (recommendations.length === 0)
+    recommendations.push("No recurring workflow failure needs action.");
+  const rate = (count: number) => Number(((100 * count) / Math.max(1, toolCalls)).toFixed(1));
+  return {
+    file,
+    toolCalls,
+    failures,
+    failureRatePercent: rate(failures),
+    workflowFailures,
+    workflowFailureRatePercent: rate(workflowFailures),
+    gateFailures: categories.get("gate") ?? 0,
+    expectedFailures: categories.get("expected") ?? 0,
+    categories: Object.fromEntries(categories),
+    execFilePrograms: Object.fromEntries(programs),
+    shellExecCalls,
+    promiseAllCalls,
+    workspaceBatchCalls,
+    repeatedWorkflowFailureLabels: [...labels].sort((a, b) => b[1] - a[1]).slice(0, examples),
+    recentFailureExamples: recent.map(({ category, label, error, functionPath, failureKind }) => ({
+      category,
+      label,
+      error,
+      functionPath,
+      failureKind: failureKind ?? undefined,
+    })),
+    recommendations,
+  };
 }

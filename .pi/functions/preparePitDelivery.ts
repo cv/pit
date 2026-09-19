@@ -1,18 +1,22 @@
 /**
  * Reports bounded Git delivery readiness without rerunning validation.
+ * Ready means Git inspection succeeded and both whitespace checks passed, not that CI passed.
  */
 async function preparePitDelivery({ git: { diff: gitDiff, status: gitStatus } }) {
+  const options = { maxBytes: 4000, maxLines: 160, raise: false };
   const [status, diffCheck, stagedDiffCheck] = await Promise.all([
-    gitStatus(["--short", "--branch"]),
-    gitDiff(["--check"]),
-    gitDiff(["--cached", "--check"]),
+    gitStatus(["--short", "--branch"], options),
+    gitDiff(["--check"], options),
+    gitDiff(["--cached", "--check"], options),
   ]);
-  const unstaged = (diffCheck.stdout || diffCheck.stderr).trim();
-  const staged = (stagedDiffCheck.stdout || stagedDiffCheck.stderr).trim();
+  const diagnostic = (result: { stdout: string; stderr: string }) =>
+    [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  const results = [status, diffCheck, stagedDiffCheck];
   return {
-    status: status.stdout.trim(),
-    diffCheck: unstaged,
-    stagedDiffCheck: staged,
-    ready: diffCheck.code === 0 && stagedDiffCheck.code === 0,
+    status: diagnostic(status),
+    diffCheck: diagnostic(diffCheck),
+    stagedDiffCheck: diagnostic(stagedDiffCheck),
+    truncated: results.some((result) => result.truncated),
+    ready: results.every((result) => result.code === 0 && !result.truncated),
   };
 }
