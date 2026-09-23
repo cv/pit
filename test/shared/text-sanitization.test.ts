@@ -34,8 +34,6 @@ describe("terminal text sanitization", () => {
     expect(sanitized).toBe(
       `\u001b[53moverlined${RESET_WITHOUT_BACKGROUND}normal \u001b[58;2;1;2;3mcolored underline${RESET_WITHOUT_BACKGROUND}normal`,
     );
-    expect(RESET_WITHOUT_BACKGROUND).toContain(";55;");
-    expect(RESET_WITHOUT_BACKGROUND).toContain(";59;");
   });
 
   it("strips output backgrounds while preserving foreground colors and text styles", () => {

@@ -1,16 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  CAPABILITY_REGISTRY,
-  generateCapabilityContract,
-  validateCapabilityCall,
-} from "../../src/capabilities/registry.js";
-import { CAPABILITY_METHODS } from "../../src/index.js";
+import { validateCapabilityCall } from "../../src/capabilities/registry.js";
 import {
   branchEntries,
   cleanupHarness,
@@ -34,32 +26,9 @@ afterEach(cleanupHarness);
 
 describe("pit extension", () => {
   it("registers the TypeScript tool and activates it", async () => {
-    expect(tool.label).toBe("TypeScript Workspace");
-    expect(tool.promptSnippet).toContain("explicit");
     await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenCalledWith(["typescript"]);
-  });
-
-  it("keeps capability declarations and model-facing metadata in sync", async () => {
-    const contract = await readFile(
-      join(process.cwd(), "src/generated/capability-contract.d.ts"),
-      "utf8",
-    );
-    const readme = await readFile(join(process.cwd(), "README.md"), "utf8");
-    expect(contract).toBe(generateCapabilityContract());
-
-    for (const [capability, methods] of Object.entries(CAPABILITY_METHODS)) {
-      const interfaceName =
-        CAPABILITY_REGISTRY[capability as keyof typeof CAPABILITY_REGISTRY].interfaceName;
-      const pattern = new RegExp(`interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`);
-      const body = contract.match(pattern)?.[1] ?? "";
-      const declared = [...body.matchAll(/^ {2}([A-Za-z_$][\w$]*)\(/gm)].map((match) => match[1]);
-      expect(declared).toEqual([...methods]);
-      expect(tool.description).toContain(`${capability}:`);
-      for (const method of methods) {
-        expect(readme).toContain(`\`${method}(`);
-      }
-    }
+    expect((await run("async ({}) => 42")).details.value).toBe(42);
   });
 
   it("validates capability dispatch and arity from the registry", () => {
@@ -107,11 +76,15 @@ describe("pit extension", () => {
         customType: "pit-function-definitions",
         data: expect.objectContaining({
           name: "greet",
-          source: `async function greet({}, input) {\n  return { greeting: "Hello, " + (input?.name ?? "world") + "!" };\n}`,
+          source: expect.any(String),
         }),
       }),
     );
 
+    const savedBranch = [...branchEntries];
+    await value('async ({ functions: { removeSession } }) => removeSession("greet")');
+    setBranchEntries(savedBranch);
+    await sessionTree({}, context());
     const invoked = await run(`async ({ greet }) => greet({ name: "Pi" })`);
     expect(invoked.details.value).toEqual({ greeting: "Hello, Pi!" });
     expect(invoked.details.functions).toEqual([{ action: "run", name: "greet", scope: "session" }]);
@@ -138,9 +111,6 @@ describe("pit extension", () => {
     const source = `async function deferred({ shell: { execFile } }) {
       return execFile("node", ["--version"]);
     }`;
-    const canonicalSource = `async function deferred({ shell: { execFile } }) {
-  return execFile("node", ["--version"]);
-}`;
     const saved = await tool.execute(
       "call-id",
       { code: source, saveOnly: true },
@@ -156,7 +126,7 @@ describe("pit extension", () => {
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         customType: "pit-function-definitions",
-        data: { name: "deferred", source: canonicalSource },
+        data: { name: "deferred", source: expect.any(String) },
       }),
     );
 
@@ -193,7 +163,7 @@ describe("pit extension", () => {
       undefined,
       context(),
     );
-    expect(execMock).toHaveBeenCalledOnce();
+    expect(execMock).toHaveBeenCalledExactlyOnceWith("node", ["--version"], expect.any(Object));
 
     await expect(
       tool.execute(

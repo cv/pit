@@ -1,6 +1,7 @@
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { formatTypeScriptSource } from "../../src/tool/source-formatter.js";
 import {
   cleanupHarness,
   renderToolCall,
@@ -93,13 +94,15 @@ describe("tool rendering", () => {
     const context = { expanded: true, argsComplete: true, state, invalidate };
 
     const initial = stripTerminalSequences(renderToolCall(args, context));
-    expect(initial).toContain("const[file,status]");
+    expect(initial).toContain(args.code);
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalledOnce());
 
-    const formatted = stripTerminalSequences(renderToolCall(args, context));
-    expect(formatted).toContain("const [file, status] = await Promise.all([");
-    expect(formatted).toContain("return { file, status };");
-    expect(formatted).not.toContain("const[file,status]");
+    const formatted = stripTerminalSequences(renderToolCall(args, context))
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .join("\n");
+    expect(formatted).toContain(await formatTypeScriptSource(args.code));
+    expect(formatted).not.toContain(args.code);
   });
 
   it("keeps incomplete streaming source raw", async () => {

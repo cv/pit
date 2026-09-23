@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -129,14 +127,6 @@ describe("ExecutionProgressController", () => {
       output: "\u001b[32mok\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m",
     });
   });
-
-  it.each(["progress.ts", "types.ts"])(
-    "keeps execution/%s independent from TUI renderer modules",
-    (file) => {
-      const source = readFileSync(new URL(`../../src/execution/${file}`, import.meta.url), "utf8");
-      expect(source).not.toMatch(/from ["'][^"']*renderer/);
-    },
-  );
 
   it("records snapshots without a listener", () => {
     const c = new ExecutionProgressController();

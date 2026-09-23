@@ -6,72 +6,62 @@ import { runInSandbox } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("sandbox caches", () => {
-  it("caches successful and failed validation plus compiled output", async () => {
+  it("reuses validation and compilation without changing successful or rejected outcomes", async () => {
     clearSandboxCaches();
     const source = "({}) => ({ answer: 42 })";
     validateTypeScript(source);
+    const validated = getSandboxCacheStats();
     validateTypeScript(source);
+    expect(getSandboxCacheStats().validationEntries).toBe(validated.validationEntries);
+    expect(getSandboxCacheStats().validationHits).toBeGreaterThan(validated.validationHits);
 
     const invalid = "({}) => 1n";
     expect(() => validateTypeScript(invalid)).toThrow();
+    const rejected = getSandboxCacheStats();
     expect(() => validateTypeScript(invalid)).toThrow();
+    expect(getSandboxCacheStats().validationEntries).toBe(rejected.validationEntries);
+    expect(getSandboxCacheStats().validationHits).toBeGreaterThan(rejected.validationHits);
 
-    await runInSandbox(source, async () => null);
-    await runInSandbox(source, async () => null);
-    expect(getSandboxCacheStats()).toEqual({
-      validationEntries: 3,
-      compilationEntries: 1,
-      validationHits: 3,
-      compilationHits: 1,
-      dependencyGraphEntries: 0,
-      dependencyGraphHits: 0,
-      dependencyReferenceHits: 0,
-    });
+    expect(await runInSandbox(source, async () => null)).toEqual({ answer: 42 });
+    const compiled = getSandboxCacheStats();
+    expect(await runInSandbox(source, async () => null)).toEqual({ answer: 42 });
+    expect(getSandboxCacheStats().compilationEntries).toBe(compiled.compilationEntries);
+    expect(getSandboxCacheStats().compilationHits).toBeGreaterThan(compiled.compilationHits);
+
     clearSandboxCaches();
-    expect(getSandboxCacheStats()).toEqual({
-      validationEntries: 0,
-      compilationEntries: 0,
-      validationHits: 0,
-      compilationHits: 0,
-      dependencyGraphEntries: 0,
-      dependencyGraphHits: 0,
-      dependencyReferenceHits: 0,
-    });
+    expect(Object.values(getSandboxCacheStats()).every((value) => value === 0)).toBe(true);
+    expect(await runInSandbox(source, async () => null)).toEqual({ answer: 42 });
+    expect(getSandboxCacheStats().compilationEntries).toBeGreaterThan(0);
+    clearSandboxCaches();
   });
 
-  it("reuses dependency graphs and invalidates changed registries", () => {
+  it("reuses equivalent registries and resolves the current dependencies after changes", () => {
     clearSandboxCaches();
     const saved = new Map([
       ["base", "async function base({}) { return 1; }"],
       ["composed", "async function composed({ base }) { return base() + 1; }"],
     ]);
-    const initial = getSavedFunctionDependencyGraph(saved);
-    expect(initial.resolve("async ({ composed }) => composed()").map(({ name }) => name)).toEqual([
-      "base",
-      "composed",
-    ]);
-
-    const reloaded = getSavedFunctionDependencyGraph(new Map(saved));
-    expect(reloaded).toBe(initial);
-    expect(reloaded.resolve("async ({ composed }) => composed()").map(({ name }) => name)).toEqual([
-      "base",
-      "composed",
-    ]);
+    const source = "async ({ composed }) => composed()";
+    const resolve = (registry: ReadonlyMap<string, string>) =>
+      getSavedFunctionDependencyGraph(registry)
+        .resolve(source)
+        .map(({ name }) => name);
+    expect(resolve(saved)).toEqual(["base", "composed"]);
+    const cached = getSandboxCacheStats();
+    expect(resolve(new Map(saved))).toEqual(["base", "composed"]);
+    expect(getSandboxCacheStats().dependencyGraphEntries).toBe(cached.dependencyGraphEntries);
+    expect(getSandboxCacheStats().dependencyGraphHits).toBeGreaterThan(cached.dependencyGraphHits);
 
     saved.set("composed", "async function composed({}) { return 2; }");
-    const replaced = getSavedFunctionDependencyGraph(saved);
-    expect(replaced).not.toBe(initial);
-    expect(replaced.resolve("async ({ composed }) => composed()").map(({ name }) => name)).toEqual([
-      "composed",
-    ]);
-
+    expect(resolve(saved)).toEqual(["composed"]);
     saved.delete("base");
-    expect(getSavedFunctionDependencyGraph(saved)).not.toBe(replaced);
-    expect(getSandboxCacheStats()).toMatchObject({
-      dependencyGraphEntries: 3,
-      dependencyGraphHits: 1,
-      dependencyReferenceHits: expect.any(Number),
-    });
-    expect(getSandboxCacheStats().dependencyReferenceHits).toBeGreaterThan(0);
+    expect(resolve(saved)).toEqual(["composed"]);
+    expect(getSavedFunctionDependencyGraph(saved).resolve("async ({ base }) => base()")).toEqual(
+      [],
+    );
+    saved.set("replacement", "async function replacement({}) { return 3; }");
+    saved.set("composed", "async function composed({ replacement }) { return replacement(); }");
+    expect(resolve(saved)).toEqual(["replacement", "composed"]);
+    clearSandboxCaches();
   });
 });

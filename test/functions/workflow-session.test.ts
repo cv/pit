@@ -254,31 +254,37 @@ describe("analyzePitSessions", () => {
     });
   });
 
-  it("keeps at most four session audits in flight and starts the next batch only after completion", async () => {
+  it("bounds concurrent audits while returning every selected session", async () => {
     const analyze = await loadWorkflowFunction("analyzePitSessions");
     const releases: Array<() => void> = [];
-    const analyzePitSession = vi.fn(
-      ({ file }: { file: string }) =>
-        new Promise((resolve) => releases.push(() => resolve(audit(file)))),
-    );
+    const completed: string[] = [];
+    let active = 0;
+    let peak = 0;
+    const analyzePitSession = ({ file }: { file: string }) => {
+      active++;
+      peak = Math.max(peak, active);
+      return new Promise((resolve) =>
+        releases.push(() => {
+          active--;
+          completed.push(file);
+          resolve(audit(file));
+        }),
+      );
+    };
+    const files = Array.from({ length: 9 }, (_, i) => `/sessions/${i}.jsonl`);
     const pending = analyze({
       context: { get: async () => ({ sessionFile: "/sessions/current.jsonl" }) },
-      workspace: {
-        glob: async () => ({
-          entries: Array.from({ length: 5 }, (_, i) => `/sessions/${i}.jsonl`),
-          truncated: false,
-        }),
-      },
+      workspace: { glob: async () => ({ entries: files, truncated: false }) },
       analyzePitSession,
     });
-    await vi.waitFor(() => expect(analyzePitSession).toHaveBeenCalledTimes(4));
-    releases[0]?.();
-    await Promise.resolve();
-    expect(analyzePitSession).toHaveBeenCalledTimes(4);
-    releases.slice(1).forEach((release) => release());
-    await vi.waitFor(() => expect(analyzePitSession).toHaveBeenCalledTimes(5));
-    releases[4]?.();
-    expect(await pending).toMatchObject({ sessions: 5 });
+    while (completed.length < files.length) {
+      await vi.waitFor(() => expect(releases.length).toBeGreaterThan(0));
+      releases.splice(0).forEach((release) => release());
+    }
+    expect(await pending).toMatchObject({ sessions: files.length });
+    expect(completed.sort()).toEqual([...files].sort());
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(active).toBe(0);
   });
 
   it("refuses truncated discovery before starting audits", async () => {

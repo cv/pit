@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { generateCapabilityContract } from "../../src/capabilities/registry.js";
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
 import { sourceFunctionDefinition } from "../../src/functions/resolved-graph.js";
 import { functionTypeModel } from "../../src/sandbox/function-types.js";
@@ -7,6 +8,7 @@ import { prepareSandboxProgram } from "../../src/sandbox/program.js";
 import { runInSandbox, runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js";
+import { typeDiagnostics } from "../helpers/type-contract.js";
 
 const base = "async function calculate({}, value: number): Promise<number> { return value + 1; }";
 
@@ -245,8 +247,11 @@ describe("layered override contracts", () => {
     ).rejects.toThrow("does not match");
   });
 
-  it("builds compatible signatures for immutable source-backed global definitions", () => {
-    const upper = "async function calculate({ $next }, value: number) { return $next(value); }";
+  it.each([
+    { name: "compatible next argument", argument: "value", accepted: true },
+    { name: "incompatible next argument", argument: "String(value)", accepted: false },
+  ])("type-checks $name against source-backed globals", ({ argument, accepted }) => {
+    const upper = `async function calculate({ $next }, value: number) { return $next(${argument}); }`;
     const registry = createLayeredFunctionRegistry([
       sourceFunctionDefinition("calculate", "global", base),
       sourceFunctionDefinition("calculate", "user", upper),
@@ -256,8 +261,7 @@ describe("layered override contracts", () => {
       checkAll: true,
       checkCompatibility: true,
     });
-    expect(model.signatures).toContain("Override calculate (user -> global)");
-    expect(model.rootDependencies).toContain('"$next"');
-    expect(model.signatures).not.toContain("__pit_signature_undefined");
+    const consumer = `${generateCapabilityContract().replaceAll("PitCapabilities", "PitBuiltinCapabilities")}\n${model.declarations}\n${model.signatures}\nconst root = (${upper}) satisfies PitSourceProgram<${model.rootDependencies}>;`;
+    expect(typeDiagnostics(consumer).length === 0).toBe(accepted);
   });
 });

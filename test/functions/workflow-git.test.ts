@@ -144,19 +144,22 @@ describe("Git readiness and review composition", () => {
         truncated,
       }),
     );
-    const diff = vi
-      .fn()
-      .mockResolvedValue(
-        processResult({ code: diffCode, stdout: "check output", stderr: "check diagnostic" }),
-      );
+    const diff = vi.fn(async (args: string[]) => {
+      if (!args.includes("--check")) return processResult({ stdout: "ordinary diff" });
+      const scope = args.includes("--cached") ? "staged" : "unstaged";
+      return processResult({
+        code: diffCode,
+        stdout: `${scope} check`,
+        stderr: `${scope} diagnostic`,
+      });
+    });
     expect(await prepare({ git: { status, diff } })).toEqual({
       status: "branch\nstatus diagnostic",
-      diffCheck: "check output\ncheck diagnostic",
-      stagedDiffCheck: "check output\ncheck diagnostic",
+      diffCheck: "unstaged check\nunstaged diagnostic",
+      stagedDiffCheck: "staged check\nstaged diagnostic",
       truncated,
       ready,
     });
-    expect(diff.mock.calls.map(([args]) => args)).toEqual([["--check"], ["--cached", "--check"]]);
   });
 
   it("reuses readiness exactly once and fetches only the additional review data", async () => {
@@ -169,22 +172,29 @@ describe("Git readiness and review composition", () => {
       truncated: false,
     };
     const preparePitDelivery = vi.fn().mockResolvedValue(readiness);
-    const diff = vi.fn().mockResolvedValue(processResult({ stdout: "diff", truncated: true }));
+    const outputs = new Map([
+      ["--stat", "unstaged statistics"],
+      ["--cached --stat", "staged statistics"],
+      ["", "unstaged patch"],
+      ["--cached", "staged patch"],
+    ]);
+    const diff = vi.fn(async (args: string[]) =>
+      processResult({
+        stdout: outputs.get(args.join(" ")) ?? "unexpected request",
+        truncated: args.length === 0,
+      }),
+    );
     const log = vi.fn().mockResolvedValue(processResult({ stdout: "recent" }));
     expect(await review({ preparePitDelivery, git: { diff, log } })).toMatchObject({
       ...readiness,
       truncated: true,
-      diff: "diff",
-      stagedDiff: "diff",
+      stat: "unstaged statistics",
+      stagedStat: "staged statistics",
+      diff: "unstaged patch",
+      stagedDiff: "staged patch",
       recentCommits: "recent",
     });
     expect(preparePitDelivery).toHaveBeenCalledOnce();
-    expect(diff.mock.calls.map(([args]) => args)).toEqual([
-      ["--stat"],
-      ["--cached", "--stat"],
-      [],
-      ["--cached"],
-    ]);
     expect(log).toHaveBeenCalledWith(["--oneline", "-5"], expect.objectContaining({ raise: true }));
   });
 });

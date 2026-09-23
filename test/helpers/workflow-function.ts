@@ -10,7 +10,7 @@ export async function loadWorkflowFunction(name: string) {
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   });
-  return runInNewContext(`${outputText}\n${name}`, { setTimeout }) as (
+  return runInNewContext(`${outputText}\n${name}`, { setTimeout, Date }) as (
     dependencies: Record<string, unknown>,
     input?: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;

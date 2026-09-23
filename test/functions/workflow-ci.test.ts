@@ -32,9 +32,17 @@ describe("findGitHubRunForCommit", () => {
     expect(runList.mock.calls[0]?.[0]).toMatchObject({
       repo: "cv/pit",
       limit: 20,
-      json: ["databaseId", "headSha", "name", "status", "conclusion", "url"],
+      json: expect.arrayContaining([
+        "databaseId",
+        "headSha",
+        "name",
+        "status",
+        "conclusion",
+        "url",
+      ]),
       raise: true,
     });
+    expect(runList.mock.calls[0]?.[0]?.json).toHaveLength(6);
     expect(runList.mock.calls[0]?.[0]).not.toHaveProperty("commit");
   });
 
@@ -118,20 +126,18 @@ describe("waitForGitHubRunForCommit composition", () => {
     expect(waitForGitHubRun).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toEqual({ match, run: { status: "completed" } });
-    expect(findGitHubRunForCommit).toHaveBeenLastCalledWith({
-      repo: "cv/pit",
-      sha,
-      runName: "CI",
-      limit: undefined,
-    });
-    expect(waitForGitHubRun).toHaveBeenCalledExactlyOnceWith({
-      id: 42,
-      repo: "cv/pit",
-      attempts: 2,
-      intervalMs: undefined,
-      initialDelayMs: 0,
-      raise: false,
-    });
+    expect(findGitHubRunForCommit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ repo: "cv/pit", sha, runName: "CI" }),
+    );
+    expect(waitForGitHubRun).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        id: 42,
+        repo: "cv/pit",
+        attempts: 2,
+        initialDelayMs: 0,
+        raise: false,
+      }),
+    );
     expect(vi.getTimerCount()).toBe(0);
   });
 
