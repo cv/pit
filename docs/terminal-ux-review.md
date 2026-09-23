@@ -51,6 +51,14 @@ fatal: permission denied
 
 Inputs and execution details follow the diagnostic rather than preceding it. An arbitrary GitHub API array of file patches no longer becomes two empty rows; filenames, patch text, and extra fields remain visible. npm audit no longer substitutes vulnerability counts for package and fix details.
 
+## Reload smoke follow-up
+
+Live calls exercised params-based reads, informational stderr with exit 0, an intentional exit-2 diagnostic tail through a saved helper, a mixed read batch, real GitHub API patch data, concurrent process streams, and an intentional subprocess timeout. Their execution results matched the fixtures. This does not certify what the user saw in the TUI.
+
+A follow-up renderer reproduction found duplicated retained output for nested process results and separate stdout/stderr blocks. Matching only rendered text was sensitive to indentation and stream labels. The fix also compares against canonical process data that was actually returned and displayed, while keeping additional or differently interleaved stream output. Error and upstream-truncated views do not use undisplayed return values to suppress diagnostics. Stream-ending newlines no longer add spurious empty rows; meaningful blank lines and trailing spaces remain intact.
+
+`test/renderers/retained-output.test.ts` covers these cases, including styled text, carriage returns, structured stdout, shared references, extra captured output, and undisplayed values. The follow-up needs another reload and visual confirmation. Interactive cancellation, resize, scrolling, and selection/copy are still pending.
+
 ## Deliberate limits and remaining acceptance
 
 - There is no per-result provenance identifier for a multi-capability composite. Such values use a faithful generic presentation instead of speculative Git/npm/GitHub attribution. A single unambiguous capability hint survives wrapping; legacy source hints remain a compatibility fallback only when runtime traces are absent.

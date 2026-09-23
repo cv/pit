@@ -1,4 +1,4 @@
-import { semanticOutcome } from "../process/results.js";
+import { processOutputLines, semanticOutcome } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderStructuredData } from "./compound.js";
 import { hasOnlyKeys, isRecord, JSON_CONTAINER_PREFIX } from "./shared.js";
@@ -33,7 +33,7 @@ export function renderShell(
     `${theme.fg("toolTitle", theme.bold("shell"))} ${theme.fg(statusColor, `exit ${value.code}`)}${suffix}`,
   ];
   if (stdout) {
-    let output = stdout.split("\n");
+    let output = processOutputLines(stdout);
     if (!value.truncated && JSON_CONTAINER_PREFIX.test(stdout)) {
       try {
         output = renderStructuredData(JSON.parse(stdout), {
@@ -48,7 +48,7 @@ export function renderShell(
     lines.push(theme.fg("accent", "stdout"), ...output);
   }
   if (stderr) {
-    lines.push(theme.fg("warning", "stderr"), ...stderr.split("\n"));
+    lines.push(theme.fg("warning", "stderr"), ...processOutputLines(stderr));
   }
   if (!stdout && !stderr) {
     lines.push(theme.fg("dim", "(no output)"));
