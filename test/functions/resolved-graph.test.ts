@@ -60,6 +60,80 @@ describe("unified function graph", () => {
     expect(graph.effects).toEqual(["npm.test"]);
   });
 
+  it.each<{ name: string; source: string; namespace: string; binding: string }>([
+    {
+      name: "builtin namespace",
+      source: "async ({ context }) => context.get()",
+      namespace: "context",
+      binding: "{ context: { get } }",
+    },
+    {
+      name: "aliased namespace",
+      source: "async ({ context: ctx }) => ctx.get()",
+      namespace: "context",
+      binding: "{ context: { get } }",
+    },
+    {
+      name: "custom namespace",
+      source: "async ({ company }) => company.tools.check()",
+      namespace: "company",
+      binding: "{ company: { tools: { check } } }",
+    },
+    {
+      name: "nested custom namespace",
+      source: "async ({ company: { tools } }) => tools.check()",
+      namespace: "company.tools",
+      binding: "{ company: { tools: { check } } }",
+    },
+  ])("explains $name capture with a nested binding", ({ source, namespace, binding }) => {
+    const registry = createLayeredFunctionRegistry([
+      sourceFunctionDefinition("company.tools.check", "project", "async function check({}) {}"),
+    ]);
+    expect(() => resolveFunctionGraph(source, registry)).toThrow(
+      `cannot inject namespace "${namespace}" as a function`,
+    );
+    expect(() => resolveFunctionGraph(source, registry)).toThrow(binding);
+  });
+
+  it("identifies the source function capturing a namespace", () => {
+    const registry = createLayeredFunctionRegistry([
+      sourceFunctionDefinition(
+        "wrapper",
+        "project",
+        "async function wrapper({ context }) { return context.get(); }",
+      ),
+    ]);
+    expect(() => resolveFunctionGraph("async ({ wrapper }) => wrapper()", registry)).toThrow(
+      'function "wrapper" cannot inject namespace "context" as a function',
+    );
+  });
+
+  it.each<{ name: string; source: string; id: string }>([
+    { name: "unknown function", source: "async ({ missing }) => missing()", id: "missing" },
+    { name: "partial namespace name", source: "async ({ work }) => work()", id: "work" },
+    {
+      name: "unknown leaf",
+      source: "async ({ workspace: { missing } }) => missing()",
+      id: "workspace.missing",
+    },
+  ])("retains the missing-function diagnostic for $name", ({ source, id }) => {
+    expect(() => resolveFunctionGraph(source, createLayeredFunctionRegistry())).toThrow(
+      new Error(`submitted program requires unavailable function "${id}"`),
+    );
+  });
+
+  it("preserves invalid-definition diagnostics ahead of namespace guidance", () => {
+    expect(() =>
+      resolveFunctionGraph(
+        "async ({ context }) => context.get()",
+        createLayeredFunctionRegistry(),
+        {
+          invalidDefinitions: new Map([["context", "invalid persisted definition"]]),
+        },
+      ),
+    ).toThrow(new Error('Function "context" is unavailable: invalid persisted definition'));
+  });
+
   it("rejects missing dependencies and invalid next declarations", () => {
     expect(() =>
       resolveFunctionGraph("async ({ missing }) => missing()", createLayeredFunctionRegistry()),
