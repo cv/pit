@@ -43,7 +43,7 @@
   "dependencies": {
     "esbuild": "^0.28.1",
     "fast-glob": "^3.3.3",
-    "oxfmt": "0.67.0",
+    "oxfmt": "0.68.0",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
