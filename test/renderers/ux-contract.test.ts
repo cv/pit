@@ -256,6 +256,22 @@ describe("terminal UX contract", () => {
       expect(output).toContain(expected);
   });
 
+  it("shows a partial-read warning on the batch item as well as the outer result", () => {
+    const output = render({
+      results: [
+        {
+          kind: "read",
+          index: 0,
+          ok: true,
+          value: { ...readValue, totalLines: 20, hasMore: true },
+        },
+      ],
+    });
+    expect(output.trimStart().startsWith("⚠ Batch")).toBe(true);
+    expect(output).toContain("⚠ [0] read");
+    expect(output).not.toContain("✓ [0] read");
+  });
+
   it("preserves field ordering and metadata through compound views", () => {
     const output = render({ identity: "FIRST_SENTINEL", read: readValue, last: "LAST_SENTINEL" });
     expect(output.indexOf("FIRST_SENTINEL")).toBeLessThan(output.indexOf("export const"));

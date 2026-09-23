@@ -1,5 +1,4 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 
 import type { FunctionRegistry } from "../functions/core.js";
 import { resolveSavedFunctionReferences } from "../functions/graph.js";
@@ -9,6 +8,7 @@ import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";
 import { describeCapabilityCall, inferCapabilityCall } from "./capability.js";
 import { renderStructuredData } from "./compound.js";
+import { HangingIndentText } from "./hanging-indent-text.js";
 
 interface RenderTheme {
   fg(color: string, text: string): string;
@@ -79,6 +79,7 @@ function describeCall(args: ToolCallArgs, code: string, registry: FunctionRegist
   if (supplied) {
     return supplied;
   }
+  if (!code) return "TypeScript";
   const named = getNamedFunctionName(code);
   if (named) {
     return `${args.saveOnly === true ? "Save" : "Define and run"} ${normalizedLabel(args.functionId) ?? named}`;
@@ -122,11 +123,12 @@ export function renderTypeScriptInputs(
 }
 
 export function renderTypeScriptToolCall(
-  args: ToolCallArgs,
+  args: ToolCallArgs | null | undefined,
   theme: RenderTheme,
   context: ToolCallContext,
   registry: FunctionRegistry,
 ) {
+  args ??= {};
   const code = typeof args.code === "string" ? args.code : "";
   const callLabel = describeCall(args, code, registry);
   const generation = generationTiming(context);
@@ -141,5 +143,5 @@ export function renderTypeScriptToolCall(
   // Pi shares isPartial across both slots. Once settled, inputs follow the result instead.
   if (context.expanded && context.isPartial !== false)
     text += `\n${renderTypeScriptInputs(args, theme, context)}`;
-  return new Text(sanitizeTerminalText(text, { preserveSgr: true }), 0, 0);
+  return new HangingIndentText(sanitizeTerminalText(text, { preserveSgr: true }));
 }

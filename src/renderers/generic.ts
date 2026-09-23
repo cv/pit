@@ -108,13 +108,16 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
   const hangingIndents: Record<number, number> = {};
   const children: RenderedResultValue[] = [];
   for (const entry of value.results) {
-    const status = entry.ok ? context.theme.fg("success", "✓") : context.theme.fg("error", "✗");
+    const nested = entry.ok
+      ? renderValueWithFallback(entry.value, {
+          ...context,
+          depth: context.depth + 1,
+        })
+      : undefined;
+    const outcome = entry.ok ? (nested?.outcome ?? "success") : "error";
+    const status = context.theme.fg(outcome, { success: "✓", warning: "⚠", error: "✗" }[outcome]);
     lines.push(`${status} [${entry.index}] ${entry.kind}`);
-    if (entry.ok) {
-      const nested = renderValueWithFallback(entry.value, {
-        ...context,
-        depth: context.depth + 1,
-      });
+    if (nested) {
       children.push(nested);
       for (const [index, width] of Object.entries(nested.hangingIndents ?? {})) {
         hangingIndents[lines.length + Number(index)] = width + 2;

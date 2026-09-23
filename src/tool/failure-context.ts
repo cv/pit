@@ -8,9 +8,12 @@ const MAX_FAILURE_BYTES = 8_000;
 const MAX_FAILURE_LINES = 24;
 const MAX_FUNCTION_PATH = 32;
 const FUNCTION_FAILURE_PREFIX = /^(?:Saved function|Function) "([^"]+)" failed: /;
-const CANCELLED_FAILURE = /abort|cancel/i;
-const TIMEOUT_FAILURE = /timed? out|timeout/i;
-const CAPABILITY_FAILURE = /command failed|capability|unknown capability/i;
+const CANCELLED_FAILURE =
+  /^(?:(?:TypeScript execution|Tool execution|Command|Sandbox(?: execution)?|Model catalog refresh|User function (?:removal|promotion)|(?:The |This )?operation|Request)(?: was)?\s+(?:aborted|cancelled|canceled)(?=\s|$)|(?:aborted|cancelled|canceled)$)/i;
+const TIMEOUT_FAILURE =
+  /^(?:(?:(?:The|This) )?operation (?:was )?aborted due to timeout\b|(?:TypeScript execution|Tool execution|Command|Sandbox(?: execution)?|HTTP request|Operation|Request)(?: was)?\s+timed?\s+out(?=\s|$))/i;
+const CAPABILITY_FAILURE = /^(?:command failed|(?:unknown |missing |invalid )?capability)\b/i;
+const COMMAND_EXIT = /^Command failed with exit code (124|130)\b/;
 const ERROR_PREFIX = /^Error:\s*/;
 
 export interface StructuredTypeScriptFailure {
@@ -26,16 +29,17 @@ export interface TypeScriptFailureDetails extends ExecutionProgressSnapshot {
   failure: StructuredTypeScriptFailure;
 }
 
-function failureKind(message: string): StructuredTypeScriptFailure["kind"] {
-  if (CANCELLED_FAILURE.test(message)) {
-    return "cancelled";
-  }
-  if (TIMEOUT_FAILURE.test(message)) {
-    return "timeout";
-  }
-  if (CAPABILITY_FAILURE.test(message)) {
-    return "capability";
-  }
+function failureKind(message: string, name?: string): StructuredTypeScriptFailure["kind"] {
+  const headline = (message.split("\n", 1)[0] ?? "").trim();
+  if (name === "TimeoutError" || headline.startsWith("TimeoutError:")) return "timeout";
+  if (name === "AbortError" || headline.startsWith("AbortError:")) return "cancelled";
+  const exit = headline.match(COMMAND_EXIT)?.[1];
+  if (exit === "124") return "timeout";
+  if (exit === "130") return "cancelled";
+  // Classify the diagnostic headline, never source excerpts, paths, or stack frames.
+  if (TIMEOUT_FAILURE.test(headline)) return "timeout";
+  if (CANCELLED_FAILURE.test(headline)) return "cancelled";
+  if (CAPABILITY_FAILURE.test(headline)) return "capability";
   return "user";
 }
 
@@ -62,7 +66,7 @@ export function structureTypeScriptFailure(
       }
     }
   }
-  const kind = failureKind(rootError);
+  const kind = failureKind(rootError, error instanceof Error ? error.name : undefined);
   const bounded = truncateHead(rootError, {
     maxBytes: MAX_FAILURE_BYTES,
     maxLines: MAX_FAILURE_LINES,

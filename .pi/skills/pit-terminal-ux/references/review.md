@@ -82,7 +82,7 @@ Use sentinel fields and a diagnostic cause near the end to detect silent loss. I
 
 ## Live acceptance
 
-Follow `pit-delivery` for the validation, non-closing push, reload, and acceptance sequence when renderer behavior changes. In live Pi:
+Follow `pit-delivery` for the validation, non-closing push, reload, and acceptance sequence when renderer behavior changes. Prefer an [isolated tmux Pi instance](tmux.md) with the supplied offline fixture provider so the agent can drive the real TUI without model requests or access to the user's credentials and active conversation pane. Reserve user requests for subjective preferences or checks that cannot be automated. In live Pi:
 
 1. Compare collapsed and expanded views in the surrounding transcript, not an isolated screenshot.
 2. Observe a slow partial update through completion and an interrupted operation through cancellation/timeout as applicable.

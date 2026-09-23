@@ -1,6 +1,7 @@
 import {
   type Component,
   sliceByColumn,
+  stripTerminalSequences,
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
@@ -31,7 +32,7 @@ export class HangingIndentText implements Component {
 
   constructor(
     private readonly text: string,
-    private readonly hangingIndents: Readonly<Record<number, number>>,
+    private readonly hangingIndents: Readonly<Record<number, number>> = {},
   ) {}
 
   render(width: number): string[] {
@@ -43,19 +44,27 @@ export class HangingIndentText implements Component {
     }
 
     const rendered: string[] = [];
-    const logicalLines = this.text.replace(/\t/g, "   ").split("\n");
+    const source = this.text.replace(/\t/g, "   ");
+    const logicalWidth = source
+      .split("\n")
+      .reduce((max, line) => Math.max(max, visibleWidth(line)), 1);
+    // Normalize styles across hard line breaks before wrapping individual logical lines.
+    const logicalLines = wrapTextWithAnsi(source, logicalWidth);
     for (const [index, line] of logicalLines.entries()) {
-      const hangingIndent = this.hangingIndents[index];
+      const explicitIndent = this.hangingIndents[index];
+      const plain = stripTerminalSequences(line);
+      const leading = plain.slice(0, plain.length - plain.trimStart().length);
+      const hangingIndent = explicitIndent ?? visibleWidth(leading);
       if (hangingIndent !== undefined && hangingIndent > 0 && hangingIndent < width) {
         const lineWidth = visibleWidth(line);
         const prefix = sliceByColumn(line, 0, hangingIndent);
-        const content = removeInheritedPrefixStyles(
-          sliceByColumn(line, hangingIndent, Math.max(0, lineWidth - hangingIndent)),
-          prefix,
-        );
+        const sliced = sliceByColumn(line, hangingIndent, Math.max(0, lineWidth - hangingIndent));
+        const content =
+          explicitIndent === undefined ? sliced : removeInheritedPrefixStyles(sliced, prefix);
         const wrapped = wrapTextWithAnsi(content, Math.max(1, width - hangingIndent));
         const [first = "", ...continuations] = wrapped;
-        const styleReset = prefix.includes("\u001b[") ? PREFIX_STYLE_RESET : "";
+        const styleReset =
+          explicitIndent !== undefined && prefix.includes("\u001b[") ? PREFIX_STYLE_RESET : "";
         rendered.push(prefix + styleReset + first);
         rendered.push(
           ...continuations.map((continuation) => `${" ".repeat(hangingIndent)}${continuation}`),

@@ -134,12 +134,12 @@ describe("tool rendering", () => {
       const context = { expanded: false, argsComplete: false, state, invalidate };
 
       expect(renderToolCall({ code: undefined }, context)).toContain(
-        "⠋ Run workspace task (generating... 0.0s)",
+        "⠋ TypeScript (generating... 0.0s)",
       );
       vi.advanceTimersByTime(400);
       expect(invalidate).toHaveBeenCalledTimes(2);
       expect(renderToolCall({ code: undefined }, context)).toContain(
-        "⠹ Run workspace task (generating... 0.4s)",
+        "⠹ TypeScript (generating... 0.4s)",
       );
 
       const completed = renderToolCall({ code: "return 1" }, { ...context, isPartial: false });
