@@ -140,7 +140,17 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
       ctx.ui.notify(`Some saved functions could not be loaded: ${shown}${omitted}`, "warning");
     }
-    pi.setActiveTools(["typescript"]);
+    const patterns = (projectConfig.allowedTools ?? []).map(
+      (pattern) =>
+        new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`),
+    );
+    const exceptions = patterns.length
+      ? pi
+          .getAllTools()
+          .map(({ name }) => name)
+          .filter((name) => patterns.some((p) => p.test(name)))
+      : [];
+    pi.setActiveTools([...new Set(["typescript", ...exceptions])]);
   });
   pi.on("session_tree", (_event, ctx) => {
     resetFunctionUsage(functionState);

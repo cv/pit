@@ -41,6 +41,7 @@ export let toolResult: (...args: any[]) => any;
 export let branchEntries: any[];
 export let execMock: ReturnType<typeof vi.fn>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
+export let getAllTools: ReturnType<typeof vi.fn>;
 export let functionsCommand: { handler: (args: string, ctx: any) => Promise<void> };
 let sessionName: string | undefined;
 let slashCommands: any[] = [];
@@ -154,6 +155,7 @@ export async function setupHarness(): Promise<void> {
   sentUserMessages = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
+  getAllTools = vi.fn(() => []);
   const pi = {
     registerTool: vi.fn((registered: RegisteredTool) => {
       tool = registered;
@@ -191,6 +193,7 @@ export async function setupHarness(): Promise<void> {
       sentUserMessages.push({ content, options });
     }),
     setActiveTools,
+    getAllTools,
     exec: execMock,
   };
   pit(pi as any);

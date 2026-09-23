@@ -285,6 +285,20 @@ Files have one documented function declaration and canonical path-derived identi
 
 This upgrade intentionally removes the old `globalFunctions` enablement settings, `listGlobal`/`getGlobal`/`removeGlobal` APIs, and `{ to: "global" }` promotion. Files in `${PI_CODING_AGENT_DIR}/pit/functions/` are ignored and left untouched. Old session entries are not replayed. Recreate required functions with explicit dependencies and move persistent files manually; see the [migration guide](docs/function-system-migration.md).
 
+### Allow other tools
+
+Pit activates only `typescript` by default. Add explicit exceptions in a trusted project's `.pi/pit.json`:
+
+```json
+{
+  "allowedTools": ["goal_*"]
+}
+```
+
+Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. Empty or invalid configuration grants no exceptions. Run `/reload` after changes.
+
+This controls startup selection only; other extensions can change active tools afterward.
+
 ### Share trusted project functions
 
 Project functions are disabled by default. Enable them only for a trusted project in `.pi/pit.json`:
