@@ -18,7 +18,7 @@ This skill owns workflow policy: sequencing, judgment, acceptance criteria, and 
 ## Implement
 
 1. Read the issue, parent epic, and relevant comments.
-2. Inspect current architecture and tests before editing.
+2. Inspect current architecture and tests before editing. For renderer, progress, diagnostic, or presentation-data changes, load [pit-terminal-ux](../pit-terminal-ux/SKILL.md) and use its design and acceptance criteria throughout the work.
 3. Use fresh hashed anchors for every mutation. Re-read after edits and formatting.
 4. Use top-level params for multiline patches. Simplify immediately after a malformed submission.
 5. Prefer typed npm, Git, and GitHub capabilities for one-off operations not covered by a project helper. Use raw CLI only for unsupported operations.
