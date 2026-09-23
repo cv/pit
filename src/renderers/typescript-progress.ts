@@ -2,6 +2,7 @@ import { stripTerminalSequences, Text } from "@earendil-works/pi-tui";
 
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { parseProcessResult } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 
@@ -70,23 +71,46 @@ function shellProgressOutput(group: ShellProgressGroup): string {
   return "";
 }
 
+function returnedProcessOutputs(value: unknown): string[] {
+  const pending = [value];
+  const seen = new WeakSet<object>();
+  const outputs: string[] = [];
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (!entry || typeof entry !== "object" || seen.has(entry)) continue;
+    seen.add(entry);
+    const result = parseProcessResult(entry);
+    if (result) {
+      // Match the displayed stdout-then-stderr ordering, not an unordered set of lines.
+      outputs.push(sanitizeTerminalText(result.stdout + result.stderr));
+    } else {
+      pending.push(...Object.values(entry));
+    }
+  }
+  return outputs;
+}
+
 export function renderRetainedShellOutput(
   details: ProgressDetails | undefined,
   theme: RenderTheme,
   returnedLines: string[] = [],
+  returnedValue?: unknown,
 ): string {
   let text = "";
   const displayed = stripTerminalSequences(returnedLines.join("\n"));
+  const processOutputs = returnedProcessOutputs(returnedValue);
   for (const entry of details?.progress ?? []) {
     const status =
       entry.status === "done"
         ? `exit ${entry.code ?? "unknown"}`
         : "unfinished when invocation ended";
     text += `\n${theme.fg("toolTitle", `[${status}] ${entry.command}`)}`;
-    if (entry.output)
-      text += displayed.includes(stripTerminalSequences(entry.output))
-        ? `\n${theme.fg("dim", "(output shown above)")}`
-        : `\n${entry.output}`;
+    if (entry.output) {
+      const output = sanitizeTerminalText(entry.output);
+      const alreadyShown =
+        displayed.includes(output) || processOutputs.some((value) => value.includes(output));
+      text += alreadyShown ? `\n${theme.fg("dim", "(output shown above)")}` : `\n${entry.output}`;
+    }
   }
   if (details?.progressTruncated)
     text += `\n${theme.fg("warning", "… earlier shell calls were not retained")}`;
