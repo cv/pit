@@ -29,6 +29,12 @@
 - Give table rows descriptive names; keep lifecycle, concurrency, ordering, and heterogeneous workflows as explicit standalone tests.
 - Do not move substantial control flow into table data merely to reduce line count.
 
+## Terminal UX
+
+- Load the [pit-terminal-ux](.pi/skills/pit-terminal-ux/SKILL.md) skill when designing, implementing, or reviewing custom renderers, tool calls/results, progress, errors, or changes to their supporting data contracts.
+- Treat faithful inputs/output, consistent semantic outcomes, explicit omissions, and readable error causes as correctness requirements, not optional polish.
+- Review representative collapsed, expanded, partial, and final views at realistic terminal widths. Headless tests do not replace live Pi acceptance for behavior changes.
+
 ## Delivery
 
 - Load the `pit-delivery` skill for issue implementation and finalization.
