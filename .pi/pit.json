@@ -1,4 +1,5 @@
 {
+  "allowedTools": ["goal_*"],
   "projectFunctions": {
     "enabled": true
   }

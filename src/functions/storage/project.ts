@@ -22,6 +22,7 @@ const PROJECT_FUNCTION_DIRECTORY = ["functions"] as const;
 
 export interface ProjectFunctionConfig {
   enabled: boolean;
+  allowedTools?: string[];
   error?: string;
 }
 
@@ -80,8 +81,17 @@ export async function loadProjectFunctionConfig(
       return enabled;
     };
     const projectEnabled = enabledSection("projectFunctions") ?? false;
+    const allowedTools = values.allowedTools;
+    if (
+      allowedTools !== undefined &&
+      (!Array.isArray(allowedTools) ||
+        !allowedTools.every((name) => typeof name === "string" && name.trim().length > 0))
+    ) {
+      throw new Error("allowedTools must be an array of non-empty strings");
+    }
     return {
       enabled: projectEnabled,
+      ...(allowedTools === undefined ? {} : { allowedTools }),
     };
   } catch (error) {
     return {
