@@ -20,6 +20,90 @@ describe("TypeScript failure context", () => {
     });
   });
 
+  it.each<{
+    name: string;
+    message: string;
+    errorName?: string;
+    kind: "cancelled" | "timeout" | "capability" | "user";
+  }>([
+    {
+      name: "timeoutMs in a validation excerpt",
+      message: "TypeScript validation failed:\ninput.timeoutMs.toUpperCase()",
+      kind: "user",
+    },
+    {
+      name: "AbortSignal in a validation excerpt",
+      message: "TypeScript validation failed:\nAbortSignal is not defined",
+      kind: "user",
+    },
+    {
+      name: "timeout/cancel words in command arguments and stderr",
+      message: "Command failed with exit code 1: node timeout-worker.js\nCould not read cancel.txt",
+      kind: "capability",
+    },
+    {
+      name: "timeout in a stack frame",
+      message: "permission denied\n    at timeout (/tmp/abort.ts:1)",
+      kind: "user",
+    },
+    { name: "timeout filename", message: "timeout.ts: unknown symbol", kind: "user" },
+    { name: "aborted filename", message: "aborted.ts: unknown symbol", kind: "user" },
+    {
+      name: "undefined TimeoutError reference",
+      message: "TimeoutError is not defined",
+      kind: "user",
+    },
+    { name: "undefined AbortError reference", message: "AbortError is not defined", kind: "user" },
+    {
+      name: "subprocess deadline exit",
+      message: "Command failed with exit code 124: node cancel.ts",
+      kind: "timeout",
+    },
+    {
+      name: "subprocess cancellation exit",
+      message: "Command failed with exit code 130: node timeout.ts",
+      kind: "cancelled",
+    },
+    {
+      name: "tool deadline",
+      message: "TypeScript execution timed out after 100ms",
+      kind: "timeout",
+    },
+    { name: "tool cancellation", message: "TypeScript execution cancelled", kind: "cancelled" },
+    {
+      name: "cancelled removal",
+      message: "User function removal was cancelled",
+      kind: "cancelled",
+    },
+    {
+      name: "cancelled model refresh",
+      message: "Model catalog refresh was cancelled",
+      kind: "cancelled",
+    },
+    {
+      name: "typed timeout takes priority over abort wording",
+      errorName: "TimeoutError",
+      message: "The operation was aborted",
+      kind: "timeout",
+    },
+    {
+      name: "typed cancellation",
+      errorName: "AbortError",
+      message: "Request stopped",
+      kind: "cancelled",
+    },
+    { name: "serialized timeout", message: "TimeoutError: request stopped", kind: "timeout" },
+    { name: "serialized cancellation", message: "AbortError: request stopped", kind: "cancelled" },
+    {
+      name: "timeout cause survives an RPC error wrapper",
+      message: "The operation was aborted due to timeout",
+      kind: "timeout",
+    },
+  ])("classifies $name without scanning unrelated text", ({ message, errorName, kind }) => {
+    const error = Object.assign(new Error(message), { name: errorName ?? "Error" });
+    expect(structureTypeScriptFailure(error, [])).toMatchObject({ kind, rootError: message });
+  });
+
   it("uses bounded activity names without retaining arguments or results", () => {
     const activity = Array.from({ length: 40 }, (_, index) => ({
       action: "run" as const,

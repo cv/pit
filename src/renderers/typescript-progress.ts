@@ -1,10 +1,11 @@
-import { stripTerminalSequences, Text } from "@earendil-works/pi-tui";
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { parseProcessResult } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
+import { HangingIndentText } from "./hanging-indent-text.js";
 
 interface ProgressDetails extends ExecutionProgressSnapshot {
   functions?: FunctionActivity[];
@@ -147,5 +148,5 @@ export function renderPartialToolResult(input: {
       text += `\n${input.theme.fg("warning", "… earlier shell calls omitted")}`;
     }
   }
-  return new Text(sanitizeTerminalText(text, { preserveSgr: true }), 0, 0);
+  return new HangingIndentText(sanitizeTerminalText(text, { preserveSgr: true }));
 }

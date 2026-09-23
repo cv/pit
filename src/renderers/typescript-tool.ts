@@ -1,5 +1,4 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -53,6 +52,7 @@ interface ToolResultContext {
   args?: ToolCallArgs;
   isError?: boolean;
   executionStarted?: boolean;
+  argsComplete?: boolean;
   state?: unknown;
   invalidate?: () => void;
 }
@@ -127,14 +127,21 @@ function renderToolError(input: {
   const rawMessage =
     input.details?.failure?.rootError || input.fallback || "TypeScript execution failed";
   const message = displayedFailure(rawMessage, input.expanded);
-  const label =
-    input.details?.failure?.kind === "cancelled"
+  const notExecuted =
+    input.context.executionStarted === false &&
+    input.context.argsComplete === false &&
+    typeof input.context.args?.code !== "string" &&
+    input.details === undefined;
+  const label = notExecuted
+    ? "Call interrupted — not executed"
+    : input.details?.failure?.kind === "cancelled"
       ? "Cancelled"
       : input.details?.failure?.kind === "timeout"
         ? "Timed out"
         : "Failed";
   let text = `${input.expanded ? "\n" : ""}${input.theme.bold(
-    input.theme.fg("error", `✗ ${label}`) + input.theme.fg("dim", ` (${input.duration})`),
+    input.theme.fg("error", `✗ ${label}`) +
+      (notExecuted ? "" : input.theme.fg("dim", ` (${input.duration})`)),
   )}`;
   text += `\n${input.theme.fg("error", message)}`;
   if (input.expanded) {
@@ -145,7 +152,7 @@ function renderToolError(input: {
     text += renderInputSection(input.context, input.theme);
     text += renderExecutionDetails(input.details, input.theme);
   }
-  return new Text(sanitizeTerminalText(text, { preserveSgr: true }), 0, 0);
+  return new HangingIndentText(sanitizeTerminalText(text, { preserveSgr: true }));
 }
 
 function renderStructuredToolValue(input: {
@@ -275,9 +282,7 @@ function renderCompletedToolResult(input: {
       .filter(([index]) => Number(index) < shown.length)
       .map(([index, width]) => [resultContentStart + Number(index), width]),
   );
-  return Object.keys(displayedHangingIndents).length > 0
-    ? new HangingIndentText(text, displayedHangingIndents)
-    : new Text(text, 0, 0);
+  return new HangingIndentText(text, displayedHangingIndents);
 }
 
 function renderToolResult(
@@ -358,6 +363,8 @@ export function renderTypeScriptToolResult(
           .filter(Boolean)
           .join("\n")
       : `${content.split("\n")[0] ?? ""}\nExpand to inspect retained data.`;
-    return new Text(sanitizeTerminalText(`${heading}\n${retained}`, { preserveSgr: true }), 0, 0);
+    return new HangingIndentText(
+      sanitizeTerminalText(`${heading}\n${retained}`, { preserveSgr: true }),
+    );
   }
 }

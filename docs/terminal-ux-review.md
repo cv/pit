@@ -2,7 +2,7 @@
 
 This review applies [pit-terminal-ux](../.pi/skills/pit-terminal-ux/SKILL.md) to Pit's tool-call and result renderer families. It covers `src/renderers/` and their execution, process, timing, and failure-data producers; it is not an audit of unrelated interactive managers.
 
-**Status:** implementation and headless review. Live Pi acceptance remains pending. No claim about live colour contrast, transcript stability, selection, or mouse/keyboard interaction follows from the automated checks.
+**Status:** implementation, headless review, and agent-driven real Pi/tmux checks. Terminal captures and interaction probes establish the behaviors below; they do not certify every desktop clipboard, terminal emulator, font, or subjective colour preference. The review branch remains unmerged.
 
 ## Shared design
 
@@ -57,14 +57,39 @@ Live calls exercised params-based reads, informational stderr with exit 0, an in
 
 A follow-up renderer reproduction found duplicated retained output for nested process results and separate stdout/stderr blocks. Matching only rendered text was sensitive to indentation and stream labels. The fix also compares against canonical process data that was actually returned and displayed, while keeping additional or differently interleaved stream output. Error and upstream-truncated views do not use undisplayed return values to suppress diagnostics. Stream-ending newlines no longer add spurious empty rows; meaningful blank lines and trailing spaces remain intact.
 
-`test/renderers/retained-output.test.ts` covers these cases, including styled text, carriage returns, structured stdout, shared references, extra captured output, and undisplayed values. The follow-up needs another reload and visual confirmation. Interactive cancellation, resize, scrolling, and selection/copy are still pending.
+`test/renderers/retained-output.test.ts` covers these cases, including styled text, carriage returns, structured stdout, shared references, extra captured output, and undisplayed values. At that checkpoint, another reload and visual confirmation were needed. The subsequent tmux checks below cover cancellation, resize, scrolling, and selection/copy.
+
+## Agent-driven tmux acceptance
+
+A separate tmux server ran real Pi instances with an empty configuration, temporary home/agent/session directories, a clean environment, and an offline deterministic provider. The active conversation and user credentials were not used. The reusable [tmux workflow](../.pi/skills/pit-terminal-ux/references/tmux.md) and [fixture provider](../.pi/skills/pit-terminal-ux/assets/fixture-provider.ts) now live with the skill.
+
+Observed behaviors:
+
+- Collapsed and expanded cases in regular/light and fullscreen/dark modes, with 60/80/120-column captures. Home/End navigation exposed the full expanded entry in fullscreen mode; regular-mode history was inspected through tmux scrollback.
+- Returned stdout/stderr and nested process output appeared once in their result sections; retained history reported output already shown. Labels and params remained inspectable.
+- Real partial updates advanced through multiple output steps. Two final captures were identical after settlement: no lingering spinner or elapsed-time drift.
+- A real Escape key produced a cancelled tool view. The printed fixture child PID no longer existed, and the final view stayed stable.
+- Transcript search found the expected sentinel occurrences in output, input, and command metadata. A mouse drag copied the exact selected sentinel through OSC 52 into the isolated tmux buffer.
+- Switching themes through `/settings` changed existing tool-row ANSI colours, rather than merely applying a theme to newly constructed test components.
+- Controlled nonzero exit, thrown diagnostic tail, actual deadline, mixed read batch, structured multiline data, and a synthetic HTTP error response had their expected presentations.
+
+The captures exposed additional defects that component-width assertions had missed:
+
+1. Validation diagnostics containing `timeoutMs` could be called a timeout. Classification now uses explicit error types, documented command exit codes, and known diagnostic headlines—not arbitrary source excerpts, filenames, or stack frames.
+2. Wrapped JSON and source lines lost their indentation. Calls, results, partial output, and errors now share ANSI-aware hanging indentation, retaining multiline content styles and explicit hashed-read gutters.
+3. A paged read inside a batch could still have a green item marker. Item markers now use the nested result's semantic outcome, while operation counts retain their original meaning.
+4. A provider-stream interruption with empty tool arguments was shown as an ordinary failed tool with an execution duration. Session inspection confirmed an assistant-stream error with no executable source or tool result. An offline interrupted-stream fixture now reproduces this state in real Pi. It is labelled `Call interrupted — not executed`, with the original cause retained and no fabricated execution duration; legacy/executed failures remain distinct.
+
+Focused regressions cover these findings. A parameterized tmux capture workflow reruns the same cases against freshly loaded code, with captures retained in the run's private temporary directory. See the PR check record for the final committed reload and CI results.
 
 ## Deliberate limits and remaining acceptance
 
 - There is no per-result provenance identifier for a multi-capability composite. Such values use a faithful generic presentation instead of speculative Git/npm/GitHub attribution. A single unambiguous capability hint survives wrapping; legacy source hints remain a compatibility fallback only when runtime traces are absent.
 - Inline complete payloads and execution history can be longer than the previous lossy views. They are secondary to the decisive output. A separate raw inspector or trace disclosure would need a real interaction design and live acceptance, not a fictitious hint or another silent cutoff.
 - Deep unknown structures retain a JSON fallback. Rendering cannot recover upstream-truncated bytes or history that the collectors did not retain. Failure capture still has an 8 KB / 24-line budget, now with explicit head/tail retention.
-- Domain warnings/errors remain separate from Pi's invocation-level shell background. This distinction must be checked with the user's actual theme.
+- Domain warnings/errors remain separate from Pi's invocation-level shell background. Their labels and markers were checked in real Pi; platform-specific colour preferences still need user judgment.
+- Long expanded entries can initially show their lower sections because Pi follows the bottom. Home/PageUp and search expose the output-first document order, but order alone does not solve initial viewport placement.
+- TypeScript validation errors may still contain a verbose available-function catalog. It is retained rather than silently removed; diagnostic relevance and further progressive disclosure remain density improvements, not claims of completed work.
 
 After the non-closing review commit is available, reload Pi and verify:
 

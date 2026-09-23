@@ -1,5 +1,10 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import {
+  sliceByColumn,
+  stripTerminalSequences,
+  visibleWidth,
+  wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { display } from "../../src/tool/typescript.js";
@@ -23,6 +28,12 @@ const renderValue = (resultValue: unknown, source?: string) =>
     )
     .render(240)
     .join("\n") ?? "";
+
+function highlightedContent(line: string): string {
+  const plain = stripTerminalSequences(line);
+  const indent = visibleWidth(plain) - visibleWidth(plain.trimStart());
+  return sliceByColumn(line, indent, visibleWidth(line) - indent);
+}
 
 describe("result renderers", () => {
   it("renders shell and Git process results", () => {
@@ -335,7 +346,8 @@ describe("result renderers", () => {
       const output = render(value);
       expect(output).toContain(description);
       for (const line of highlightedMarkdown) {
-        expect(output).toContain(line);
+        // Wrapping can repeat indentation styles or omit redundant line-edge resets.
+        expect(output).toContain(highlightedContent(line));
       }
     }
 
@@ -405,7 +417,8 @@ describe("result renderers", () => {
       const output = render(value);
       expect(output).toContain(description);
       for (const line of highlightCode(source, language)) {
-        expect(output).toContain(line);
+        // Wrapping can repeat indentation styles or omit redundant line-edge resets.
+        expect(output).toContain(highlightedContent(line));
       }
     }
 
