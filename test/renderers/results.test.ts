@@ -27,7 +27,7 @@ const renderValue = (resultValue: unknown, source?: string) =>
 describe("result renderers", () => {
   it("renders shell and Git process results", () => {
     const shellOutput = renderValue(shell);
-    expect(shellOutput).toContain("shell exit 0");
+    expect(shellOutput).toContain("Command exit 0");
     expect(shellOutput).toContain("stdout");
     expect(shellOutput).toContain("tests passed");
     expect(shellOutput).toContain("stderr");
@@ -44,7 +44,7 @@ describe("result renderers", () => {
     expect(coloredShell).not.toContain("\u001b[2J");
 
     const gitOutput = renderValue(shell, 'async ({ git }) => git.status(["--short"])');
-    expect(gitOutput).toContain("git status exit 0");
+    expect(gitOutput).toContain("✓ Git status");
     expect(gitOutput).toContain("Git status, 1 line");
   });
 
@@ -59,7 +59,8 @@ describe("result renderers", () => {
       totalLines: 10,
       hasMore: true,
     });
-    expect(readOutput).toContain("src/example.ts (5-5 of 10; raw, more available; rev rev-1)");
+    expect(readOutput).toContain("Read src/example.ts, 5-5 of 10, raw, more available");
+    expect(readOutput).toContain("revision: rev-1");
     expect(stripTerminalSequences(readOutput)).toContain("export const answer");
 
     const searchOutput = renderValue({
@@ -79,7 +80,7 @@ describe("result renderers", () => {
       filesSearched: 3,
       filesSkipped: 1,
     });
-    expect(searchOutput).toContain("search (1 match, 3 files searched, 1 skipped)");
+    expect(searchOutput).toContain("Found 1 match, 3 files searched, 1 skipped");
     expect(searchOutput).toContain("src/example.ts:8:3 (8:abc)");
     expect(searchOutput).toContain("> 8    answer();");
 
@@ -91,13 +92,13 @@ describe("result renderers", () => {
         bytes: 80,
         deleted: false,
       }),
-    ).toContain("✓ src/example.ts updated (2 changes, 80 bytes, rev rev-2)");
+    ).toContain("✓ Edit src/example.ts, updated, 2 changes, 80 bytes");
 
     const listOutput = renderValue([
       { name: "src", type: "directory" },
       { name: "README.md", type: "file" },
     ]);
-    expect(listOutput).toContain("workspace (2 entries)");
+    expect(listOutput).toContain("Listed 2 entries");
     expect(listOutput).toContain("[d] src");
     expect(listOutput).toContain("[f] README.md");
 
@@ -105,7 +106,7 @@ describe("result renderers", () => {
       entries: ["src/index.ts", "src/workspace.ts"],
       truncated: true,
     });
-    expect(globOutput).toContain("glob (2 entries, truncated)");
+    expect(globOutput).toContain("Listed 2 entries, truncated");
     expect(globOutput).toContain("src/workspace.ts");
   });
 
@@ -133,7 +134,7 @@ describe("result renderers", () => {
         { kind: "read", index: 1, ok: false, error: "missing" },
       ],
     });
-    expect(batchOutput).toContain("batch (2 operations, 1 succeeded, 1 failed)");
+    expect(batchOutput).toContain("Batch 2 operations, 1 succeeded, 1 failed");
     expect(batchOutput).toContain("✓ [0] edit");
     expect(batchOutput).toContain("a.ts updated");
     expect(batchOutput).toContain("✗ [1] read");
@@ -146,8 +147,8 @@ describe("result renderers", () => {
     });
     expect(compoundOutput).toContain("status (shell, exit 0)");
     expect(compoundOutput).toContain("sources (glob, 2 entries)");
-    expect(compoundOutput).toContain("other");
-    expect(compoundOutput).toContain('"note": "kept as JSON"');
+    expect(compoundOutput).toContain("note:");
+    expect(compoundOutput).toContain('"kept as JSON"');
   });
 
   it("renders fallback and edge-case result shapes", () => {
@@ -164,7 +165,7 @@ describe("result renderers", () => {
       code: 2,
       truncated: true,
     });
-    expect(failedShell).toContain("shell exit 2, truncated");
+    expect(failedShell).toContain("Command exit 2, truncated");
     expect(failedShell).toContain("(no output)");
 
     const hashedRead = renderValue({
@@ -175,7 +176,7 @@ describe("result renderers", () => {
       lines: 1,
       truncated: true,
     });
-    expect(hashedRead).toContain("1-1 of 1; hashed, truncated");
+    expect(hashedRead).toContain("1-1 of 1, hashed, truncated");
     expect(stripTerminalSequences(hashedRead)).toContain("1:abc|heading");
     expect(
       renderValue({
@@ -185,7 +186,7 @@ describe("result renderers", () => {
         revision: "rev-4",
         lines: 0,
       }),
-    ).toContain("(empty; raw; rev rev-4)");
+    ).toContain("Read Makefile, empty, raw");
 
     expect(
       renderValue({
@@ -194,12 +195,12 @@ describe("result renderers", () => {
         filesSearched: 0,
         filesSkipped: 0,
       }),
-    ).toContain("search (0 matches, 0 files searched, truncated)");
+    ).toContain("Found 0 matches, 0 files searched, truncated");
     expect(
       renderValue({ file: "old.ts", revision: null, applied: 1, bytes: 0, deleted: true }),
-    ).toContain("old.ts deleted (1 change, 0 bytes, no revision)");
+    ).toContain("old.ts, deleted, 1 change, 0 bytes");
     expect(renderValue([{ name: "current", type: "symlink" }])).toContain("[l] current");
-    expect(renderValue({ entries: [], truncated: false })).toContain("glob (0 entries)");
+    expect(renderValue({ entries: [], truncated: false })).toContain("Listed 0 entries");
     expect(renderValue({ entries: [], truncated: false })).toContain("(no entries)");
 
     const failedHttp = renderValue({
@@ -222,13 +223,13 @@ describe("result renderers", () => {
     ).toContain("Symbol(nested)");
     expect(
       renderValue({ size: 12, modified: "2026-01-01T00:00:00.000Z", directory: true, file: false }),
-    ).toContain("stat directory");
+    ).toContain("Stat directory");
     expect(
       renderValue({ size: 8, modified: "2026-01-01T00:00:00.000Z", directory: false, file: true }),
-    ).toContain("stat file");
+    ).toContain("Stat file");
     expect(
       renderValue({ size: 0, modified: "2026-01-01T00:00:00.000Z", directory: false, file: false }),
-    ).toContain("stat other");
+    ).toContain("Stat other");
 
     const recursive: Record<string, unknown> = { status: shell };
     recursive.self = recursive;
@@ -257,7 +258,7 @@ describe("result renderers", () => {
         .join("\n");
 
     const direct = render("first\r\nsecond\n\u001b[31mthird\u001b[0m\u001b[2J");
-    expect(direct).toContain("Returned 3 lines (3 lines, 0.0s)");
+    expect(direct).toContain("Returned 3 lines (0.0s)");
     expect(direct).toContain(
       "\nfirst\nsecond\n\u001b[31mthird\u001b[10;22;23;24;25;27;28;29;39;50;54;55;59;65;75m",
     );
@@ -267,21 +268,22 @@ describe("result renderers", () => {
     const compound = render({ status: "failed", output: "first line\nsecond line", code: 1 });
     expect(compound).toContain("output (text, 2 lines)");
     expect(compound).toContain("\n  first line\n  second line");
-    expect(compound).toContain("other");
-    expect(compound).toContain('"status": "failed"');
-    expect(compound).toContain('"code": 1');
+    expect(compound).toContain("status:");
+    expect(compound).toContain('"failed"');
+    expect(stripTerminalSequences(compound)).toContain("code: 1");
     expect(compound).not.toContain('"output":');
 
     const nested = render({
       rows: [{ id: 1, output: "alpha\nbeta" }, "plain", { id: 2, output: "gamma\ndelta" }],
     });
     expect(nested).toContain("rows (array, 3 items)");
-    expect(nested).toContain("[0] (compound, 1 section)");
+    expect(nested).toContain("[0] (compound, 2 fields)");
     expect(nested).toContain("[1] (json)");
-    expect(nested).toContain("[2] (compound, 1 section)");
+    expect(nested).toContain("[2] (compound, 2 fields)");
     expect(nested).toContain("output (text, 2 lines)");
-    expect(nested).toContain('"id": 1');
-    expect(nested).toContain('"id": 2');
+    expect(nested).toContain("id:");
+    expect(stripTerminalSequences(nested)).toContain("id: 1");
+    expect(stripTerminalSequences(nested)).toContain("id: 2");
 
     const nestedRead = render({
       items: [

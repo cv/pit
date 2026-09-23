@@ -3,18 +3,18 @@ import { Text } from "@earendil-works/pi-tui";
 
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { executionTiming } from "../tool/timing.js";
 import { type CapabilityCall, inferCapabilityCall } from "./capability.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
+import { isRecord, renderJson } from "./shared.js";
 import type { RenderedResultValue } from "./types.js";
 import { displayedFailure, displayedFunctionPath } from "./typescript-failure.js";
-import { renderPartialToolResult } from "./typescript-progress.js";
-
-const _SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
-const _SPINNER_INTERVAL_MS = 200;
+import { renderPartialToolResult, renderRetainedShellOutput } from "./typescript-progress.js";
+import { renderTypeScriptInputs, type ToolCallArgs } from "./typescript-tool-call.js";
 
 interface TypeScriptDetails extends ExecutionProgressSnapshot {
   value: unknown;
@@ -24,7 +24,7 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
 }
 
 function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | undefined {
-  if (!details.traces) {
+  if (!details.traces || details.tracesTruncated) {
     return;
   }
   const publicTraces = details.traces.filter((entry) => entry.capability !== "__pit");
@@ -50,10 +50,21 @@ interface ToolResultLike {
 }
 
 interface ToolResultContext {
-  args?: { code?: unknown };
+  args?: ToolCallArgs;
   isError?: boolean;
+  executionStarted?: boolean;
   state?: unknown;
   invalidate?: () => void;
+}
+
+function renderInputSection(context: ToolResultContext, theme: RenderTheme): string {
+  if (!context.args || Object.keys(context.args).length === 0) return "";
+  const inputs = renderTypeScriptInputs(context.args, theme, {
+    ...context,
+    expanded: true,
+    argsComplete: true,
+  });
+  return `\n\n${theme.bold(theme.fg("toolTitle", "Inputs"))}\n${inputs}`;
 }
 
 function describeResult(
@@ -87,6 +98,7 @@ function describeResult(
   if (value === undefined) {
     return fallback ? "Returned text" : "No returned value";
   }
+  if (value === null) return "Returned null";
   if (Array.isArray(value)) {
     return `Returned ${value.length} item${value.length === 1 ? "" : "s"}`;
   }
@@ -110,25 +122,30 @@ function renderToolError(input: {
   fallback: string;
   duration: string;
   theme: RenderTheme;
+  context: ToolResultContext;
 }) {
   const rawMessage =
     input.details?.failure?.rootError || input.fallback || "TypeScript execution failed";
   const message = displayedFailure(rawMessage, input.expanded);
+  const label =
+    input.details?.failure?.kind === "cancelled"
+      ? "Cancelled"
+      : input.details?.failure?.kind === "timeout"
+        ? "Timed out"
+        : "Failed";
   let text = `${input.expanded ? "\n" : ""}${input.theme.bold(
-    input.theme.fg("error", "✗ Failed") + input.theme.fg("dim", ` (${input.duration})`),
+    input.theme.fg("error", `✗ ${label}`) + input.theme.fg("dim", ` (${input.duration})`),
   )}`;
+  text += `\n${input.theme.fg("error", message)}`;
   if (input.expanded) {
-    const path = input.details?.failure ? input.details.failure.functionPath : [];
+    const path = input.details?.failure?.functionPath ?? [];
     if (path.length > 0) {
       text += `\n${input.theme.fg("toolTitle", "Function path")}\n${input.theme.fg("muted", displayedFunctionPath(path))}`;
     }
-    const dashboard = renderExecutionDashboard(input.details, input.theme);
-    if (dashboard) {
-      text += `\n${input.theme.fg("toolTitle", "Execution")}${dashboard}`;
-    }
+    text += renderInputSection(input.context, input.theme);
+    text += renderExecutionDetails(input.details, input.theme);
   }
-  text += `\n${input.theme.fg("error", message)}`;
-  return new Text(text, 0, 0);
+  return new Text(sanitizeTerminalText(text, { preserveSgr: true }), 0, 0);
 }
 
 function renderStructuredToolValue(input: {
@@ -138,7 +155,7 @@ function renderStructuredToolValue(input: {
   context: ToolResultContext;
 }): ResultRenderingState {
   const { details, fallback, theme, context } = input;
-  if (!(details && !details.truncated)) {
+  if (!(details && !details.truncated && Object.hasOwn(details, "value"))) {
     return {
       lines: fallback ? highlightCode(fallback, "typescript") : [],
       hangingIndents: {},
@@ -148,12 +165,15 @@ function renderStructuredToolValue(input: {
     return { lines: highlightCode("undefined", "typescript"), hangingIndents: {} };
   }
   const source = typeof context.args?.code === "string" ? context.args.code : "";
-  const capabilityCall = runtimeCapabilityCall(details) ?? inferCapabilityCall(source);
+  const capabilityCall = details.traces
+    ? runtimeCapabilityCall(details)
+    : inferCapabilityCall(source);
   const structuredResult = renderResultValue(details.value, theme, capabilityCall);
   if (structuredResult) {
     return {
-      lines: structuredResult.lines,
-      hangingIndents: structuredResult.hangingIndents ?? {},
+      lines: structuredResult.detailLines ?? structuredResult.lines,
+      hangingIndents:
+        structuredResult.detailHangingIndents ?? structuredResult.hangingIndents ?? {},
       structuredResult,
     };
   }
@@ -168,6 +188,38 @@ function renderStructuredToolValue(input: {
   return { lines: highlightCode(serialized, language), hangingIndents: {} };
 }
 
+function executionNotices(details: TypeScriptDetails | undefined, outcome: string): string[] {
+  const notices: string[] = [];
+  const failed = details?.traces?.some(
+    (entry) => entry.status === "failed" || entry.status === "rejected",
+  );
+  const nonzero = details?.progress?.some(
+    (entry) => entry.status === "done" && entry.code !== undefined && entry.code !== 0,
+  );
+  if (failed) notices.push("execution had failures");
+  else if (nonzero && outcome !== "error") notices.push("nonzero exits recorded");
+  if (details?.tracesTruncated || details?.progressTruncated)
+    notices.push("execution history incomplete");
+  return notices;
+}
+
+function renderExecutionDetails(
+  details: TypeScriptDetails | undefined,
+  theme: RenderTheme,
+  returnedLines: string[] = [],
+): string {
+  let text = "";
+  const retained = renderRetainedShellOutput(details, theme, returnedLines);
+  if (retained)
+    text += `\n\n${theme.bold(theme.fg("toolTitle", "Retained process output (tails)"))}${retained}`;
+  const dashboard = renderExecutionDashboard(details, theme, true);
+  if (dashboard)
+    text += `\n\n${theme.bold(theme.fg("toolTitle", "Execution (call completion)"))}${dashboard}`;
+  if (details?.truncated)
+    text += `\n${theme.fg("warning", "Output was truncated before rendering; omitted data is unavailable here.")}`;
+  return text;
+}
+
 function renderCompletedToolResult(input: {
   expanded: boolean;
   details?: TypeScriptDetails;
@@ -175,44 +227,46 @@ function renderCompletedToolResult(input: {
   duration: string;
   theme: RenderTheme;
   rendering: ResultRenderingState;
+  context: ToolResultContext;
 }) {
   const { expanded, details, fallback, duration, theme, rendering } = input;
   const shown = expanded ? rendering.lines : [];
-  const state = details?.truncated
-    ? `truncated, ${duration}`
-    : `${rendering.lines.length} line${rendering.lines.length === 1 ? "" : "s"}, ${duration}`;
+  const state = details?.truncated ? `truncated, ${duration}` : duration;
   const resultLabel = describeResult(
     details?.value,
     rendering.structuredResult,
     details?.truncated === true,
-    fallback,
+    details && Object.hasOwn(details, "value") ? "" : fallback,
   );
-  const resultOutcome = details?.truncated
-    ? "warning"
-    : (rendering.structuredResult?.outcome ?? "success");
-  const resultMarker =
-    resultOutcome === "warning"
-      ? theme.fg("warning", "⚠ ")
-      : resultOutcome === "error"
-        ? theme.fg("error", "✗ ")
-        : theme.fg("success", "✓ ");
+  const leafOutcome = rendering.structuredResult?.outcome ?? "success";
+  const notices = executionNotices(details, leafOutcome);
+  const resultOutcome =
+    leafOutcome === "error"
+      ? "error"
+      : details?.truncated || notices.length > 0
+        ? "warning"
+        : leafOutcome;
+  const resultMarker = theme.fg(
+    resultOutcome,
+    { success: "✓ ", warning: "⚠ ", error: "✗ " }[resultOutcome],
+  );
   let text = `${expanded ? "\n" : ""}${theme.bold(
     resultMarker +
       theme.fg("toolTitle", resultLabel) +
+      notices.map((notice) => theme.fg("warning", ` · ${notice}`)).join("") +
       theme.fg(resultOutcome === "success" ? "dim" : resultOutcome, ` (${state})`),
   )}`;
-  if (expanded) {
-    const dashboard = renderExecutionDashboard(details, theme);
-    if (dashboard) {
-      text += `\n${theme.bold(theme.fg("toolTitle", "Execution"))}${dashboard}`;
-    }
-  }
   const resultContentStart = text.split("\n").length;
   if (expanded && shown.length > 0) {
     text += `\n${shown.join("\n")}`;
   } else if (expanded) {
     text += `\n${theme.fg("dim", "(no result)")}`;
   }
+  if (expanded) {
+    text += renderInputSection(input.context, theme);
+    text += renderExecutionDetails(details, theme, rendering.lines);
+  }
+  text = sanitizeTerminalText(text, { preserveSgr: true });
   const displayedHangingIndents = Object.fromEntries(
     Object.entries(rendering.hangingIndents)
       .filter(([index]) => Number(index) < shown.length)
@@ -223,17 +277,25 @@ function renderCompletedToolResult(input: {
     : new Text(text, 0, 0);
 }
 
-export function renderTypeScriptToolResult(
+function renderToolResult(
   result: ToolResultLike,
   options: { expanded: boolean; isPartial: boolean },
   theme: RenderTheme,
   context: ToolResultContext,
 ) {
-  const content = result.content[0];
-  const fallback = content?.type === "text" ? (content.text ?? "") : "";
-  const details = result.details as TypeScriptDetails | undefined;
+  const fallback = result.content
+    .filter((content) => content.type === "text")
+    .map((content) => content.text ?? "")
+    .join("\n");
+  const details = isRecord(result.details)
+    ? (result.details as unknown as TypeScriptDetails)
+    : undefined;
   const execution = executionTiming(context, !options.isPartial || context.isError === true);
-  if (options.isPartial) {
+  for (const key of ["traces", "progress", "functions"] as const) {
+    if (details?.[key] !== undefined && !Array.isArray(details[key]))
+      throw new Error("Invalid execution metadata");
+  }
+  if (options.isPartial && !context.isError) {
     return renderPartialToolResult({
       expanded: options.expanded,
       ...(details ? { details } : {}),
@@ -248,6 +310,7 @@ export function renderTypeScriptToolResult(
       fallback,
       duration: execution.duration,
       theme,
+      context,
     });
   }
   const rendering = renderStructuredToolValue({
@@ -263,5 +326,35 @@ export function renderTypeScriptToolResult(
     duration: execution.duration,
     theme,
     rendering,
+    context,
   });
+}
+
+export function renderTypeScriptToolResult(
+  result: ToolResultLike,
+  options: { expanded: boolean; isPartial: boolean },
+  theme: RenderTheme,
+  context: ToolResultContext,
+) {
+  try {
+    return renderToolResult(result, options, theme, context);
+  } catch {
+    const content = result.content
+      .filter((entry) => entry.type === "text")
+      .map((entry) => entry.text ?? "")
+      .join("\n");
+    const heading = context.isError
+      ? "✗ Failed — structured view unavailable"
+      : "⚠ Structured view unavailable";
+    const retained = options.expanded
+      ? [
+          content,
+          ...renderJson(result.details),
+          ...(context.args ? ["Inputs", ...renderJson(context.args)] : []),
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : `${content.split("\n")[0] ?? ""}\nExpand to inspect retained data.`;
+    return new Text(sanitizeTerminalText(`${heading}\n${retained}`, { preserveSgr: true }), 0, 0);
+  }
 }

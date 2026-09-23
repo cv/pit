@@ -21,6 +21,7 @@ export interface ToolCallTimingContext {
 }
 
 export interface ToolResultTimingContext {
+  executionStarted?: boolean;
   isError?: boolean;
   state?: unknown;
   invalidate?: () => void;
@@ -74,13 +75,18 @@ export function generationTiming(context: ToolCallTimingContext): {
   spinner: string;
 } {
   const state = rendererState(context.state);
+  context.state = state;
   const complete =
     context.argsComplete || context.executionStarted === true || context.isPartial === false;
   if (context.executionStarted === true) {
     timingState(state, "execution").startedAt ??= Date.now();
   }
+  const timing = activeTiming(timingState(state, "generation"), complete, context.invalidate);
   return {
-    ...activeTiming(timingState(state, "generation"), complete, context.invalidate),
+    ...timing,
+    ...(context.executionStarted === false && context.isPartial === false
+      ? { duration: "time unavailable" }
+      : {}),
     complete,
   };
 }
@@ -90,5 +96,9 @@ export function executionTiming(
   complete: boolean,
 ): { duration: string; spinner: string } {
   const state = rendererState(context.state);
-  return activeTiming(timingState(state, "execution"), complete, context.invalidate);
+  context.state = state;
+  const timing = activeTiming(timingState(state, "execution"), complete, context.invalidate);
+  return context.executionStarted === false && complete
+    ? { ...timing, duration: "time unavailable" }
+    : timing;
 }

@@ -1,6 +1,11 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
-import { nonemptyLines, type ProcessResult, parseProcessResult } from "../process/results.js";
+import {
+  processOutputLines,
+  type ProcessResult,
+  parseProcessResult,
+  semanticOutcome,
+} from "../process/results.js";
 import type { RenderContext, RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 const STATUS_PORCELAIN_PATTERN = /^.. /;
@@ -22,8 +27,21 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`): s
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+function reportsDifferences(result: ProcessResult): boolean {
+  return result.code === 1 && result.stderr.trim() === "";
+}
+
+function gitOutcome(method: string, result: ProcessResult) {
+  return semanticOutcome(
+    result,
+    method === "diff" && reportsDifferences(result)
+      ? { domainOutcome: "warning", acceptedExitCodes: [1] }
+      : {},
+  );
+}
+
 function gitHeader(method: string, result: ProcessResult, theme: ResultTheme): string {
-  const statusColor = result.code === 0 ? "success" : "error";
+  const statusColor = gitOutcome(method, result);
   const suffix = result.truncated ? theme.fg("warning", ", truncated") : "";
   return `${theme.fg("toolTitle", theme.bold(`git ${method}`))} ${theme.fg(statusColor, `exit ${result.code}`)}${suffix}`;
 }
@@ -46,7 +64,7 @@ function gitResult({
   stderrAsOutput,
 }: GitResultOptions): RenderedResultValue {
   const lines = [gitHeader(method, result, context.theme), ...stdoutLines];
-  const stderrLines = nonemptyLines(result.stderr);
+  const stderrLines = processOutputLines(result.stderr);
   if (stderrLines.length > 0) {
     lines.push(
       context.theme.fg(stderrAsOutput && result.code === 0 ? "accent" : "warning", "stderr"),
@@ -58,6 +76,7 @@ function gitResult({
   }
   return {
     kind: "git",
+    outcome: gitOutcome(method, result),
     lines,
     summary: `${summary}${result.truncated ? ", truncated" : ""}`,
     detailLines: lines.slice(1),
@@ -89,7 +108,7 @@ function statusLine(line: string, theme: ResultTheme): string {
 }
 
 const renderGitStatus: ValueRenderer = gitRenderer((result, context) => {
-  const output = nonemptyLines(result.stdout);
+  const output = processOutputLines(result.stdout);
   const failure = failedSummary("status", result);
   if (failure) {
     return gitResult({ method: "status", result, context, summary: failure, stdoutLines: output });
@@ -122,8 +141,10 @@ const renderGitStatus: ValueRenderer = gitRenderer((result, context) => {
 });
 
 const renderGitDiff: ValueRenderer = gitRenderer((result, context) => {
-  const output = result.stdout.trimEnd();
-  const failure = failedSummary("diff", result);
+  const output = result.stdout.replace(/\r?\n$/, "");
+  const failure = reportsDifferences(result)
+    ? "diff, differences found (exit 1)"
+    : failedSummary("diff", result);
   const summary =
     failure ?? (output ? `diff, ${plural(output.split("\n").length, "line")}` : "diff, no changes");
   return gitResult({
@@ -148,7 +169,7 @@ function logLine(line: string, theme: ResultTheme): string {
 }
 
 const renderGitLog: ValueRenderer = gitRenderer((result, context) => {
-  const output = nonemptyLines(result.stdout);
+  const output = processOutputLines(result.stdout);
   const commits = output.filter(
     (line) => LOG_ONE_LINE_PATTERN.test(line) || LOG_COMMIT_LINE_PATTERN.test(line),
   ).length;
@@ -170,12 +191,12 @@ const renderGitAdd: ValueRenderer = gitRenderer((result, context) => {
     result,
     context,
     summary: failure ?? "add, complete",
-    stdoutLines: nonemptyLines(result.stdout),
+    stdoutLines: processOutputLines(result.stdout),
   });
 });
 
 const renderGitCommit: ValueRenderer = gitRenderer((result, context) => {
-  const output = nonemptyLines(result.stdout);
+  const output = processOutputLines(result.stdout);
   const styled = output.map((line, index) =>
     index === 0 && result.code === 0 ? context.theme.fg("success", line) : line,
   );
@@ -204,7 +225,7 @@ function showLines(output: string): string[] {
 }
 
 const renderGitShow: ValueRenderer = gitRenderer((result, context) => {
-  const output = result.stdout.trimEnd();
+  const output = result.stdout.replace(/\r?\n$/, "");
   const failure = failedSummary("show", result);
   const summary = failure ?? `show, ${plural(output ? output.split("\n").length : 0, "line")}`;
   return gitResult({
@@ -223,13 +244,13 @@ const renderGitPush: ValueRenderer = gitRenderer((result, context) => {
     result,
     context,
     summary: failure ?? "push, complete",
-    stdoutLines: nonemptyLines(result.stdout),
+    stdoutLines: processOutputLines(result.stdout),
     stderrAsOutput: true,
   });
 });
 
 const renderGitTag: ValueRenderer = gitRenderer((result, context) => {
-  const output = nonemptyLines(result.stdout);
+  const output = processOutputLines(result.stdout);
   const failure = failedSummary("tag", result);
   const summary =
     failure ?? (output.length > 0 ? `tag, ${plural(output.length, "tag")}` : "tag, complete");

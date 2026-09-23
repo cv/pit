@@ -194,7 +194,6 @@ function findUnattributedActivities(
   return functions
     .filter((entry) => entry.action === "run")
     .filter((entry) => !attributed.has(`${entry.scope ?? "session"}:${entry.name}`))
-    .slice(-4)
     .map((entry) => ({ scope: entry.scope ?? "session", name: entry.name }));
 }
 
@@ -323,7 +322,7 @@ export function buildExecutionDashboardModel(
   now = Date.now(),
 ): ExecutionDashboardModel {
   const traces = details?.traces ?? [];
-  const recent = groupAdjacentTraces(traces).slice(-12);
+  const recent = groupAdjacentTraces(traces);
   const index = indexTraceFunctions(traces);
   const involved = findInvolvedInvocations(recent, index.contexts);
   const calls = groupDashboardCalls(recent);

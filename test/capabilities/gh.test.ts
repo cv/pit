@@ -213,7 +213,9 @@ describe("gh renderer", () => {
       ),
     );
     expect(list.summary).toBe("1 result");
-    expect(list.lines.join("\n")).toContain("#30 Epic [OPEN]");
+    expect(list.lines.join("\n")).toContain('"number": 30');
+    expect(list.lines.join("\n")).toContain('"state": "OPEN"');
+    expect(list.lines.join("\n")).toContain("Epic");
     const object = render(
       result(
         JSON.stringify({
@@ -226,7 +228,7 @@ describe("gh renderer", () => {
       ),
     );
     expect(object.summary).toBe("1 result");
-    expect(object.lines.join("\n")).toContain("body: text");
+    expect(object.lines.join("\n")).toContain('"body": "text"');
   });
   it("renders text, errors, empty output, and malformed values", () => {
     expect(render(result("created https://example")).summary).toBe("exit 0");
@@ -283,7 +285,7 @@ describe("gh renderer", () => {
       expect(render(result(JSON.stringify(["one", 2]))).summary).toBe("2 results");
       expect(
         render(result(JSON.stringify({ name: "run", jobs: [{ name: "test" }] }))).lines.join("\n"),
-      ).toContain("jobs:");
+      ).toContain('"jobs":');
       expect(render(result("plain", "warning", 1, true)).summary).toBe("exit 1, truncated");
       const call: CapabilityCall = {
         capability: "gh",

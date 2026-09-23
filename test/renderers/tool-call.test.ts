@@ -20,7 +20,7 @@ describe("tool rendering", () => {
       { expanded: false, argsComplete: true },
     );
     const collapsedLines = collapsed.split("\n");
-    expect(collapsedLines[0]).toContain("Render generated TypeScript (15 lines, 0.0s)");
+    expect(collapsedLines[0]).toContain("Render generated TypeScript (0.0s)");
     expect(collapsedLines[0]).not.toContain("timeout=");
     expect(collapsedLines[0]).toContain("\u001b[1m");
     expect(collapsedLines[0]).toContain("› ");
@@ -29,22 +29,23 @@ describe("tool rendering", () => {
     expect(collapsed).not.toContain("more lines");
 
     const expanded = renderToolCall({ code }, { expanded: true, argsComplete: true });
-    expect(expanded).toContain("Run workspace task (15 lines, 0.0s)");
+    expect(expanded).toContain("Run workspace task (0.0s)");
     expect(expanded).toContain("source line 15");
     expect(expanded).not.toContain("more lines");
-    expect(expanded.split("\n")[1]).toContain("source line 1");
+    expect(expanded.split("\n")[1]).toContain("Source");
+    expect(expanded.split("\n")[2]).toContain("source line 1");
 
     const singleLine = renderToolCall(
       { code: "return 1" },
       { expanded: false, argsComplete: true },
     );
-    expect(singleLine).toContain("1 line, 0.0s)");
+    expect(singleLine).toContain("Run workspace task (0.0s)");
 
     const saveOnly = renderToolCall(
       { code: "async function later() {}", saveOnly: true },
       { expanded: false, argsComplete: true },
     );
-    expect(saveOnly).toContain("Save later (1 line, 0.0s)");
+    expect(saveOnly).toContain("Save later (0.0s)");
     expect(saveOnly).toContain("save-only");
 
     const empty = renderToolCall({ code: "" }, { expanded: false, argsComplete: true });
@@ -98,7 +99,7 @@ describe("tool rendering", () => {
     const formatted = stripTerminalSequences(renderToolCall(args, context));
     expect(formatted).toContain("const [file, status] = await Promise.all([");
     expect(formatted).toContain("return { file, status };");
-    expect(formatted).toContain("7 lines, 0.0s");
+    expect(formatted).not.toContain("const[file,status]");
   });
 
   it("keeps incomplete streaming source raw", async () => {
@@ -142,14 +143,14 @@ describe("tool rendering", () => {
       );
 
       const completed = renderToolCall({ code: "return 1" }, { ...context, isPartial: false });
-      expect(completed).toContain("1 line, 0.4s");
+      expect(completed).toContain("Run workspace task (0.4s)");
       vi.advanceTimersByTime(400);
       expect(invalidate).toHaveBeenCalledTimes(2);
       const executionStarted = renderToolCall(
         { code: "return 1" },
         { expanded: false, argsComplete: false, executionStarted: true, state: {} },
       );
-      expect(executionStarted).toContain("1 line, 0.0s");
+      expect(executionStarted).toContain("Run workspace task (0.0s)");
     } finally {
       vi.useRealTimers();
     }
@@ -181,7 +182,7 @@ describe("tool rendering", () => {
         { expanded: false, isPartial: false },
         context,
       );
-      expect(completed).toContain("No returned value (0 lines, 0.4s)");
+      expect(completed).toContain("No returned value (0.4s)");
       vi.advanceTimersByTime(400);
       expect(invalidate).toHaveBeenCalledTimes(2);
     } finally {

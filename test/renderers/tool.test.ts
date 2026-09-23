@@ -30,7 +30,7 @@ describe("tool rendering", () => {
       { content: [], details: { value: Symbol("value"), truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(symbolResult).toContain("Returned symbol (1 line, 0.0s)");
+    expect(symbolResult).toContain("Returned symbol (0.0s)");
     expect(symbolResult).not.toContain("Symbol(value)");
     const expandedSymbol = renderToolResult(
       { content: [], details: { value: Symbol("value"), truncated: false } },
@@ -44,7 +44,7 @@ describe("tool rendering", () => {
       { content: [], details: { value: circular, truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(circularResult).toContain("Returned 1 field: self (1 line, 0.0s)");
+    expect(circularResult).toContain("Returned 1 field: self (0.0s)");
     expect(circularResult).not.toContain("[object Object]");
     const expandedCircular = renderToolResult(
       { content: [], details: { value: circular, truncated: false } },
@@ -128,11 +128,11 @@ describe("tool rendering", () => {
       { isError: true },
     );
     expect(expandedFailure).toContain("function0 → function1 → function2 → function3");
-    expect(expandedFailure).toContain("… 4 omitted");
+    expect(expandedFailure).toContain("function4 → function5 → function6 → function7");
     expect(expandedFailure).toContain("function8 → function9 → function10 → function11");
     expect(expandedFailure).toContain("failure line 11");
-    expect(expandedFailure).not.toContain("failure line 12");
-    expect(expandedFailure).toContain("additional diagnostic lines omitted");
+    expect(expandedFailure).toContain("failure line 19");
+    expect(expandedFailure).not.toContain("additional diagnostic lines omitted");
 
     expect(
       renderToolResult({ content: [] }, { expanded: false, isPartial: false }, { isError: true }),
