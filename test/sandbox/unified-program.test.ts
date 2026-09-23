@@ -35,6 +35,37 @@ describe("compileSandboxSource", () => {
     expect(read).toHaveBeenCalledWith("README.md", { format: "raw" });
   });
 
+  it.each<{ name: string; source: string; namespace: string }>([
+    { name: "context", source: "async ({ context }) => context.get()", namespace: "context" },
+    {
+      name: "workspace alias",
+      source: 'async ({ workspace: ws }) => ws.stat("README.md")',
+      namespace: "workspace",
+    },
+    {
+      name: "function inspection",
+      source: "async ({ functions }) => functions.listAll({ limit: 10 })",
+      namespace: "functions",
+    },
+    { name: "commands", source: "async ({ commands }) => commands.list()", namespace: "commands" },
+  ])("explains namespace capture before compilation: $name", async ({ source, namespace }) => {
+    await expect(compileSandboxSource(source, {})).rejects.toThrow(
+      `cannot inject namespace "${namespace}" as a function`,
+    );
+  });
+
+  it("lets a caller recover by injecting the individual function", async () => {
+    await expect(compileSandboxSource("async ({ context }) => context.get()", {})).rejects.toThrow(
+      "{ context: { get } }",
+    );
+    const main = await compiledProgram("async ({ context: { get } }) => get()", new Map());
+    const get = vi.fn(async () => ({ cwd: "/project" }));
+    await expect(
+      main({ context: { get } }, undefined, async (_name, _layer, callback) => callback()),
+    ).resolves.toEqual({ cwd: "/project" });
+    expect(get).toHaveBeenCalledExactlyOnceWith();
+  });
+
   it("rejects missing explicit functions before compilation", async () => {
     await expect(compileSandboxSource("async ({ missing }) => missing()", {})).rejects.toThrow(
       /Property 'missing' does not exist|unavailable function "missing"/,

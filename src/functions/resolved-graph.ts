@@ -1,6 +1,7 @@
 import type { FunctionDefinition, SourceFunctionDefinition } from "./definitions.js";
 import { getFunctionDependencies, type FunctionDependency } from "./dependencies.js";
 import type { FunctionDefinitionReference } from "./environment.js";
+import { functionDependencyBinding } from "./identifier.js";
 import type { LayeredFunctionRegistry } from "./layered-registry.js";
 
 export interface ResolvedFunctionDependency extends FunctionDependency {
@@ -24,6 +25,19 @@ export interface ResolvedFunctionGraph {
 
 export function definitionKey(definition: FunctionDefinition): string {
   return `${definition.layer}:${definition.id}`;
+}
+
+function namespaceDependencyHint(
+  id: string,
+  registry: LayeredFunctionRegistry<FunctionDefinition>,
+): string | undefined {
+  const example = registry.identifiers().find((candidate) => candidate.startsWith(`${id}.`));
+  if (!example) return;
+  return (
+    `cannot inject namespace "${id}" as a function. ` +
+    `Destructure individual functions in the first parameter, for example ${functionDependencyBinding(example)}, ` +
+    "then call the bound function."
+  );
 }
 
 export function resolveFunctionGraph(
@@ -64,7 +78,7 @@ export function resolveFunctionGraph(
       const target = registry.resolve(dependency.id);
       if (!target) {
         throw new Error(
-          `function "${definition.id}" requires unavailable dependency "${dependency.id}"`,
+          `function "${definition.id}" ${namespaceDependencyHint(dependency.id, registry) ?? `requires unavailable dependency "${dependency.id}"`}`,
         );
       }
       return { id: dependency.id, localName: dependency.localName, targetKey: visit(target) };
@@ -117,7 +131,9 @@ export function resolveFunctionGraph(
     if (invalid && !target?.sealed)
       throw new Error(`Function "${dependency.id}" is unavailable: ${invalid}`);
     if (!target) {
-      throw new Error(`submitted program requires unavailable function "${dependency.id}"`);
+      throw new Error(
+        `submitted program ${namespaceDependencyHint(dependency.id, registry) ?? `requires unavailable function "${dependency.id}"`}`,
+      );
     }
     return { id: dependency.id, localName: dependency.localName, targetKey: visit(target) };
   });
