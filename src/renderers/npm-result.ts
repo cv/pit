@@ -1,15 +1,16 @@
 import {
-  nonemptyLines as lines,
+  processOutputLines as lines,
   type ProcessResult,
   parseProcessResult,
   type SemanticOutcome,
   semanticOutcome,
 } from "../process/results.js";
+import { isRecord, renderJson } from "./shared.js";
 import type { RenderedResultValue, ValueRenderer } from "./types.js";
 
 // oxlint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
-const TEST_COUNT_PATTERN = /Tests\s+(\d+)\s+passed/i;
+const TEST_COUNTS_PATTERN = /\bTests\s+([^\r\n]+)/i;
 const INSTALL_SUMMARY_PATTERN = /^(added|removed|changed|up to date|audited)\b/i;
 
 function plural(count: number, noun: string, pluralForm = `${noun}s`): string {
@@ -59,7 +60,7 @@ function renderer(
       lines: display,
       outcome: status,
       summary: `${rendered.summary}${result.truncated ? ", truncated" : ""}`,
-      detailLines: display.slice(1),
+      detailLines: [`exit: ${result.code}`, ...display.slice(1)],
     } satisfies RenderedResultValue;
   };
 }
@@ -67,10 +68,17 @@ function renderer(
 const run = renderer("run", (result) => ({ summary: `run, exit ${result.code}` }));
 const test = renderer("test", (result) => {
   const plain = result.stdout.replace(ANSI_PATTERN, "");
-  const count = Number(plain.match(TEST_COUNT_PATTERN)?.[1] ?? 0);
+  const counts = plain.match(TEST_COUNTS_PATTERN)?.[1] ?? "";
+  const passed = Number(counts.match(/(\d+)\s+passed/i)?.[1] ?? 0);
+  const failed = Number(counts.match(/(\d+)\s+failed/i)?.[1] ?? 0);
   return {
-    summary: count ? `test, ${plural(count, "test")} passed` : `test, exit ${result.code}`,
+    summary: failed
+      ? `test, ${failed} failed, ${passed} passed`
+      : passed
+        ? `test, ${plural(passed, "test")} passed`
+        : `test, exit ${result.code}`,
     output: lines(result.stdout),
+    ...(failed > 0 ? { outcome: "warning" as const } : {}),
   };
 });
 const install = renderer("install", (result) => {
@@ -82,46 +90,45 @@ const install = renderer("install", (result) => {
   };
 });
 const audit = renderer("audit", (result) => {
-  const parsed = json(result.stdout) as
+  const parsed = (result.truncated ? undefined : json(result.stdout)) as
     | { metadata?: { vulnerabilities?: Record<string, number> } }
     | undefined;
   const vulnerabilities = parsed?.metadata?.vulnerabilities;
   const total = typeof vulnerabilities?.total === "number" ? vulnerabilities.total : 0;
-  const output = vulnerabilities
-    ? [
-        "vulnerabilities",
-        ...["critical", "high", "moderate", "low", "info"].map(
-          (severity) => `${severity}: ${vulnerabilities[severity] ?? 0}`,
-        ),
-      ]
-    : lines(result.stdout);
+  const output = parsed === undefined ? lines(result.stdout) : renderJson(parsed);
   return {
-    summary: parsed
-      ? `audit, ${plural(total, "vulnerability", "vulnerabilities")}`
-      : `audit, exit ${result.code}`,
+    summary:
+      typeof vulnerabilities?.total === "number"
+        ? `audit, ${plural(total, "vulnerability", "vulnerabilities")}`
+        : `audit, exit ${result.code}`,
     output,
     ...(total > 0 ? { outcome: "warning" as const, acceptedExitCodes: [1] } : {}),
   };
 });
 const outdated = renderer("outdated", (result) => {
-  const parsed = json(result.stdout);
+  const parsed = result.truncated ? undefined : json(result.stdout);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { summary: `outdated, exit ${result.code}`, output: lines(result.stdout) };
   }
-  const entries = Object.entries(
-    parsed as Record<string, { current?: string; wanted?: string; latest?: string }>,
-  );
+  const entries = Object.entries(parsed);
+  const findings =
+    entries.length > 0 &&
+    entries.every(
+      ([, item]) =>
+        isRecord(item) &&
+        [item.current, item.wanted, item.latest].some((version) => typeof version === "string"),
+    );
   return {
-    summary: `outdated, ${plural(entries.length, "package")}`,
-    output: entries.map(
-      ([name, item]) =>
-        `${name}: ${item.current ?? "?"} → ${item.wanted ?? item.latest ?? "?"}${item.latest && item.latest !== item.wanted ? ` (latest ${item.latest})` : ""}`,
-    ),
-    ...(entries.length > 0 ? { outcome: "warning" as const, acceptedExitCodes: [1] } : {}),
+    summary:
+      findings || entries.length === 0
+        ? `outdated, ${plural(entries.length, "package")}`
+        : `outdated, exit ${result.code}`,
+    output: renderJson(parsed),
+    ...(findings ? { outcome: "warning" as const, acceptedExitCodes: [1] } : {}),
   };
 });
 const pack = renderer("pack", (result) => {
-  const parsed = json(result.stdout);
+  const parsed = result.truncated ? undefined : json(result.stdout);
   const item = Array.isArray(parsed)
     ? (parsed[0] as
         | {
@@ -139,11 +146,7 @@ const pack = renderer("pack", (result) => {
   const identity = [item.name, item.version].filter(Boolean).join("@");
   return {
     summary: `pack, ${identity || item.filename || "complete"}`,
-    output: [
-      item.filename ? `file: ${item.filename}` : "",
-      item.size === undefined ? "" : `size: ${item.size} bytes`,
-      item.unpackedSize === undefined ? "" : `unpacked: ${item.unpackedSize} bytes`,
-    ].filter(Boolean),
+    output: renderJson(parsed),
   };
 });
 

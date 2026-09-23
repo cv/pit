@@ -8,17 +8,20 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";
 import { describeCapabilityCall, inferCapabilityCall } from "./capability.js";
+import { renderStructuredData } from "./compound.js";
 
 interface RenderTheme {
   fg(color: string, text: string): string;
   bold(text: string): string;
 }
 
-interface ToolCallArgs {
+export interface ToolCallArgs {
   label?: unknown;
   code?: unknown;
   functionId?: unknown;
   saveOnly?: unknown;
+  params?: unknown;
+  timeoutMs?: unknown;
 }
 
 interface ToolCallContext extends ToolCallTimingContext {
@@ -89,6 +92,35 @@ function describeCall(args: ToolCallArgs, code: string, registry: FunctionRegist
   return describeCapabilityCall(inferCapabilityCall(code)) ?? "Run workspace task";
 }
 
+export function renderTypeScriptInputs(
+  args: ToolCallArgs,
+  theme: RenderTheme,
+  context: ToolCallContext,
+): string {
+  const lines: string[] = [];
+  const functionId = normalizedLabel(args.functionId);
+  if (functionId) lines.push(theme.fg("dim", `functionId: ${functionId}`));
+  if (args.saveOnly === true) lines.push("saveOnly: true");
+  if (args.timeoutMs !== undefined) lines.push(`timeoutMs: ${String(args.timeoutMs)}`);
+  if (Object.hasOwn(args, "params")) {
+    const params = renderStructuredData(args.params, {
+      theme,
+      depth: 0,
+      seen: new WeakSet(),
+    }).lines;
+    lines.push(theme.bold(theme.fg("toolTitle", "Params")), ...params);
+  }
+  const code = typeof args.code === "string" ? formattedDisplaySource(args.code, context) : "";
+  if (code)
+    lines.push(
+      theme.bold(theme.fg("toolTitle", "Source")),
+      ...highlightCode(sanitizeTerminalText(code), "typescript"),
+    );
+  else
+    lines.push(theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)"));
+  return sanitizeTerminalText(lines.join("\n"), { preserveSgr: true });
+}
+
 export function renderTypeScriptToolCall(
   args: ToolCallArgs,
   theme: RenderTheme,
@@ -96,29 +128,18 @@ export function renderTypeScriptToolCall(
   registry: FunctionRegistry,
 ) {
   const code = typeof args.code === "string" ? args.code : "";
-  const displayedCode = formattedDisplaySource(code, context);
   const callLabel = describeCall(args, code, registry);
-  const lines = displayedCode ? highlightCode(displayedCode, "typescript") : [];
-  const shown = context.expanded ? lines : [];
   const generation = generationTiming(context);
-  const state = generation.complete
-    ? `${lines.length} line${lines.length === 1 ? "" : "s"}, ${generation.duration}`
-    : `generating... ${generation.duration}`;
+  const state = generation.complete ? generation.duration : `generating... ${generation.duration}`;
   const callMarker = generation.complete ? "› " : `${generation.spinner} `;
   let text = theme.bold(
     theme.fg("accent", callMarker) +
       theme.fg("toolTitle", callLabel) +
       theme.fg("dim", ` (${state})`),
   );
-  if (args.saveOnly === true) {
-    text += theme.fg("accent", " save-only");
-  }
-  const functionId = normalizedLabel(args.functionId);
-  if (context.expanded && functionId) text += `\n${theme.fg("dim", `functionId: ${functionId}`)}`;
-  if (context.expanded && shown.length > 0) {
-    text += `\n${shown.join("\n")}`;
-  } else if (context.expanded) {
-    text += `\n${theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)")}`;
-  }
-  return new Text(text, 0, 0);
+  if (args.saveOnly === true) text += theme.fg("accent", " save-only");
+  // Pi shares isPartial across both slots. Once settled, inputs follow the result instead.
+  if (context.expanded && context.isPartial !== false)
+    text += `\n${renderTypeScriptInputs(args, theme, context)}`;
+  return new Text(sanitizeTerminalText(text, { preserveSgr: true }), 0, 0);
 }

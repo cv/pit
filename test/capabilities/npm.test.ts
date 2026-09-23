@@ -99,7 +99,7 @@ describe("npm result renderers", () => {
       ),
     );
     expect(audit.summary).toBe("audit, 3 vulnerabilities");
-    expect(audit.lines.join("\n")).toContain("high: 1");
+    expect(audit.lines.join("\n")).toContain('"high": 1');
   });
 
   it("renders outdated and pack JSON with fallbacks", () => {
@@ -108,7 +108,9 @@ describe("npm result renderers", () => {
       result(JSON.stringify({ foo: { current: "1", wanted: "2", latest: "3" } }), "", 1),
     );
     expect(outdated.summary).toBe("outdated, 1 package");
-    expect(outdated.lines.join("\n")).toContain("foo: 1 → 2 (latest 3)");
+    expect(outdated.lines.join("\n")).toContain('"current": "1"');
+    expect(outdated.lines.join("\n")).toContain('"wanted": "2"');
+    expect(outdated.lines.join("\n")).toContain('"latest": "3"');
     const pack = render(
       "pack",
       result(
@@ -129,14 +131,12 @@ describe("npm result renderers", () => {
     expect(render("run", result("", "warning")).lines).toContain("stderr");
     expect(render("test", result("no test summary", "", 1)).summary).toBe("test, exit 1");
     expect(render("install", result("custom output")).summary).toBe("install, exit 0");
-    expect(render("audit", result(JSON.stringify({ metadata: {} }))).summary).toBe(
-      "audit, 0 vulnerabilities",
-    );
+    expect(render("audit", result(JSON.stringify({ metadata: {} }))).summary).toBe("audit, exit 0");
     const current = render(
       "outdated",
       result(JSON.stringify({ foo: { current: "1", wanted: "2", latest: "2" } })),
     );
-    expect(current.lines.join("\n")).not.toContain("latest 2");
+    expect(current.lines.join("\n")).toContain('"latest": "2"');
     expect(render("pack", result(JSON.stringify([{}]))).summary).toBe("pack, complete");
     const call: CapabilityCall = { capability: "npm", method: "run", qualifiedName: "npm.run" };
     expect(renderResultValue({ bad: true }, theme, call)).toBeUndefined();

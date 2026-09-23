@@ -32,16 +32,18 @@ describe("TypeScript failure context", () => {
     expect(JSON.stringify(failure)).not.toContain("results");
   });
 
-  it("strips ANSI-colored stacks and bounds multiline root diagnostics", () => {
+  it("sanitizes supplied stacks and bounds diagnostics with explicit head/tail retention", () => {
     const colored = structureTypeScriptFailure(
       new Error("root failure\n\u001b[31m    at colored (/tmp/file.ts:1:1)\u001b[0m"),
       [],
     );
-    expect(colored.rootError).toBe("root failure");
+    expect(colored.rootError).toBe("root failure\n    at colored (/tmp/file.ts:1:1)");
 
     const multiline = Array.from({ length: 50 }, (_, index) => `diagnostic ${index}`).join("\n");
     const bounded = structureTypeScriptFailure(multiline, []);
-    expect(bounded.rootError.split("\n")).toHaveLength(24);
+    expect(bounded.rootError.split("\n").length).toBeLessThanOrEqual(24);
+    expect(bounded.rootError).toContain("diagnostic 49");
+    expect(bounded.rootError).toContain("not retained");
     expect(Buffer.byteLength(bounded.rootError)).toBeLessThanOrEqual(8_000);
   });
 

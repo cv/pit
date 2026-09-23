@@ -2,6 +2,7 @@ import { highlightCode } from "@earendil-works/pi-coding-agent";
 
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import {
+  combinedOutcome,
   indent,
   isRecord,
   type JsonRecord,
@@ -14,6 +15,20 @@ import {
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 type NestedRenderer = (value: unknown, context: RenderContext) => RenderedResultValue | undefined;
+
+/** Display parsed JSON/inputs without pretending nested data are capability results. */
+export function renderStructuredData(value: unknown, context: RenderContext): RenderedResultValue {
+  const nested: NestedRenderer = (entry, child) =>
+    renderMultilineText(entry, child) ??
+    renderArrayCompound(entry, child, nested) ??
+    renderCompound(entry, child, nested);
+  return (
+    nested(value, { ...context, depth: 0, seen: new WeakSet() }) ?? {
+      kind: "json",
+      lines: renderJson(value),
+    }
+  );
+}
 
 export function renderMultilineText(
   value: unknown,
@@ -83,8 +98,7 @@ export function renderCompound(
   }
   context.seen.add(value);
 
-  const recognized: Array<[string, RenderedResultValue]> = [];
-  const remaining: JsonRecord = {};
+  const entries: Array<[string, unknown, RenderedResultValue | undefined]> = [];
   const recordLanguage = recordSyntaxLanguage(value) ?? context.syntaxLanguage;
   for (const [key, entry] of Object.entries(value)) {
     const syntaxLanguage = fieldSyntaxLanguage(key, recordLanguage);
@@ -93,19 +107,20 @@ export function renderCompound(
       depth: context.depth + 1,
       ...(syntaxLanguage ? { syntaxLanguage } : {}),
     });
-    if (rendered) {
-      recognized.push([key, rendered]);
-    } else {
-      remaining[key] = entry;
-    }
+    entries.push([key, entry, rendered]);
   }
-  if (recognized.length === 0) {
+  if (!entries.some(([, , rendered]) => rendered)) {
     return;
   }
 
   const lines: string[] = [];
   const hangingIndents: Record<number, number> = {};
-  for (const [key, rendered] of recognized) {
+  for (const [key, entryValue, known] of entries) {
+    const rendered = known ?? { kind: "json", lines: renderJson(entryValue) };
+    if (!known && rendered.lines.length === 1) {
+      lines.push(`${context.theme.fg("accent", safeSectionLabel(key))}: ${rendered.lines[0]}`);
+      continue;
+    }
     if (lines.length > 0) {
       lines.push("");
     }
@@ -121,19 +136,11 @@ export function renderCompound(
       hangingIndents[detailStart + Number(index)] = width + 2;
     }
   }
-  if (Object.keys(remaining).length > 0) {
-    if (lines.length > 0) {
-      lines.push("");
-    }
-    lines.push(
-      context.theme.fg("accent", context.theme.bold("other")),
-      ...indent(renderJson(remaining)),
-    );
-  }
   return {
     kind: "compound",
     lines,
-    summary: plural(recognized.length, "section"),
+    summary: plural(entries.length, "field"),
+    outcome: combinedOutcome(entries.map(([, , rendered]) => rendered)),
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,
@@ -179,6 +186,7 @@ export function renderArrayCompound(
     kind: "array",
     lines,
     summary: plural(value.length, "item"),
+    outcome: combinedOutcome(renderedEntries),
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,

@@ -5,7 +5,15 @@ import { GIT_RESULT_RENDERERS } from "./git-result.js";
 import { renderHttp } from "./http.js";
 import { NPM_RESULT_RENDERERS } from "./npm-result.js";
 import { renderShell } from "./process.js";
-import { hasOnlyKeys, indent, isRecord, type JsonRecord, plural, renderJson } from "./shared.js";
+import {
+  combinedOutcome,
+  hasOnlyKeys,
+  indent,
+  isRecord,
+  type JsonRecord,
+  plural,
+  renderJson,
+} from "./shared.js";
 import type {
   RenderContext,
   RenderedResultValue,
@@ -97,6 +105,8 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
   const lines = [
     `${context.theme.fg("toolTitle", context.theme.bold("batch"))} ${context.theme.fg(failed ? "warning" : "dim", `(${summary})`)}`,
   ];
+  const hangingIndents: Record<number, number> = {};
+  const children: RenderedResultValue[] = [];
   for (const entry of value.results) {
     const status = entry.ok ? context.theme.fg("success", "✓") : context.theme.fg("error", "✗");
     lines.push(`${status} [${entry.index}] ${entry.kind}`);
@@ -105,12 +115,26 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
         ...context,
         depth: context.depth + 1,
       });
+      children.push(nested);
+      for (const [index, width] of Object.entries(nested.hangingIndents ?? {})) {
+        hangingIndents[lines.length + Number(index)] = width + 2;
+      }
       lines.push(...indent(nested.lines));
     } else {
       lines.push(context.theme.fg("error", `  ${entry.error}`));
     }
   }
-  return { kind: "batch", lines, summary, detailLines: lines.slice(1) };
+  return {
+    kind: "batch",
+    lines,
+    summary,
+    outcome: failed ? "error" : combinedOutcome(children),
+    detailLines: lines.slice(1),
+    hangingIndents,
+    detailHangingIndents: Object.fromEntries(
+      Object.entries(hangingIndents).map(([index, width]) => [Number(index) - 1, width]),
+    ),
+  };
 }
 
 const VALUE_RENDERERS: ValueRenderer[] = [
@@ -127,7 +151,7 @@ const VALUE_RENDERERS: ValueRenderer[] = [
 ];
 
 function renderKnownValue(value: unknown, context: RenderContext): RenderedResultValue | undefined {
-  if (context.depth === 0 && context.capabilityCall) {
+  if (context.capabilityCall) {
     const rendererName = capabilityResultRenderer(context.capabilityCall);
     const renderer = rendererName ? CAPABILITY_RESULT_RENDERERS[rendererName] : undefined;
     const rendered = renderer?.(value, context);

@@ -1,7 +1,8 @@
-import { Text } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, Text } from "@earendil-works/pi-tui";
 
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 
 interface ProgressDetails extends ExecutionProgressSnapshot {
@@ -69,6 +70,29 @@ function shellProgressOutput(group: ShellProgressGroup): string {
   return "";
 }
 
+export function renderRetainedShellOutput(
+  details: ProgressDetails | undefined,
+  theme: RenderTheme,
+  returnedLines: string[] = [],
+): string {
+  let text = "";
+  const displayed = stripTerminalSequences(returnedLines.join("\n"));
+  for (const entry of details?.progress ?? []) {
+    const status =
+      entry.status === "done"
+        ? `exit ${entry.code ?? "unknown"}`
+        : "unfinished when invocation ended";
+    text += `\n${theme.fg("toolTitle", `[${status}] ${entry.command}`)}`;
+    if (entry.output)
+      text += displayed.includes(stripTerminalSequences(entry.output))
+        ? `\n${theme.fg("dim", "(output shown above)")}`
+        : `\n${entry.output}`;
+  }
+  if (details?.progressTruncated)
+    text += `\n${theme.fg("warning", "… earlier shell calls were not retained")}`;
+  return text;
+}
+
 export function renderPartialToolResult(input: {
   expanded: boolean;
   details?: ProgressDetails;
@@ -83,16 +107,21 @@ export function renderPartialToolResult(input: {
   if (input.expanded) {
     text += renderExecutionDashboard(input.details, input.theme);
     const progressGroups = groupAdjacentShellProgress(input.details?.progress ?? []);
-    for (const group of progressGroups.slice(-4)) {
+    const visible = progressGroups.filter(
+      (group, index) =>
+        index >= progressGroups.length - 4 ||
+        group.entries.some((entry) => failedShellProgress(entry) || entry.status === "running"),
+    );
+    for (const group of visible) {
       text += `\n${input.theme.fg("accent", `[${shellProgressState(group)}]`)} ${input.theme.fg("dim", group.command)}`;
       const output = shellProgressOutput(group);
       if (output) {
         text += `\n${input.theme.fg("muted", output)}`;
       }
     }
-    if (input.details?.progressTruncated || progressGroups.length > 4) {
+    if (input.details?.progressTruncated || visible.length < progressGroups.length) {
       text += `\n${input.theme.fg("warning", "… earlier shell calls omitted")}`;
     }
   }
-  return new Text(text, 0, 0);
+  return new Text(sanitizeTerminalText(text, { preserveSgr: true }), 0, 0);
 }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { nonemptyLines, parseProcessResult, semanticOutcome } from "../../src/process/results.js";
+import {
+  processOutputLines,
+  parseProcessResult,
+  semanticOutcome,
+} from "../../src/process/results.js";
 
 const processResult = (code = 0) => ({ stdout: "ok", stderr: "", code, truncated: false });
 
@@ -23,6 +27,6 @@ describe("process results", () => {
         acceptedExitCodes: [1],
       }),
     ).toBe("warning");
-    expect(nonemptyLines("one  \n\ntwo\n")).toEqual(["one", "two"]);
+    expect(processOutputLines("one  \n\ntwo\n")).toEqual(["one  ", "", "two"]);
   });
 });

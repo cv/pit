@@ -56,13 +56,16 @@ export function renderRead(
   }
   return {
     kind: "read",
+    outcome: value.truncated || value.hasMore ? "warning" : "success",
     lines,
     summary: `${value.file}, ${range}, ${flags}`,
-    detailLines: lines.slice(1),
+    detailLines: [theme.fg("dim", `revision: ${value.revision}`), ...lines.slice(1)],
     hangingIndents: Object.fromEntries(
       Object.entries(detailHangingIndents).map(([index, width]) => [Number(index) + 1, width]),
     ),
-    detailHangingIndents,
+    detailHangingIndents: Object.fromEntries(
+      Object.entries(detailHangingIndents).map(([index, width]) => [Number(index) + 1, width]),
+    ),
   };
 }
 
@@ -142,18 +145,25 @@ export function renderSearch(
   ];
   for (const match of value.matches) {
     lines.push(theme.fg("accent", `${match.file}:${match.line}:${match.column} (${match.anchor})`));
+    lines.push(theme.fg("dim", `  revision: ${match.revision}`));
     for (const contextLine of match.before) {
-      lines.push(theme.fg("dim", `  ${contextLine.line}  ${contextLine.text}`));
+      lines.push(theme.fg("dim", `  ${contextLine.anchor}|${contextLine.text}`));
     }
     lines.push(`> ${match.line}  ${match.text}`);
     for (const contextLine of match.after) {
-      lines.push(theme.fg("dim", `  ${contextLine.line}  ${contextLine.text}`));
+      lines.push(theme.fg("dim", `  ${contextLine.anchor}|${contextLine.text}`));
     }
   }
   if (value.matches.length === 0) {
     lines.push(theme.fg("dim", "(no matches)"));
   }
-  return { kind: "search", lines, summary, detailLines: lines.slice(1) };
+  return {
+    kind: "search",
+    outcome: value.truncated || value.filesSkipped > 0 ? "warning" : "success",
+    lines,
+    summary,
+    detailLines: lines.slice(1),
+  };
 }
 
 export function renderEdit(
@@ -180,7 +190,7 @@ export function renderEdit(
       `${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(value.file))} ${action} ${theme.fg("dim", `(${plural(value.applied, "change")}, ${value.bytes} bytes, ${revision})`)}`,
     ],
     summary: `${value.file}, ${action}, ${plural(value.applied, "change")}, ${value.bytes} bytes`,
-    detailLines: [],
+    detailLines: [theme.fg("dim", revision)],
   };
 }
 
@@ -235,6 +245,7 @@ export function renderGlob(
   const entryLines = value.entries.length > 0 ? value.entries : [theme.fg("dim", "(no entries)")];
   return {
     kind: "glob",
+    outcome: value.truncated ? "warning" : "success",
     lines: [
       `${theme.fg("toolTitle", theme.bold("glob"))} ${theme.fg(value.truncated ? "warning" : "dim", `(${state})`)}`,
       ...entryLines,
@@ -264,6 +275,6 @@ export function renderStat(
       `${theme.fg("toolTitle", theme.bold("stat"))} ${kind} ${theme.fg("dim", `(${value.size} bytes, modified ${value.modified})`)}`,
     ],
     summary: `${kind}, ${value.size} bytes`,
-    detailLines: [],
+    detailLines: [`modified: ${value.modified}`],
   };
 }

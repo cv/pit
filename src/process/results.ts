@@ -28,11 +28,10 @@ export function parseProcessResult(value: unknown): ProcessResult | undefined {
   return result as unknown as ProcessResult;
 }
 
-export function nonemptyLines(value: string): string[] {
+export function processOutputLines(value: string): string[] {
   return sanitizeTerminalText(value, { preserveSgr: true })
     .split("\n")
-    .map((line) => line.trimEnd())
-    .filter(Boolean);
+    .filter((line, index, all) => index < all.length - 1 || line !== "");
 }
 
 export interface SemanticOutcomeOptions {
@@ -48,5 +47,5 @@ export function semanticOutcome(
   if (!accepted) {
     return "error";
   }
-  return options.domainOutcome ?? "success";
+  return options.domainOutcome ?? (result.truncated ? "warning" : "success");
 }

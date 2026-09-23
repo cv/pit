@@ -1,7 +1,8 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
-import type { ResultTheme } from "./types.js";
+import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import type { RenderedResultValue, ResultTheme } from "./types.js";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -36,12 +37,24 @@ export function plural(count: number, singular: string, pluralForm = `${singular
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+export function combinedOutcome(
+  values: Array<RenderedResultValue | undefined>,
+): NonNullable<RenderedResultValue["outcome"]> {
+  if (values.some((value) => value?.outcome === "error")) return "error";
+  return values.some((value) => value?.outcome === "warning") ? "warning" : "success";
+}
+
 export function renderJson(value: unknown): string[] {
+  let source: string;
   try {
-    const source = JSON.stringify(value, null, 2) ?? String(value);
+    source = JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    source = String(value);
+  }
+  try {
     return highlightCode(source, "json");
   } catch {
-    return [String(value)];
+    return sanitizeTerminalText(source).split("\n");
   }
 }
 

@@ -1,10 +1,5 @@
-import {
-  hasOnlyKeys,
-  isRecord,
-  isStringRecord,
-  JSON_CONTAINER_PREFIX,
-  renderJson,
-} from "./shared.js";
+import { renderStructuredData } from "./compound.js";
+import { hasOnlyKeys, isRecord, isStringRecord, JSON_CONTAINER_PREFIX } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderHttp(
@@ -42,9 +37,13 @@ export function renderHttp(
       contentType?.toLowerCase().includes("json") === true ||
       JSON_CONTAINER_PREFIX.test(value.body);
     let bodyLines = value.body.split("\n");
-    if (shouldParseJson) {
+    if (shouldParseJson && !value.truncated) {
       try {
-        bodyLines = renderJson(JSON.parse(value.body));
+        bodyLines = renderStructuredData(JSON.parse(value.body), {
+          theme,
+          depth: 0,
+          seen: new WeakSet(),
+        }).lines;
       } catch {
         // Keep malformed or mislabeled response bodies as text.
       }
@@ -53,5 +52,11 @@ export function renderHttp(
   } else {
     lines.push(theme.fg("dim", "(empty body)"));
   }
-  return { kind: "http", lines, summary: state, detailLines: lines.slice(1) };
+  return {
+    kind: "http",
+    outcome: !value.ok ? "error" : value.truncated ? "warning" : "success",
+    lines,
+    summary: state,
+    detailLines: lines.slice(1),
+  };
 }

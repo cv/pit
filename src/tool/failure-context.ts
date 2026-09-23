@@ -1,4 +1,4 @@
-import { type ExtensionAPI, truncateHead } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, truncateHead, truncateTail } from "@earendil-works/pi-coding-agent";
 
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -12,7 +12,6 @@ const CANCELLED_FAILURE = /abort|cancel/i;
 const TIMEOUT_FAILURE = /timed? out|timeout/i;
 const CAPABILITY_FAILURE = /command failed|capability|unknown capability/i;
 const ERROR_PREFIX = /^Error:\s*/;
-const STACK_TRACE = /\n\s+at /;
 
 export interface StructuredTypeScriptFailure {
   functionPath: string[];
@@ -46,10 +45,6 @@ export function structureTypeScriptFailure(
 ): StructuredTypeScriptFailure {
   let rootError = error instanceof Error ? error.message : String(error);
   rootError = sanitizeTerminalText(rootError).replace(ERROR_PREFIX, "");
-  const stackStart = rootError.search(STACK_TRACE);
-  if (stackStart >= 0) {
-    rootError = rootError.slice(0, stackStart);
-  }
   const functionPath: string[] = [];
   for (;;) {
     const match = rootError.match(FUNCTION_FAILURE_PREFIX);
@@ -67,15 +62,20 @@ export function structureTypeScriptFailure(
       }
     }
   }
-  rootError = truncateHead(rootError, {
+  const kind = failureKind(rootError);
+  const bounded = truncateHead(rootError, {
     maxBytes: MAX_FAILURE_BYTES,
     maxLines: MAX_FAILURE_LINES,
-  }).content;
-  return {
-    functionPath: functionPath.slice(0, MAX_FUNCTION_PATH),
-    rootError,
-    kind: failureKind(rootError),
-  };
+  });
+  if (bounded.truncated) {
+    const limits = { maxBytes: 3_500, maxLines: 11 };
+    rootError = `${truncateHead(rootError, limits).content}\n… diagnostic middle omitted before rendering; not retained …\n${truncateTail(rootError, limits).content}`;
+  }
+  const boundedPath =
+    functionPath.length > MAX_FUNCTION_PATH
+      ? [...functionPath.slice(0, 16), "… further calls not retained …", ...functionPath.slice(-15)]
+      : functionPath;
+  return { functionPath: boundedPath, rootError, kind };
 }
 
 export function captureTypeScriptFailure(

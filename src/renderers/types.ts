@@ -20,7 +20,9 @@ export interface RenderedResultValue {
   kind: string;
   lines: string[];
   summary?: string;
+  /** Domain outcome, propagated through compound results independently of invocation success. */
   outcome?: "success" | "warning" | "error";
+  /** Body paired with summary: retain every display-safe field not represented by the summary. */
   detailLines?: string[];
   hangingIndents?: Record<number, number>;
   detailHangingIndents?: Record<number, number>;

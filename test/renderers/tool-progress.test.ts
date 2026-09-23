@@ -25,7 +25,7 @@ describe("tool rendering", () => {
 
     const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
     expect(collapsed).not.toContain("functions:");
-    expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (17 lines, 0.0s)");
+    expect(collapsed).toContain("Returned 15 fields: key1, key2, key3 (0.0s)");
     const resultLines = collapsed.split("\n");
     expect(resultLines).toHaveLength(1);
     expect(resultLines[0]).toContain("\u001b[1m");
@@ -41,13 +41,13 @@ describe("tool rendering", () => {
       { content: [{ type: "text", text: "hello" }], details: { value: "hello", truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(stringResult).toContain("Returned string (1 line, 0.0s)");
+    expect(stringResult).toContain("Returned string (0.0s)");
     expect(stringResult).not.toContain('"hello"');
     const arrayResult = renderToolResult(
       { content: [], details: { value: [1, 2], truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(arrayResult).toContain("Returned 2 items (4 lines, 0.0s)");
+    expect(arrayResult).toContain("Returned 2 items (0.0s)");
 
     const singleArrayResult = renderToolResult(
       { content: [], details: { value: [1], truncated: false } },
@@ -59,7 +59,7 @@ describe("tool rendering", () => {
       { content: [], details: { value: {}, truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(emptyObjectResult).toContain("Returned 0 fields (1 line, 0.0s)");
+    expect(emptyObjectResult).toContain("Returned 0 fields (0.0s)");
 
     const undefinedResult = renderToolResult(
       {
@@ -68,7 +68,7 @@ describe("tool rendering", () => {
       },
       { expanded: false, isPartial: false },
     );
-    expect(undefinedResult).toContain("Returned text (1 line, 0.0s)");
+    expect(undefinedResult).toContain("No returned value (0.0s)");
     expect(undefinedResult).not.toContain("undefined");
 
     const truncated = renderToolResult(
@@ -93,7 +93,7 @@ describe("tool rendering", () => {
       { content: [], details: undefined },
       { expanded: false, isPartial: false },
     );
-    expect(empty).toContain("No returned value (0 lines, 0.0s)");
+    expect(empty).toContain("No returned value (0.0s)");
 
     const emptyText = renderToolResult(
       { content: [{ type: "text" }], details: undefined },
@@ -174,7 +174,7 @@ describe("tool rendering", () => {
     expect(streaming.match(/project function projectChecks/g)).toHaveLength(1);
     expect(streaming).toContain("running");
     expect(streaming).toContain("git.status");
-    expect(streaming).toContain("succeeded");
+    expect(streaming).toContain("completed");
     expect(streaming).toContain("additional capability traces omitted");
   });
 
@@ -214,7 +214,7 @@ describe("tool rendering", () => {
       { expanded: true, isPartial: true },
     );
     expect(polling.match(/gh\.runView/g)).toHaveLength(1);
-    expect(polling).toContain("29 succeeded, 1 running over");
+    expect(polling).toContain("29 completed, 1 running over");
     expect(polling).toContain("[running, 29 done (0)] gh run view 42");
     expect(polling).not.toContain("poll output");
 
@@ -246,7 +246,7 @@ describe("tool rendering", () => {
       { expanded: true, isPartial: true },
     );
     expect(completedPolling).toContain("gh.runView");
-    expect(completedPolling).toContain("succeeded ×2 over");
+    expect(completedPolling).toContain("completed ×2 over");
     expect(completedPolling).toContain("[2 done (0)] gh run view 42");
     expect(completedPolling).not.toContain("completed output");
 
