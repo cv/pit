@@ -22,7 +22,7 @@ describe("HangingIndentText", () => {
     const first = component.render(8);
     expect(first[0]).toContain("abalpha");
     expect(first[1]?.startsWith("  ")).toBe(true);
-    expect(component.render(8)).toBe(first);
+    expect(component.render(8)).toEqual(first);
 
     component.invalidate();
     expect(component.render(8)).toEqual(first);

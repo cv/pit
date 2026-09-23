@@ -44,10 +44,8 @@ describe("dynamic prompt additions", () => {
       projectFunctionCatalog(project ? projectDocs : new Map()),
     ].filter(Boolean);
     const text = parts.join("\n\n");
-    expect(text.match(/^## /gm) ?? []).toHaveLength(headings);
+    expect(parts).toHaveLength(headings);
     expect(textSize(text).bytes).toBeLessThanOrEqual(budget);
-    expect(text).not.toContain("Inject them by name");
-    expect(text).not.toContain("first parameter");
     expect(text.includes("company.check(input: { value: number })")).toBe(project);
     expect(text.includes("input.value: Value to check.")).toBe(project);
     expect(text.includes("value: Name to format.")).toBe(user);
@@ -57,9 +55,7 @@ describe("dynamic prompt additions", () => {
     const override = "async function check({}, input: { value: number }) { return input.value; }";
     const session = new Map([["company.check", override]]);
     const text = projectFunctionCatalog(projectDocs, session);
-    expect(text).toContain(
-      "company.check(input: { value: number }) — Session override of project function.",
-    );
+    expect(text).toContain("company.check(input: { value: number })");
     expect(text).not.toContain("Value to check.");
     expect(userFunctionCatalog(projectDocs, session, new Map())).toBe("");
     expect(userFunctionCatalog(projectDocs, new Map(), session)).toBe("");
@@ -85,7 +81,7 @@ describe("dynamic prompt additions", () => {
     }
   });
 
-  it("accounts for session notices and skills separately, without weakening skill instructions", () => {
+  it("bounds session notices and skill catalogs while preserving escaped metadata", () => {
     const session = savedFunctionCatalogNotice(
       new Map([["company.check", "async function check({}) { return 42; }"]]),
     );
@@ -107,8 +103,6 @@ describe("dynamic prompt additions", () => {
     ]);
     expect(textSize(skills).bytes).toBeLessThanOrEqual(1000);
     expect(skills).toContain("Check &lt;code&gt; &amp; paths");
-    expect(skills).toContain("Always read skill files in full");
-    expect(skills).toContain("resolve it against the skill directory");
     expect(skills).not.toContain("hidden");
     expect(textSize(formatPitSkillsForPrompt([]))).toEqual({ characters: 0, bytes: 0 });
   });

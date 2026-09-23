@@ -1,0 +1,100 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { loadWorkflowFunction, processResult } from "../helpers/workflow-function.js";
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+const response = (status: string, conclusion = "") =>
+  processResult({
+    stdout: JSON.stringify({
+      status,
+      conclusion,
+      url: "https://example.invalid/runs/42",
+      jobs: [],
+    }),
+  });
+
+describe("waitForGitHubRun behavior", () => {
+  it("waits before the first request, polls at the requested interval, and stops on completion", async () => {
+    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const runView = vi
+      .fn()
+      .mockResolvedValueOnce(response("in_progress"))
+      .mockResolvedValue(response("completed", "success"));
+    const pending = wait({ gh: { runView } }, { id: 42, repo: "cv/pit", intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(119_999);
+    expect(runView).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(runView).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(runView).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toMatchObject({ status: "completed", conclusion: "success", attempt: 2 });
+    expect(runView).toHaveBeenLastCalledWith(42, expect.objectContaining({ repo: "cv/pit" }));
+    const calls = runView.mock.calls.length;
+    await vi.runAllTimersAsync();
+    expect(runView).toHaveBeenCalledTimes(calls);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["failure", "cancelled", ""])(
+    "rejects completed %s outcomes by default",
+    async (conclusion) => {
+      const wait = await loadWorkflowFunction("waitForGitHubRun");
+      const runView = vi.fn().mockResolvedValue(response("completed", conclusion));
+      await expect(
+        wait({ gh: { runView } }, { id: 42, repo: "cv/pit", initialDelayMs: 0 }),
+      ).rejects.toThrow(conclusion || "no conclusion");
+      expect(runView).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("returns an unsuccessful outcome when the caller explicitly suppresses raising", async () => {
+    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const runView = vi.fn().mockResolvedValue(response("completed", "failure"));
+    expect(
+      await wait({ gh: { runView } }, { id: 42, repo: "cv/pit", initialDelayMs: 0, raise: false }),
+    ).toMatchObject({ status: "completed", conclusion: "failure" });
+  });
+
+  it("stays within the tool's time budget even when many polls are requested", async () => {
+    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const runView = vi.fn().mockResolvedValue(response("in_progress"));
+    const started = Date.now();
+    const pending = wait(
+      { gh: { runView } },
+      {
+        id: 42,
+        repo: "cv/pit",
+        attempts: 120,
+        intervalMs: 30_000,
+        initialDelayMs: 120_000,
+        raise: false,
+      },
+    );
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({
+      status: "timed_out",
+      attempts: runView.mock.calls.length,
+    });
+    expect(Date.now() - started).toBeLessThan(300_000);
+    expect(runView.mock.calls.length).toBeLessThan(120);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("fails rather than reporting success when the requested attempts are exhausted", async () => {
+    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const runView = vi.fn().mockResolvedValue(response("in_progress"));
+    const pending = wait(
+      { gh: { runView } },
+      { id: 42, repo: "cv/pit", attempts: 2, intervalMs: 1000, initialDelayMs: 0 },
+    );
+    const rejected = pending.then(
+      () => false,
+      () => true,
+    );
+    await vi.runAllTimersAsync();
+    expect(await rejected).toBe(true);
+    expect(runView).toHaveBeenCalledTimes(2);
+  });
+});

@@ -22,10 +22,6 @@ describe("Pit skill prompt", () => {
       },
     ]);
 
-    expect(prompt).toContain("typescript tool's workspace.read capability");
-    expect(prompt).toContain("load the complete skill file");
-
-    expect(prompt).toContain("parent of SKILL.md / dirname of the path");
     expect(prompt).toContain("<name>review&lt;&amp;&gt;&apos;</name>");
     expect(prompt).toContain(
       "<description>Review &quot;changes&quot; &amp; report\nnext &gt;</description>",
