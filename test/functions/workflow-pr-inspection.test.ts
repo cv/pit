@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { skipWithoutJq } from "../helpers/jq.js";
 import { loadWorkflowFunction, processResult } from "../helpers/workflow-function.js";
 
 const OUTPUT_BUDGET = 45_000;
@@ -85,7 +86,7 @@ function dependencies(view = rawView, commits: unknown[] = defaultCommits) {
   return { prView, api };
 }
 
-describe("bounded PR inspection", () => {
+describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   it("projects a large body before the process cap and reports omitted discussion and pages", async () => {
     const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
     const gh = dependencies();
