@@ -163,7 +163,7 @@ describe("tool rendering", () => {
       { expanded: true, isPartial: true },
     );
     expect(streaming).toContain("[running] npm test");
-    expect(streaming).toContain("earlier shell calls omitted");
+    expect(streaming).toContain("earlier shell calls were not retained");
     expect(streaming).toContain("test output");
     expect(streaming).toContain("[done (0)] git status");
     expect(streaming).toContain("[running] sleep 1");

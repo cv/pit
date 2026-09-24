@@ -15,6 +15,43 @@ interface ExecutionDashboardTheme {
   fg(color: string, text: string): string;
 }
 
+/** Completed call groups older than this many recent rows are hidden while an invocation runs. */
+const LIVE_RECENT_CALL_GROUPS = 12;
+
+function callsInOrder(events: DashboardEvent[]): DashboardCall[] {
+  return events.flatMap((event) => (event.kind === "call" ? [event] : callsInOrder(event.events)));
+}
+
+function keepEvents(events: DashboardEvent[], kept: Set<DashboardCall>): DashboardEvent[] {
+  return events.flatMap((event): DashboardEvent[] => {
+    if (event.kind === "call") {
+      return kept.has(event) ? [event] : [];
+    }
+    if (event.events.length === 0) {
+      return [event];
+    }
+    const children = keepEvents(event.events, kept);
+    return children.length > 0 ? [{ ...event, events: children }] : [];
+  });
+}
+
+/**
+ * A live view keeps running, failed, rejected, and recent call groups so the invocation stays
+ * oriented; the settled view lists every retained call.
+ */
+function liveEvents(events: DashboardEvent[]): { events: DashboardEvent[]; hiddenCalls: number } {
+  const calls = callsInOrder(events);
+  const firstRecent = calls.length - LIVE_RECENT_CALL_GROUPS;
+  const kept = new Set(
+    calls.filter((call, index) => index >= firstRecent || call.status !== "succeeded"),
+  );
+  if (kept.size === calls.length) {
+    return { events, hiddenCalls: 0 };
+  }
+  const hiddenCalls = calls.reduce((sum, call) => sum + (kept.has(call) ? 0 : call.count), 0);
+  return { events: keepEvents(events, kept), hiddenCalls };
+}
+
 function callMarker(call: DashboardCall, theme: ExecutionDashboardTheme, settled: boolean): string {
   if (call.status === "running") {
     return settled ? theme.fg("warning", "?") : theme.fg("accent", "●");
@@ -71,11 +108,17 @@ export function renderExecutionDashboard(
   settled = false,
 ): string {
   const model = buildExecutionDashboardModel(details);
+  const { events, hiddenCalls } = settled
+    ? { events: model.events, hiddenCalls: 0 }
+    : liveEvents(model.events);
   let text = "";
   for (const activity of model.activities) {
     text += `\n${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${activity.scope} function`)} ${activity.name}`;
   }
-  for (const event of model.events) {
+  if (hiddenCalls > 0) {
+    text += `\n${theme.fg("dim", `… ${hiddenCalls} earlier completed call${hiddenCalls === 1 ? "" : "s"} hidden while running; listed when finished`)}`;
+  }
+  for (const event of events) {
     text += renderEvent(event, 0, theme, settled);
   }
   if (model.tracesTruncated) {

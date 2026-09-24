@@ -25,6 +25,26 @@ function trace(
   };
 }
 
+function interleaved(groups: number, firstSequence: number): CapabilityTrace[] {
+  return Array.from({ length: groups }, (_, index) =>
+    trace(
+      firstSequence + index,
+      index % 2 === 0 ? "exec" : "execFile",
+      "succeeded",
+      index * 100,
+      50,
+    ),
+  );
+}
+
+function inFunction(entry: CapabilityTrace, invocationId: number, name: string): CapabilityTrace {
+  return { ...entry, function: { invocationId, name, scope: "project", depth: 1 } };
+}
+
+function rows(text: string): string[] {
+  return text.split("\n").slice(1);
+}
+
 describe("execution dashboard rendering", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -101,5 +121,54 @@ describe("execution dashboard rendering", () => {
     const before = renderExecutionDashboard(details, theme, true);
     vi.advanceTimersByTime(60_000);
     expect(renderExecutionDashboard(details, theme, true)).toBe(before);
+  });
+  it("shows every call group while running when the recent budget suffices", () => {
+    const traces = interleaved(12, 1);
+    const live = rows(renderExecutionDashboard({ traces }, theme));
+    expect(live).toHaveLength(12);
+    expect(live.join("\n")).not.toContain("hidden while running");
+  });
+
+  it("hides older completed groups while running but keeps failures, active calls, and a count", () => {
+    const traces = [
+      trace(1, "exec", "succeeded", 0, 50),
+      trace(2, "exec", "succeeded", 100, 50),
+      trace(3, "execFile", "failed", 200, 100),
+      ...interleaved(20, 4),
+      trace(24, "spawn", "running", NOW - 1_000),
+    ];
+    const live = rows(renderExecutionDashboard({ traces }, theme));
+    expect(live[0]).toBe("… 11 earlier completed calls hidden while running; listed when finished");
+    expect(live[1]).toBe("✗ shell.execFile failed, 0.1s");
+    expect(live).toHaveLength(14);
+    expect(live.at(-1)).toBe("● shell.spawn running, 1.0s");
+
+    const settled = rows(renderExecutionDashboard({ traces }, theme, true));
+    expect(settled).toHaveLength(23);
+    expect(settled[0]).toMatch(/^· shell\.exec completed ×2 over /);
+    expect(settled.join("\n")).not.toContain("hidden while running");
+  });
+
+  it("keeps a function header while running only when it still has a visible call", () => {
+    const traces = [
+      inFunction(trace(1, "exec", "succeeded", 0, 10), 1, "early"),
+      {
+        ...inFunction(trace(2, "savedFunctionRun", "succeeded", 20, 1), 2, "pure"),
+        capability: "__pit",
+      },
+      ...interleaved(14, 3),
+      inFunction(trace(17, "spawn", "succeeded", 2_000, 10), 3, "late"),
+    ];
+    const live = rows(renderExecutionDashboard({ traces }, theme));
+    expect(live[0]).toBe("… 4 earlier completed calls hidden while running; listed when finished");
+    expect(live).toContain("↳ project function pure #2");
+    expect(live.slice(-2)).toEqual([
+      "↳ project function late #3",
+      "  · shell.spawn completed, 0.0s",
+    ]);
+    expect(live.join("\n")).not.toContain("function early");
+    expect(rows(renderExecutionDashboard({ traces }, theme, true))).toContain(
+      "↳ project function early #1",
+    );
   });
 });

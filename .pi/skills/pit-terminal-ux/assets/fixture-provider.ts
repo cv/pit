@@ -66,6 +66,16 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     "for(let n=1;n<=6;n++){console.log('PROGRESS_STEP_'+n);await new Promise(r=>setTimeout(r,700));}",
     10000,
   ),
+  calls: {
+    label: "UX CALLS: more call groups than the live budget",
+    code: 'async ({ workspace: { stat, list }, shell: { execFile } }, input: { rounds: number; script: string }) => { for (let round = 0; round < input.rounds; round++) { await stat("package.json"); await list("src"); } return execFile("node", ["--input-type=module", "--eval", input.script], { timeoutMs: 15000 }); }',
+    params: {
+      rounds: 30,
+      script:
+        "for(let n=1;n<=6;n++){console.log('CALLS_STEP_'+n);await new Promise(r=>setTimeout(r,800));}",
+    },
+    timeoutMs: 20000,
+  },
   batch: {
     label: "UX BATCH: one intentional read failure",
     code: 'async ({ workspace: { batch } }, input: { missing: string }) => batch([{ kind: "read", file: "src/renderers/types.ts", options: { limit: 2 } }, { kind: "read", file: input.missing }], { failure: "settled" })',
