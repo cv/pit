@@ -1,23 +1,8 @@
 # pit
 
-**Give Pi one typed tool instead of a toolbox.**
+**One typed tool for Pi, instead of a toolbox.**
 
-Pit replaces Pi's normal coding tools with one `typescript` tool. One call can inspect a repository, edit files, run checks, use Git and GitHub, make HTTP requests, and request interactive input.
-
-This design gives Pit four main benefits:
-
-- **Fewer round trips:** One call can combine related operations and ordinary computation.
-- **Less context noise:** Intermediate data stays in the restricted process. Only the final result enters the model context.
-- **Earlier feedback:** Pit checks each TypeScript call against the active capability contract before execution.
-- **Reusable workflows:** A successful workflow can become a typed, branch-local function for later calls and composition.
-
-Each call runs in a fresh, permission-restricted process. Capabilities make effects explicit, and bounded results keep the model context and TUI compact.
-
-For a detailed experience report, see [I Wasn't Trying to Build an App](docs/case_study/), a case study of growing an adaptive music-recommendation system through ordinary Pit use.
-
-## See one call
-
-One call can inspect files and Git state in parallel, then return only the useful summary:
+Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It swaps Pi's built-in tools for a single `typescript` tool. Instead of reading a file, running a command, and making an edit in three separate turns, the model writes one small TypeScript function against the capabilities it needs and gets back only the value that function returns.
 
 ```ts
 async ({ workspace: { read }, git: { status: gitStatus } }) => {
@@ -35,44 +20,54 @@ async ({ workspace: { read }, git: { status: gitStatus } }) => {
 }
 ```
 
-The resolved value becomes the tool result. Pi does not need a separate tool call for each read, command, or intermediate calculation.
+That call reads a file and checks Git status in parallel, then hands the model a three-field summary instead of two raw outputs.
 
-## Install Pit
+## Why try it
 
-Pit requires Node 22.19 or newer. The current compatibility target is Pi 0.86.0; other Pi versions may work, but they are not part of the release guarantee. During Git package installation, Pit downloads and verifies the matching Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. Submitted programs then run in the in-process Wasmtime/QuickJS executor by default. If no verified prebuild is available, Pit warns and temporarily uses the deprecated permission-restricted Node executor.
+- **Fewer round trips.** Related reads, commands, and edits, plus the logic between them, fit in one call.
+- **Quieter context.** Intermediate output stays inside the call; only the returned value reaches the model.
+- **Earlier feedback.** Each call is type-checked against the capability contract before it runs, with source-located diagnostics.
+- **Workflows that stick.** A call that works can be saved as a typed function and reused later in the session, across a project, or in all your projects.
 
-Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
+Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct filesystem, network, or process access. Host effects happen only through the capabilities the call asks for, and results are bounded so the context and TUI stay compact.
 
-Install the pinned release to user scope:
+It is a different way of working and won't suit every setup. Pit replaces Pi's default tools for the whole session (you can [allow specific others](#allow-other-tools)), and everything the model does goes through TypeScript.
+
+For a longer first-hand account, see [I Wasn't Trying to Build an App](docs/case_study/), a case study of growing a music-recommendation system through everyday Pit use.
+
+## Install
+
+Pit needs Node 22.19 or newer and is tested with Pi 0.86.0; other Pi versions may work.
+
+Install the latest version:
 
 ```sh
+pi install git:github.com/cv/pit
+```
+
+This follows `main`, the branch releases are cut from; every change passes CI before it merges. To pick up new changes, run `pi update git:github.com/cv/pit`, then `/reload` in Pi or restart it.
+
+Other ways to install:
+
+```sh
+# Try it for one session without changing your settings
+pi -e git:github.com/cv/pit
+
+# Install for the current project only (writes .pi/settings.json)
+pi install -l git:github.com/cv/pit
+
+# Pin a release; package updates leave pinned installs where they are
 pi install git:github.com/cv/pit@v0.17.0
 ```
 
-Install the pinned release for the current project:
+See [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) for what changed between versions. Pit is distributed from GitHub only; it isn't published to npm.
 
-```sh
-pi install -l git:github.com/cv/pit@v0.17.0
-```
+Calls run in a Wasmtime sandbox through a prebuilt addon for Linux, macOS, or Windows on ARM64 or x64. If no addon is available for your machine, Pit warns and falls back to a deprecated, permission-restricted Node executor.
 
-Use the pinned release one time without changing settings:
-
-```sh
-pi -e git:github.com/cv/pit@v0.17.0
-```
-
-Update an existing unpinned Git installation and reload extensions:
-
-```sh
-pi update git:github.com/cv/pit
-```
-
-Then run `/reload` in Pi.
-
-Pit intentionally replaces the active coding tool set with `typescript` when each session starts, including when Pi's `defaultTools` setting names other tools.
+When a session starts, Pit makes `typescript` the only active coding tool, even if Pi's `defaultTools` setting lists others.
 
 > [!IMPORTANT]
-> Review the source before installation. Pi extensions run with the permissions of the host process. Pit restricts submitted code, but its host capabilities can still change files, run commands, and access the network.
+> Pi extensions run with your user's permissions, so review the source before installing. Pit sandboxes the code the model writes, but the capabilities it exposes can still change files, run commands, and reach the network.
 
 ## Know what Pit can do
 
@@ -283,7 +278,7 @@ Use `functions.promote(name, summary, { to: "user" })` or **Save to user scope**
 
 Files have one documented function declaration and canonical path-derived identifiers: `company/check.ts` declares `check` and is injected as `company.check`. Alternate dotted filenames, case-only collisions, and leaf/namespace collisions are rejected. Discovery is bounded; symlinked subdirectories are not followed and symlinked function files are rejected. Invalid definitions reserve their identifier so calls cannot silently fall back to a lower implementation. Fix or explicitly remove the invalid definition, then reload external edits.
 
-This upgrade intentionally removes the old `globalFunctions` enablement settings, `listGlobal`/`getGlobal`/`removeGlobal` APIs, and `{ to: "global" }` promotion. Files in `${PI_CODING_AGENT_DIR}/pit/functions/` are ignored and left untouched. Old session entries are not replayed. Recreate required functions with explicit dependencies and move persistent files manually; see the [migration guide](docs/function-system-migration.md).
+Upgrading from a version before 0.16? User functions moved, and the old `globalFunctions` settings and global-management APIs were removed. See the [migration guide](docs/function-system-migration.md).
 
 ### Allow other tools
 
