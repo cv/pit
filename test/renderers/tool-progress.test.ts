@@ -41,8 +41,7 @@ describe("tool rendering", () => {
       { content: [{ type: "text", text: "hello" }], details: { value: "hello", truncated: false } },
       { expanded: false, isPartial: false },
     );
-    expect(stringResult).toContain("Returned string (0.0s)");
-    expect(stringResult).not.toContain('"hello"');
+    expect(stringResult).toContain('Returned string: "hello" (0.0s)');
     const arrayResult = renderToolResult(
       { content: [], details: { value: [1, 2], truncated: false } },
       { expanded: false, isPartial: false },

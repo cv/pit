@@ -13,7 +13,7 @@ import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderRead(
   value: unknown,
-  { theme }: RenderContext,
+  { theme, details }: RenderContext,
 ): RenderedResultValue | undefined {
   if (
     !isRecord(value) ||
@@ -45,6 +45,9 @@ export function renderRead(
   ]
     .filter(Boolean)
     .join(", ");
+  const summary = `${value.file}, ${range}, ${flags}`;
+  const outcome = value.truncated || value.hasMore ? "warning" : "success";
+  if (details === false) return { kind: "read", summary, outcome, lines: [] };
   const lines = [
     `${theme.fg("toolTitle", theme.bold(value.file))} ${theme.fg("dim", `(${range}; ${flags}; rev ${value.revision})`)}`,
   ];
@@ -64,9 +67,9 @@ export function renderRead(
   }
   return {
     kind: "read",
-    outcome: value.truncated || value.hasMore ? "warning" : "success",
+    outcome,
     lines,
-    summary: `${value.file}, ${range}, ${flags}`,
+    summary,
     detailLines: [theme.fg("dim", `revision: ${value.revision}`), ...lines.slice(1)],
     hangingIndents: offsetHangingIndents(detailHangingIndents, { lines: 1 }),
     detailHangingIndents: offsetHangingIndents(detailHangingIndents, { lines: 1 }),

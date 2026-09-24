@@ -46,6 +46,7 @@ export class ExecutionProgressController {
     }
     const current = this.#shell.get(event.id) ?? {
       id: event.id,
+      ...(event.traceSequence === undefined ? {} : { traceSequence: event.traceSequence }),
       command: sanitizeTerminalText(event.command),
       status: "running" as const,
       output: "",

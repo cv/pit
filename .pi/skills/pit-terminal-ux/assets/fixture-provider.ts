@@ -15,6 +15,32 @@ function processFixture(label: string, script: string, timeoutMs = 5000, raise =
   };
 }
 const fixtures: Record<string, ToolCall["arguments"]> = {
+  "trace-a": { label: "TRACE A: simple value", code: "async ({}) => 42" },
+  "trace-b": {
+    label: "TRACE B: one file",
+    code: 'async ({ workspace: { read } }) => read(".gitignore")',
+  },
+  "trace-c": {
+    label: "TRACE C: two files",
+    code: 'async ({ workspace: { read } }) => Promise.all([read(".gitignore"), read(".oxfmtrc.json")])',
+  },
+  "trace-d": {
+    label: "TRACE D: bc sum",
+    code: "async ({ shell: { exec } }) => exec(\"printf '2 + 3\\\\n' | bc\", { raise: true })",
+  },
+  "trace-e": {
+    label: "TRACE E: wc then bc",
+    code: `async ({ shell: { execFile, exec } }) => {
+      const counts = await Promise.all([".gitignore", ".oxfmtrc.json"].map(async file => {
+        const result = await execFile("wc", ["-l", file], { raise: true });
+        const lines = Number(result.stdout.trim().split(/\\s+/)[0]);
+        if (result.truncated || !Number.isSafeInteger(lines) || lines < 0) throw new Error("Invalid wc output");
+        return { file, lines };
+      }));
+      const sum = await exec("printf '" + counts.map(item => item.lines).join(" + ") + "\\\\n' | bc", { raise: true });
+      return { counts, sum };
+    }`,
+  },
   transport: {},
   success: processFixture(
     "UX SUCCESS: separate streams",

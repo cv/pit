@@ -27,6 +27,7 @@ export interface DashboardStatusCount {
 
 export interface DashboardCall {
   kind: "call";
+  sequences: number[];
   capability: string;
   method: string;
   /** Aggregate status, prioritizing failed, rejected, then running calls. */
@@ -70,12 +71,21 @@ function sameTraceGroup(left: CapabilityTrace, right: CapabilityTrace): boolean 
   );
 }
 
-function groupAdjacentTraces(traces: CapabilityTrace[]): CapabilityTraceGroup[] {
+function groupAdjacentTraces(
+  traces: CapabilityTrace[],
+  linked: Set<number>,
+): CapabilityTraceGroup[] {
   const groups: CapabilityTraceGroup[] = [];
   for (const trace of traces) {
     const previous = groups.at(-1);
     const previousTrace = previous?.traces.at(-1);
-    if (previous && previousTrace && sameTraceGroup(previousTrace, trace)) {
+    if (
+      previous &&
+      previousTrace &&
+      !linked.has(previousTrace.sequence) &&
+      !linked.has(trace.sequence) &&
+      sameTraceGroup(previousTrace, trace)
+    ) {
       previous.traces.push(trace);
     } else {
       groups.push({ sequence: trace.sequence, traces: [trace] });
@@ -118,6 +128,7 @@ function callModel(group: CapabilityTraceGroup, now: number): DashboardCall {
   const trace = group.traces.at(-1) as CapabilityTrace;
   return {
     kind: "call",
+    sequences: group.traces.map((entry) => entry.sequence),
     capability: trace.capability,
     method: trace.method,
     status: traceGroupStatus(group),
@@ -334,7 +345,12 @@ export function buildExecutionDashboardModel(
   now = Date.now(),
 ): ExecutionDashboardModel {
   const traces = details?.traces ?? [];
-  const recent = groupAdjacentTraces(traces);
+  const linked = new Set(
+    (details?.progress ?? []).flatMap((entry) =>
+      entry.traceSequence === undefined ? [] : [entry.traceSequence],
+    ),
+  );
+  const recent = groupAdjacentTraces(traces, linked);
   const index = indexTraceFunctions(traces);
   const involved = findInvolvedInvocations(recent, index.contexts);
   const calls = groupDashboardCalls(recent);

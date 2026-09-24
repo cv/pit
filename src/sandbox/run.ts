@@ -1,4 +1,5 @@
 import type { CapabilityTrace } from "../execution/capability-trace.js";
+import type { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { FunctionEnvironment, FunctionDefinitionReference } from "../functions/environment.js";
 import type { CapabilityHandler } from "./dispatcher.js";
 import {
@@ -18,6 +19,7 @@ export {
 
 export interface SandboxOptions extends FunctionEnvironment {
   definition?: FunctionDefinitionReference;
+  timings?: ExecutionTimingRecorder;
   memoryLimitMb?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -51,6 +53,7 @@ export async function runWithFunctionExecutor(
 ): Promise<unknown> {
   const execution = executionOptions(options);
   const program = await prepareSandboxProgram(source, {
+    ...(options.timings ? { timings: options.timings } : {}),
     ...(options.definition ? { definition: options.definition } : {}),
     ...(options.invalidDefinitions ? { invalidDefinitions: options.invalidDefinitions } : {}),
     ...(options.userFunctions ? { userFunctions: options.userFunctions } : {}),
@@ -58,6 +61,7 @@ export async function runWithFunctionExecutor(
     ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
     ...(options.input === undefined ? {} : { input: options.input }),
   });
+  options.timings?.enter("execution");
   return executor.execute(program, handler, execution);
 }
 

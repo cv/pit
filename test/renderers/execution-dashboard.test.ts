@@ -102,13 +102,13 @@ describe("execution dashboard rendering", () => {
       name: "a failed call",
       traces: [trace(1, "exec", "failed", 0, 500)],
       settled: true,
-      line: "✗ shell.exec failed, 0.5s",
+      line: "✗ shell.exec failed, 500ms",
     },
     {
       name: "a rejected call",
       traces: [trace(1, "execFile", "rejected", 0, 0)],
       settled: false,
-      line: "✗ shell.execFile rejected, 0.0s",
+      line: "✗ shell.execFile rejected, 0ms",
     },
   ])("words $name from structured call facts", ({ traces, settled, line }) => {
     expect(renderExecutionDashboard({ traces }, theme, settled).trim()).toBe(line);
@@ -139,7 +139,7 @@ describe("execution dashboard rendering", () => {
     ];
     const live = rows(renderExecutionDashboard({ traces }, theme));
     expect(live[0]).toBe("… 11 earlier completed calls hidden while running; listed when finished");
-    expect(live[1]).toBe("✗ shell.execFile failed, 0.1s");
+    expect(live[1]).toBe("✗ shell.execFile failed, 100ms");
     expect(live).toHaveLength(14);
     expect(live.at(-1)).toBe("● shell.spawn running, 1.0s");
 
@@ -164,7 +164,7 @@ describe("execution dashboard rendering", () => {
     expect(live).toContain("↳ project function pure #2");
     expect(live.slice(-2)).toEqual([
       "↳ project function late #3",
-      "  · shell.spawn completed, 0.0s",
+      "  · shell.spawn completed, 10ms",
     ]);
     expect(live.join("\n")).not.toContain("function early");
     expect(rows(renderExecutionDashboard({ traces }, theme, true))).toContain(

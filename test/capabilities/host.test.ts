@@ -509,6 +509,7 @@ describe("host capabilities", () => {
   it("truncates oversized tool output", async () => {
     const result = await run(`({}) => "x".repeat(200000)`);
     expect(result.content[0].text).toContain("[Result truncated]");
-    expect(result.details).toEqual({ value: undefined, truncated: true });
+    expect(result.details).toMatchObject({ value: undefined, truncated: true });
+    expect(result.details.timings.totalMs).toBeGreaterThanOrEqual(0);
   });
 });

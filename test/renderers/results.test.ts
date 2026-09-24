@@ -307,7 +307,7 @@ describe("result renderers", () => {
         },
       ],
     });
-    expect(nestedRead).toContain("items (array, 1 item)");
+    expect(nestedRead).toContain("items (reads, 1 file)");
     expect(stripTerminalSequences(nestedRead)).toContain("1:abc|heading");
 
     expect(render("first\rsecond")).toContain("\nfirst\nsecond");
