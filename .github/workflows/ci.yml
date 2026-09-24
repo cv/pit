@@ -39,5 +39,7 @@ jobs:
         run: npm run package:check
       - name: Run static checks
         run: npm run check
+      - name: Check jq for workflow query tests
+        run: jq --version
       - name: Test with coverage
         run: npm run coverage

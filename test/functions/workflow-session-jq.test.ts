@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { skipWithoutJq } from "../helpers/jq.js";
 import { loadWorkflowFunction, processResult } from "../helpers/workflow-function.js";
 
 const execute = promisify(execFile);
@@ -55,7 +56,7 @@ const toolCall = (id: string, label = "Edit file", code = "") => ({
   arguments: { label, code },
 });
 
-describe("session queries with real jq", () => {
+describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
   it("preserves the established audit of the 8 MB recorded case-study session", async () => {
     const { analyze } = await workflows();
     const result = await analyze({ file: resolve("docs/case_study/session.jsonl"), examples: 2 });
