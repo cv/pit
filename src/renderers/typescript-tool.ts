@@ -219,7 +219,7 @@ function renderExecutionDetails(
   // Error and upstream-truncated views may not display details.value at all.
   const returnedValue =
     returnedLines.length > 0 && !details?.truncated ? details?.value : undefined;
-  const retained = renderRetainedShellOutput(details, theme, returnedLines, returnedValue);
+  const retained = renderRetainedShellOutput(details, theme, returnedValue);
   if (retained)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Retained process output (tails)"))}${retained}`;
   const dashboard = renderExecutionDashboard(details, theme, true);

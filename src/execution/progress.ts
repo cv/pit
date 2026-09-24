@@ -11,6 +11,12 @@ import type {
 
 const UPDATE_INTERVAL_MS = 200;
 const MAX_COMPLETED_SHELL_CALLS = 32;
+/** Live output kept per shell call, shown by progress views and retained-output sections. */
+const SHELL_OUTPUT_TAIL = { maxBytes: 4000, maxLines: 8 } as const;
+
+export function retainShellOutputTail(output: string): string {
+  return truncateTail(output, SHELL_OUTPUT_TAIL).content;
+}
 
 export class ExecutionProgressController {
   readonly #traces = new CapabilityTraceCollector();
@@ -45,10 +51,9 @@ export class ExecutionProgressController {
       output: "",
     };
     if (event.phase === "output") {
-      current.output = truncateTail(
+      current.output = retainShellOutputTail(
         current.output + sanitizeTerminalText(event.chunk, { preserveSgr: true }),
-        { maxBytes: 4000, maxLines: 8 },
-      ).content;
+      );
     }
     if (event.phase === "end") {
       current.status = "done";

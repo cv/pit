@@ -1,5 +1,4 @@
-import { stripTerminalSequences } from "@earendil-works/pi-tui";
-
+import { retainShellOutputTail } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { parseProcessResult } from "../process/results.js";
@@ -72,18 +71,34 @@ function shellProgressOutput(group: ShellProgressGroup): string {
   return "";
 }
 
-function returnedProcessOutputs(value: unknown): string[] {
+interface ReturnedOutput {
+  tail: string;
+  code?: number;
+}
+
+function retainedTail(text: string): string {
+  return sanitizeTerminalText(
+    retainShellOutputTail(sanitizeTerminalText(text, { preserveSgr: true })),
+  );
+}
+
+/** Returned texts that could be a shell call's whole output, reduced by the live retention rule. */
+function returnedOutputs(value: unknown): ReturnedOutput[] {
   const pending = [value];
   const seen = new WeakSet<object>();
-  const outputs: string[] = [];
+  const outputs: ReturnedOutput[] = [];
   while (pending.length > 0) {
     const entry = pending.pop();
+    if (typeof entry === "string") {
+      if (entry) outputs.push({ tail: retainedTail(entry) });
+      continue;
+    }
     if (!entry || typeof entry !== "object" || seen.has(entry)) continue;
     seen.add(entry);
     const result = parseProcessResult(entry);
     if (result) {
-      // Match the displayed stdout-then-stderr ordering, not an unordered set of lines.
-      outputs.push(sanitizeTerminalText(result.stdout + result.stderr));
+      // Captured chunks interleave streams; stdout-then-stderr matches only when they did not.
+      outputs.push({ tail: retainedTail(result.stdout + result.stderr), code: result.code });
     } else {
       pending.push(...Object.values(entry));
     }
@@ -91,15 +106,22 @@ function returnedProcessOutputs(value: unknown): string[] {
   return outputs;
 }
 
+/** A completed call is shown above only when a returned text yields exactly its retained tail. */
+function returnedWhole(entry: ShellProgress, outputs: ReturnedOutput[]): boolean {
+  if (entry.status !== "done") return false;
+  const retained = sanitizeTerminalText(entry.output);
+  return outputs.some(
+    ({ tail, code }) => (code === undefined || code === entry.code) && tail === retained,
+  );
+}
+
 export function renderRetainedShellOutput(
   details: ProgressDetails | undefined,
   theme: RenderTheme,
-  returnedLines: string[] = [],
   returnedValue?: unknown,
 ): string {
   let text = "";
-  const displayed = stripTerminalSequences(returnedLines.join("\n"));
-  const processOutputs = returnedProcessOutputs(returnedValue);
+  let outputs: ReturnedOutput[] | undefined;
   for (const entry of details?.progress ?? []) {
     const status =
       entry.status === "done"
@@ -107,10 +129,10 @@ export function renderRetainedShellOutput(
         : "unfinished when invocation ended";
     text += `\n${theme.fg("toolTitle", `[${status}] ${entry.command}`)}`;
     if (entry.output) {
-      const output = sanitizeTerminalText(entry.output);
-      const alreadyShown =
-        displayed.includes(output) || processOutputs.some((value) => value.includes(output));
-      text += alreadyShown ? `\n${theme.fg("dim", "(output shown above)")}` : `\n${entry.output}`;
+      outputs ??= returnedOutputs(returnedValue);
+      text += returnedWhole(entry, outputs)
+        ? `\n${theme.fg("dim", "(output shown above)")}`
+        : `\n${entry.output}`;
     }
   }
   if (details?.progressTruncated)
