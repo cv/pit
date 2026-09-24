@@ -2,13 +2,16 @@
  * Reports bounded uncovered-line and branch markers from Pit's generated coverage HTML.
  *
  * @param input.files - Optional source paths such as src/index.ts.
- * @param input.limit - Maximum uncovered markers. The default is 100.
+ * @param input.limit - Maximum uncovered markers (1-500). The default is 100.
  */
 async function inspectPitCoverageGaps(
   { workspace: { read, search } },
   input: { files?: string[]; limit?: number } = {},
 ) {
-  const limit = Math.max(1, Math.min(input.limit ?? 100, 500));
+  const limit = input.limit ?? 100;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+    throw new Error("limit must be an integer between 1 and 500");
+  }
   const requested = [...new Set(input.files ?? [])];
   const paths =
     requested.length > 0 ? requested.map((file) => `coverage/${file}.html`) : ["coverage"];

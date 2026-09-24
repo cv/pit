@@ -1,25 +1,33 @@
 /**
  * Reviews bounded staged and unstaged Git changes for Pit.
- * Each diff stops at whichever of its line or byte limits comes first; effective limits are returned.
+ * Each diff stops at whichever of its line or byte limits comes first; the limits used are returned.
  *
- * @param input.diffLines - Maximum lines in each diff. The default is 240.
- * @param input.diffBytes - Maximum bytes in each diff. The default is 12000.
- * @param input.commits - Recent commits to include. The default is 5.
+ * @param input.diffLines - Maximum lines in each diff (20-800). The default is 240.
+ * @param input.diffBytes - Maximum bytes in each diff (1000-20000). The default is 12000.
+ * @param input.commits - Recent commits to include (1-20). The default is 5.
  */
 async function reviewPitChanges(
   { preparePitDelivery, git: { diff: gitDiff, log: gitLog } },
   input: { diffLines?: number; diffBytes?: number; commits?: number } = {},
 ) {
-  for (const [name, value] of Object.entries(input)) {
-    if (value !== undefined && !Number.isInteger(value)) {
-      throw new Error(`${name} must be an integer`);
+  const integerInput = (
+    name: string,
+    value: number | undefined,
+    fallback: number,
+    min: number,
+    max: number,
+  ) => {
+    const chosen = value ?? fallback;
+    if (!Number.isInteger(chosen) || chosen < min || chosen > max) {
+      throw new Error(`${name} must be an integer between ${min} and ${max}`);
     }
-  }
+    return chosen;
+  };
   const limits = {
-    diffLines: Math.max(20, Math.min(input.diffLines ?? 240, 800)),
+    diffLines: integerInput("diffLines", input.diffLines, 240, 20, 800),
     // Two diffs at the maximum still leave room for summaries within the tool output limit.
-    diffBytes: Math.max(1000, Math.min(input.diffBytes ?? 12_000, 20_000)),
-    commits: Math.max(1, Math.min(input.commits ?? 5, 20)),
+    diffBytes: integerInput("diffBytes", input.diffBytes, 12_000, 1000, 20_000),
+    commits: integerInput("commits", input.commits, 5, 1, 20),
   };
   const diffOptions = {
     maxBytes: limits.diffBytes,

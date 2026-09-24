@@ -25,6 +25,11 @@ result types from injected functions instead of copying their schemas.
 
 ## Bounds and failure contracts
 
+- Numeric inputs are integers within the ranges their documentation states.
+  Fractional, non-finite, or out-of-range values are rejected before any host call
+  instead of being silently clamped. The only derived cap is `waitForGitHubRun()`'s
+  285-second polling budget: checks that would not fit after the initial delay are
+  skipped, and a timeout reports both `attempts` made and `requestedAttempts`.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
 - `listChangedGitFiles()` preserves literal filenames, uses rename destinations,

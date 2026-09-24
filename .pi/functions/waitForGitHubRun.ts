@@ -1,9 +1,11 @@
 /**
  * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
  *
- * @param input.attempts - Maximum status checks. The default is 12.
- * @param input.intervalMs - Delay between checks. The default is 15000 ms.
- * @param input.initialDelayMs - Delay before the first check. The default is 120000 ms.
+ * @param input.attempts - Maximum status checks (1-120). The default is 12. Checks that would not
+ *   fit the 285 s polling budget after the initial delay are skipped; a timeout reports both
+ *   attempts made and requestedAttempts.
+ * @param input.intervalMs - Delay between checks (1000-30000). The default is 15000 ms.
+ * @param input.initialDelayMs - Delay before the first check (0-120000). The default is 120000 ms.
  * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
  */
 async function waitForGitHubRun(
@@ -17,12 +19,28 @@ async function waitForGitHubRun(
     raise?: boolean;
   },
 ) {
-  const intervalMs = Math.max(1000, Math.min(input.intervalMs ?? 15000, 30000));
-  const initialDelayMs = Math.max(0, Math.min(input.initialDelayMs ?? 120000, 120000));
-  const requestedAttempts = Math.max(1, Math.min(input.attempts ?? 12, 120));
-  const pollingBudgetMs = Math.max(0, 285000 - initialDelayMs);
-  const maximumAttempts = Math.floor(pollingBudgetMs / intervalMs) + 1;
-  const attempts = Math.min(requestedAttempts, maximumAttempts);
+  const integerInput = (
+    name: string,
+    value: number | undefined,
+    fallback: number,
+    min: number,
+    max: number,
+  ) => {
+    const chosen = value ?? fallback;
+    if (!Number.isInteger(chosen) || chosen < min || chosen > max) {
+      throw new Error(`${name} must be an integer between ${min} and ${max}`);
+    }
+    return chosen;
+  };
+  const intervalMs = integerInput("intervalMs", input.intervalMs, 15000, 1000, 30000);
+  const initialDelayMs = integerInput("initialDelayMs", input.initialDelayMs, 120000, 0, 120000);
+  const requestedAttempts = integerInput("attempts", input.attempts, 12, 1, 120);
+  // Keeps the whole wait inside the 300 s tool invocation limit.
+  const POLLING_BUDGET_MS = 285000;
+  const attempts = Math.min(
+    requestedAttempts,
+    Math.floor((POLLING_BUDGET_MS - initialDelayMs) / intervalMs) + 1,
+  );
   const raise = input.raise ?? true;
   if (initialDelayMs > 0) {
     await new Promise<void>((resolve) => setTimeout(resolve, initialDelayMs));
@@ -56,8 +74,14 @@ async function waitForGitHubRun(
       await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
     }
   }
+  const budgetNote =
+    attempts < requestedAttempts
+      ? `; ${requestedAttempts} were requested, but only ${attempts} fit the ${POLLING_BUDGET_MS / 1000} s polling budget`
+      : "";
   if (raise) {
-    throw new Error(`GitHub Actions run ${input.id} did not complete after ${attempts} checks`);
+    throw new Error(
+      `GitHub Actions run ${input.id} did not complete after ${attempts} checks${budgetNote}`,
+    );
   }
-  return { status: "timed_out", id: input.id, attempts };
+  return { status: "timed_out", id: input.id, attempts, requestedAttempts };
 }

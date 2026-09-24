@@ -1,16 +1,17 @@
 /**
  * Aggregates workflow failures and usage patterns across recent Pit sessions.
  *
- * @param input.limit - Maximum sessions to inspect. The default is 12.
- * @param input.examples - Repeated failure labels retained per session. The default is 5.
+ * @param input.limit - Maximum sessions to inspect (1-20). The default is 12.
+ * @param input.examples - Repeated failure labels retained per session (1-30, validated by
+ *   analyzePitSession). The default is 5.
  */
 async function analyzePitSessions(
   { context: { get }, workspace: { glob }, analyzePitSession },
   input: { limit?: number; examples?: number } = {},
 ) {
-  for (const [name, value] of Object.entries(input)) {
-    if (value !== undefined && !Number.isInteger(value))
-      throw new Error(`${name} must be an integer`);
+  const limit = input.limit ?? 12;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+    throw new Error("limit must be an integer between 1 and 20");
   }
   const runtime = await get();
   if (!runtime.sessionFile) {
@@ -26,7 +27,6 @@ async function analyzePitSessions(
   });
   if (listed.truncated)
     throw new Error("Session discovery was truncated; refusing an incomplete selection");
-  const limit = Math.max(1, Math.min(input.limit ?? 12, 20));
   const files = [...listed.entries].sort().reverse().slice(0, limit);
   const audits: Array<Awaited<ReturnType<typeof analyzePitSession>>> = [];
   for (let offset = 0; offset < files.length; offset += 4) {
