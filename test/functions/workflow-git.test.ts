@@ -197,4 +197,30 @@ describe("Git readiness and review composition", () => {
     expect(preparePitDelivery).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(["--oneline", "-5"], expect.objectContaining({ raise: true }));
   });
+
+  it("bounds each diff by its own line and byte limits and reports them", async () => {
+    const review = await loadWorkflowFunction("reviewPitChanges");
+    const preparePitDelivery = vi.fn().mockResolvedValue({
+      status: "",
+      diffCheck: "",
+      stagedDiffCheck: "",
+      ready: true,
+      truncated: false,
+    });
+    const diff = vi.fn(async (_args: string[], _options: Record<string, unknown>) =>
+      processResult(),
+    );
+    const log = vi.fn().mockResolvedValue(processResult());
+    const result = await review(
+      { preparePitDelivery, git: { diff, log } },
+      { diffLines: 100, diffBytes: 15000 },
+    );
+    expect(result.limits).toEqual({ diffLines: 100, diffBytes: 15000, commits: 5 });
+    for (const args of [[], ["--cached"]]) {
+      expect(diff).toHaveBeenCalledWith(
+        args,
+        expect.objectContaining({ maxLines: 100, maxBytes: 15000 }),
+      );
+    }
+  });
 });
