@@ -6,7 +6,7 @@ import {
   semanticOutcome,
 } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import { isRecord, parseCompleteJson, renderJson } from "./shared.js";
+import { isRecord, offsetHangingIndents, parseCompleteJson, plural, renderJson } from "./shared.js";
 import type { RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 // oxlint-disable-next-line no-control-regex
@@ -26,9 +26,6 @@ interface NpmSummary {
   acceptedExitCodes?: readonly number[];
 }
 
-function plural(count: number, noun: string, pluralForm = `${noun}s`): string {
-  return `${count} ${count === 1 ? noun : pluralForm}`;
-}
 function field(value: unknown, key: string): unknown {
   return isRecord(value) ? value[key] : undefined;
 }
@@ -92,12 +89,7 @@ function renderer(
       display.push(context.theme.fg("dim", "(no output)"));
     }
     // Both views keep exactly one line (header or exit code) before the output.
-    const hangingIndents = Object.fromEntries(
-      Object.entries(rendered.hangingIndents ?? {}).map(([index, width]) => [
-        Number(index) + 1,
-        width,
-      ]),
-    );
+    const hangingIndents = offsetHangingIndents(rendered.hangingIndents, { lines: 1 });
     return {
       kind: "npm",
       lines: display,

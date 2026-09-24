@@ -11,6 +11,8 @@ import {
   indent,
   isRecord,
   type JsonRecord,
+  offsetHangingIndents,
+  outcomeMarker,
   plural,
   renderJson,
 } from "./shared.js";
@@ -115,13 +117,14 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
         })
       : undefined;
     const outcome = entry.ok ? (nested?.outcome ?? "success") : "error";
-    const status = context.theme.fg(outcome, { success: "✓", warning: "⚠", error: "✗" }[outcome]);
+    const status = outcomeMarker(context.theme, outcome);
     lines.push(`${status} [${entry.index}] ${entry.kind}`);
     if (nested) {
       children.push(nested);
-      for (const [index, width] of Object.entries(nested.hangingIndents ?? {})) {
-        hangingIndents[lines.length + Number(index)] = width + 2;
-      }
+      Object.assign(
+        hangingIndents,
+        offsetHangingIndents(nested.hangingIndents, { lines: lines.length, columns: 2 }),
+      );
       lines.push(...indent(nested.lines));
     } else {
       lines.push(context.theme.fg("error", `  ${entry.error}`));
@@ -134,9 +137,7 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
     outcome: failed ? "error" : combinedOutcome(children),
     detailLines: lines.slice(1),
     hangingIndents,
-    detailHangingIndents: Object.fromEntries(
-      Object.entries(hangingIndents).map(([index, width]) => [Number(index) - 1, width]),
-    ),
+    detailHangingIndents: offsetHangingIndents(hangingIndents, { lines: -1 }),
   };
 }
 

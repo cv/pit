@@ -6,7 +6,7 @@ import {
   parseProcessResult,
   semanticOutcome,
 } from "../process/results.js";
-import { parseCompleteJson } from "./shared.js";
+import { parseCompleteJson, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 const STATUS_PORCELAIN_PATTERN = /^.. /;
@@ -24,10 +24,6 @@ function gitRenderer(renderer: ParsedGitRenderer): ValueRenderer {
     const result = parseProcessResult(value);
     return result ? renderer(result, context) : undefined;
   };
-}
-
-function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
 function reportsDifferences(result: DisplayProcessResult): boolean {
