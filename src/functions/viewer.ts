@@ -10,6 +10,11 @@ import {
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { FunctionInspection } from "./inspection.js";
 
+type MetadataLine = {
+  label?: string;
+  text: string;
+};
+
 export class FunctionViewer {
   private lines: string[] = [];
   private omitted = 0;
@@ -38,32 +43,60 @@ export class FunctionViewer {
   render(width: number): string[] {
     const definition = this.definition;
     const metadata = [
-      `Scope: ${definition.scope}${definition.effective ? " (effective)" : ` (shadowed; effective: ${definition.effectiveScope})`}`,
-      `Implementation: ${definition.kind}${definition.readOnly ? "; read-only" : ""}${definition.sealed ? "; sealed" : ""}`,
-      `Origin: ${definition.origin}`,
-      `Signature: ${definition.signature}`,
-      ...(definition.documentation ? [definition.documentation] : []),
-      "Override chain:",
-      ...definition.overrideChain.map(
-        (entry) =>
-          `  ${entry.scope}${entry.effective ? " (effective)" : ""}${entry.available ? "" : " (invalid)"}: ${entry.origin}`,
-      ),
-      `Dependencies: ${definition.resolvedDependencies.map((entry) => `${entry.name} [${entry.scope ?? "missing"}]`).join(", ") || "none"}`,
-      `$next: ${definition.next ? `${definition.next.name} [${definition.next.scope}]${definition.next.available ? "" : " (invalid)"}` : "none"}`,
-      `Direct effects: ${definition.directEffects.join(", ") || "none"}`,
-      `Transitive effects: ${definition.error ? "unavailable" : definition.effects.join(", ") || "none"}`,
-      ...(definition.error ? [`Unavailable: ${definition.error}`] : []),
+      {
+        label: "Scope",
+        text: `${definition.scope}${definition.effective ? " (effective)" : ` (shadowed; effective: ${definition.effectiveScope})`}`,
+      },
+      {
+        label: "Implementation",
+        text: `${definition.kind}${definition.readOnly ? "; read-only" : ""}${definition.sealed ? "; sealed" : ""}`,
+      },
+      { label: "Origin", text: definition.origin },
+      { label: "Signature", text: definition.signature },
+      ...(definition.documentation ? [{ text: definition.documentation }] : []),
+      { label: "Override chain", text: "" },
+      ...definition.overrideChain.map((entry) => ({
+        text: `  ${entry.scope}${entry.effective ? " (effective)" : ""}${entry.available ? "" : " (invalid)"}: ${entry.origin}`,
+      })),
+      {
+        label: "Dependencies",
+        text:
+          definition.resolvedDependencies
+            .map((entry) => `${entry.name} [${entry.scope ?? "missing"}]`)
+            .join(", ") || "none",
+      },
+      {
+        label: "$next",
+        text: definition.next
+          ? `${definition.next.name} [${definition.next.scope}]${definition.next.available ? "" : " (invalid)"}`
+          : "none",
+      },
+      { label: "Direct effects", text: definition.directEffects.join(", ") || "none" },
+      {
+        label: "Transitive effects",
+        text: definition.error ? "unavailable" : definition.effects.join(", ") || "none",
+      },
+      ...(definition.error ? [{ label: "Unavailable", text: definition.error }] : []),
       ...(definition.kind === "native"
-        ? ["Native-backed definition; no authored source is exposed."]
+        ? [{ text: "Native-backed definition; no authored source is exposed." }]
         : []),
     ];
-    const metadataLines = metadata.flatMap((line) => sanitizeTerminalText(line).split("\n"));
+    const metadataLines = metadata.flatMap<MetadataLine>((line) => {
+      const safeText = sanitizeTerminalText(line.text).split("\n");
+      return safeText.map((text, index) => {
+        const label = index === 0 && line.label ? sanitizeTerminalText(line.label) : undefined;
+        return label ? { label, text } : { text };
+      });
+    });
     return [
       truncateToWidth(this.theme.fg("toolTitle", this.theme.bold(definition.name)), width),
       "",
-      ...metadataLines
-        .slice(0, 80)
-        .map((line) => truncateToWidth(this.theme.fg("dim", line), width)),
+      ...metadataLines.slice(0, 80).map((line) => {
+        const content = line.label
+          ? `${this.theme.fg("accent", `${line.label}: `)}${this.theme.fg("text", line.text)}`
+          : this.theme.fg("text", line.text);
+        return truncateToWidth(content, width);
+      }),
       ...(metadataLines.length > 80
         ? [truncateToWidth(this.theme.fg("muted", "… metadata lines omitted"), width)]
         : []),
