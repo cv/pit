@@ -42,7 +42,7 @@ export function renderHttp(
     lines.push(
       ...(parsed === undefined
         ? value.body.split("\n")
-        : renderStructuredData(parsed, { theme, depth: 0, seen: new WeakSet() }).lines),
+        : renderStructuredData(parsed, { theme }).lines),
     );
   } else {
     lines.push(theme.fg("dim", "(empty body)"));

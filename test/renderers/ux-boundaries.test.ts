@@ -138,8 +138,14 @@ describe("renderer inspection boundaries", () => {
   it("preserves content with an empty syntax hint", () => {
     const output = renderStructuredData(
       { language: "  ", content: "first\nlast" },
-      { theme, seen: new WeakSet(), depth: 0 },
+      { theme },
     ).lines.join("\n");
     expect(stripTerminalSequences(output)).toContain("first\n  last");
+  });
+
+  it("applies a caller syntax hint to multiline structured text", () => {
+    const output = renderStructuredData("-old\n+new", { theme, syntaxLanguage: "diff" });
+    expect(output.kind).toBe("diff");
+    expect(stripTerminalSequences(output.lines.join("\n"))).toBe("-old\n+new");
   });
 });

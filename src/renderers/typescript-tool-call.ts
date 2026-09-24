@@ -104,11 +104,7 @@ export function renderTypeScriptInputs(
   if (args.saveOnly === true) lines.push("saveOnly: true");
   if (args.timeoutMs !== undefined) lines.push(`timeoutMs: ${String(args.timeoutMs)}`);
   if (Object.hasOwn(args, "params")) {
-    const params = renderStructuredData(args.params, {
-      theme,
-      depth: 0,
-      seen: new WeakSet(),
-    }).lines;
+    const params = renderStructuredData(args.params, { theme }).lines;
     lines.push(theme.bold(theme.fg("toolTitle", "Params")), ...params);
   }
   const code = typeof args.code === "string" ? formattedDisplaySource(args.code, context) : "";
