@@ -4,6 +4,7 @@ import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
+import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { executionTiming } from "../tool/timing.js";
 import { type CapabilityCall, inferCapabilityCall } from "./capability.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
@@ -57,7 +58,9 @@ interface ToolResultContext {
   invalidate?: () => void;
 }
 
-function renderInputSection(context: ToolResultContext, theme: RenderTheme): string {
+type StatefulResultContext = WithRendererState<ToolResultContext>;
+
+function renderInputSection(context: StatefulResultContext, theme: RenderTheme): string {
   if (!context.args || Object.keys(context.args).length === 0) return "";
   const inputs = renderTypeScriptInputs(context.args, theme, {
     ...context,
@@ -122,7 +125,7 @@ function renderToolError(input: {
   fallback: string;
   duration: string;
   theme: RenderTheme;
-  context: ToolResultContext;
+  context: StatefulResultContext;
 }) {
   const rawMessage =
     input.details?.failure?.rootError || input.fallback || "TypeScript execution failed";
@@ -159,7 +162,7 @@ function renderStructuredToolValue(input: {
   details?: TypeScriptDetails;
   fallback: string;
   theme: RenderTheme;
-  context: ToolResultContext;
+  context: StatefulResultContext;
 }): ResultRenderingState {
   const { details, fallback, theme, context } = input;
   if (!(details && !details.truncated && Object.hasOwn(details, "value"))) {
@@ -237,7 +240,7 @@ function renderCompletedToolResult(input: {
   duration: string;
   theme: RenderTheme;
   rendering: ResultRenderingState;
-  context: ToolResultContext;
+  context: StatefulResultContext;
 }) {
   const { expanded, details, fallback, duration, theme, rendering } = input;
   const shown = expanded ? rendering.lines : [];
@@ -285,7 +288,7 @@ function renderToolResult(
   result: ToolResultLike,
   options: { expanded: boolean; isPartial: boolean },
   theme: RenderTheme,
-  context: ToolResultContext,
+  context: StatefulResultContext,
 ) {
   const fallback = result.content
     .filter((content) => content.type === "text")
@@ -341,6 +344,7 @@ export function renderTypeScriptToolResult(
   context: ToolResultContext,
 ) {
   try {
+    ensureRendererState(context);
     return renderToolResult(result, options, theme, context);
   } catch {
     const content = result.content

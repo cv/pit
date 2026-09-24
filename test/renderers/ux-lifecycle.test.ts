@@ -107,6 +107,33 @@ describe("terminal UX lifecycle and fallback", () => {
     }
   });
 
+  it("keeps one clock across renders when a caller omits renderer state", () => {
+    vi.useFakeTimers();
+    try {
+      const context = { executionStarted: true, invalidate: vi.fn() };
+      renderTypeScriptToolResult(
+        { content: [], details: {} },
+        { expanded: false, isPartial: true },
+        theme,
+        context,
+      );
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(1_500);
+      const output = plain(
+        renderTypeScriptToolResult(
+          { content: [], details: { value: true } },
+          { expanded: false, isPartial: false },
+          theme,
+          context,
+        ),
+      );
+      expect(output).toContain("(1.5s)");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps earlier failures and still-active processes visible during a busy update", () => {
     const progress = Array.from({ length: 8 }, (_, id) => ({
       id,
