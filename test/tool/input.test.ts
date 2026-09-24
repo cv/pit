@@ -43,6 +43,36 @@ describe("resolveToolInput", () => {
       expected: "{}",
     },
     {
+      name: "a template literal input",
+      source: "async ({}, input: `{${string}}`) => input",
+      params: encoded,
+      expected: encoded,
+    },
+    {
+      name: "a template literal without substitutions",
+      source: "async ({}, input: `{}`) => input",
+      params: "{}",
+      expected: "{}",
+    },
+    {
+      name: "a parenthesized string input",
+      source: "async ({}, input: (string)) => input",
+      params: encoded,
+      expected: encoded,
+    },
+    {
+      name: "a String input",
+      source: "async ({}, input: String) => input",
+      params: encoded,
+      expected: encoded,
+    },
+    {
+      name: "an any input",
+      source: "async ({}, input: any) => input",
+      params: encoded,
+      expected: encoded,
+    },
+    {
       name: "an unknown input",
       source: "async ({}, input: unknown) => input",
       params: encoded,
