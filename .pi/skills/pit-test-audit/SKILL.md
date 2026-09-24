@@ -1,0 +1,102 @@
+---
+name: pit-test-audit
+description: Gates new and changed Pit tests on observable contracts and credible regressions, and audits existing tests for duplication, implementation coupling, weak negative controls, and test-only production seams. Use before writing, changing, reviewing, or sweeping tests. Discovery is read-only; deletion requires recorded evidence.
+---
+
+# Pit test audit
+
+## Purpose and modes
+
+Optimize confidence per maintenance cost, not test count, deleted lines, or coverage percentage. This skill adapts the approach in OpenClaw's [test-audit skill](https://github.com/openclaw/openclaw/blob/main/.agents/skills/test-audit/SKILL.md) to Pit's boundaries, helpers, and delivery policy.
+
+- **Authoring:** apply the gate below before adding or changing a test, including coverage-only work.
+- **Focused audit:** scan read-only, then deeply review a few high-confidence candidates. Report findings before editing tests or production owners. An audit request alone does not require a cleanup.
+- **Subsystem campaign:** agree on one owner and enumerate all its tests, support files, and overlapping boundary proof. Track reviewed, retained, changed, and deferred cases. Deliver coherent batches; refresh from current main before the next batch. Do not turn a campaign into a deletion quota.
+
+Read root and scoped `AGENTS.md` first. Consult the [existing contract inventory](../../../docs/test-contract-inventory.md) so a previously reviewed false positive is not mistaken for new evidence. Use [pit-delivery](../pit-delivery/SKILL.md) for execution and delivery, and [pit-terminal-ux](../pit-terminal-ux/SKILL.md) for renderer or presentation-contract work.
+
+## Four-question authoring gate
+
+Answer these questions in the review or task notes; do not encode the answers as assertions about policy prose:
+
+1. **Contract:** which observable behavior, invariant, or independently meaningful contract is protected?
+2. **Regression:** which plausible defect would make the test fail, and at which assertion?
+3. **Ownership:** why would the existing strongest boundary test not already catch that defect? Extend its typed table or fixture when possible. Another layer needs a distinct risk, such as transport, persistence, trust, or lifecycle behavior.
+4. **Seams:** does the test require a production export, wrapper, switch, or injection hook with no production need? Prefer the real boundary. Do not introduce a new seam merely to reach private branches.
+
+A bug regression must fail on the pre-fix behavior for the intended reason and pass after repair. Record that observation. A failure caused by fixture setup, an unrelated guard, or a broken mock does not prove the fix.
+
+Use descriptive typed `it.each` rows for cases with the same setup and assertion shape. Keep lifecycle, concurrency, ordering, and heterogeneous workflows explicit. Do not hide substantial control flow in table data just to reduce line count.
+
+## Discovery signals, not automatic verdicts
+
+Look for:
+
+- assertion-free probes, self-comparisons, and expectations computed by the function under test;
+- copied implementation strings, policy sentences, file/export inventories, and exact private call shapes;
+- duplicate proof at several layers without a distinct failure mode;
+- identity or incidental-order assertions that reject behavior-preserving refactors;
+- mocks that perform the behavior supposedly being tested, identical responses that hide swapped attribution, or fixtures that pre-supply the ordering/receipt the owner must produce;
+- declared capability flags without evidence of the promised effect;
+- a rejection that can pass through the wrong guard, or persistence checked in a store the exercised path never writes;
+- names that promise execution, cancellation, fallback, or refresh while only asserting object existence;
+- test-only production exports, globals, wrappers, or dead paths kept alive by their own tests.
+
+Searches and AST counts only select candidates. Do not label every substring check, mock, static test, or slow test as junk. Narrow truncated searches and state the limits of any mechanical scan.
+
+## Retention bar: Pit contracts that matter
+
+Retain independent protection for:
+
+- injected capability signatures, argument-safe process argv, correct repository/run targets, public source/data representations, and reflection;
+- project trust, scope resolution and `$next`, promotion validation, rollback, and persistence;
+- sandbox isolation, grants, cancellation, time/memory/protocol bounds, and absence of forbidden effects;
+- hashed revisions/anchors, conflict rejection, atomic edits, and preservation of unrelated files;
+- terminal sanitization bytes, meaningful outcomes, retained payloads, explicit omissions, width, and settled lifecycle behavior;
+- package layout, native platform support, generated contract drift, architecture rules, defaults, and usable documentation examples.
+
+Keep call ordering when it changes observable effects. Exact assertions are appropriate when the bytes, key, path, or public name are the contract. Source inspection can be the cheapest independent guard if it survives an identifier-only refactor and detects a genuine contract break. Dedicated check/package gates own their contracts; do not weaken them or coverage thresholds to make pruning pass.
+
+Treat a valuable test that fails on the baseline as a possible product defect: reproduce it and investigate the owner, rather than deleting the test.
+
+## Evidence required for each candidate
+
+Read the complete test and production owner, entry point, relevant callers/callees, sibling implementations, overlapping tests, CI routing, and history. Inspect dependency source or types directly when the claim depends on an external API.
+
+Record:
+
+- baseline commit, exact test name, and file/line;
+- the failure actually detected, and any claimed behavior not demonstrated;
+- production owner and non-test callers of the seam;
+- stronger remaining proof with its exact location, or why none is needed;
+- relevant history and why the test/seam exists;
+- proposed action: retain, strengthen, consolidate, remove, or defer;
+- production/support deletion unlocked (explicitly say none when applicable);
+- risk and the focused validation invocation.
+
+Missing evidence means **defer**, not delete. If there is no stronger proof for an important contract, strengthen or relocate it. Keep read-only audit findings distinct from implemented changes. Record counterfactual probes separately from baseline passing tests; a surviving mutation demonstrates a coverage gap, not a production bug.
+
+## Edit and validate one coherent batch
+
+1. Record the evidence and scope before editing. Never edit source or tests while Vitest runs in the same checkout.
+2. Prefer removing redundant tests and obsolete seams over adding wrappers or aliases. Do not chase net-negative LOC when that would discard independent proof.
+3. Use existing boundary fixtures and trusted project helpers:
+
+   ```ts
+   runPitTargetedTests({ files: ["test/tool/source-formatter.test.ts"] })
+   reviewPitChanges()
+   formatPitChanges()
+   validatePit({ coverage: true, packageCheck: true })
+   preparePitDelivery()
+   ```
+
+4. Run the smallest owner and relevant sibling suites first. Use `testNamePattern` for a single case. Counterfactuals requiring unsupported runner options may use a temporary Vite transform through `shell.execFile`; do not rewrite checked-in owners while tests run, and remove temporary artifacts afterward.
+5. If removing a source/prose check, run the executable contract or policy gate that replaces it. For project skills, exercise Pi's real discovery API; do not add a test that copies the skill's sentences.
+6. Format only changed files and re-read before further edits. Review the final diff, then use `validatePit()` for standard gates and `preparePitDelivery()` for Git readiness. Do not run full tests and coverage concurrently. `auditPitCodeQuality()` measures maintainability signals, not test value.
+7. Apply `pit-delivery`'s reload/live-acceptance requirements to any changed TUI, extension-loading, saved-function, sandbox, or partial-update behavior. Headless assertions do not certify interactive behavior.
+
+Commit, push, open PRs, and close issues only when authorized. Do not use closing keywords before required interactive acceptance.
+
+## Handoff
+
+Report the reviewed scope and omissions, findings with evidence, retained false positives, actual edits, production/tooling versus test/support LOC, focused/full proof actually run (including failures and skips), and named follow-ups. State commit/PR/merge and live-acceptance status without implying unperformed delivery.

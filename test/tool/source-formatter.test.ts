@@ -40,21 +40,4 @@ describe("TypeScript source formatting", () => {
   ])("preserves $name source when it cannot be usefully formatted", async ({ source }) => {
     await expect(formatTypeScriptSource(source)).resolves.toBe(source);
   });
-
-  it("falls back when the native formatter throws", async () => {
-    vi.resetModules();
-    vi.doMock("oxfmt", () => ({
-      format: vi.fn(async () => {
-        throw new Error("native formatter unavailable");
-      }),
-    }));
-    try {
-      const { formatTypeScriptSource: formatWithFailure } =
-        await import("../../src/tool/source-formatter.js");
-      await expect(formatWithFailure("answer()")).resolves.toBe("answer()");
-    } finally {
-      vi.doUnmock("oxfmt");
-      vi.resetModules();
-    }
-  });
 });

@@ -143,20 +143,41 @@ describe("configuredFunctionExecutor", () => {
     );
   });
 
-  it("loads environment artifact overrides with default filesystem operations", async () => {
+  it("executes with the environment-selected addon and component using default filesystem operations", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pit-wasmtime-loader-"));
     try {
       const addon = join(directory, "addon.cjs");
       const component = join(directory, "guest.wasm");
       await Promise.all([
-        writeFile(addon, "module.exports = { executeQueuedJavascript() {} };"),
+        writeFile(
+          addon,
+          `module.exports = {
+            async executeQueuedJavascript(component, _source, callback) {
+              await callback(JSON.stringify({
+                type: "result",
+                value: { addon: "environment-override", component: Array.from(component) },
+              }));
+              return true;
+            },
+          };`,
+        ),
         writeFile(component, new Uint8Array([0, 97, 115, 109])),
       ]);
       vi.stubEnv("PIT_FUNCTION_EXECUTOR", "wasmtime");
       vi.stubEnv("PIT_WASMTIME_ADDON", addon);
       vi.stubEnv("PIT_WASMTIME_COMPONENT", component);
 
-      expect(configuredFunctionExecutor()).toBeDefined();
+      // The addon reports its identity and received bytes; it does not emulate a guest VM.
+      await expect(
+        runWithFunctionExecutor(
+          'async ({}) => "guest-result"',
+          async () => {
+            throw new Error("unexpected capability call");
+          },
+          { memoryLimitMb: 64, timeoutMs: 5_000 },
+          configuredFunctionExecutor(),
+        ),
+      ).resolves.toEqual({ addon: "environment-override", component: [0, 97, 115, 109] });
     } finally {
       vi.unstubAllEnvs();
       await rm(directory, { recursive: true, force: true });
