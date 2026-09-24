@@ -119,6 +119,8 @@ Use top-level `params` for large patches, generated file contents, commit messag
 
 Top-level `params` work with a one-time function and with the first execution of a named function.
 
+Some clients send `params` as a JSON string. Pit decodes a string holding a JSON object or array when the declared input type does not accept strings; a program that declares a string input receives the string unchanged.
+
 ### Control concurrency
 
 Capability calls are asynchronous. A call starts when the function invokes the capability method. Pit waits for outstanding calls before it accepts a successful result.

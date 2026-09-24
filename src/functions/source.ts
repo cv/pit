@@ -20,6 +20,34 @@ function submissionExpression(source: string): ts.Expression | undefined {
   return expression;
 }
 
+function admitsString(type: ts.TypeNode): boolean {
+  if (ts.isParenthesizedTypeNode(type)) return admitsString(type.type);
+  if (ts.isUnionTypeNode(type)) return type.types.some(admitsString);
+  if (ts.isLiteralTypeNode(type)) {
+    return ts.isStringLiteral(type.literal) || ts.isNoSubstitutionTemplateLiteral(type.literal);
+  }
+  if (ts.isTypeReferenceNode(type)) return type.typeName.getText() === "String";
+  return (
+    ts.isTemplateLiteralTypeNode(type) ||
+    type.kind === ts.SyntaxKind.StringKeyword ||
+    type.kind === ts.SyntaxKind.AnyKeyword ||
+    type.kind === ts.SyntaxKind.UnknownKeyword
+  );
+}
+
+/**
+ * Reports whether a program's annotated input parameter admits a string, or `undefined` when
+ * the program has no annotated second parameter.
+ */
+export function programInputAdmitsString(source: string): boolean | undefined {
+  const expression = submissionExpression(source);
+  if (!(expression && (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)))) {
+    return;
+  }
+  const type = expression.parameters[1]?.type;
+  return type ? admitsString(type) : undefined;
+}
+
 export function isProgramExpression(source: string): boolean {
   const expression = submissionExpression(source);
   return Boolean(

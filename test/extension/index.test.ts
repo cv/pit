@@ -229,6 +229,20 @@ describe("pit extension", () => {
       { value: 21 },
     );
     expect(anonymous.details.value).toEqual({ doubled: 42 });
+
+    // Clients that send params as a JSON string still reach typed inputs.
+    const decoded = await runWithParams(
+      "async ({}, input: { value: number }) => ({ doubled: input.value * 2 })",
+      JSON.stringify({ value: 21 }),
+    );
+    expect(decoded.details.value).toEqual({ doubled: 42 });
+    const named = await runWithParams(
+      source.replace("inspect", "encodedInspect"),
+      JSON.stringify({ path: "README.md" }),
+    );
+    expect(named.details.value).toEqual({ path: "README.md" });
+    const literal = await runWithParams("async ({}, input: string) => input", '{"value":21}');
+    expect(literal.details.value).toBe('{"value":21}');
     await expect(runWithParams("inspect()", {})).rejects.toThrow(
       "TypeScript programs must be function expressions",
     );
