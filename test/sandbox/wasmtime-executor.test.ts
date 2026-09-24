@@ -116,9 +116,10 @@ describe("createWasmtimeFunctionExecutor", () => {
     };
     const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
 
-    await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
-      "TypeScript execution timed out after 500ms",
-    );
+    await expect(executor.execute(program([]), async () => null, options)).rejects.toMatchObject({
+      name: "TimeoutError",
+      message: "TypeScript execution timed out after 500ms",
+    });
   });
 
   it("normalizes Wasmtime fuel exhaustion", async () => {
@@ -142,8 +143,30 @@ describe("createWasmtimeFunctionExecutor", () => {
 
     await expect(
       executor.execute(program([]), async () => null, { ...options, signal: controller.signal }),
-    ).rejects.toThrow("cancelled");
+    ).rejects.toMatchObject({ name: "AbortError", message: "TypeScript execution cancelled" });
     expect(addon.executeQueuedJavascript).not.toHaveBeenCalled();
+  });
+
+  it.each<{ name: string; frames: string[]; expectedName: string }>([
+    {
+      name: "a reported termination name",
+      frames: [JSON.stringify({ type: "failure", name: "TimeoutError" })],
+      expectedName: "TimeoutError",
+    },
+    { name: "no reported name", frames: [], expectedName: "Error" },
+  ])("rejects an uncaught guest failure with $name", async ({ frames, expectedName }) => {
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript(_component, _source, callback) {
+        for (const frame of frames) await callback(frame);
+        throw new Error("deadline reached");
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+
+    await expect(executor.execute(program([]), async () => null, options)).rejects.toMatchObject({
+      name: expectedName,
+      message: "deadline reached",
+    });
   });
 
   it.each([JSON.stringify({ type: "unknown" }), "null"])(
@@ -204,7 +227,7 @@ describe("createWasmtimeFunctionExecutor", () => {
     const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
     await expect(
       executor.execute(program([]), async () => null, { ...options, signal: controller.signal }),
-    ).rejects.toThrow("TypeScript execution cancelled");
+    ).rejects.toMatchObject({ name: "AbortError", message: "TypeScript execution cancelled" });
     expect(interruptQueuedJavascript).toHaveBeenCalledWith(expect.any(String));
   });
 });

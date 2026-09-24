@@ -8,6 +8,8 @@ import { prepareSandboxProgram } from "../../src/sandbox/program.js";
 import { runInSandbox, runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js";
+import { terminationError } from "../../src/shared/termination-errors.js";
+import { structureTypeScriptFailure } from "../../src/tool/failure-context.js";
 import { typeDiagnostics } from "../helpers/type-contract.js";
 
 const base = "async function calculate({}, value: number): Promise<number> { return value + 1; }";
@@ -227,6 +229,38 @@ describe("layered override contracts", () => {
           functionContext: expect.objectContaining({ scope: "user", depth: 3 }),
         }),
       );
+    },
+  );
+
+  it.runIf(process.platform === "linux" && process.arch === "arm64")(
+    "keeps a capability termination name through saved-function wrappers in Wasmtime",
+    async () => {
+      const user =
+        "async function calculate({ context: { get } }, value: number): Promise<number> { await get(); return value + 1; }";
+      const session =
+        "async function calculate({ $next }, value: number) { return (await $next(value)) + 3; }";
+      const failure = await runWithFunctionExecutor(
+        session,
+        async ({ capability }) => {
+          if (capability === "context") throw terminationError("timeout", "deadline reached");
+          return null;
+        },
+        {
+          userFunctions: new Map([["calculate", user]]),
+          sessionFunctions: new Map([["calculate", session]]),
+          definition: { id: "calculate", layer: "session" },
+          input: 4,
+          timeoutMs: 5000,
+        },
+        configuredFunctionExecutor({ backend: "wasmtime" }),
+      ).catch((error: unknown) => error);
+
+      expect(failure).toMatchObject({ name: "TimeoutError" });
+      expect(structureTypeScriptFailure(failure, [])).toMatchObject({
+        functionPath: ["calculate"],
+        kind: "timeout",
+        rootError: expect.stringMatching(/^deadline reached(?:\n|$)/),
+      });
     },
   );
 

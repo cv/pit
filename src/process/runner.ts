@@ -8,6 +8,7 @@ import {
 
 import type { HostShellProgressEvent } from "../execution/types.js";
 import { boundedIntegerValue } from "../shared/argument-values.js";
+import { terminationError } from "../shared/termination-errors.js";
 import { resolveWorkspacePath } from "../workspace/paths.js";
 import { executeStreamingProcess } from "./host.js";
 import type { ProcessResult } from "./results.js";
@@ -98,10 +99,23 @@ export async function executeHostProcess({
   const stderr = truncateOutput(processStderr, { maxBytes, maxLines });
   if (options.raise === true && result.code !== 0) {
     const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4000);
-    throw new Error(
+    const message =
       `Command failed with exit code ${result.code}: ${displayCommand}` +
-        (detail ? `\n${detail}` : ""),
-    );
+      (detail ? `\n${detail}` : "");
+    const termination =
+      "termination" in result
+        ? result.termination
+        : result.killed
+          ? signal?.aborted
+            ? "abort"
+            : "timeout"
+          : undefined;
+    // The host's synthetic exit codes are not reliable signals: programs may exit 124 or 130 themselves.
+    throw termination === "timeout"
+      ? terminationError("timeout", message)
+      : termination === "abort"
+        ? terminationError("cancelled", message)
+        : new Error(message);
   }
   return {
     stdout: stdout.content,

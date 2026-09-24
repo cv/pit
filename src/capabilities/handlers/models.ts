@@ -3,6 +3,7 @@ import {
   recordValue as object,
   stringValue as string,
 } from "../../shared/argument-values.js";
+import { terminationError } from "../../shared/termination-errors.js";
 import type { PiControlServices } from "./services.js";
 
 type PiModel = NonNullable<PiControlServices["ctx"]["model"]>;
@@ -36,7 +37,7 @@ function refreshDiagnostics(result: ModelRefreshResult) {
 
 function ensureRefreshCompleted(result: ModelRefreshResult, signal: AbortSignal): void {
   if (result.aborted || signal.aborted) {
-    throw new Error("Model catalog refresh was cancelled");
+    throw terminationError("cancelled", "Model catalog refresh was cancelled");
   }
 }
 

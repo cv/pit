@@ -6,6 +6,7 @@ import {
 
 import type { CAPABILITY_METHODS } from "../capabilities/registry.js";
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
+import { terminationError } from "../shared/termination-errors.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
 import { validateFunctionId as validateSavedFunctionName } from "./identifier.js";
 import { FunctionInspector, type FunctionListOptions } from "./inspection.js";
@@ -173,7 +174,7 @@ function createPersistentFunctionHandlers({
         `Delete ${userFunctionPath(name)} for every project?`,
       );
       if (!confirmed) {
-        throw new Error("User function removal was cancelled");
+        throw terminationError("cancelled", "User function removal was cancelled");
       }
       const removed = await service.removeFromUser(name);
       if (removed) {
@@ -244,7 +245,7 @@ export function createFunctionCapabilityMethods({
           `Make ${name} available in every Pit project under ${userFunctionDirectory()}?`,
         );
         if (!confirmed) {
-          throw new Error("User function promotion was cancelled");
+          throw terminationError("cancelled", "User function promotion was cancelled");
         }
         await service.promoteToUser({ name, summary, context: ctx, activity });
       }

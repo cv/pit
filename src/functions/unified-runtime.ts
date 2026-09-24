@@ -77,7 +77,10 @@ function renderSourceAssignment(
       try {
         return await __pit_implementation(__pit_dependencies, ...__pit_args);
       } catch (__pit_error) {
-        throw new Error(${prefix} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error });
+        const __pit_failure = new Error(${prefix} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error });
+        // Keep the name so termination kinds such as TimeoutError survive the wrapper.
+        if (typeof __pit_error?.name === "string") __pit_failure.name = __pit_error.name;
+        throw __pit_failure;
       }
     });
   })();`;

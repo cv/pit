@@ -28,7 +28,11 @@ const __pit_rpc = async (message) => {
       ? { functionContext: __pit_function_context }
       : {}),
   })));
-  if (typeof response.error === "string") throw new Error(response.error);
+  if (typeof response.error === "string") {
+    const error = new Error(response.error);
+    if (typeof response.errorName === "string") error.name = response.errorName;
+    throw error;
+  }
   return response.value;
 };
 
@@ -73,11 +77,20 @@ const __pit_run_saved = async (name, scope, callback) => {
 };
 
 const __pit_main = (0, eval)(${compiled});
-const __pit_value = await __pit_main(
-  __pit_capabilities,
-  ${serializedInput},
-  __pit_run_saved,
-);
+let __pit_value;
+try {
+  __pit_value = await __pit_main(
+    __pit_capabilities,
+    ${serializedInput},
+    __pit_run_saved,
+  );
+} catch (error) {
+  // The host receives only the message of an uncaught guest error; report a non-default name.
+  if (typeof error?.name === "string" && error.name !== "Error") {
+    await __pit_rpc({ type: "failure", name: error.name.slice(0, 100) });
+  }
+  throw error;
+}
 await __pit_rpc({ type: "result", value: __pit_value });
 `;
 }

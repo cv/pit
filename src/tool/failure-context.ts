@@ -2,18 +2,23 @@ import { type ExtensionAPI, truncateHead, truncateTail } from "@earendil-works/p
 
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { terminationKind } from "../shared/termination-errors.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 
 const MAX_FAILURE_BYTES = 8_000;
 const MAX_FAILURE_LINES = 24;
 const MAX_FUNCTION_PATH = 32;
+const OMITTED_DIAGNOSTIC = "… diagnostic middle omitted before rendering; not retained …";
+const OMITTED_CALLS = "… further calls not retained …";
+// Head and tail halves, joined by newline-delimited omission markers, stay within the maximums.
+const DIAGNOSTIC_HALF = {
+  maxBytes: Math.floor((MAX_FAILURE_BYTES - Buffer.byteLength(OMITTED_DIAGNOSTIC) - 2) / 2),
+  maxLines: Math.floor((MAX_FAILURE_LINES - 1) / 2),
+};
+const PATH_HEAD = Math.ceil((MAX_FUNCTION_PATH - 1) / 2);
+const PATH_TAIL = MAX_FUNCTION_PATH - 1 - PATH_HEAD;
 const FUNCTION_FAILURE_PREFIX = /^(?:Saved function|Function) "([^"]+)" failed: /;
-const CANCELLED_FAILURE =
-  /^(?:(?:TypeScript execution|Tool execution|Command|Sandbox(?: execution)?|Model catalog refresh|User function (?:removal|promotion)|(?:The |This )?operation|Request)(?: was)?\s+(?:aborted|cancelled|canceled)(?=\s|$)|(?:aborted|cancelled|canceled)$)/i;
-const TIMEOUT_FAILURE =
-  /^(?:(?:(?:The|This) )?operation (?:was )?aborted due to timeout\b|(?:TypeScript execution|Tool execution|Command|Sandbox(?: execution)?|HTTP request|Operation|Request)(?: was)?\s+timed?\s+out(?=\s|$))/i;
 const CAPABILITY_FAILURE = /^(?:command failed|(?:unknown |missing |invalid )?capability)\b/i;
-const COMMAND_EXIT = /^Command failed with exit code (124|130)\b/;
 const ERROR_PREFIX = /^Error:\s*/;
 
 export interface StructuredTypeScriptFailure {
@@ -29,16 +34,19 @@ export interface TypeScriptFailureDetails extends ExecutionProgressSnapshot {
   failure: StructuredTypeScriptFailure;
 }
 
+function errorName(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  // The Node executor wraps guest errors and keeps the guest error name separately.
+  const remoteName = (error as { remoteName?: unknown }).remoteName;
+  return typeof remoteName === "string" ? remoteName : error.name;
+}
+
 function failureKind(message: string, name?: string): StructuredTypeScriptFailure["kind"] {
-  const headline = (message.split("\n", 1)[0] ?? "").trim();
-  if (name === "TimeoutError" || headline.startsWith("TimeoutError:")) return "timeout";
-  if (name === "AbortError" || headline.startsWith("AbortError:")) return "cancelled";
-  const exit = headline.match(COMMAND_EXIT)?.[1];
-  if (exit === "124") return "timeout";
-  if (exit === "130") return "cancelled";
+  // Terminations are identified by error name, carried from their source through the guest.
+  const termination = terminationKind(name);
+  if (termination) return termination;
   // Classify the diagnostic headline, never source excerpts, paths, or stack frames.
-  if (TIMEOUT_FAILURE.test(headline)) return "timeout";
-  if (CANCELLED_FAILURE.test(headline)) return "cancelled";
+  const headline = (message.split("\n", 1)[0] ?? "").trim();
   if (CAPABILITY_FAILURE.test(headline)) return "capability";
   return "user";
 }
@@ -66,18 +74,19 @@ export function structureTypeScriptFailure(
       }
     }
   }
-  const kind = failureKind(rootError, error instanceof Error ? error.name : undefined);
+  const kind = failureKind(rootError, errorName(error));
   const bounded = truncateHead(rootError, {
     maxBytes: MAX_FAILURE_BYTES,
     maxLines: MAX_FAILURE_LINES,
   });
   if (bounded.truncated) {
-    const limits = { maxBytes: 3_500, maxLines: 11 };
-    rootError = `${truncateHead(rootError, limits).content}\n… diagnostic middle omitted before rendering; not retained …\n${truncateTail(rootError, limits).content}`;
+    const head = truncateHead(rootError, DIAGNOSTIC_HALF).content;
+    const tail = truncateTail(rootError, DIAGNOSTIC_HALF).content;
+    rootError = `${head}\n${OMITTED_DIAGNOSTIC}\n${tail}`;
   }
   const boundedPath =
     functionPath.length > MAX_FUNCTION_PATH
-      ? [...functionPath.slice(0, 16), "… further calls not retained …", ...functionPath.slice(-15)]
+      ? [...functionPath.slice(0, PATH_HEAD), OMITTED_CALLS, ...functionPath.slice(-PATH_TAIL)]
       : functionPath;
   return { functionPath: boundedPath, rootError, kind };
 }
