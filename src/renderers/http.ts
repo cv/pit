@@ -1,5 +1,5 @@
 import { renderStructuredData } from "./compound.js";
-import { hasOnlyKeys, isRecord, isStringRecord, JSON_CONTAINER_PREFIX } from "./shared.js";
+import { hasOnlyKeys, isRecord, isStringRecord, parseCompleteJson } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderHttp(
@@ -33,22 +33,17 @@ export function renderHttp(
     const contentType = Object.entries(value.headers).find(
       ([name]) => name.toLowerCase() === "content-type",
     )?.[1];
-    const shouldParseJson =
-      contentType?.toLowerCase().includes("json") === true ||
-      JSON_CONTAINER_PREFIX.test(value.body);
-    let bodyLines = value.body.split("\n");
-    if (shouldParseJson && !value.truncated) {
-      try {
-        bodyLines = renderStructuredData(JSON.parse(value.body), {
-          theme,
-          depth: 0,
-          seen: new WeakSet(),
-        }).lines;
-      } catch {
-        // Keep malformed or mislabeled response bodies as text.
-      }
-    }
-    lines.push(...bodyLines);
+    const jsonContentType = contentType?.toLowerCase().includes("json") === true;
+    // Keep malformed, mislabeled, or truncated response bodies as text.
+    const parsed = parseCompleteJson(value.body, {
+      truncated: value.truncated,
+      requireContainer: !jsonContentType,
+    });
+    lines.push(
+      ...(parsed === undefined
+        ? value.body.split("\n")
+        : renderStructuredData(parsed, { theme, depth: 0, seen: new WeakSet() }).lines),
+    );
   } else {
     lines.push(theme.fg("dim", "(empty body)"));
   }
