@@ -26,7 +26,7 @@ export function renderShell(
     const output =
       parsed === undefined
         ? processOutputLines(stdout)
-        : renderStructuredData(parsed, { theme, depth: 0, seen: new WeakSet() }).lines;
+        : renderStructuredData(parsed, { theme }).lines;
     lines.push(theme.fg("accent", "stdout"), ...output);
   }
   if (stderr) {
