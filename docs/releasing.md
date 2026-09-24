@@ -1,14 +1,14 @@
 # Releasing Pit
 
-Pit is distributed only through tagged GitHub releases. Keep `private: true` in `package.json`; do not publish Pit to npm.
+Pit is distributed only through GitHub: `main` for the latest changes and tags for pinned releases. Keep `private: true` in `package.json`; do not publish Pit to npm.
 
 ## Prepare
 
 1. Confirm the release tracking issue is current.
 2. Confirm the intended Pi version has been tested and documented without overstating compatibility.
 3. Review dependency updates and run `npm audit`.
-4. Update `CHANGELOG.md`, `README.md`, `package.json`, and `package-lock.json` to the release version.
-5. Confirm installation examples reference the exact tag.
+4. Update `CHANGELOG.md`, `package.json`, and `package-lock.json` to the release version, and point the README's pinned install example at the new tag.
+5. Keep the README's primary install command unpinned (`pi install git:github.com/cv/pit`); `npm run package:check` enforces both.
 6. Run a full-history secret scan before the first public release or after adding substantial generated/session artifacts.
 7. Review the dry-run package file list and size.
 8. Confirm the reusable Wasmtime prebuild workflow has successfully built and smoke-tested Linux, macOS, and Windows on ARM64/x64 before tagging.

@@ -31,8 +31,11 @@ if (packageJson.private !== true) {
 }
 
 const installReference = `git:github.com/cv/pit@v${packageJson.version}`;
-if (readme.split(installReference).length - 1 < 3) {
-  fail(`README.md must use ${installReference} in pinned install examples`);
+if (!readme.includes(`pi install ${installReference}`)) {
+  fail(`README.md must show pi install ${installReference} as the pinned install example`);
+}
+if (!/^pi install git:github\.com\/cv\/pit$/m.test(readme)) {
+  fail("README.md must show the unpinned pi install git:github.com/cv/pit command");
 }
 
 if (!Array.isArray(packageJson.pi?.extensions) || packageJson.pi.extensions.length === 0) {
