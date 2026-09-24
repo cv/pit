@@ -218,7 +218,7 @@ describe("session queries with real jq", () => {
     const { analyze } = await workflows();
     const file = join(directory, "boundary.jsonl");
     const lines = [
-      ...Array.from({ length: 199 }, () => "{}"),
+      ...Array.from({ length: 499 }, () => "{}"),
       message({ role: "assistant", content: [toolCall("one"), toolCall("two")] }),
       message({
         role: "toolResult",
@@ -240,6 +240,66 @@ describe("session queries with real jq", () => {
       categories: { anchor: 1, typescript: 1 },
       recentFailureExamples: [{ category: "typescript" }],
     });
+  });
+
+  it("ends dense pages at the byte budget without losing or duplicating calls", async () => {
+    const { events } = await workflows();
+    const file = join(directory, "dense.jsonl");
+    const lines = Array.from({ length: 400 }, (_, index) =>
+      message({
+        role: "assistant",
+        content: [toolCall(`call-${index}`, `${"label ".repeat(60)}${index}`)],
+      }),
+    );
+    await writeFile(file, lines.join("\n") + "\n");
+    const ids: string[] = [];
+    const pageBytes: number[] = [];
+    for (let afterLine = 0, hasMore = true; hasMore;) {
+      const page = (await events({ file, afterLine, limit: 500 })) as {
+        hasMore: boolean;
+        nextLine: number;
+        events: Array<{ calls: Array<{ id: string; label: string }> }>;
+      };
+      pageBytes.push(Buffer.byteLength(JSON.stringify(page)));
+      for (const event of page.events) {
+        for (const call of event.calls) {
+          expect(call.label).toHaveLength(200);
+          ids.push(call.id);
+        }
+      }
+      expect(page.nextLine).toBeGreaterThan(afterLine);
+      ({ hasMore } = page);
+      afterLine = page.nextLine;
+    }
+    expect(ids).toEqual(Array.from({ length: 400 }, (_, index) => `call-${index}`));
+    expect(pageBytes.length).toBeGreaterThan(1);
+    for (const bytes of pageBytes) expect(bytes).toBeLessThan(50_000);
+  });
+
+  it("clips unbounded failure text and function paths", async () => {
+    const { events } = await workflows();
+    const file = join(directory, "failure.jsonl");
+    await writeFile(
+      file,
+      message({
+        role: "toolResult",
+        toolCallId: "one",
+        content: [{ type: "text", text: "Error: wrapper" }],
+        isError: true,
+        details: {
+          failure: {
+            rootError: "e".repeat(10_000),
+            functionPath: Array.from({ length: 40 }, () => "f".repeat(1000)),
+          },
+        },
+      }) + "\n",
+    );
+    const page = (await events({ file })) as {
+      events: Array<{ failure: { error: string; functionPath: string[] } }>;
+    };
+    const failure = page.events[0]?.failure;
+    expect(failure?.error).toHaveLength(500);
+    expect(failure?.functionPath).toEqual(Array.from({ length: 16 }, () => "f".repeat(200)));
   });
 
   it.each<{ name: string; input: Record<string, unknown> }>([

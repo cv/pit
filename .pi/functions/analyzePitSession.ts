@@ -43,10 +43,13 @@ async function analyzePitSession(
   let promiseAllCalls = 0;
   let workspaceBatchCalls = 0;
   let afterLine = 0;
-  for (let pageNumber = 0; ; pageNumber++) {
-    if (pageNumber === 200)
-      throw new Error("Session exceeds 40000 lines; refusing an incomplete audit");
-    const page = await readPitSessionEvents({ file, afterLine, limit: 200 });
+  const MAX_SESSION_LINES = 100_000;
+  for (;;) {
+    if (afterLine >= MAX_SESSION_LINES)
+      throw new Error(`Session exceeds ${MAX_SESSION_LINES} lines; refusing an incomplete audit`);
+    // Each page rescans the file from its start, so request the largest pages; the reader
+    // ends dense pages early at its byte budget.
+    const page = await readPitSessionEvents({ file, afterLine, limit: 500 });
     for (const event of page.events) {
       for (const call of event.calls) {
         calls.set(call.id, call.label);
