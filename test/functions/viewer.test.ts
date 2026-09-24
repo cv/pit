@@ -59,6 +59,30 @@ describe("function definition viewer", () => {
     ).toContain("absent [missing]");
   });
 
+  it("keeps primary metadata readable and limits dim styling to secondary hints", () => {
+    const calls: Array<{ color: string; text: string }> = [];
+    const recordedTheme = {
+      fg: (color: string, text: string) => {
+        calls.push({ color, text });
+        return text;
+      },
+      bold: (text: string) => text,
+    } as Theme;
+    const viewer = new FunctionViewer(
+      new FunctionInspector({}, "/project").inspect("workspace.read"),
+      recordedTheme,
+      vi.fn(),
+    );
+
+    expect(viewer.render(80).join("\n")).toContain("Scope: global (effective)");
+    expect(calls.some(({ color, text }) => color === "accent" && text === "Scope: ")).toBe(true);
+    expect(calls.some(({ color, text }) => color === "text" && text.includes("global"))).toBe(true);
+    expect(calls.filter(({ color }) => color === "dim").map(({ text }) => text)).toEqual([
+      "Enter/Esc/q to close",
+    ]);
+    expect(calls.some(({ color }) => color === "muted")).toBe(false);
+  });
+
   it("bounds metadata lines and ignores non-close keys", () => {
     const definition = new FunctionInspector({}, "/project").inspect("workspace.read");
     definition.documentation = Array.from(
