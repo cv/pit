@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
 import { CapabilityDispatcher } from "../../src/sandbox/dispatcher.js";
+import { terminationError } from "../../src/shared/termination-errors.js";
 
 describe("CapabilityDispatcher", () => {
   it("dispatches bounded calls and reports successful traces", async () => {
@@ -64,5 +65,42 @@ describe("CapabilityDispatcher", () => {
       { type: "response", id: 1, error: "Function grant does not allow shell.exec" },
     ]);
     expect(traces.map(({ status }) => status)).toEqual(["running", "rejected"]);
+  });
+
+  it.each<{ name: string; error: unknown; response: Record<string, unknown> }>([
+    {
+      name: "a Pit termination",
+      error: terminationError("timeout", "deadline reached"),
+      response: { error: "deadline reached", errorName: "TimeoutError" },
+    },
+    {
+      name: "a platform abort",
+      error: new DOMException("This operation was aborted", "AbortError"),
+      response: { error: "This operation was aborted", errorName: "AbortError" },
+    },
+    {
+      name: "a plain error",
+      error: new Error("permission denied"),
+      response: { error: "permission denied" },
+    },
+    { name: "a non-Error value", error: "raw failure", response: { error: "raw failure" } },
+  ])("returns $name to the guest with its non-default name", async ({ error, response }) => {
+    const sent: unknown[] = [];
+    const dispatcher = new CapabilityDispatcher({
+      handler: async () => {
+        throw error;
+      },
+      signal: new AbortController().signal,
+      maximumCalls: 1,
+      maximumConcurrentCalls: 1,
+      send: (message) => {
+        sent.push(message);
+        return true;
+      },
+      parseFunctionContext: () => undefined,
+    });
+    dispatcher.handle({ type: "call", id: 1, capability: "context", method: "get", args: [] });
+    await Promise.all(dispatcher.pending());
+    expect(sent).toEqual([{ type: "response", id: 1, ...response }]);
   });
 });

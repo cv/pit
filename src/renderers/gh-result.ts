@@ -1,6 +1,6 @@
 import { processOutputLines, parseProcessResult, semanticOutcome } from "../process/results.js";
 import { renderStructuredData } from "./compound.js";
-import { isRecord } from "./shared.js";
+import { isRecord, parseCompleteJson, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue, ValueRenderer } from "./types.js";
 
 const FAILED_STATES = new Set(["failure", "failed", "cancelled", "timed_out", "action_required"]);
@@ -20,14 +20,8 @@ function hasFailedDomainItem(value: unknown, depth = 0): boolean {
 export const renderGhResult: ValueRenderer = (value, context: RenderContext) => {
   const result = parseProcessResult(value);
   if (!result) return;
-  let parsed: unknown;
-  if (!result.truncated) {
-    try {
-      parsed = JSON.parse(result.stdout);
-    } catch {
-      /* Preserve non-JSON output verbatim. */
-    }
-  }
+  // Non-JSON or truncated output stays verbatim.
+  const parsed = parseCompleteJson(result.stdout, { truncated: result.truncated });
   // gh.api accepts arbitrary shapes. A list/PR projection is never a lossless default.
   const output =
     parsed === undefined
@@ -50,7 +44,7 @@ export const renderGhResult: ValueRenderer = (value, context: RenderContext) => 
     kind: "gh",
     lines,
     outcome: status,
-    summary: `${parsed === undefined ? `exit ${result.code}` : `${count} result${count === 1 ? "" : "s"}`}${result.truncated ? ", truncated" : ""}`,
+    summary: `${parsed === undefined ? `exit ${result.code}` : plural(count, "result")}${result.truncated ? ", truncated" : ""}`,
     detailLines: [`exit: ${result.code}`, ...lines.slice(1)],
   } satisfies RenderedResultValue;
 };

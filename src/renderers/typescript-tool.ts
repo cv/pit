@@ -4,12 +4,13 @@ import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
+import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { executionTiming } from "../tool/timing.js";
 import { type CapabilityCall, inferCapabilityCall } from "./capability.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
-import { isRecord, renderJson } from "./shared.js";
+import { isRecord, offsetHangingIndents, outcomeMarker, plural, renderJson } from "./shared.js";
 import type { RenderedResultValue } from "./types.js";
 import { displayedFailure, displayedFunctionPath } from "./typescript-failure.js";
 import { renderPartialToolResult, renderRetainedShellOutput } from "./typescript-progress.js";
@@ -57,7 +58,9 @@ interface ToolResultContext {
   invalidate?: () => void;
 }
 
-function renderInputSection(context: ToolResultContext, theme: RenderTheme): string {
+type StatefulResultContext = WithRendererState<ToolResultContext>;
+
+function renderInputSection(context: StatefulResultContext, theme: RenderTheme): string {
   if (!context.args || Object.keys(context.args).length === 0) return "";
   const inputs = renderTypeScriptInputs(context.args, theme, {
     ...context,
@@ -100,12 +103,12 @@ function describeResult(
   }
   if (value === null) return "Returned null";
   if (Array.isArray(value)) {
-    return `Returned ${value.length} item${value.length === 1 ? "" : "s"}`;
+    return `Returned ${plural(value.length, "item")}`;
   }
   if (value !== null && typeof value === "object") {
     const keys = Object.keys(value);
     const names = keys.slice(0, 3).join(", ");
-    return `Returned ${keys.length} field${keys.length === 1 ? "" : "s"}${names ? `: ${names}` : ""}`;
+    return `Returned ${plural(keys.length, "field")}${names ? `: ${names}` : ""}`;
   }
   return `Returned ${typeof value}`;
 }
@@ -122,7 +125,7 @@ function renderToolError(input: {
   fallback: string;
   duration: string;
   theme: RenderTheme;
-  context: ToolResultContext;
+  context: StatefulResultContext;
 }) {
   const rawMessage =
     input.details?.failure?.rootError || input.fallback || "TypeScript execution failed";
@@ -159,7 +162,7 @@ function renderStructuredToolValue(input: {
   details?: TypeScriptDetails;
   fallback: string;
   theme: RenderTheme;
-  context: ToolResultContext;
+  context: StatefulResultContext;
 }): ResultRenderingState {
   const { details, fallback, theme, context } = input;
   if (!(details && !details.truncated && Object.hasOwn(details, "value"))) {
@@ -219,7 +222,7 @@ function renderExecutionDetails(
   // Error and upstream-truncated views may not display details.value at all.
   const returnedValue =
     returnedLines.length > 0 && !details?.truncated ? details?.value : undefined;
-  const retained = renderRetainedShellOutput(details, theme, returnedLines, returnedValue);
+  const retained = renderRetainedShellOutput(details, theme, returnedValue);
   if (retained)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Retained process output (tails)"))}${retained}`;
   const dashboard = renderExecutionDashboard(details, theme, true);
@@ -237,7 +240,7 @@ function renderCompletedToolResult(input: {
   duration: string;
   theme: RenderTheme;
   rendering: ResultRenderingState;
-  context: ToolResultContext;
+  context: StatefulResultContext;
 }) {
   const { expanded, details, fallback, duration, theme, rendering } = input;
   const shown = expanded ? rendering.lines : [];
@@ -256,10 +259,7 @@ function renderCompletedToolResult(input: {
       : details?.truncated || notices.length > 0
         ? "warning"
         : leafOutcome;
-  const resultMarker = theme.fg(
-    resultOutcome,
-    { success: "✓ ", warning: "⚠ ", error: "✗ " }[resultOutcome],
-  );
+  const resultMarker = `${outcomeMarker(theme, resultOutcome)} `;
   let text = `${expanded ? "\n" : ""}${theme.bold(
     resultMarker +
       theme.fg("toolTitle", resultLabel) +
@@ -277,11 +277,10 @@ function renderCompletedToolResult(input: {
     text += renderExecutionDetails(details, theme, rendering.lines);
   }
   text = sanitizeTerminalText(text, { preserveSgr: true });
-  const displayedHangingIndents = Object.fromEntries(
-    Object.entries(rendering.hangingIndents)
-      .filter(([index]) => Number(index) < shown.length)
-      .map(([index, width]) => [resultContentStart + Number(index), width]),
-  );
+  const displayedHangingIndents = offsetHangingIndents(rendering.hangingIndents, {
+    lines: resultContentStart,
+    before: shown.length,
+  });
   return new HangingIndentText(text, displayedHangingIndents);
 }
 
@@ -289,7 +288,7 @@ function renderToolResult(
   result: ToolResultLike,
   options: { expanded: boolean; isPartial: boolean },
   theme: RenderTheme,
-  context: ToolResultContext,
+  context: StatefulResultContext,
 ) {
   const fallback = result.content
     .filter((content) => content.type === "text")
@@ -345,6 +344,7 @@ export function renderTypeScriptToolResult(
   context: ToolResultContext,
 ) {
   try {
+    ensureRendererState(context);
     return renderToolResult(result, options, theme, context);
   } catch {
     const content = result.content

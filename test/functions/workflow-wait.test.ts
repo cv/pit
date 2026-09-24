@@ -57,7 +57,7 @@ describe("waitForGitHubRun behavior", () => {
     ).toMatchObject({ status: "completed", conclusion: "failure" });
   });
 
-  it("stays within the tool's time budget even when many polls are requested", async () => {
+  it("stays within the tool's time budget and reports how many requested polls fit", async () => {
     const wait = await loadWorkflowFunction("waitForGitHubRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const started = Date.now();
@@ -73,13 +73,29 @@ describe("waitForGitHubRun behavior", () => {
       },
     );
     await vi.runAllTimersAsync();
-    expect(await pending).toMatchObject({
+    // After the 120 s delay, 165 s of budget fits the first check and five 30 s intervals.
+    expect(await pending).toEqual({
       status: "timed_out",
-      attempts: runView.mock.calls.length,
+      id: 42,
+      attempts: 6,
+      requestedAttempts: 120,
     });
+    expect(runView).toHaveBeenCalledTimes(6);
     expect(Date.now() - started).toBeLessThan(300_000);
-    expect(runView.mock.calls.length).toBeLessThan(120);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("names the polling budget when it cut a failed wait short", async () => {
+    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const runView = vi.fn().mockResolvedValue(response("in_progress"));
+    const failure = wait({ gh: { runView } }, { id: 42, repo: "cv/pit", attempts: 20 }).then(
+      () => "resolved",
+      (error: Error) => error.message,
+    );
+    await vi.runAllTimersAsync();
+    expect(await failure).toContain("did not complete after 12 checks");
+    expect(await failure).toContain("20 were requested, but only 12 fit the 285 s polling budget");
+    expect(runView).toHaveBeenCalledTimes(12);
   });
 
   it("fails rather than reporting success when the requested attempts are exhausted", async () => {

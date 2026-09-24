@@ -8,6 +8,7 @@ import {
   type JsonRecord,
   languageForFile,
   MAX_RECURSIVE_DEPTH,
+  offsetHangingIndents,
   plural,
   renderJson,
   syntaxLanguageForHint,
@@ -16,18 +17,25 @@ import type { RenderContext, RenderedResultValue } from "./types.js";
 
 type NestedRenderer = (value: unknown, context: RenderContext) => RenderedResultValue | undefined;
 
+/** Theme and optional syntax hint for structured display; recursion state always starts fresh. */
+export type StructuredDataOptions = Pick<RenderContext, "theme" | "syntaxLanguage">;
+
 /** Display parsed JSON/inputs without pretending nested data are capability results. */
-export function renderStructuredData(value: unknown, context: RenderContext): RenderedResultValue {
+export function renderStructuredData(
+  value: unknown,
+  { theme, syntaxLanguage }: StructuredDataOptions,
+): RenderedResultValue {
   const nested: NestedRenderer = (entry, child) =>
     renderMultilineText(entry, child) ??
     renderArrayCompound(entry, child, nested) ??
     renderCompound(entry, child, nested);
-  return (
-    nested(value, { ...context, depth: 0, seen: new WeakSet() }) ?? {
-      kind: "json",
-      lines: renderJson(value),
-    }
-  );
+  const root: RenderContext = {
+    theme,
+    depth: 0,
+    seen: new WeakSet(),
+    ...(syntaxLanguage ? { syntaxLanguage } : {}),
+  };
+  return nested(value, root) ?? { kind: "json", lines: renderJson(value) };
 }
 
 export function renderMultilineText(
@@ -131,10 +139,13 @@ export function renderCompound(
       `${context.theme.fg("accent", context.theme.bold(safeSectionLabel(key)))} ${context.theme.fg("dim", `(${description})`)}`,
       ...indent(detailLines),
     );
-    const detailHangingIndents = rendered.detailHangingIndents ?? rendered.hangingIndents ?? {};
-    for (const [index, width] of Object.entries(detailHangingIndents)) {
-      hangingIndents[detailStart + Number(index)] = width + 2;
-    }
+    Object.assign(
+      hangingIndents,
+      offsetHangingIndents(rendered.detailHangingIndents ?? rendered.hangingIndents, {
+        lines: detailStart,
+        columns: 2,
+      }),
+    );
   }
   return {
     kind: "compound",
@@ -177,10 +188,13 @@ export function renderArrayCompound(
       `${context.theme.fg("accent", context.theme.bold(`[${index}]`))} ${context.theme.fg("dim", `(${description})`)}`,
       ...indent(detailLines),
     );
-    const detailHangingIndents = rendered.detailHangingIndents ?? rendered.hangingIndents ?? {};
-    for (const [lineIndex, width] of Object.entries(detailHangingIndents)) {
-      hangingIndents[detailStart + Number(lineIndex)] = width + 2;
-    }
+    Object.assign(
+      hangingIndents,
+      offsetHangingIndents(rendered.detailHangingIndents ?? rendered.hangingIndents, {
+        lines: detailStart,
+        columns: 2,
+      }),
+    );
   }
   return {
     kind: "array",

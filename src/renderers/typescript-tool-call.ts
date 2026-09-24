@@ -4,6 +4,7 @@ import type { FunctionRegistry } from "../functions/core.js";
 import { resolveSavedFunctionReferences } from "../functions/graph.js";
 import { getNamedFunctionName } from "../functions/source.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";
 import { describeCapabilityCall, inferCapabilityCall } from "./capability.js";
@@ -35,28 +36,23 @@ interface SourceFormattingState {
   formatted?: string;
 }
 
-type RendererState = Record<PropertyKey, unknown> & {
-  [SOURCE_FORMATTING_STATE]?: SourceFormattingState;
-};
-
-function formattedDisplaySource(code: string, context: ToolCallContext): string {
+function formattedDisplaySource(code: string, context: WithRendererState<ToolCallContext>): string {
   if (!(code && context.argsComplete)) {
     return code;
   }
-  const root =
-    context.state && typeof context.state === "object"
-      ? (context.state as RendererState)
-      : ({} as RendererState);
-  context.state = root;
-  let formatting = root[SOURCE_FORMATTING_STATE];
+  const { state } = context;
+  const current = (): SourceFormattingState | undefined =>
+    state[SOURCE_FORMATTING_STATE] as SourceFormattingState | undefined;
+  let formatting = current();
   if (!formatting || formatting.source !== code) {
     formatting = { source: code };
-    root[SOURCE_FORMATTING_STATE] = formatting;
+    state[SOURCE_FORMATTING_STATE] = formatting;
     void formatTypeScriptSource(code).then((formatted) => {
-      if (root[SOURCE_FORMATTING_STATE]?.source !== code) {
+      const latest = current();
+      if (latest?.source !== code) {
         return undefined;
       }
-      root[SOURCE_FORMATTING_STATE].formatted = formatted;
+      latest.formatted = formatted;
       if (formatted !== code) {
         context.invalidate?.();
       }
@@ -98,17 +94,14 @@ export function renderTypeScriptInputs(
   theme: RenderTheme,
   context: ToolCallContext,
 ): string {
+  ensureRendererState(context);
   const lines: string[] = [];
   const functionId = normalizedLabel(args.functionId);
   if (functionId) lines.push(theme.fg("dim", `functionId: ${functionId}`));
   if (args.saveOnly === true) lines.push("saveOnly: true");
   if (args.timeoutMs !== undefined) lines.push(`timeoutMs: ${String(args.timeoutMs)}`);
   if (Object.hasOwn(args, "params")) {
-    const params = renderStructuredData(args.params, {
-      theme,
-      depth: 0,
-      seen: new WeakSet(),
-    }).lines;
+    const params = renderStructuredData(args.params, { theme }).lines;
     lines.push(theme.bold(theme.fg("toolTitle", "Params")), ...params);
   }
   const code = typeof args.code === "string" ? formattedDisplaySource(args.code, context) : "";
@@ -129,6 +122,7 @@ export function renderTypeScriptToolCall(
   registry: FunctionRegistry,
 ) {
   args ??= {};
+  ensureRendererState(context);
   const code = typeof args.code === "string" ? args.code : "";
   const callLabel = describeCall(args, code, registry);
   const generation = generationTiming(context);

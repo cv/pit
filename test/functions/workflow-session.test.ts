@@ -180,15 +180,16 @@ describe("analyzePitSession", () => {
     ).rejects.toThrow("cursor did not advance");
   });
 
-  it("refuses an incomplete audit at the page budget", async () => {
+  it("refuses an incomplete audit at the session line budget", async () => {
     const analyze = await loadWorkflowFunction("analyzePitSession");
     const readPitSessionEvents = vi.fn(async ({ afterLine }: { afterLine: number }) =>
       page([], true, afterLine + 200),
     );
     await expect(
       analyze({ context: { get: vi.fn() }, readPitSessionEvents }, { file: "/session" }),
-    ).rejects.toThrow("40000 lines");
-    expect(readPitSessionEvents).toHaveBeenCalledTimes(200);
+    ).rejects.toThrow("100000 lines");
+    const cursors = readPitSessionEvents.mock.calls.map(([input]) => input.afterLine);
+    expect(Math.max(...cursors)).toBeLessThan(100_000);
   });
 
   it("propagates projection failure rather than returning earlier partial counts", async () => {

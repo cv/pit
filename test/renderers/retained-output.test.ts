@@ -2,6 +2,7 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { retainShellOutputTail } from "../../src/execution/progress.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 import { renderTypeScriptToolResult } from "../../src/renderers/typescript-tool.js";
 
@@ -9,6 +10,9 @@ const theme = { fg: (_color: string, text: string) => text, bold: (text: string)
 const result = (stdout: string, stderr = "") => ({ stdout, stderr, code: 0, truncated: false });
 const shared = result("SENTINEL\nNEXT\n");
 const json = JSON.stringify({ text: "SENTINEL\nNEXT" }) + "\n";
+const longOutput = `${Array.from({ length: 12 }, (_, index) =>
+  index === 11 ? "SENTINEL" : `line ${index}`,
+).join("\n")}\n`;
 interface Case {
   name: string;
   value: unknown;
@@ -101,6 +105,34 @@ const cases: Case[] = [
     occurrences: 1,
     alreadyShown: false,
   },
+  {
+    name: "returned stdout text",
+    value: shared.stdout,
+    captured: shared.stdout,
+    occurrences: 1,
+    alreadyShown: true,
+  },
+  {
+    name: "long output compared by its retained tail",
+    value: result(longOutput),
+    captured: retainShellOutputTail(longOutput),
+    occurrences: 1,
+    alreadyShown: true,
+  },
+  {
+    name: "unrelated returned text containing the output",
+    value: { summary: "before SENTINEL after" },
+    captured: "SENTINEL",
+    occurrences: 2,
+    alreadyShown: false,
+  },
+  {
+    name: "returned result with a different exit code",
+    value: { ...result("SENTINEL\n"), code: 1 },
+    captured: "SENTINEL\n",
+    occurrences: 2,
+    alreadyShown: false,
+  },
 ];
 
 beforeEach(() => initTheme("dark"));
@@ -157,6 +189,26 @@ describe("retained process output", () => {
       expect(output).not.toContain("(output shown above)");
     },
   );
+
+  it("keeps an unfinished call's tail even when a returned text matches it", () => {
+    const rendered = renderTypeScriptToolResult(
+      {
+        content: [],
+        details: {
+          value: shared.stdout,
+          truncated: false,
+          progress: [{ id: 1, command: "smoke fixture", status: "running", output: shared.stdout }],
+        },
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      {},
+    );
+    const output = rendered.render(120).map(stripTerminalSequences).join("\n");
+    expect(output.split("SENTINEL").length - 1).toBe(2);
+    expect(output).toContain("[unfinished when invocation ended] smoke fixture");
+    expect(output).not.toContain("(output shown above)");
+  });
 
   it("does not turn stream-ending newlines into extra blank rows", () => {
     const rendered = renderResultValue(result("first  \n\nlast  \n", "notice  \n"), theme);

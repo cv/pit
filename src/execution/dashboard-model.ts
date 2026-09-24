@@ -20,12 +20,25 @@ export interface DashboardActivity {
   name: string;
 }
 
+export interface DashboardStatusCount {
+  status: CapabilityTraceStatus;
+  count: number;
+}
+
 export interface DashboardCall {
   kind: "call";
   capability: string;
   method: string;
+  /** Aggregate status, prioritizing failed, rejected, then running calls. */
   status: CapabilityTraceStatus;
-  summary: string;
+  /** Calls in this group. */
+  count: number;
+  /** Calls per status in first-seen order. */
+  statuses: DashboardStatusCount[];
+  /** Span from the first start to the last finish; unfinished calls are measured to `now`. */
+  durationMs: number;
+  /** Whether any call in the group has no recorded finish. */
+  unfinished: boolean;
 }
 
 export interface DashboardFunction {
@@ -85,24 +98,20 @@ function traceGroupStatus(group: CapabilityTraceGroup): CapabilityTraceStatus {
   return "succeeded";
 }
 
-function traceGroupSummary(group: CapabilityTraceGroup, now: number): string {
-  if (group.traces.length === 1) {
-    const trace = group.traces[0];
-    return `${trace.status}, ${((trace.durationMs ?? Math.max(0, now - trace.startedAt)) / 1000).toFixed(1)}s`;
-  }
-  const statuses = new Map<CapabilityTraceStatus, number>();
+function traceGroupStatuses(group: CapabilityTraceGroup): DashboardStatusCount[] {
+  const counts = new Map<CapabilityTraceStatus, number>();
   for (const trace of group.traces) {
-    statuses.set(trace.status, (statuses.get(trace.status) ?? 0) + 1);
+    counts.set(trace.status, (counts.get(trace.status) ?? 0) + 1);
   }
-  const status =
-    statuses.size === 1
-      ? `${group.traces[0].status} ×${group.traces.length}`
-      : [...statuses].map(([name, count]) => `${count} ${name}`).join(", ");
+  return [...counts].map(([status, count]) => ({ status, count }));
+}
+
+function traceGroupDurationMs(group: CapabilityTraceGroup, now: number): number {
   const startedAt = group.traces[0].startedAt;
   const finishedAt = Math.max(
     ...group.traces.map((trace) => trace.startedAt + (trace.durationMs ?? now - trace.startedAt)),
   );
-  return `${status} over ${(Math.max(0, finishedAt - startedAt) / 1000).toFixed(1)}s`;
+  return Math.max(0, finishedAt - startedAt);
 }
 
 function callModel(group: CapabilityTraceGroup, now: number): DashboardCall {
@@ -112,7 +121,10 @@ function callModel(group: CapabilityTraceGroup, now: number): DashboardCall {
     capability: trace.capability,
     method: trace.method,
     status: traceGroupStatus(group),
-    summary: traceGroupSummary(group, now),
+    count: group.traces.length,
+    statuses: traceGroupStatuses(group),
+    durationMs: traceGroupDurationMs(group, now),
+    unfinished: group.traces.some((entry) => entry.durationMs === undefined),
   };
 }
 

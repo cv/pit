@@ -12,15 +12,27 @@ const run = (databaseId: number, name = "CI", headSha = sha) => ({
   url: `https://example.com/runs/${databaseId}`,
 });
 
+// Applies GitHub's workflow filter and newest-first search window, like `gh run list`.
+const githubRunList = (runs: ReturnType<typeof run>[]) =>
+  vi.fn(async (options: { workflow?: string; limit: number; json?: string[] }) =>
+    processResult({
+      stdout: JSON.stringify(
+        runs
+          .filter((entry) => !options.workflow || entry.name === options.workflow)
+          .slice(0, options.limit),
+      ),
+    }),
+  );
+
 describe("findGitHubRunForCommit", () => {
-  it("selects an exact workflow before capping output matches", async () => {
+  it("asks GitHub for one workflow so other workflows cannot fill the search window", async () => {
     const find = await loadWorkflowFunction("findGitHubRunForCommit");
     const runs = [
-      ...Array.from({ length: 6 }, (_, i) => run(i, "Other")),
+      ...Array.from({ length: 25 }, (_, i) => run(100 + i, "Other")),
       run(42),
       run(43, "CI", "1234567"),
     ];
-    const runList = vi.fn().mockResolvedValue(processResult({ stdout: JSON.stringify(runs) }));
+    const runList = githubRunList(runs);
     expect(
       await find({ gh: { runList } }, { repo: "cv/pit", sha: " ABCDEF0 ", runName: "CI" }),
     ).toMatchObject({
@@ -32,6 +44,7 @@ describe("findGitHubRunForCommit", () => {
     expect(runList.mock.calls[0]?.[0]).toMatchObject({
       repo: "cv/pit",
       limit: 20,
+      workflow: "CI",
       json: expect.arrayContaining([
         "databaseId",
         "headSha",
@@ -57,6 +70,7 @@ describe("findGitHubRunForCommit", () => {
     expect(result).toMatchObject({ found: true, truncated: true, searchLimited: true });
     expect(result.matches).toHaveLength(5);
     expect(runList.mock.calls[0]?.[0]).toHaveProperty("commit", sha);
+    expect(runList.mock.calls[0]?.[0]).not.toHaveProperty("workflow");
   });
 
   it.each<{ name: string; input: Record<string, unknown>; error: string }>([
@@ -141,6 +155,28 @@ describe("waitForGitHubRunForCommit composition", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("stops discovery at once when GitHub rejects the workflow filter", async () => {
+    const find = await loadWorkflowFunction("findGitHubRunForCommit");
+    const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
+    const runList = vi
+      .fn()
+      .mockRejectedValue(new Error("could not find any workflows named NoSuchWorkflow"));
+    const waitForGitHubRun = vi.fn();
+    await expect(
+      wait(
+        {
+          findGitHubRunForCommit: (input: Record<string, unknown>) =>
+            find({ gh: { runList } }, input),
+          waitForGitHubRun,
+        },
+        { repo: "cv/pit", sha, runName: "NoSuchWorkflow", discoveryAttempts: 3 },
+      ),
+    ).rejects.toThrow("could not find any workflows named NoSuchWorkflow");
+    expect(runList).toHaveBeenCalledOnce();
+    expect(waitForGitHubRun).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("does not poll an unrelated run when discovery is exhausted", async () => {
     const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
     const findGitHubRunForCommit = vi.fn().mockResolvedValue({ found: false, matches: [] });
@@ -160,11 +196,11 @@ describe("waitForGitHubRunForCommit composition", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("composes real discovery with waiting when the requested workflow is beyond the output cap", async () => {
+  it("composes real discovery with waiting when other workflows ran more recently", async () => {
     const find = await loadWorkflowFunction("findGitHubRunForCommit");
     const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
-    const runs = [...Array.from({ length: 6 }, (_, i) => run(i, "Other")), run(42)];
-    const runList = vi.fn().mockResolvedValue(processResult({ stdout: JSON.stringify(runs) }));
+    const runs = [...Array.from({ length: 25 }, (_, i) => run(100 + i, "Other")), run(42)];
+    const runList = githubRunList(runs);
     const waitForGitHubRun = vi.fn().mockResolvedValue({ status: "completed" });
     await wait(
       {

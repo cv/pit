@@ -17,6 +17,8 @@ export interface WireMessage {
   functionContext?: FunctionExecutionContext;
   value?: unknown;
   error?: string | SandboxWireError;
+  /** Non-default error name for a string error, such as TimeoutError or AbortError. */
+  errorName?: string;
   input?: unknown;
 }
 

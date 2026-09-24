@@ -25,6 +25,11 @@ result types from injected functions instead of copying their schemas.
 
 ## Bounds and failure contracts
 
+- Numeric inputs are integers within the ranges their documentation states.
+  Fractional, non-finite, or out-of-range values are rejected before any host call
+  instead of being silently clamped. The only derived cap is `waitForGitHubRun()`'s
+  285-second polling budget: checks that would not fit after the initial delay are
+  skipped, and a timeout reports both `attempts` made and `requestedAttempts`.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
 - `listChangedGitFiles()` preserves literal filenames, uses rename destinations,
@@ -38,8 +43,10 @@ result types from injected functions instead of copying their schemas.
   independently of readiness.
 - CI discovery returns at most five matches, newest first. `truncated` means more
   matching runs were omitted; `searchLimited` means the recent-run search window
-  was full. Absence from that window is not proof that no run exists. An exact
-  `runName` filter applies before the five-match cap.
+  was full. Absence from that window is not proof that no run exists. `runName`
+  becomes GitHub's workflow filter (a name, file name, or ID), so the window holds
+  only that workflow's runs; an unknown workflow fails rather than returning
+  `found: false`.
 
 ## Session analysis and jq
 
@@ -56,14 +63,17 @@ session-schema projection, and external query execution.
   not a security sandbox. Each invocation has a 30-second timeout and rejects
   nonzero exits, invalid JSON, or output beyond 50,000 bytes / 2,000 lines.
 - `readPitSessionEvents()` projects physical-line pages. Its small jq query removes
-  code bodies, images, and successful tool output before crossing into the guest.
-  It does not classify failures or generate recommendations. Empty event pages
-  can still have `hasMore: true`; continue using `nextLine`.
+  code bodies, images, and successful tool output before crossing into the guest,
+  clips long labels, programs, and errors, and ends a page early after about 40 KB
+  of projected events, always keeping at least one line. It does not classify
+  failures or generate recommendations. Empty event pages can still have
+  `hasMore: true`; continue using `nextLine`.
 - `analyzePitSession()` correlates calls across pages, classifies failures, and
   retains only the requested number of recent failure examples. It refuses an
-  incomplete audit beyond 40,000 physical lines. The query's page lookahead bounds
-  each transfer; it does not slurp the session. Paging reopens and scans past the
-  earlier lines, trading extra sequential I/O for a stateless, bounded interface.
+  incomplete audit beyond 100,000 physical lines. The query reads one line past
+  each page; it does not slurp the session. Paging reopens and scans past the
+  earlier lines, so audits request the largest (500-line) pages, trading extra
+  sequential I/O for a stateless, bounded interface.
 - As before, audits cover all recorded branches, skip malformed JSONL lines, and
   use heuristic source-text usage counters. They are not active-branch execution
   traces or TypeScript AST analysis. Sessions are expected to remain append-only

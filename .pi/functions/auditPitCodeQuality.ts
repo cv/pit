@@ -1,13 +1,17 @@
 /**
  * Runs Pit's maintainability audit and returns bounded structured findings.
  *
+ * @param input.limit - Maximum findings to return (1-100). The default is 30.
  */
 async function auditPitCodeQuality(
   { context: { get }, shell: { execFile } },
   input: { limit?: number; kinds?: string[] } = {},
 ) {
+  const limit = input.limit ?? 30;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error("limit must be an integer between 1 and 100");
+  }
   const runtime = await get();
-  const limit = Math.max(1, Math.min(input.limit ?? 30, 100));
   const result = await execFile("node", ["scripts/audit-code-size.mjs", "--json"], {
     cwd: runtime.cwd,
     timeoutMs: 30000,

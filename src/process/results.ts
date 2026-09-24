@@ -9,7 +9,22 @@ export interface ProcessResult {
 
 export type SemanticOutcome = "success" | "warning" | "error";
 
-export function parseProcessResult(value: unknown): ProcessResult | undefined {
+declare const sanitizedText: unique symbol;
+
+/** Display-safe process text: controls removed, line endings normalized, foreground SGR kept. */
+export type SanitizedText = string & { readonly [sanitizedText]: true };
+
+/** A returned process result whose streams were sanitized once for display. */
+export interface DisplayProcessResult extends Omit<ProcessResult, "stdout" | "stderr"> {
+  stdout: SanitizedText;
+  stderr: SanitizedText;
+}
+
+export function sanitizeProcessText(value: string): SanitizedText {
+  return sanitizeTerminalText(value, { preserveSgr: true }) as SanitizedText;
+}
+
+export function parseProcessResult(value: unknown): DisplayProcessResult | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return;
   }
@@ -25,13 +40,16 @@ export function parseProcessResult(value: unknown): ProcessResult | undefined {
   ) {
     return;
   }
-  return result as unknown as ProcessResult;
+  return {
+    stdout: sanitizeProcessText(result.stdout),
+    stderr: sanitizeProcessText(result.stderr),
+    code: result.code,
+    truncated: result.truncated,
+  };
 }
 
-export function processOutputLines(value: string): string[] {
-  return sanitizeTerminalText(value, { preserveSgr: true })
-    .split("\n")
-    .filter((line, index, all) => index < all.length - 1 || line !== "");
+export function processOutputLines(value: SanitizedText): string[] {
+  return value.split("\n").filter((line, index, all) => index < all.length - 1 || line !== "");
 }
 
 export interface SemanticOutcomeOptions {
@@ -40,7 +58,7 @@ export interface SemanticOutcomeOptions {
 }
 
 export function semanticOutcome(
-  result: ProcessResult,
+  result: Pick<ProcessResult, "code" | "truncated">,
   options: SemanticOutcomeOptions = {},
 ): SemanticOutcome {
   const accepted = result.code === 0 || options.acceptedExitCodes?.includes(result.code) === true;

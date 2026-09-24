@@ -1,8 +1,7 @@
-import { stripTerminalSequences } from "@earendil-works/pi-tui";
-
+import { retainShellOutputTail } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
-import { parseProcessResult } from "../process/results.js";
+import { parseProcessResult, sanitizeProcessText } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
@@ -72,18 +71,33 @@ function shellProgressOutput(group: ShellProgressGroup): string {
   return "";
 }
 
-function returnedProcessOutputs(value: unknown): string[] {
+interface ReturnedOutput {
+  tail: string;
+  code?: number;
+}
+
+/** Applies the live retention rule to styled text, then drops styling for comparison. */
+function unstyledTail(text: string): string {
+  return sanitizeTerminalText(retainShellOutputTail(text));
+}
+
+/** Returned texts that could be a shell call's whole output, reduced by the live retention rule. */
+function returnedOutputs(value: unknown): ReturnedOutput[] {
   const pending = [value];
   const seen = new WeakSet<object>();
-  const outputs: string[] = [];
+  const outputs: ReturnedOutput[] = [];
   while (pending.length > 0) {
     const entry = pending.pop();
+    if (typeof entry === "string") {
+      if (entry) outputs.push({ tail: unstyledTail(sanitizeProcessText(entry)) });
+      continue;
+    }
     if (!entry || typeof entry !== "object" || seen.has(entry)) continue;
     seen.add(entry);
     const result = parseProcessResult(entry);
     if (result) {
-      // Match the displayed stdout-then-stderr ordering, not an unordered set of lines.
-      outputs.push(sanitizeTerminalText(result.stdout + result.stderr));
+      // Captured chunks interleave streams; stdout-then-stderr matches only when they did not.
+      outputs.push({ tail: unstyledTail(result.stdout + result.stderr), code: result.code });
     } else {
       pending.push(...Object.values(entry));
     }
@@ -91,15 +105,22 @@ function returnedProcessOutputs(value: unknown): string[] {
   return outputs;
 }
 
+/** A completed call is shown above only when a returned text yields exactly its retained tail. */
+function returnedWhole(entry: ShellProgress, outputs: ReturnedOutput[]): boolean {
+  if (entry.status !== "done") return false;
+  const retained = sanitizeTerminalText(entry.output);
+  return outputs.some(
+    ({ tail, code }) => (code === undefined || code === entry.code) && tail === retained,
+  );
+}
+
 export function renderRetainedShellOutput(
   details: ProgressDetails | undefined,
   theme: RenderTheme,
-  returnedLines: string[] = [],
   returnedValue?: unknown,
 ): string {
   let text = "";
-  const displayed = stripTerminalSequences(returnedLines.join("\n"));
-  const processOutputs = returnedProcessOutputs(returnedValue);
+  let outputs: ReturnedOutput[] | undefined;
   for (const entry of details?.progress ?? []) {
     const status =
       entry.status === "done"
@@ -107,10 +128,10 @@ export function renderRetainedShellOutput(
         : "unfinished when invocation ended";
     text += `\n${theme.fg("toolTitle", `[${status}] ${entry.command}`)}`;
     if (entry.output) {
-      const output = sanitizeTerminalText(entry.output);
-      const alreadyShown =
-        displayed.includes(output) || processOutputs.some((value) => value.includes(output));
-      text += alreadyShown ? `\n${theme.fg("dim", "(output shown above)")}` : `\n${entry.output}`;
+      outputs ??= returnedOutputs(returnedValue);
+      text += returnedWhole(entry, outputs)
+        ? `\n${theme.fg("dim", "(output shown above)")}`
+        : `\n${entry.output}`;
     }
   }
   if (details?.progressTruncated)
@@ -132,20 +153,29 @@ export function renderPartialToolResult(input: {
   if (input.expanded) {
     text += renderExecutionDashboard(input.details, input.theme);
     const progressGroups = groupAdjacentShellProgress(input.details?.progress ?? []);
-    const visible = progressGroups.filter(
-      (group, index) =>
-        index >= progressGroups.length - 4 ||
-        group.entries.some((entry) => failedShellProgress(entry) || entry.status === "running"),
+    const visible = new Set(
+      progressGroups.filter(
+        (group, index) =>
+          index >= progressGroups.length - 4 ||
+          group.entries.some((entry) => failedShellProgress(entry) || entry.status === "running"),
+      ),
     );
+    const hidden = progressGroups.reduce(
+      (count, group) => count + (visible.has(group) ? 0 : group.entries.length),
+      0,
+    );
+    if (input.details?.progressTruncated) {
+      text += `\n${input.theme.fg("warning", "… earlier shell calls were not retained")}`;
+    }
+    if (hidden > 0) {
+      text += `\n${input.theme.fg("dim", `… ${hidden} earlier shell call${hidden === 1 ? "" : "s"} hidden while running; listed when finished`)}`;
+    }
     for (const group of visible) {
       text += `\n${input.theme.fg("accent", `[${shellProgressState(group)}]`)} ${input.theme.fg("dim", group.command)}`;
       const output = shellProgressOutput(group);
       if (output) {
         text += `\n${input.theme.fg("muted", output)}`;
       }
-    }
-    if (input.details?.progressTruncated || visible.length < progressGroups.length) {
-      text += `\n${input.theme.fg("warning", "… earlier shell calls omitted")}`;
     }
   }
   return new HangingIndentText(sanitizeTerminalText(text, { preserveSgr: true }));

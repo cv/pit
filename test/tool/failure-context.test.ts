@@ -1,21 +1,52 @@
 import { describe, expect, it } from "vitest";
 
+import { SandboxRemoteError } from "../../src/sandbox/node-executor.js";
+import { terminationError } from "../../src/shared/termination-errors.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
   structureTypeScriptFailure,
 } from "../../src/tool/failure-context.js";
 
+type FailureKind = "cancelled" | "timeout" | "capability" | "user";
+
 describe("TypeScript failure context", () => {
-  it.each([
-    ["operation cancelled", "cancelled"],
-    ["sandbox timed out after 10ms", "timeout"],
-    ["Command failed with exit code 1", "capability"],
-    ["plain user error", "user"],
-  ] as const)("classifies %s", (message, kind) => {
-    expect(structureTypeScriptFailure(new Error(message), [])).toMatchObject({
+  it.each<{ name: string; error: Error; kind: FailureKind }>([
+    {
+      name: "Pit cancellation",
+      error: terminationError("cancelled", "User function removal was cancelled"),
+      kind: "cancelled",
+    },
+    {
+      name: "Pit timeout",
+      error: terminationError("timeout", "TypeScript execution timed out after 100ms"),
+      kind: "timeout",
+    },
+    {
+      name: "platform timeout",
+      error: new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+      kind: "timeout",
+    },
+    {
+      name: "platform abort",
+      error: new DOMException("This operation was aborted", "AbortError"),
+      kind: "cancelled",
+    },
+    {
+      name: "Node executor guest timeout",
+      error: new SandboxRemoteError({ name: "TimeoutError", message: "deadline reached" }),
+      kind: "timeout",
+    },
+    {
+      name: "command failure",
+      error: new Error("Command failed with exit code 1"),
+      kind: "capability",
+    },
+    { name: "plain user error", error: new Error("plain user error"), kind: "user" },
+  ])("classifies a $name", ({ error, kind }) => {
+    expect(structureTypeScriptFailure(error, [])).toMatchObject({
       functionPath: [],
-      rootError: message,
+      rootError: error.message,
       kind,
     });
   });
@@ -24,7 +55,7 @@ describe("TypeScript failure context", () => {
     name: string;
     message: string;
     errorName?: string;
-    kind: "cancelled" | "timeout" | "capability" | "user";
+    kind: FailureKind;
   }>([
     {
       name: "timeoutMs in a validation excerpt",
@@ -55,51 +86,39 @@ describe("TypeScript failure context", () => {
     },
     { name: "undefined AbortError reference", message: "AbortError is not defined", kind: "user" },
     {
-      name: "subprocess deadline exit",
+      name: "a program's own exit code 124",
       message: "Command failed with exit code 124: node cancel.ts",
-      kind: "timeout",
+      kind: "capability",
     },
     {
-      name: "subprocess cancellation exit",
+      name: "a program's own exit code 130",
       message: "Command failed with exit code 130: node timeout.ts",
-      kind: "cancelled",
+      kind: "capability",
     },
     {
-      name: "tool deadline",
-      message: "TypeScript execution timed out after 100ms",
-      kind: "timeout",
+      name: "timeout wording from user code",
+      message: "Request timed out",
+      kind: "user",
     },
-    { name: "tool cancellation", message: "TypeScript execution cancelled", kind: "cancelled" },
+    { name: "cancellation wording from user code", message: "Operation cancelled", kind: "user" },
     {
-      name: "cancelled removal",
-      message: "User function removal was cancelled",
-      kind: "cancelled",
-    },
-    {
-      name: "cancelled model refresh",
-      message: "Model catalog refresh was cancelled",
-      kind: "cancelled",
+      name: "a name serialized into user text",
+      message: "TimeoutError: request stopped",
+      kind: "user",
     },
     {
-      name: "typed timeout takes priority over abort wording",
+      name: "typed timeout over abort wording",
       errorName: "TimeoutError",
       message: "The operation was aborted",
       kind: "timeout",
     },
     {
-      name: "typed cancellation",
+      name: "typed cancellation over timeout wording",
       errorName: "AbortError",
-      message: "Request stopped",
+      message: "Request timed out",
       kind: "cancelled",
     },
-    { name: "serialized timeout", message: "TimeoutError: request stopped", kind: "timeout" },
-    { name: "serialized cancellation", message: "AbortError: request stopped", kind: "cancelled" },
-    {
-      name: "timeout cause survives an RPC error wrapper",
-      message: "The operation was aborted due to timeout",
-      kind: "timeout",
-    },
-  ])("classifies $name without scanning unrelated text", ({ message, errorName, kind }) => {
+  ])("classifies $name by error name, never message wording", ({ message, errorName, kind }) => {
     const error = Object.assign(new Error(message), { name: errorName ?? "Error" });
     expect(structureTypeScriptFailure(error, [])).toMatchObject({ kind, rootError: message });
   });

@@ -132,6 +132,12 @@ describe("Git result renderers", () => {
     expect(render("show", processResult("", "unknown object", 128)).summary).toBe("show, exit 128");
   });
 
+  it("keeps truncated shown JSON literal even when its retained prefix parses", () => {
+    const shown = render("show", processResult('{"line":1}\n', "", 0, true));
+    expect(shown.lines).toContain('{"line":1}');
+    expect(shown.lines.join("\n")).not.toContain('"line": 1');
+  });
+
   it("treats successful push progress as output and failures as warnings", () => {
     const pushed = render("push", processResult("", "To github.com:cv/pit.git\n   main -> main\n"));
     expect(pushed.summary).toBe("push, complete");

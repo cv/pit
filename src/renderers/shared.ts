@@ -7,7 +7,7 @@ import type { RenderedResultValue, ResultTheme } from "./types.js";
 export type JsonRecord = Record<string, unknown>;
 
 export const MAX_RECURSIVE_DEPTH = 4;
-export const JSON_CONTAINER_PREFIX = /^\s*[[{]/;
+const JSON_CONTAINER_PREFIX = /^\s*[[{]/;
 const HASHED_LINE_PATTERN = /^(\d+:[^|]+\|)(.*)$/;
 
 export function isRecord(value: unknown): value is JsonRecord {
@@ -37,11 +37,63 @@ export function plural(count: number, singular: string, pluralForm = `${singular
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+type Outcome = NonNullable<RenderedResultValue["outcome"]>;
+
+const OUTCOME_MARKERS: Readonly<Record<Outcome, string>> = {
+  success: "✓",
+  warning: "⚠",
+  error: "✗",
+};
+
+/** The colored glyph for a semantic outcome, shared by result headers, batch entries, and dashboards. */
+export function outcomeMarker(theme: Pick<ResultTheme, "fg">, outcome: Outcome): string {
+  return theme.fg(outcome, OUTCOME_MARKERS[outcome]);
+}
+
+/**
+ * Moves nested hanging indents into an enclosing view: source line N becomes line N + `lines`, and
+ * each width grows by `columns`. `before` keeps only source lines shown in a prefix of the view.
+ */
+export function offsetHangingIndents(
+  indents: Readonly<Record<number, number>> | undefined,
+  {
+    lines = 0,
+    columns = 0,
+    before = Number.POSITIVE_INFINITY,
+  }: { lines?: number; columns?: number; before?: number },
+): Record<number, number> {
+  const shifted: Record<number, number> = {};
+  for (const [line, width] of Object.entries(indents ?? {})) {
+    if (Number(line) < before) {
+      shifted[lines + Number(line)] = width + columns;
+    }
+  }
+  return shifted;
+}
+
 export function combinedOutcome(
   values: Array<RenderedResultValue | undefined>,
 ): NonNullable<RenderedResultValue["outcome"]> {
   if (values.some((value) => value?.outcome === "error")) return "error";
   return values.some((value) => value?.outcome === "warning") ? "warning" : "success";
+}
+
+/**
+ * Parses JSON only from complete text; `undefined` means the text must stay literal.
+ * `requireContainer` limits structured views to objects and arrays so scalar output stays text.
+ */
+export function parseCompleteJson(
+  text: string,
+  { truncated, requireContainer = false }: { truncated: boolean; requireContainer?: boolean },
+): unknown {
+  if (truncated || (requireContainer && !JSON_CONTAINER_PREFIX.test(text))) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 export function renderJson(value: unknown): string[] {

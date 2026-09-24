@@ -2,19 +2,22 @@ import { highlightCode } from "@earendil-works/pi-coding-agent";
 
 import {
   processOutputLines,
-  type ProcessResult,
+  type DisplayProcessResult,
   parseProcessResult,
   semanticOutcome,
 } from "../process/results.js";
+import { parseCompleteJson, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 const STATUS_PORCELAIN_PATTERN = /^.. /;
 const LOG_ONE_LINE_PATTERN = /^([0-9a-f]{7,40})(\s+)(.*)$/i;
 const LOG_COMMIT_LINE_PATTERN = /^(commit)\s+([0-9a-f]{7,40})(.*)$/i;
 const SHOW_DIFF_PATTERN = /^(?:commit\s|diff --git )/m;
-const JSON_CONTAINER_PATTERN = /^\s*[[{]/;
 
-type ParsedGitRenderer = (result: ProcessResult, context: RenderContext) => RenderedResultValue;
+type ParsedGitRenderer = (
+  result: DisplayProcessResult,
+  context: RenderContext,
+) => RenderedResultValue;
 
 function gitRenderer(renderer: ParsedGitRenderer): ValueRenderer {
   return (value, context) => {
@@ -23,15 +26,11 @@ function gitRenderer(renderer: ParsedGitRenderer): ValueRenderer {
   };
 }
 
-function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
-}
-
-function reportsDifferences(result: ProcessResult): boolean {
+function reportsDifferences(result: DisplayProcessResult): boolean {
   return result.code === 1 && result.stderr.trim() === "";
 }
 
-function gitOutcome(method: string, result: ProcessResult) {
+function gitOutcome(method: string, result: DisplayProcessResult) {
   return semanticOutcome(
     result,
     method === "diff" && reportsDifferences(result)
@@ -40,7 +39,7 @@ function gitOutcome(method: string, result: ProcessResult) {
   );
 }
 
-function gitHeader(method: string, result: ProcessResult, theme: ResultTheme): string {
+function gitHeader(method: string, result: DisplayProcessResult, theme: ResultTheme): string {
   const statusColor = gitOutcome(method, result);
   const suffix = result.truncated ? theme.fg("warning", ", truncated") : "";
   return `${theme.fg("toolTitle", theme.bold(`git ${method}`))} ${theme.fg(statusColor, `exit ${result.code}`)}${suffix}`;
@@ -48,7 +47,7 @@ function gitHeader(method: string, result: ProcessResult, theme: ResultTheme): s
 
 interface GitResultOptions {
   method: string;
-  result: ProcessResult;
+  result: DisplayProcessResult;
   context: RenderContext;
   summary: string;
   stdoutLines: string[];
@@ -83,7 +82,7 @@ function gitResult({
   };
 }
 
-function failedSummary(method: string, result: ProcessResult): string | undefined {
+function failedSummary(method: string, result: DisplayProcessResult): string | undefined {
   return result.code === 0 ? undefined : `${method}, exit ${result.code}`;
 }
 
@@ -210,18 +209,15 @@ const renderGitCommit: ValueRenderer = gitRenderer((result, context) => {
   });
 });
 
-function showLines(output: string): string[] {
+function showLines(output: string, truncated: boolean): string[] {
   if (SHOW_DIFF_PATTERN.test(output)) {
     return highlightCode(output, "diff");
   }
-  if (JSON_CONTAINER_PATTERN.test(output)) {
-    try {
-      return highlightCode(JSON.stringify(JSON.parse(output), null, 2), "json");
-    } catch {
-      // Keep malformed or incomplete JSON-like output as plain text.
-    }
-  }
-  return output.split("\n");
+  // Keep malformed, truncated, or scalar JSON-like output as plain text.
+  const parsed = parseCompleteJson(output, { truncated, requireContainer: true });
+  return parsed === undefined
+    ? output.split("\n")
+    : highlightCode(JSON.stringify(parsed, null, 2), "json");
 }
 
 const renderGitShow: ValueRenderer = gitRenderer((result, context) => {
@@ -233,7 +229,7 @@ const renderGitShow: ValueRenderer = gitRenderer((result, context) => {
     result,
     context,
     summary,
-    stdoutLines: output ? showLines(output) : [],
+    stdoutLines: output ? showLines(output, result.truncated) : [],
   });
 });
 
