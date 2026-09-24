@@ -1,7 +1,7 @@
 import { retainShellOutputTail } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
-import { parseProcessResult } from "../process/results.js";
+import { parseProcessResult, sanitizeProcessText } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
@@ -76,10 +76,9 @@ interface ReturnedOutput {
   code?: number;
 }
 
-function retainedTail(text: string): string {
-  return sanitizeTerminalText(
-    retainShellOutputTail(sanitizeTerminalText(text, { preserveSgr: true })),
-  );
+/** Applies the live retention rule to styled text, then drops styling for comparison. */
+function unstyledTail(text: string): string {
+  return sanitizeTerminalText(retainShellOutputTail(text));
 }
 
 /** Returned texts that could be a shell call's whole output, reduced by the live retention rule. */
@@ -90,7 +89,7 @@ function returnedOutputs(value: unknown): ReturnedOutput[] {
   while (pending.length > 0) {
     const entry = pending.pop();
     if (typeof entry === "string") {
-      if (entry) outputs.push({ tail: retainedTail(entry) });
+      if (entry) outputs.push({ tail: unstyledTail(sanitizeProcessText(entry)) });
       continue;
     }
     if (!entry || typeof entry !== "object" || seen.has(entry)) continue;
@@ -98,7 +97,7 @@ function returnedOutputs(value: unknown): ReturnedOutput[] {
     const result = parseProcessResult(entry);
     if (result) {
       // Captured chunks interleave streams; stdout-then-stderr matches only when they did not.
-      outputs.push({ tail: retainedTail(result.stdout + result.stderr), code: result.code });
+      outputs.push({ tail: unstyledTail(result.stdout + result.stderr), code: result.code });
     } else {
       pending.push(...Object.values(entry));
     }

@@ -2,7 +2,7 @@ import { highlightCode } from "@earendil-works/pi-coding-agent";
 
 import {
   processOutputLines,
-  type ProcessResult,
+  type DisplayProcessResult,
   parseProcessResult,
   semanticOutcome,
 } from "../process/results.js";
@@ -14,7 +14,10 @@ const LOG_COMMIT_LINE_PATTERN = /^(commit)\s+([0-9a-f]{7,40})(.*)$/i;
 const SHOW_DIFF_PATTERN = /^(?:commit\s|diff --git )/m;
 const JSON_CONTAINER_PATTERN = /^\s*[[{]/;
 
-type ParsedGitRenderer = (result: ProcessResult, context: RenderContext) => RenderedResultValue;
+type ParsedGitRenderer = (
+  result: DisplayProcessResult,
+  context: RenderContext,
+) => RenderedResultValue;
 
 function gitRenderer(renderer: ParsedGitRenderer): ValueRenderer {
   return (value, context) => {
@@ -27,11 +30,11 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`): s
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
-function reportsDifferences(result: ProcessResult): boolean {
+function reportsDifferences(result: DisplayProcessResult): boolean {
   return result.code === 1 && result.stderr.trim() === "";
 }
 
-function gitOutcome(method: string, result: ProcessResult) {
+function gitOutcome(method: string, result: DisplayProcessResult) {
   return semanticOutcome(
     result,
     method === "diff" && reportsDifferences(result)
@@ -40,7 +43,7 @@ function gitOutcome(method: string, result: ProcessResult) {
   );
 }
 
-function gitHeader(method: string, result: ProcessResult, theme: ResultTheme): string {
+function gitHeader(method: string, result: DisplayProcessResult, theme: ResultTheme): string {
   const statusColor = gitOutcome(method, result);
   const suffix = result.truncated ? theme.fg("warning", ", truncated") : "";
   return `${theme.fg("toolTitle", theme.bold(`git ${method}`))} ${theme.fg(statusColor, `exit ${result.code}`)}${suffix}`;
@@ -48,7 +51,7 @@ function gitHeader(method: string, result: ProcessResult, theme: ResultTheme): s
 
 interface GitResultOptions {
   method: string;
-  result: ProcessResult;
+  result: DisplayProcessResult;
   context: RenderContext;
   summary: string;
   stdoutLines: string[];
@@ -83,7 +86,7 @@ function gitResult({
   };
 }
 
-function failedSummary(method: string, result: ProcessResult): string | undefined {
+function failedSummary(method: string, result: DisplayProcessResult): string | undefined {
   return result.code === 0 ? undefined : `${method}, exit ${result.code}`;
 }
 
