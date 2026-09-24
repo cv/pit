@@ -1,33 +1,18 @@
-import { processOutputLines, semanticOutcome } from "../process/results.js";
-import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import { parseProcessResult, processOutputLines, semanticOutcome } from "../process/results.js";
 import { renderStructuredData } from "./compound.js";
-import { hasOnlyKeys, isRecord, JSON_CONTAINER_PREFIX } from "./shared.js";
+import { JSON_CONTAINER_PREFIX } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderShell(
-  value: unknown,
+  input: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ["stdout", "stderr", "code", "truncated"]) ||
-    typeof value.stdout !== "string" ||
-    typeof value.stderr !== "string" ||
-    typeof value.code !== "number" ||
-    typeof value.truncated !== "boolean"
-  ) {
+  const value = parseProcessResult(input);
+  if (!value) {
     return undefined;
   }
-
-  const stdout = sanitizeTerminalText(value.stdout, { preserveSgr: true });
-  const stderr = sanitizeTerminalText(value.stderr, { preserveSgr: true });
-
-  const statusColor = semanticOutcome({
-    stdout,
-    stderr,
-    code: value.code,
-    truncated: value.truncated,
-  });
+  const { stdout, stderr } = value;
+  const statusColor = semanticOutcome(value);
   const suffix = value.truncated ? theme.fg("warning", ", truncated") : "";
   const lines = [
     `${theme.fg("toolTitle", theme.bold("shell"))} ${theme.fg(statusColor, `exit ${value.code}`)}${suffix}`,

@@ -1,6 +1,6 @@
 import {
   processOutputLines as lines,
-  type ProcessResult,
+  type DisplayProcessResult,
   parseProcessResult,
   type SemanticOutcome,
   semanticOutcome,
@@ -25,7 +25,7 @@ function json(value: string): unknown {
 }
 function renderer(
   method: string,
-  summarize: (result: ProcessResult) => {
+  summarize: (result: DisplayProcessResult) => {
     summary: string;
     output?: string[];
     outcome?: Exclude<SemanticOutcome, "error">;

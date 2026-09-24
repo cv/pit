@@ -3,7 +3,7 @@ import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
-import { processOutputLines } from "../../src/process/results.js";
+import { processOutputLines, sanitizeProcessText } from "../../src/process/results.js";
 import { GIT_RESULT_RENDERERS } from "../../src/renderers/git-result.js";
 import { renderTypeScriptToolCall } from "../../src/renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../../src/renderers/typescript-tool.js";
@@ -206,7 +206,11 @@ describe("terminal UX contract", () => {
   });
 
   it("preserves process blank lines and trailing diff spaces", () => {
-    expect(processOutputLines("first  \n\nlast \n")).toEqual(["first  ", "", "last "]);
+    expect(processOutputLines(sanitizeProcessText("first  \n\nlast \n"))).toEqual([
+      "first  ",
+      "",
+      "last ",
+    ]);
     const rendered = GIT_RESULT_RENDERERS.diff(processValue("@@ -1 +1 @@\n-old\n+new  \n"), {
       theme,
       seen: new WeakSet(),
