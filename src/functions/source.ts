@@ -76,6 +76,78 @@ function functionCallSignature(name: string, declaration: ts.FunctionLikeDeclara
   return `${name}${generics}(${parameters.join(", ")})${result}`.replace(SIGNATURE_WHITESPACE, " ");
 }
 
+const JSDOC_LINE_PREFIX = /^\s*\*?\s?/;
+
+function replaceJsDocSummary(block: string, summary: string): string {
+  const inner = block.slice(3, -2);
+  if (!inner.includes("\n")) {
+    const content = inner.trim();
+    const tagStart = content.search(/(^|\s)@/);
+    const description = (tagStart < 0 ? content : content.slice(0, tagStart)).trim();
+    const tags = tagStart < 0 ? "" : content.slice(tagStart).trim();
+    return description === summary ? block : `/** ${[summary, tags].filter(Boolean).join(" ")} */`;
+  }
+
+  const lines = inner.split("\n");
+  const text = (index: number) =>
+    (index === 0 ? lines[index] : lines[index]?.replace(JSDOC_LINE_PREFIX, ""))?.trim() ?? "";
+  const continuation = lines.slice(1).find((line) => /^\s*\*/.test(line));
+  const prefix = `${continuation?.match(/^\s*\*/)?.[0] ?? " *"} `;
+  const first = lines.findIndex((_, index) => text(index).length > 0);
+
+  if (first < 0 || text(first).startsWith("@")) {
+    const insertAt = first < 0 ? 1 : first;
+    const moved = first === 0 ? [`${prefix}${text(0)}`] : [];
+    const separator = first < 0 ? [] : [prefix.trimEnd()];
+    return `/**${[
+      ...lines.slice(0, insertAt === 0 ? 0 : insertAt),
+      ...(insertAt === 0 ? [""] : []),
+      `${prefix}${summary}`,
+      ...separator,
+      ...moved,
+      ...lines.slice(first === 0 ? 1 : insertAt),
+    ].join("\n")}*/`;
+  }
+
+  let end = first;
+  while (end < lines.length && text(end) !== "" && !text(end).startsWith("@")) end++;
+  const current = lines
+    .slice(first, end)
+    .map((_, offset) => text(first + offset))
+    .join(" ")
+    .replace(SIGNATURE_WHITESPACE, " ");
+  if (current === summary) return block;
+  const replacement = first === 0 ? ` ${summary}` : `${prefix}${summary}`;
+  return `/**${[...lines.slice(0, first), replacement, ...lines.slice(end)].join("\n")}*/`;
+}
+
+/**
+ * Makes `summary` the summary paragraph of a definition's leading JSDoc block. An
+ * undocumented definition gains a one-line block; a documented one keeps its other
+ * paragraphs and tags, and is returned unchanged when its summary already matches.
+ */
+export function withPersistentSummary(source: string, summary: string): string {
+  const file = ts.createSourceFile(
+    "/pit/promotion.ts",
+    source,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const declaration = file.statements[0];
+  const doc =
+    declaration && ts.isFunctionDeclaration(declaration)
+      ? (declaration as ts.FunctionDeclaration & { jsDoc?: ts.JSDoc[] }).jsDoc?.at(-1)
+      : undefined;
+  if (!doc) return `/** ${summary} */\n${source}`;
+  const start = doc.getStart(file);
+  return (
+    source.slice(0, start) +
+    replaceJsDocSummary(source.slice(start, doc.end), summary) +
+    source.slice(doc.end)
+  );
+}
+
 export function getPersistentFunctionMetadata(
   source: string,
   id?: string,

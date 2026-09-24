@@ -417,6 +417,10 @@ async function projectTests({ npm: { test } }) {
     await value(
       'async ({ functions: { list: functionList, promote, remove: removeProject } }) => promote("versionedProject", "Project version two.")',
     );
+    // A matching summary keeps the documented source instead of adding a second JSDoc block.
+    const promoted = await readFile(join(cwd, ".pi/functions/versionedProject.ts"), "utf8");
+    expect(promoted.match(/\/\*\*/g)).toHaveLength(1);
+    expect(promoted).toContain("/** Project version two. */");
     expect(branchEntries).toContainEqual(
       expect.objectContaining({
         customType: "pit-function-definitions",
