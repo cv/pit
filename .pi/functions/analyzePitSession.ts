@@ -1,17 +1,19 @@
 /**
  * Audits a Pi session for recurring tool-call failures and workflow smells.
  * Processes compact pages, keeping correlation and classification in TypeScript.
+ *
+ * @param input.examples - Recent failure examples to retain (1-30). The default is 12.
  */
 async function analyzePitSession(
   { context: { get }, readPitSessionEvents },
   input: { file?: string; examples?: number } = {},
 ) {
+  const examples = input.examples ?? 12;
+  if (!Number.isInteger(examples) || examples < 1 || examples > 30) {
+    throw new Error("examples must be an integer between 1 and 30");
+  }
   const file = input.file ?? (await get()).sessionFile;
   if (!file) throw new Error("No Pi session file is available");
-  if (input.examples !== undefined && !Number.isInteger(input.examples)) {
-    throw new Error("examples must be an integer");
-  }
-  const examples = Math.max(1, Math.min(input.examples ?? 12, 30));
   type Page = Awaited<ReturnType<typeof readPitSessionEvents>>;
   type Failure = NonNullable<Page["events"][number]["failure"]>;
   const classifyFailure = (label: string, error: string) => {
