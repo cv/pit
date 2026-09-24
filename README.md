@@ -2,7 +2,7 @@
 
 **One typed tool for Pi, instead of a toolbox.**
 
-Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It swaps Pi's built-in tools for a single `typescript` tool. Instead of reading a file, running a command, and making an edit in three separate turns, the model writes one small TypeScript function against the capabilities it needs and gets back only the value that function returns.
+Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It swaps Pi's built-in tools for a single `typescript` tool. Rather than reading a file, running a command, and making an edit in three separate turns, the model writes one small TypeScript function that uses the capabilities it needs, and only that function's return value comes back.
 
 ```ts
 async ({ workspace: { read }, git: { status: gitStatus } }) => {
@@ -20,18 +20,18 @@ async ({ workspace: { read }, git: { status: gitStatus } }) => {
 }
 ```
 
-That call reads a file and checks Git status in parallel, then hands the model a three-field summary instead of two raw outputs.
+That call reads a file and checks Git status in parallel, then returns a three-field summary, not two raw outputs.
 
 ## Why try it
 
 - **Fewer round trips.** Related reads, commands, and edits, plus the logic between them, fit in one call.
 - **Quieter context.** Intermediate output stays inside the call; only the returned value reaches the model.
-- **Earlier feedback.** Each call is type-checked against the capability contract before it runs, with source-located diagnostics.
-- **Workflows that stick.** A call that works can be saved as a typed function and reused later in the session, across a project, or in all your projects.
+- **Earlier feedback.** Each call is type-checked before it runs, so a misspelled method or bad argument is reported with its line and column before anything happens.
+- **Reusable workflows.** A call that works can be saved as a typed function and reused later in the session, across a project, or in all your projects.
 
-Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct filesystem, network, or process access. Host effects happen only through the capabilities the call asks for, and results are bounded so the context and TUI stay compact.
+Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It can affect the host only through the capabilities it asks for, and results are bounded so the context and TUI stay compact.
 
-It is a different way of working and won't suit every setup. Pit replaces Pi's default tools for the whole session (you can [allow specific others](#allow-other-tools)), and everything the model does goes through TypeScript.
+It's a different way of working, and it won't suit every setup. When a session starts, Pit makes `typescript` the only active coding tool, even if Pi's `defaultTools` setting lists others (you can [allow specific tools](#allow-other-tools)). Everything the model does goes through TypeScript.
 
 For a longer first-hand account, see [I Wasn't Trying to Build an App](docs/case_study/), a case study of growing a music-recommendation system through everyday Pit use.
 
@@ -45,7 +45,7 @@ Install the latest version:
 pi install git:github.com/cv/pit
 ```
 
-This follows `main`, the branch releases are cut from; every change passes CI before it merges. To pick up new changes, run `pi update git:github.com/cv/pit`, then `/reload` in Pi or restart it.
+This tracks `main`, where releases are cut from; changes land there only after CI passes. To update, run `pi update git:github.com/cv/pit`, then `/reload` in Pi (or restart it).
 
 Other ways to install:
 
@@ -56,20 +56,18 @@ pi -e git:github.com/cv/pit
 # Install for the current project only (writes .pi/settings.json)
 pi install -l git:github.com/cv/pit
 
-# Pin a release; package updates leave pinned installs where they are
+# Pin a release (package updates won't move a pinned install)
 pi install git:github.com/cv/pit@v0.17.0
 ```
 
 See [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) for what changed between versions. Pit is distributed from GitHub only; it isn't published to npm.
 
-Calls run in a Wasmtime sandbox through a prebuilt addon for Linux, macOS, or Windows on ARM64 or x64. If no addon is available for your machine, Pit warns and falls back to a deprecated, permission-restricted Node executor.
-
-When a session starts, Pit makes `typescript` the only active coding tool, even if Pi's `defaultTools` setting lists others.
+Pit uses a prebuilt Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. Without one, it warns and falls back to a deprecated, permission-restricted Node executor.
 
 > [!IMPORTANT]
 > Pi extensions run with your user's permissions, so review the source before installing. Pit sandboxes the code the model writes, but the capabilities it exposes can still change files, run commands, and reach the network.
 
-## Know what Pit can do
+## What Pit can do
 
 Pit injects only the capabilities that submitted code requests.
 
