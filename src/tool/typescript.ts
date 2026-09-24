@@ -29,6 +29,7 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
+import { resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
   FUNCTION_ID_DESCRIPTION,
@@ -148,6 +149,7 @@ function createExecutionProgress(
 }
 
 interface SandboxValueExecution {
+  input: unknown;
   request: TypeScriptToolExecution;
   preparedFunction: PreparedSavedFunctionExecution;
   functionActivity: FunctionActivity[];
@@ -158,6 +160,7 @@ interface SandboxValueExecution {
 
 async function executeSandboxValue({
   request,
+  input,
   preparedFunction,
   functionActivity,
   promotionSuggestions,
@@ -198,7 +201,7 @@ async function executeSandboxValue({
     userFunctions: preparedFunction.userFunctions,
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,
-    ...(request.params.params === undefined ? {} : { input: request.params.params }),
+    ...(input === undefined ? {} : { input }),
     onCapabilityTrace: (trace: CapabilityTrace) => executionProgress.recordTrace(trace),
   };
   return runWithFunctionExecutor(
@@ -262,17 +265,19 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
   try {
     const source = await formatTypeScriptSource(request.params.code);
+    const input = resolveToolInput(source, request.params.params);
     timings.enter("preparation");
     const preparedFunction = request.savedFunctionService.prepare({
       source,
       ...(request.params.functionId === undefined ? {} : { functionId: request.params.functionId }),
-      ...(request.params.params === undefined ? {} : { input: request.params.params }),
+      ...(input === undefined ? {} : { input }),
       ...(request.params.saveOnly ? { saveOnly: true } : {}),
       context: request.ctx,
     });
     const value = await executeSandboxValue({
       request,
       preparedFunction,
+      input,
       functionActivity,
       promotionSuggestions,
       executionProgress,
