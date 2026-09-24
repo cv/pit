@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
@@ -27,6 +29,8 @@ import {
 } from "./registry.js";
 
 const MAX_HTTP_BYTES = 1_000_000;
+// One storage instance; each host dispatch owns its async scope, including overlapping tools.
+const processTraceContext = new AsyncLocalStorage<number | undefined>();
 
 type PublicCapabilityHandler = (
   method: string,
@@ -90,6 +94,7 @@ export interface HostCapabilityServices {
 }
 
 interface ProcessCapabilityHandlers {
+  withTrace<T>(sequence: number | undefined, operation: () => T): T;
   shell: Record<CapabilityMethodName<"shell">, CapabilityMethodHandler>;
   run(
     program: string,
@@ -108,8 +113,15 @@ function createProcessCapabilityHandlers(input: {
   let nextShellProgressId = 1;
   const progressFor = (command: string) => {
     const id = nextShellProgressId++;
+    const traceSequence = processTraceContext.getStore();
     return input.onShellProgress
-      ? (event: HostShellProgressEvent) => input.onShellProgress?.({ id, command, ...event })
+      ? (event: HostShellProgressEvent) =>
+          input.onShellProgress?.({
+            id,
+            command,
+            ...event,
+            ...(traceSequence === undefined ? {} : { traceSequence }),
+          })
       : undefined;
   };
   const run = (
@@ -130,6 +142,7 @@ function createProcessCapabilityHandlers(input: {
     });
   };
   return {
+    withTrace: (sequence, operation) => processTraceContext.run(sequence, operation),
     run,
     shell: {
       exec: (args, signal) => {
@@ -271,39 +284,40 @@ export function createCapabilities({
     runtime: createRuntimeCapabilityHandler({ pi, ctx }),
   };
 
-  return ({ capability, method, args, signal, functionContext }) => {
-    if (capability === "__pit" && method === "savedFunctionRun") {
-      const name = string(args[0], "saved function name");
-      if (!functionState.effective.has(name)) {
-        throw new Error(`Saved function "${name}" is unavailable`);
-      }
-      const scope = functionRunScope(
-        name,
-        {
-          user: functionState.user,
-          project: functionState.project,
-          session: functionState.session,
-        },
-        functionContext?.scope,
-      );
-      activity.push({ action: "run", name, scope });
-      if (
-        scope === "session" &&
-        !functionState.project.has(name) &&
-        !functionState.user.has(name) &&
-        !TEMPORARY_FUNCTION_NAME.test(name)
-      ) {
-        const runs = (functionState.sessionRunCounts.get(name) ?? 0) + 1;
-        functionState.sessionRunCounts.set(name, runs);
-        if (runs >= PROMOTION_SUGGESTION_RUNS && !functionState.promotionSuggested.has(name)) {
-          functionState.promotionSuggested.add(name);
-          promotionSuggestions.push(name);
+  return ({ capability, method, args, signal, functionContext, traceSequence }) =>
+    processHandlers.withTrace(traceSequence, () => {
+      if (capability === "__pit" && method === "savedFunctionRun") {
+        const name = string(args[0], "saved function name");
+        if (!functionState.effective.has(name)) {
+          throw new Error(`Saved function "${name}" is unavailable`);
         }
+        const scope = functionRunScope(
+          name,
+          {
+            user: functionState.user,
+            project: functionState.project,
+            session: functionState.session,
+          },
+          functionContext?.scope,
+        );
+        activity.push({ action: "run", name, scope });
+        if (
+          scope === "session" &&
+          !functionState.project.has(name) &&
+          !functionState.user.has(name) &&
+          !TEMPORARY_FUNCTION_NAME.test(name)
+        ) {
+          const runs = (functionState.sessionRunCounts.get(name) ?? 0) + 1;
+          functionState.sessionRunCounts.set(name, runs);
+          if (runs >= PROMOTION_SUGGESTION_RUNS && !functionState.promotionSuggested.has(name)) {
+            functionState.promotionSuggested.add(name);
+            promotionSuggestions.push(name);
+          }
+        }
+        return null;
       }
-      return null;
-    }
 
-    validateCapabilityCall(capability, method, args);
-    return publicHandlers[capability as CapabilityName](method, args, signal);
-  };
+      validateCapabilityCall(capability, method, args);
+      return publicHandlers[capability as CapabilityName](method, args, signal);
+    });
 }

@@ -12,6 +12,8 @@ export interface CapabilityRequest {
   args: unknown[];
   signal: AbortSignal;
   functionContext?: FunctionExecutionContext;
+  /** Host-assigned identity, never supplied by guest code. */
+  traceSequence?: number;
 }
 
 export type CapabilityHandler = (request: CapabilityRequest) => unknown | Promise<unknown>;
@@ -98,6 +100,7 @@ export class CapabilityDispatcher {
           method,
           args,
           signal: this.options.signal,
+          traceSequence: trace.sequence,
           ...(trace.function ? { functionContext: trace.function } : {}),
         }),
       )

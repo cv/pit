@@ -46,6 +46,12 @@ export function renderMultilineText(
     return;
   }
   const source = sanitizeTerminalText(value.replace(/\r\n?/g, "\n"), { preserveSgr: true });
+  if (context.details === false)
+    return {
+      kind: context.syntaxLanguage ?? "text",
+      lines: [],
+      summary: plural(source.split("\n").length, "line"),
+    };
   const lines =
     context.syntaxLanguage && !source.includes("\u001b[")
       ? highlightCode(source, context.syntaxLanguage)
@@ -121,6 +127,9 @@ export function renderCompound(
     return;
   }
 
+  const summary = plural(entries.length, "field");
+  const outcome = combinedOutcome(entries.map(([, , rendered]) => rendered));
+  if (context.details === false) return { kind: "compound", summary, outcome, lines: [] };
   const lines: string[] = [];
   const hangingIndents: Record<number, number> = {};
   for (const [key, entryValue, known] of entries) {
@@ -150,8 +159,8 @@ export function renderCompound(
   return {
     kind: "compound",
     lines,
-    summary: plural(entries.length, "field"),
-    outcome: combinedOutcome(entries.map(([, , rendered]) => rendered)),
+    summary,
+    outcome,
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,
@@ -174,6 +183,10 @@ export function renderArrayCompound(
     return;
   }
 
+  const kind = renderedEntries.every((entry) => entry?.kind === "read") ? "reads" : "array";
+  const summary = plural(value.length, kind === "reads" ? "file" : "item");
+  const outcome = combinedOutcome(renderedEntries);
+  if (context.details === false) return { kind, summary, outcome, lines: [] };
   const lines: string[] = [];
   const hangingIndents: Record<number, number> = {};
   for (const [index, entry] of value.entries()) {
@@ -197,10 +210,10 @@ export function renderArrayCompound(
     );
   }
   return {
-    kind: "array",
+    kind,
     lines,
-    summary: plural(value.length, "item"),
-    outcome: combinedOutcome(renderedEntries),
+    summary,
+    outcome,
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,

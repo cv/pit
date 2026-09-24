@@ -177,18 +177,25 @@ function renderKnownValue(value: unknown, context: RenderContext): RenderedResul
 }
 
 function renderValueWithFallback(value: unknown, context: RenderContext): RenderedResultValue {
-  return renderKnownValue(value, context) || { kind: "json", lines: renderJson(value) };
+  return (
+    renderKnownValue(value, context) || {
+      kind: "json",
+      lines: context.details === false ? [] : renderJson(value),
+    }
+  );
 }
 
 export function renderResultValue(
   value: unknown,
   theme: ResultTheme,
   capabilityCall?: CapabilityCall,
+  details = true,
 ): RenderedResultValue | undefined {
   return renderKnownValue(value, {
     theme,
     seen: new WeakSet(),
     depth: 0,
+    details,
     ...(capabilityCall ? { capabilityCall } : {}),
   });
 }

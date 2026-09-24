@@ -74,6 +74,7 @@ describe("execution dashboard model", () => {
         events: [
           {
             kind: "call",
+            sequences: [2, 3, 4],
             capability: "gh",
             method: "runView",
             status: "running",

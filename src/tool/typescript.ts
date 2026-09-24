@@ -13,6 +13,7 @@ import { Type } from "typebox";
 import { createCapabilities } from "../capabilities/host.js";
 import type { CapabilityTrace } from "../execution/capability-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
+import { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { functionDependencyBinding } from "../functions/identifier.js";
@@ -127,6 +128,7 @@ interface TypeScriptToolExecution extends TypeScriptToolServices {
 function createExecutionProgress(
   update: TypeScriptToolExecution["update"],
   functionActivity: FunctionActivity[],
+  timings: ExecutionTimingRecorder,
 ): ExecutionProgressController {
   return new ExecutionProgressController(
     update
@@ -137,6 +139,7 @@ function createExecutionProgress(
               value: undefined,
               truncated: false,
               ...snapshot,
+              timings: timings.snapshot(),
               ...(functionActivity.length > 0 ? { functions: [...functionActivity] } : {}),
             },
           })
@@ -150,6 +153,7 @@ interface SandboxValueExecution {
   functionActivity: FunctionActivity[];
   promotionSuggestions: string[];
   executionProgress: ExecutionProgressController;
+  timings: ExecutionTimingRecorder;
 }
 
 async function executeSandboxValue({
@@ -158,6 +162,7 @@ async function executeSandboxValue({
   functionActivity,
   promotionSuggestions,
   executionProgress,
+  timings,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
     return { savedFunction: preparedFunction.name, executed: false };
@@ -175,6 +180,7 @@ async function executeSandboxValue({
     ...(onShellProgress ? { onShellProgress } : {}),
   });
   const options = {
+    timings,
     ...(request.signal ? { signal: request.signal } : {}),
     timeoutMs: request.params.timeoutMs ?? 30_000,
     ...(preparedFunction.name
@@ -252,9 +258,11 @@ function buildToolResult(input: {
 async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const functionActivity: FunctionActivity[] = [];
   const promotionSuggestions: string[] = [];
-  const executionProgress = createExecutionProgress(request.update, functionActivity);
+  const timings = new ExecutionTimingRecorder();
+  const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
   try {
     const source = await formatTypeScriptSource(request.params.code);
+    timings.enter("preparation");
     const preparedFunction = request.savedFunctionService.prepare({
       source,
       ...(request.params.functionId === undefined ? {} : { functionId: request.params.functionId }),
@@ -268,9 +276,12 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       functionActivity,
       promotionSuggestions,
       executionProgress,
+      timings,
     });
+    timings.enter("commit");
     await request.savedFunctionService.commit(preparedFunction, request.ctx, functionActivity);
-    return buildToolResult({
+    timings.enter("result");
+    const result = buildToolResult({
       value,
       ...(preparedFunction.name ? { namedFunction: preparedFunction.name } : {}),
       projectFunction: preparedFunction.projectMetadata !== undefined,
@@ -280,10 +291,14 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       promotionSuggestions,
       executionProgress,
     });
+    return { ...result, details: { ...result.details, timings: timings.finish() } };
   } catch (error) {
     request.pendingFailures.set(
       request.id,
-      captureTypeScriptFailure(error, functionActivity, executionProgress.snapshot()),
+      captureTypeScriptFailure(error, functionActivity, {
+        ...executionProgress.snapshot(),
+        timings: timings.finish(),
+      }),
     );
     throw error;
   } finally {

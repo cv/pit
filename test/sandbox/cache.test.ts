@@ -1,11 +1,55 @@
 import { describe, expect, it } from "vitest";
 
 import { getSavedFunctionDependencyGraph } from "../../src/functions/graph.js";
-import { clearSandboxCaches, getSandboxCacheStats } from "../../src/sandbox/program.js";
+import {
+  clearSandboxCaches,
+  getSandboxCacheStats,
+  prepareSandboxProgram,
+} from "../../src/sandbox/program.js";
 import { runInSandbox } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("sandbox caches", () => {
+  it("reuses validated graphs without leaking mutations or stale grants", async () => {
+    clearSandboxCaches();
+    const source = "async ({ action }) => action()";
+    const projectFunctions = new Map([
+      [
+        "action",
+        "async function action({ workspace: { read } }) { await read('one.txt'); return 1; }",
+      ],
+    ]);
+    const options = { projectFunctions };
+    const first = await prepareSandboxProgram(source, options);
+    expect(first.effects).toEqual(["workspace.read"]);
+    first.effects.push("shell.exec");
+    const cached = await prepareSandboxProgram(source, options);
+    expect(cached.effects).toEqual(["workspace.read"]);
+    expect(getSandboxCacheStats().validationHits).toBeGreaterThan(0);
+
+    projectFunctions.set(
+      "action",
+      "async function action({ shell: { exec } }) { await exec('echo changed'); return 1; }",
+    );
+    expect((await prepareSandboxProgram(source, options)).effects).toEqual(["shell.exec"]);
+    await expect(
+      prepareSandboxProgram(source, {
+        ...options,
+        invalidDefinitions: new Map([["action", "disabled"]]),
+      }),
+    ).rejects.toThrow("unavailable");
+    projectFunctions.delete("action");
+    await expect(prepareSandboxProgram(source, options)).rejects.toThrow("action");
+    clearSandboxCaches();
+  });
+
+  it("does not reuse validated top-level params for different input types", async () => {
+    const source = "async ({}, input: { value: number }) => input.value";
+    await prepareSandboxProgram(source, { input: { value: 1 } });
+    await expect(prepareSandboxProgram(source, { input: { value: "wrong" } })).rejects.toThrow(
+      /string.*number/,
+    );
+  });
   it("reuses validation and compilation without changing successful or rejected outcomes", async () => {
     clearSandboxCaches();
     const source = "({}) => ({ answer: 42 })";

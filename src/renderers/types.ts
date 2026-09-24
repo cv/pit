@@ -12,6 +12,8 @@ export interface RenderContext {
   seen: WeakSet<object>;
   depth: number;
   syntaxLanguage?: string;
+  /** False for summary-only rendering; domain outcomes must still be evaluated. */
+  details?: boolean;
   /** The first statically identifiable capability call in submitted source. */
   capabilityCall?: CapabilityCall;
 }

@@ -1,5 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
+import { formatDuration } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
@@ -10,7 +11,8 @@ import { type CapabilityCall, inferCapabilityCall } from "./capability.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
-import { isRecord, offsetHangingIndents, outcomeMarker, plural, renderJson } from "./shared.js";
+import { describeResult } from "./result-summary.js";
+import { isRecord, offsetHangingIndents, outcomeMarker, renderJson } from "./shared.js";
 import type { RenderedResultValue } from "./types.js";
 import { displayedFailure, displayedFunctionPath } from "./typescript-failure.js";
 import { renderPartialToolResult, renderRetainedShellOutput } from "./typescript-progress.js";
@@ -70,49 +72,6 @@ function renderInputSection(context: StatefulResultContext, theme: RenderTheme):
   return `\n\n${theme.bold(theme.fg("toolTitle", "Inputs"))}\n${inputs}`;
 }
 
-function describeResult(
-  value: unknown,
-  structured: RenderedResultValue | undefined,
-  truncated: boolean,
-  fallback: string,
-): string {
-  if (truncated) {
-    return "Truncated output";
-  }
-  if (structured) {
-    const summary = structured.summary ? ` ${structured.summary}` : "";
-    const verbs: Record<string, string> = {
-      read: "Read",
-      search: "Found",
-      edit: "Edit",
-      shell: "Command",
-      git: "Git",
-      npm: "npm",
-      gh: "GitHub",
-      list: "Listed",
-      glob: "Listed",
-      http: "Received",
-      batch: "Batch",
-      stat: "Stat",
-      compound: "Returned",
-    };
-    return `${verbs[structured.kind] ?? "Returned"}${summary}`;
-  }
-  if (value === undefined) {
-    return fallback ? "Returned text" : "No returned value";
-  }
-  if (value === null) return "Returned null";
-  if (Array.isArray(value)) {
-    return `Returned ${plural(value.length, "item")}`;
-  }
-  if (value !== null && typeof value === "object") {
-    const keys = Object.keys(value);
-    const names = keys.slice(0, 3).join(", ");
-    return `Returned ${plural(keys.length, "field")}${names ? `: ${names}` : ""}`;
-  }
-  return `Returned ${typeof value}`;
-}
-
 interface ResultRenderingState {
   lines: string[];
   hangingIndents: Record<number, number>;
@@ -159,6 +118,7 @@ function renderToolError(input: {
 }
 
 function renderStructuredToolValue(input: {
+  expanded: boolean;
   details?: TypeScriptDetails;
   fallback: string;
   theme: RenderTheme;
@@ -167,18 +127,21 @@ function renderStructuredToolValue(input: {
   const { details, fallback, theme, context } = input;
   if (!(details && !details.truncated && Object.hasOwn(details, "value"))) {
     return {
-      lines: fallback ? highlightCode(fallback, "typescript") : [],
+      lines: input.expanded && fallback ? highlightCode(fallback, "typescript") : [],
       hangingIndents: {},
     };
   }
   if (details.value === undefined) {
-    return { lines: highlightCode("undefined", "typescript"), hangingIndents: {} };
+    return {
+      lines: input.expanded ? highlightCode("undefined", "typescript") : [],
+      hangingIndents: {},
+    };
   }
   const source = typeof context.args?.code === "string" ? context.args.code : "";
   const capabilityCall = details.traces
     ? runtimeCapabilityCall(details)
     : inferCapabilityCall(source);
-  const structuredResult = renderResultValue(details.value, theme, capabilityCall);
+  const structuredResult = renderResultValue(details.value, theme, capabilityCall, input.expanded);
   if (structuredResult) {
     return {
       lines: structuredResult.detailLines ?? structuredResult.lines,
@@ -187,6 +150,7 @@ function renderStructuredToolValue(input: {
       structuredResult,
     };
   }
+  if (!input.expanded) return { lines: [], hangingIndents: {} };
   let serialized: string;
   let language = "json";
   try {
@@ -225,9 +189,16 @@ function renderExecutionDetails(
   const retained = renderRetainedShellOutput(details, theme, returnedValue);
   if (retained)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Retained process output (tails)"))}${retained}`;
-  const dashboard = renderExecutionDashboard(details, theme, true);
+  const dashboard = renderExecutionDashboard(details, theme, true, returnedValue);
   if (dashboard)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Execution (call completion)"))}${dashboard}`;
+  if (isRecord(details?.timings?.phases)) {
+    const phases = Object.entries(details.timings.phases)
+      .filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value >= 0)
+      .map(([phase, value]) => `${phase} ${formatDuration(value as number)}`);
+    if (phases.length)
+      text += `\n\n${theme.bold(theme.fg("toolTitle", "Invocation timing"))}\n${phases.join(" · ")}`;
+  }
   if (details?.truncated)
     text += `\n${theme.fg("warning", "Output was truncated before rendering; omitted data is unavailable here.")}`;
   return text;
@@ -245,12 +216,11 @@ function renderCompletedToolResult(input: {
   const { expanded, details, fallback, duration, theme, rendering } = input;
   const shown = expanded ? rendering.lines : [];
   const state = details?.truncated ? `truncated, ${duration}` : duration;
-  const resultLabel = describeResult(
-    details?.value,
-    rendering.structuredResult,
-    details?.truncated === true,
-    details && Object.hasOwn(details, "value") ? "" : fallback,
-  );
+  const resultLabel = describeResult(details?.value, rendering.structuredResult, {
+    truncated: details?.truncated === true,
+    fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
+    expanded,
+  });
   const leafOutcome = rendering.structuredResult?.outcome ?? "success";
   const notices = executionNotices(details, leafOutcome);
   const resultOutcome =
@@ -298,6 +268,15 @@ function renderToolResult(
     ? (result.details as unknown as TypeScriptDetails)
     : undefined;
   const execution = executionTiming(context, !options.isPartial || context.isError === true);
+  const recordedMs = details?.timings?.totalMs;
+  if (
+    (!options.isPartial || context.isError) &&
+    typeof recordedMs === "number" &&
+    Number.isFinite(recordedMs) &&
+    recordedMs >= 0
+  ) {
+    execution.duration = formatDuration(recordedMs);
+  }
   for (const key of ["traces", "progress", "functions"] as const) {
     if (details?.[key] !== undefined && !Array.isArray(details[key]))
       throw new Error("Invalid execution metadata");
@@ -321,6 +300,7 @@ function renderToolResult(
     });
   }
   const rendering = renderStructuredToolValue({
+    expanded: options.expanded,
     ...(details ? { details } : {}),
     fallback,
     theme,

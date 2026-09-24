@@ -1,10 +1,9 @@
-import { retainShellOutputTail } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
-import { parseProcessResult, sanitizeProcessText } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
+import { linkedProcessProgress, processProgressRenderer } from "./process-progress.js";
 
 interface ProgressDetails extends ExecutionProgressSnapshot {
   functions?: FunctionActivity[];
@@ -71,71 +70,18 @@ function shellProgressOutput(group: ShellProgressGroup): string {
   return "";
 }
 
-interface ReturnedOutput {
-  tail: string;
-  code?: number;
-}
-
-/** Applies the live retention rule to styled text, then drops styling for comparison. */
-function unstyledTail(text: string): string {
-  return sanitizeTerminalText(retainShellOutputTail(text));
-}
-
-/** Returned texts that could be a shell call's whole output, reduced by the live retention rule. */
-function returnedOutputs(value: unknown): ReturnedOutput[] {
-  const pending = [value];
-  const seen = new WeakSet<object>();
-  const outputs: ReturnedOutput[] = [];
-  while (pending.length > 0) {
-    const entry = pending.pop();
-    if (typeof entry === "string") {
-      if (entry) outputs.push({ tail: unstyledTail(sanitizeProcessText(entry)) });
-      continue;
-    }
-    if (!entry || typeof entry !== "object" || seen.has(entry)) continue;
-    seen.add(entry);
-    const result = parseProcessResult(entry);
-    if (result) {
-      // Captured chunks interleave streams; stdout-then-stderr matches only when they did not.
-      outputs.push({ tail: unstyledTail(result.stdout + result.stderr), code: result.code });
-    } else {
-      pending.push(...Object.values(entry));
-    }
-  }
-  return outputs;
-}
-
-/** A completed call is shown above only when a returned text yields exactly its retained tail. */
-function returnedWhole(entry: ShellProgress, outputs: ReturnedOutput[]): boolean {
-  if (entry.status !== "done") return false;
-  const retained = sanitizeTerminalText(entry.output);
-  return outputs.some(
-    ({ tail, code }) => (code === undefined || code === entry.code) && tail === retained,
-  );
-}
-
 export function renderRetainedShellOutput(
   details: ProgressDetails | undefined,
   theme: RenderTheme,
   returnedValue?: unknown,
 ): string {
-  let text = "";
-  let outputs: ReturnedOutput[] | undefined;
-  for (const entry of details?.progress ?? []) {
-    const status =
-      entry.status === "done"
-        ? `exit ${entry.code ?? "unknown"}`
-        : "unfinished when invocation ended";
-    text += `\n${theme.fg("toolTitle", `[${status}] ${entry.command}`)}`;
-    if (entry.output) {
-      outputs ??= returnedOutputs(returnedValue);
-      text += returnedWhole(entry, outputs)
-        ? `\n${theme.fg("dim", "(output shown above)")}`
-        : `\n${entry.output}`;
-    }
-  }
+  const render = processProgressRenderer(theme, returnedValue);
+  let text = linkedProcessProgress(details)
+    .unlinked.map((entry) => render(entry, { settled: true }))
+    .join("");
   if (details?.progressTruncated)
-    text += `\n${theme.fg("warning", "… earlier shell calls were not retained")}`;
+    text += `
+${theme.fg("warning", "… earlier shell calls were not retained")}`;
   return text;
 }
 
@@ -152,7 +98,9 @@ export function renderPartialToolResult(input: {
   );
   if (input.expanded) {
     text += renderExecutionDashboard(input.details, input.theme);
-    const progressGroups = groupAdjacentShellProgress(input.details?.progress ?? []);
+    const progressGroups = groupAdjacentShellProgress(
+      linkedProcessProgress(input.details).unlinked,
+    );
     const visible = new Set(
       progressGroups.filter(
         (group, index) =>

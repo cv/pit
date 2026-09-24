@@ -1,7 +1,7 @@
 import { transform } from "esbuild";
 
+import type { ExecutionTimingRecorder } from "../execution/timings.js";
 import {
-  functionRegistry,
   type FunctionEnvironment,
   type FunctionDefinitionReference,
 } from "../functions/environment.js";
@@ -9,10 +9,12 @@ import {
   clearSavedFunctionDependencyGraphCache,
   getSavedFunctionDependencyGraphCacheStats,
 } from "../functions/graph.js";
-import { resolveFunctionGraph } from "../functions/resolved-graph.js";
-import { isProgramExpression } from "../functions/source.js";
 import { unifiedRuntimeProgram } from "../functions/unified-runtime.js";
-import { clearValidationCache, getValidationCacheStats, validateTypeScript } from "./validation.js";
+import {
+  clearValidationCache,
+  getValidationCacheStats,
+  validateSandboxTypeScript,
+} from "./validation.js";
 
 const MAX_CACHE_ENTRIES = 128;
 const compilationCache = new Map<string, Promise<string>>();
@@ -68,6 +70,7 @@ async function compileTypeScript(source: string): Promise<string> {
 export interface SandboxProgramOptions extends FunctionEnvironment {
   input?: unknown;
   definition?: FunctionDefinitionReference;
+  timings?: ExecutionTimingRecorder;
 }
 
 export interface PreparedSandboxProgram {
@@ -79,16 +82,13 @@ export async function prepareSandboxProgram(
   source: string,
   options: SandboxProgramOptions,
 ): Promise<PreparedSandboxProgram> {
-  if (!isProgramExpression(source)) {
-    throw new Error("TypeScript programs must be function expressions");
-  }
-  const registry = functionRegistry(options);
-  validateTypeScript(source, new Map(), options.input, {
+  options.timings?.enter("validation");
+  const graph = validateSandboxTypeScript(source, options.input, {
     environment: options,
     ...(options.definition ? { definition: options.definition } : {}),
     checkAll: false,
   });
-  const graph = resolveFunctionGraph(source, registry, options);
+  options.timings?.enter("compilation");
   return {
     compiled: await compileTypeScript(unifiedRuntimeProgram(source, graph)),
     effects: graph.effects,

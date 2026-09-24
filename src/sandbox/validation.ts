@@ -8,7 +8,7 @@ import {
   type FunctionEnvironment,
   type FunctionDefinitionReference,
 } from "../functions/environment.js";
-import { resolveFunctionGraph } from "../functions/resolved-graph.js";
+import { resolveFunctionGraph, type ResolvedFunctionGraph } from "../functions/resolved-graph.js";
 import { isProgramExpression } from "../functions/source.js";
 import { SANDBOX_GLOBALS } from "./contract.js";
 import { functionTypeModel } from "./function-types.js";
@@ -26,10 +26,14 @@ const MAX_DIAGNOSTICS = 8;
 const SAVED_CAPABILITY_HINT =
   'There is no "saved" namespace. Use async ({ functions: { listAll } }) => listAll() to inspect functions; inject a callable by name in the first parameter.';
 const MAX_CACHE_ENTRIES = 128;
-const validationCache = new Map<string, string | null>();
+interface ValidatedSource {
+  error?: string;
+  graph?: ResolvedFunctionGraph;
+}
+const validationCache = new Map<string, ValidatedSource>();
 let validationCacheHits = 0;
 
-function cacheSet(key: string, value: string | null): void {
+function cacheSet(key: string, value: ValidatedSource): void {
   validationCache.delete(key);
   validationCache.set(key, value);
   if (validationCache.size > MAX_CACHE_ENTRIES) {
@@ -131,7 +135,32 @@ export function validateTypeScript(
   input?: unknown,
   validation: TypeScriptValidationOptions = {},
 ): void {
+  validateSource(source, savedFunctions, input, validation);
+}
+
+/** Execution consumes the exact graph whose layered dependencies passed validation. */
+export function validateSandboxTypeScript(
+  source: string,
+  input: unknown,
+  validation: TypeScriptValidationOptions & { environment: FunctionEnvironment },
+): ResolvedFunctionGraph {
+  // A supplied environment always produces a graph; callers never receive the cached graph.
+  return structuredClone(
+    validateSource(source, new Map(), input, { ...validation, requireExpression: true })
+      .graph as ResolvedFunctionGraph,
+  );
+}
+
+function validateSource(
+  source: string,
+  savedFunctions: ReadonlyMap<string, string>,
+  input: unknown,
+  validation: TypeScriptValidationOptions & { requireExpression?: boolean },
+): ValidatedSource {
   const programExpression = isProgramExpression(source);
+  if (validation.requireExpression && !programExpression) {
+    throw new Error("TypeScript programs must be function expressions");
+  }
   const registry = functionRegistry(validation.environment ?? { sessionFunctions: savedFunctions });
   const names = [
     ...(validation.availableNames ??
@@ -154,13 +183,11 @@ export function validateTypeScript(
     Boolean(validation.environment),
     [...(validation.environment?.invalidDefinitions ?? [])],
   ]);
-  if (validationCache.has(cacheKey)) {
+  const cached = validationCache.get(cacheKey);
+  if (cached) {
     validationCacheHits++;
-    const cachedError = validationCache.get(cacheKey);
-    if (cachedError) {
-      throw new Error(cachedError);
-    }
-    return;
+    if (cached.error) throw new Error(cached.error);
+    return cached;
   }
 
   const model = functionTypeModel(source, registry, {
@@ -216,11 +243,14 @@ ${model.declarations}`,
   const diagnostics = programDiagnostics(program);
   if (diagnostics.length > 0) {
     const error = validationError(diagnostics, names);
-    cacheSet(cacheKey, error);
+    cacheSet(cacheKey, { error });
     throw new Error(error);
   }
-  if (validation.environment) {
-    resolveFunctionGraph(source, registry, { ...validation, ...validation.environment });
-  }
-  cacheSet(cacheKey, null);
+  const result: ValidatedSource = validation.environment
+    ? {
+        graph: resolveFunctionGraph(source, registry, { ...validation, ...validation.environment }),
+      }
+    : {};
+  cacheSet(cacheKey, result);
+  return result;
 }

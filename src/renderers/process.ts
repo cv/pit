@@ -5,7 +5,7 @@ import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderShell(
   input: unknown,
-  { theme }: RenderContext,
+  { theme, details }: RenderContext,
 ): RenderedResultValue | undefined {
   const value = parseProcessResult(input);
   if (!value) {
@@ -13,6 +13,8 @@ export function renderShell(
   }
   const { stdout, stderr } = value;
   const statusColor = semanticOutcome(value);
+  const summary = `exit ${value.code}${value.truncated ? ", truncated" : ""}`;
+  if (details === false) return { kind: "shell", outcome: statusColor, summary, lines: [] };
   const suffix = value.truncated ? theme.fg("warning", ", truncated") : "";
   const lines = [
     `${theme.fg("toolTitle", theme.bold("shell"))} ${theme.fg(statusColor, `exit ${value.code}`)}${suffix}`,
@@ -39,7 +41,7 @@ export function renderShell(
     kind: "shell",
     outcome: statusColor,
     lines,
-    summary: `exit ${value.code}${value.truncated ? ", truncated" : ""}`,
+    summary,
     detailLines: lines.slice(1),
   };
 }
