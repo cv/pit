@@ -82,6 +82,77 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
       truncated: false,
     },
   },
+  "npm-pack": {
+    label: "UX NPM PACK: real JSON dry run",
+    code: "async ({ npm: { pack } }) => pack({ dryRun: true, timeoutMs: 60000 })",
+    timeoutMs: 70000,
+  },
+  // Registry-backed npm commands return fixed reports without a network request. The never-taken
+  // `npm.<method>()` branch lets result routing identify the capability from source.
+  "npm-audit": {
+    label: "UX NPM AUDIT: synthetic report",
+    code: "async ({ npm: { audit } }, result: { stdout: string; stderr: string; code: number; truncated: boolean }) => { const npm = { audit }; return result.code < 0 ? npm.audit() : result; }",
+    params: {
+      stdout: JSON.stringify({
+        auditReportVersion: 2,
+        vulnerabilities: {
+          "make-dir": {
+            severity: "moderate",
+            via: ["semver"],
+            range: "2.0.0 - 3.1.0",
+            fixAvailable: false,
+          },
+          semver: {
+            severity: "moderate",
+            via: [
+              {
+                title: "semver vulnerable to Regular Expression Denial of Service",
+                url: "https://github.com/advisories/AUDIT_URL_SENTINEL",
+              },
+            ],
+            range: "<5.7.2 || >=6.0.0 <6.3.1 || >=7.0.0 <7.5.2",
+            fixAvailable: { name: "eslint", version: "9.0.0", isSemVerMajor: true },
+          },
+          "@babel/traverse": {
+            severity: "critical",
+            via: [
+              {
+                title:
+                  "Babel vulnerable to arbitrary code execution when compiling specifically crafted malicious code",
+              },
+            ],
+            range: "<7.23.2",
+            fixAvailable: true,
+          },
+        },
+        metadata: {
+          vulnerabilities: { info: 0, low: 0, moderate: 2, high: 0, critical: 1, total: 3 },
+        },
+      }),
+      stderr: "",
+      code: 1,
+      truncated: false,
+    },
+  },
+  "npm-outdated": {
+    label: "UX NPM OUTDATED: synthetic report",
+    code: "async ({ npm: { outdated } }, result: { stdout: string; stderr: string; code: number; truncated: boolean }) => { const npm = { outdated }; return result.code < 0 ? npm.outdated() : result; }",
+    params: {
+      stdout: JSON.stringify({
+        esbuild: { wanted: "0.28.2", latest: "0.28.2", dependent: "pit" },
+        oxfmt: {
+          current: "0.67.0",
+          wanted: "0.68.0",
+          latest: "0.70.0",
+          dependent: "OUTDATED_SENTINEL",
+        },
+        typescript: { current: "6.0.2", wanted: "6.0.3", latest: "7.0.2", dependent: "pit" },
+      }),
+      stderr: "",
+      code: 1,
+      truncated: false,
+    },
+  },
   json: {
     label: "UX JSON: nested multiline data",
     code: "async ({}, value: { identity: string; rows: { filename: string; patch: string; reviewed: boolean }[]; extra: string; flag: boolean }) => value",
