@@ -79,6 +79,12 @@ describe("resolveToolInput", () => {
       expected: encoded,
     },
     {
+      name: "a program that is not a function",
+      source: "inspect()",
+      params: encoded,
+      expected: encoded,
+    },
+    {
       name: "an unannotated input",
       source: "async ({}, input) => input",
       params: encoded,
