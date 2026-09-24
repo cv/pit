@@ -98,7 +98,7 @@ describe("npm result renderers", () => {
         1,
       ),
     );
-    expect(audit.summary).toBe("audit, 3 vulnerabilities");
+    expect(audit.summary).toBe("audit, 3 vulnerabilities (1 high, 2 moderate)");
     expect(audit.lines.join("\n")).toContain('"high": 1');
   });
 

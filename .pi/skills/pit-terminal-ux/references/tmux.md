@@ -19,21 +19,24 @@ Use `shell.execFile` through TypeScript, with argument arrays. Keep one paramete
 
 Submit one fixture name as ordinary prompt text:
 
-| Fixture     | Expected behavior                                                                                       |
-| ----------- | ------------------------------------------------------------------------------------------------------- |
-| `success`   | Exit 0, separate stdout/stderr, no duplicated retained logs.                                            |
-| `nested`    | Two returned process results; outcomes, identity, and indentation survive composition.                  |
-| `read`      | Real params-based, paged file read with visible source, params, revision, and incompleteness.           |
-| `failure`   | Intentional exit 2, not a successful-looking result.                                                    |
-| `error`     | Thrown multiline error with the final diagnostic still inspectable.                                     |
-| `invalid`   | Validation failure whose source mentions `timeoutMs`; must not become a timeout.                        |
-| `timeout`   | Actual subprocess deadline, with clear cause and retained output.                                       |
-| `progress`  | Several real partial updates followed by a stable final result.                                         |
-| `cancel`    | Long-running subprocess that prints `CANCEL_PID`; Escape should cancel it and terminate that child.     |
-| `json`      | Heterogeneous fields and multiline patch content without field loss.                                    |
-| `batch`     | Real settled read batch with one deliberate missing-file failure.                                       |
-| `http`      | Synthetic HTTP 503 data exercises domain-error presentation without a network request.                  |
-| `transport` | Simulated provider-stream error before arguments complete; the call must be identified as not executed. |
+| Fixture        | Expected behavior                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `success`      | Exit 0, separate stdout/stderr, no duplicated retained logs.                                            |
+| `nested`       | Two returned process results; outcomes, identity, and indentation survive composition.                  |
+| `read`         | Real params-based, paged file read with visible source, params, revision, and incompleteness.           |
+| `failure`      | Intentional exit 2, not a successful-looking result.                                                    |
+| `error`        | Thrown multiline error with the final diagnostic still inspectable.                                     |
+| `invalid`      | Validation failure whose source mentions `timeoutMs`; must not become a timeout.                        |
+| `timeout`      | Actual subprocess deadline, with clear cause and retained output.                                       |
+| `progress`     | Several real partial updates followed by a stable final result.                                         |
+| `cancel`       | Long-running subprocess that prints `CANCEL_PID`; Escape should cancel it and terminate that child.     |
+| `json`         | Heterogeneous fields and multiline patch content without field loss.                                    |
+| `batch`        | Real settled read batch with one deliberate missing-file failure.                                       |
+| `http`         | Synthetic HTTP 503 data exercises domain-error presentation without a network request.                  |
+| `transport`    | Simulated provider-stream error before arguments complete; the call must be identified as not executed. |
+| `npm-pack`     | Real JSON dry run: tarball identity, sizes, and file count lead the complete JSON inventory.            |
+| `npm-audit`    | Synthetic report (no registry request): severity counts and findings lead the complete JSON report.     |
+| `npm-outdated` | Synthetic report (no registry request): per-package versions lead the complete JSON report.             |
 
 Use `/new` between cases when independent captures are useful. Expansion state persists across new sessions: track it rather than blindly toggling twice. Use the configured expand action (the isolated default is Ctrl+O).
 
