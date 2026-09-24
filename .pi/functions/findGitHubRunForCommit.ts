@@ -1,6 +1,7 @@
 /**
  * Finds the newest GitHub Actions run whose head SHA matches a commit prefix.
- * @param input.runName - Optional exact workflow name, filtered before the five-match output cap.
+ * @param input.runName - Optional workflow name, file name such as ci.yml, or ID. GitHub filters
+ *   runs by it before the search window, and an unknown workflow is an error.
  * @param input.limit - Recent runs to inspect (1-100). The default is 20. searchLimited flags a
  *   full search window.
  */
@@ -19,6 +20,7 @@ async function findGitHubRunForCommit(
   const result = await runList({
     repo: input.repo,
     limit,
+    ...(input.runName ? { workflow: input.runName } : {}),
     ...(sha.length === 40 ? { commit: sha } : {}),
     json: ["databaseId", "headSha", "name", "status", "conclusion", "url"],
     maxLines: 100,
@@ -36,10 +38,7 @@ async function findGitHubRunForCommit(
     conclusion: string;
     url: string;
   }>;
-  const matching = runs.filter(
-    (run) =>
-      run.headSha.toLowerCase().startsWith(sha) && (!input.runName || run.name === input.runName),
-  );
+  const matching = runs.filter((run) => run.headSha.toLowerCase().startsWith(sha));
   const matches = matching
     .slice(0, 5)
     .map(({ databaseId, headSha, name, status, conclusion, url }) => ({

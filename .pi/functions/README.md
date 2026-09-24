@@ -43,8 +43,10 @@ result types from injected functions instead of copying their schemas.
   independently of readiness.
 - CI discovery returns at most five matches, newest first. `truncated` means more
   matching runs were omitted; `searchLimited` means the recent-run search window
-  was full. Absence from that window is not proof that no run exists. An exact
-  `runName` filter applies before the five-match cap.
+  was full. Absence from that window is not proof that no run exists. `runName`
+  becomes GitHub's workflow filter (a name, file name, or ID), so the window holds
+  only that workflow's runs; an unknown workflow fails rather than returning
+  `found: false`.
 
 ## Session analysis and jq
 
