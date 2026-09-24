@@ -390,7 +390,7 @@ Press `Ctrl+O` to expand a tool row. The expanded row shows submitted source and
 
 Pit uses compact structured renderers for common capability results. Compound objects can show recognized values as named sections. Unknown values use syntax-highlighted JSON. Git results use Git-aware summaries and styling while they preserve the serialized result.
 
-Expanded running rows show a live capability dashboard in source order. Each entry shows the capability, method, state, and duration. Project and session functions include their scope. Long-running shell calls show a sanitized, bounded tail of standard output and standard error. Partial updates do not enter the final model context.
+Expanded running rows show a live capability dashboard in source order. Each entry shows the capability, method, state, and duration. Project and session functions include their scope. While running, the dashboard keeps running, failed, and rejected calls plus the 12 most recent call groups, and a counted notice replaces older completed calls; the finished expanded view lists every retained call. Long-running shell calls show a sanitized, bounded tail of standard output and standard error. Partial updates do not enter the final model context.
 
 Each invocation retains at most 128 runtime capability traces for TUI attribution. A trace records names, source order, timing, duration, and outcome. Argument metadata contains bounded type-and-size summaries, not argument values. Additional calls set a truncation flag. Traces let saved-function results use the same renderers as direct calls. Ambiguous multi-call results use generic rendering.
 

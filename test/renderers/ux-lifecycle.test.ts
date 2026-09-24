@@ -125,7 +125,7 @@ describe("terminal UX lifecycle and fallback", () => {
     );
     expect(output).toContain("FAILURE_SENTINEL");
     expect(output).toContain("[running] command-1");
-    expect(output).toContain("earlier shell calls omitted");
+    expect(output).toContain("… 2 earlier shell calls hidden while running; listed when finished");
   });
 
   it("does not duplicate a returned process log in retained output", () => {
