@@ -27,10 +27,20 @@ export const workspaceCapability = defineCapability({
     batch: {
       callDescription: "Run workspace batch",
       resultRenderer: "batch",
+      // Failure handling applies only to read batches; the runtime rejects options for edits.
       declaration: `batch(
-  operations: PitBatchOperation[],
+  operations: PitBatchReadOperation[],
   options?: { failure?: "fail-fast" | "settled" },
 ): Promise<{
+  results: Array<
+    | { kind: "read"; index: number; ok: true; value: PitReadResult }
+    | { kind: "read"; index: number; ok: false; value?: undefined; error: string }
+  >;
+}>;
+batch(
+  operations: PitBatchEditOperation[],
+): Promise<{ results: Array<{ kind: "edit"; index: number; ok: true; value: PitEditResult }> }>;
+batch(operations: PitBatchOperation[]): Promise<{
   results: Array<
     | { kind: "read"; index: number; ok: true; value: PitReadResult }
     | { kind: "read"; index: number; ok: false; value?: undefined; error: string }
@@ -38,7 +48,7 @@ export const workspaceCapability = defineCapability({
   >;
 }>;`,
       documentation:
-        'workspace.batch uses homogeneous reads [{ kind: "read", file, options? }] or edits [{ kind: "edit", file, changes: { revision, changes } }], accepts { failure?: "fail-fast" | "settled" }, and returns ordered { results }',
+        'workspace.batch runs homogeneous reads [{ kind: "read", file, options? }], optionally with { failure?: "fail-fast" | "settled" }, or edits [{ kind: "edit", file, changes: { revision, changes } }] without options; both return ordered { results }',
       minimumArguments: 1,
       maximumArguments: 2,
     },

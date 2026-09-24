@@ -419,7 +419,7 @@ Report suspected vulnerabilities privately as described in [SECURITY.md](SECURIT
 
 - `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a bounded selection. Hashed format is the default and includes edit-ready anchors and a whole-file revision.
 - `edit(file, { revision, changes })` applies revision-checked anchored or file-level changes.
-- `batch(operations, { failure?: "fail-fast" | "settled" })` runs a homogeneous read batch or edit batch. Mixed batches are rejected. Both modes return `{ results }`.
+- `batch(operations, options?)` runs a homogeneous read batch or edit batch and returns ordered `{ results }`. Only read batches accept `{ failure?: "fail-fast" | "settled" }`; mixed batches are rejected.
 - `search(query, options?)` returns bounded matches with revisions, anchors, and context. Regex matching is interruptible.
 - `list(path?)` lists directory entries.
 - `glob(patterns?, options?)` returns deterministic bounded matches and truncation metadata.
