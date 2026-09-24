@@ -1,5 +1,5 @@
 /**
- * Stages exactly the listed files, verifies the staged set, and commits it, optionally pushing the
+ * Stages the listed files, verifies the staged set, and commits it, optionally pushing the
  * current branch. Tracked paths are staged with `git add -u`, so an ignore rule that matches a
  * tracked file (for example a global `.pi` rule) does not block it; new ignored files still fail.
  * Unrelated changes that are already staged stop the commit before anything is staged.
