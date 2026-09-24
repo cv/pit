@@ -4,6 +4,29 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-24
+
+### Added
+
+- Allow selected Pi tools alongside `typescript` through a trusted project's `allowedTools` configuration, with case-sensitive names and `*` patterns that respect Pi's tool restrictions.
+- Lead npm audit, outdated, and pack results with useful overviews while keeping complete retained payloads inspectable.
+
+### Changed
+
+- Put completed tool output and decisive diagnostics before inputs and execution history in expanded views.
+- Preserve semantic outcomes, retained fields, and explicit truncation notices across workspace, process, Git, GitHub, HTTP, and compound results.
+- Bound live dashboards with counted omissions while keeping active and failed work visible and exposing all retained calls in the final expanded view.
+- Compose trusted project workflows through shared helpers, with jq-backed session analysis, byte-bounded inspection, strict input ranges, and workflow-specific CI discovery.
+- Update the tested Pi integration to 0.86.0 and refresh development dependencies.
+
+### Fixed
+
+- Improve saved-function viewer contrast on dark themes, including scope badges, metadata, and shortcuts.
+- Distinguish cancellation, timeout, and interrupted generation without misclassifying source excerpts or inventing execution timing.
+- Avoid duplicate retained process output without hiding additional diagnostics or differently interleaved streams.
+- Preserve wrapping, hanging indentation, and terminal sanitization through nested and streaming views.
+- Explain namespace-capture errors during saved-function resolution more clearly.
+
 ## [0.16.1] - 2026-09-18
 
 ### Changed
@@ -117,7 +140,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/cv/pit/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/cv/pit/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/cv/pit/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/cv/pit/compare/v0.15.0...v0.15.1

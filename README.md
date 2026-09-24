@@ -39,26 +39,26 @@ The resolved value becomes the tool result. Pi does not need a separate tool cal
 
 ## Install Pit
 
-Pit requires Node 22.19 or newer. The current compatibility target is Pi 0.85.1; other Pi versions may work, but they are not part of the release guarantee. During Git package installation, Pit downloads and verifies the matching Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. Submitted programs then run in the in-process Wasmtime/QuickJS executor by default. If no verified prebuild is available, Pit warns and temporarily uses the deprecated permission-restricted Node executor.
+Pit requires Node 22.19 or newer. The current compatibility target is Pi 0.86.0; other Pi versions may work, but they are not part of the release guarantee. During Git package installation, Pit downloads and verifies the matching Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. Submitted programs then run in the in-process Wasmtime/QuickJS executor by default. If no verified prebuild is available, Pit warns and temporarily uses the deprecated permission-restricted Node executor.
 
 Pit is distributed from public, tagged GitHub releases and intentionally remains unpublished on npm.
 
 Install the pinned release to user scope:
 
 ```sh
-pi install git:github.com/cv/pit@v0.16.1
+pi install git:github.com/cv/pit@v0.17.0
 ```
 
 Install the pinned release for the current project:
 
 ```sh
-pi install -l git:github.com/cv/pit@v0.16.1
+pi install -l git:github.com/cv/pit@v0.17.0
 ```
 
 Use the pinned release one time without changing settings:
 
 ```sh
-pi -e git:github.com/cv/pit@v0.16.1
+pi -e git:github.com/cv/pit@v0.17.0
 ```
 
 Update an existing unpinned Git installation and reload extensions:
