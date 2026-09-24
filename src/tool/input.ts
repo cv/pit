@@ -10,8 +10,8 @@ export function resolveToolInput(source: string, params: unknown): unknown {
   const text = params.trim();
   if (!(text.startsWith("{") || text.startsWith("["))) return params;
   try {
-    const decoded: unknown = JSON.parse(text);
-    return decoded !== null && typeof decoded === "object" ? decoded : params;
+    // Text that starts with { or [ can only parse to an object or array.
+    return JSON.parse(text) as unknown;
   } catch {
     return params;
   }

@@ -117,8 +117,11 @@ function replaceJsDocSummary(block: string, summary: string): string {
   }
 
   const lines = inner.split("\n");
-  const text = (index: number) =>
-    (index === 0 ? lines[index] : lines[index]?.replace(JSDOC_LINE_PREFIX, ""))?.trim() ?? "";
+  // Each line's content without its JSDoc prefix; the opening line has none.
+  const texts = lines.map((line, index) =>
+    (index === 0 ? line : line.replace(JSDOC_LINE_PREFIX, "")).trim(),
+  );
+  const text = (index: number) => String(texts[index]);
   const continuation = lines.slice(1).find((line) => /^\s*\*/.test(line));
   const prefix = `${continuation?.match(/^\s*\*/)?.[0] ?? " *"} `;
   const first = lines.findIndex((_, index) => text(index).length > 0);

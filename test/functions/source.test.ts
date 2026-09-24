@@ -80,6 +80,11 @@ describe("withPersistentSummary", () => {
     { name: "an undocumented definition", source: body, expected: `/** Adds one. */\n${body}` },
     { name: "an empty block", source: `/** */ ${body}`, expected: `/** Adds one. */ ${body}` },
     {
+      name: "an empty multi-line block",
+      source: `/**\n */\n${body}`,
+      expected: `/**\n * Adds one.\n */\n${body}`,
+    },
+    {
       name: "a different one-line summary",
       source: `/** Old. */ ${body}`,
       expected: `/** Adds one. */ ${body}`,
