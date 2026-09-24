@@ -6,7 +6,7 @@ import {
   semanticOutcome,
 } from "../process/results.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import { isRecord, renderJson } from "./shared.js";
+import { isRecord, parseCompleteJson, renderJson } from "./shared.js";
 import type { RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 // oxlint-disable-next-line no-control-regex
@@ -28,13 +28,6 @@ interface NpmSummary {
 
 function plural(count: number, noun: string, pluralForm = `${noun}s`): string {
   return `${count} ${count === 1 ? noun : pluralForm}`;
-}
-function json(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    // Keep malformed or truncated JSON as process output.
-  }
 }
 function field(value: unknown, key: string): unknown {
   return isRecord(value) ? value[key] : undefined;
@@ -190,7 +183,7 @@ function severityBreakdown(counts: unknown): string {
   }).join(", ");
 }
 const audit = renderer("audit", (result, theme) => {
-  const parsed = result.truncated ? undefined : json(result.stdout);
+  const parsed = parseCompleteJson(result.stdout, { truncated: result.truncated });
   const counts = field(field(parsed, "metadata"), "vulnerabilities");
   const total = field(counts, "total");
   const breakdown = severityBreakdown(counts);
@@ -221,7 +214,7 @@ function outdatedRow(name: string, item: Record<string, unknown>): string {
   return `${inline(name)}: ${[current ? `current ${current}` : "not installed", ...targets].join(", ")}`;
 }
 const outdated = renderer("outdated", (result, theme) => {
-  const parsed = result.truncated ? undefined : json(result.stdout);
+  const parsed = parseCompleteJson(result.stdout, { truncated: result.truncated });
   if (!isRecord(parsed)) {
     return { summary: `outdated, exit ${result.code}`, output: lines(result.stdout) };
   }
@@ -268,7 +261,7 @@ function packRow(item: Record<string, unknown>): string {
   return facts.length > 0 ? `${head}: ${facts.join(", ")}` : head;
 }
 const pack = renderer("pack", (result, theme) => {
-  const parsed = result.truncated ? undefined : json(result.stdout);
+  const parsed = parseCompleteJson(result.stdout, { truncated: result.truncated });
   const items = Array.isArray(parsed) ? parsed.filter(isRecord) : [];
   const [first] = items;
   if (!first) {

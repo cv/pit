@@ -7,7 +7,7 @@ import type { RenderedResultValue, ResultTheme } from "./types.js";
 export type JsonRecord = Record<string, unknown>;
 
 export const MAX_RECURSIVE_DEPTH = 4;
-export const JSON_CONTAINER_PREFIX = /^\s*[[{]/;
+const JSON_CONTAINER_PREFIX = /^\s*[[{]/;
 const HASHED_LINE_PATTERN = /^(\d+:[^|]+\|)(.*)$/;
 
 export function isRecord(value: unknown): value is JsonRecord {
@@ -42,6 +42,24 @@ export function combinedOutcome(
 ): NonNullable<RenderedResultValue["outcome"]> {
   if (values.some((value) => value?.outcome === "error")) return "error";
   return values.some((value) => value?.outcome === "warning") ? "warning" : "success";
+}
+
+/**
+ * Parses JSON only from complete text; `undefined` means the text must stay literal.
+ * `requireContainer` limits structured views to objects and arrays so scalar output stays text.
+ */
+export function parseCompleteJson(
+  text: string,
+  { truncated, requireContainer = false }: { truncated: boolean; requireContainer?: boolean },
+): unknown {
+  if (truncated || (requireContainer && !JSON_CONTAINER_PREFIX.test(text))) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 export function renderJson(value: unknown): string[] {

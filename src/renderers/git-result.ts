@@ -6,13 +6,13 @@ import {
   parseProcessResult,
   semanticOutcome,
 } from "../process/results.js";
+import { parseCompleteJson } from "./shared.js";
 import type { RenderContext, RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 const STATUS_PORCELAIN_PATTERN = /^.. /;
 const LOG_ONE_LINE_PATTERN = /^([0-9a-f]{7,40})(\s+)(.*)$/i;
 const LOG_COMMIT_LINE_PATTERN = /^(commit)\s+([0-9a-f]{7,40})(.*)$/i;
 const SHOW_DIFF_PATTERN = /^(?:commit\s|diff --git )/m;
-const JSON_CONTAINER_PATTERN = /^\s*[[{]/;
 
 type ParsedGitRenderer = (
   result: DisplayProcessResult,
@@ -213,18 +213,15 @@ const renderGitCommit: ValueRenderer = gitRenderer((result, context) => {
   });
 });
 
-function showLines(output: string): string[] {
+function showLines(output: string, truncated: boolean): string[] {
   if (SHOW_DIFF_PATTERN.test(output)) {
     return highlightCode(output, "diff");
   }
-  if (JSON_CONTAINER_PATTERN.test(output)) {
-    try {
-      return highlightCode(JSON.stringify(JSON.parse(output), null, 2), "json");
-    } catch {
-      // Keep malformed or incomplete JSON-like output as plain text.
-    }
-  }
-  return output.split("\n");
+  // Keep malformed, truncated, or scalar JSON-like output as plain text.
+  const parsed = parseCompleteJson(output, { truncated, requireContainer: true });
+  return parsed === undefined
+    ? output.split("\n")
+    : highlightCode(JSON.stringify(parsed, null, 2), "json");
 }
 
 const renderGitShow: ValueRenderer = gitRenderer((result, context) => {
@@ -236,7 +233,7 @@ const renderGitShow: ValueRenderer = gitRenderer((result, context) => {
     result,
     context,
     summary,
-    stdoutLines: output ? showLines(output) : [],
+    stdoutLines: output ? showLines(output, result.truncated) : [],
   });
 });
 

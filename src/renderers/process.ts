@@ -1,6 +1,6 @@
 import { parseProcessResult, processOutputLines, semanticOutcome } from "../process/results.js";
 import { renderStructuredData } from "./compound.js";
-import { JSON_CONTAINER_PREFIX } from "./shared.js";
+import { parseCompleteJson } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderShell(
@@ -18,18 +18,15 @@ export function renderShell(
     `${theme.fg("toolTitle", theme.bold("shell"))} ${theme.fg(statusColor, `exit ${value.code}`)}${suffix}`,
   ];
   if (stdout) {
-    let output = processOutputLines(stdout);
-    if (!value.truncated && JSON_CONTAINER_PREFIX.test(stdout)) {
-      try {
-        output = renderStructuredData(JSON.parse(stdout), {
-          theme,
-          depth: 0,
-          seen: new WeakSet(),
-        }).lines;
-      } catch {
-        /* Incomplete JSON remains text. */
-      }
-    }
+    // Incomplete, malformed, or scalar JSON stays text.
+    const parsed = parseCompleteJson(stdout, {
+      truncated: value.truncated,
+      requireContainer: true,
+    });
+    const output =
+      parsed === undefined
+        ? processOutputLines(stdout)
+        : renderStructuredData(parsed, { theme, depth: 0, seen: new WeakSet() }).lines;
     lines.push(theme.fg("accent", "stdout"), ...output);
   }
   if (stderr) {
