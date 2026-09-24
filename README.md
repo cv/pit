@@ -319,6 +319,8 @@ async function runTests({ npm: { test } }, input: { coverage?: boolean } = {}) {
 }
 ```
 
+If the definition already has a JSDoc block, the summary replaces that block's summary paragraph; other paragraphs and tags such as `@param` are kept.
+
 Project functions use the same execution rules as session functions. Pit commits a function after successful execution, or after static validation when `saveOnly` is `true`.
 
 Pit stores project functions as readable TypeScript files in `.pi/functions/`. Legacy `.pi/pit/functions/` files are ignored and left untouched. Scope comes from storage location, not a source marker. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
