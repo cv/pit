@@ -107,13 +107,15 @@ type PitWorkspaceEntry = {
   type: "file" | "directory" | "symlink";
 };
 
-type PitBatchOperation =
-  | {
-      kind: "read";
-      file: string;
-      options?: { format?: PitReadFormat; offset?: number; limit?: number };
-    }
-  | { kind: "edit"; file: string; changes: PitEditChangeSpec };
+type PitBatchReadOperation = {
+  kind: "read";
+  file: string;
+  options?: { format?: PitReadFormat; offset?: number; limit?: number };
+};
+
+type PitBatchEditOperation = { kind: "edit"; file: string; changes: PitEditChangeSpec };
+
+type PitBatchOperation = PitBatchReadOperation | PitBatchEditOperation;
 
 type PitSlashCommand = {
   name: string;
@@ -223,9 +225,18 @@ interface PitWorkspaceCapability {
   edit(file: string, changes: PitEditChangeSpec): Promise<PitEditResult>;
 
   batch(
-    operations: PitBatchOperation[],
+    operations: PitBatchReadOperation[],
     options?: { failure?: "fail-fast" | "settled" },
   ): Promise<{
+    results: Array<
+      | { kind: "read"; index: number; ok: true; value: PitReadResult }
+      | { kind: "read"; index: number; ok: false; value?: undefined; error: string }
+    >;
+  }>;
+  batch(
+    operations: PitBatchEditOperation[],
+  ): Promise<{ results: Array<{ kind: "edit"; index: number; ok: true; value: PitEditResult }> }>;
+  batch(operations: PitBatchOperation[]): Promise<{
     results: Array<
       | { kind: "read"; index: number; ok: true; value: PitReadResult }
       | { kind: "read"; index: number; ok: false; value?: undefined; error: string }
