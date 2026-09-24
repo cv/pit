@@ -10,7 +10,12 @@ async function accepted(c: PitCapabilities) {
   const file = await c.workspace.read("a.ts", { format: "raw" });
   const text: string = file.content;
   await c.workspace.edit("new.ts", { revision: null, changes: [{ kind: "replaceFile", content: text }] });
-  await c.workspace.batch([{ kind: "read", file: "a.ts" }], { failure: "settled" });
+  const reads = await c.workspace.batch([{ kind: "read", file: "a.ts" }], { failure: "settled" });
+  const readKinds: "read"[] = reads.results.map((result) => result.kind);
+  const edits = await c.workspace.batch([
+    { kind: "edit", file: "a.ts", changes: { revision: null, changes: [{ kind: "replaceFile", content: text }] } },
+  ]);
+  const editKinds: "edit"[] = edits.results.map((result) => result.kind);
   const process = await c.git.status(["--short"]);
   const exitCode: number = process.code;
   await c.npm.test({ coverage: true });
@@ -19,7 +24,7 @@ async function accepted(c: PitCapabilities) {
   const response = await c.http.request("https://example.invalid");
   const status: number = response.status;
   await c.functions.removeSession("helper", { cascade: true });
-  return { text, exitCode, status };
+  return { text, exitCode, status, readKinds, editKinds };
 }
 async function rejected(c: PitCapabilities) {
   // @ts-expect-error a file path is required
@@ -40,6 +45,8 @@ async function rejected(c: PitCapabilities) {
   const exit: string = (await c.shell.execFile("node", [])).code;
   // @ts-expect-error cascade is an explicit boolean option
   await c.functions.removeSession("helper", { cascade: "yes" });
+  // @ts-expect-error failure handling applies only to read batches
+  await c.workspace.batch([{ kind: "edit", file: "a.ts", changes: { revision: null, changes: [{ kind: "replaceFile", content: "x" }] } }], { failure: "settled" });
 }
 `;
     expect(typeDiagnostics(generateCapabilityContract() + consumer)).toEqual([]);
