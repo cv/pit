@@ -4,13 +4,13 @@ import { loadWorkflowFunction, processResult } from "../helpers/workflow-functio
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
-const response = (status: string, conclusion = "") =>
+const response = (status: string, conclusion = "", jobs: unknown[] = []) =>
   processResult({
     stdout: JSON.stringify({
       status,
       conclusion,
       url: "https://example.invalid/runs/42",
-      jobs: [],
+      jobs,
     }),
   });
 
@@ -79,6 +79,9 @@ describe("waitForGitHubRun behavior", () => {
       id: 42,
       attempts: 6,
       requestedAttempts: 120,
+      lastStatus: "in_progress",
+      url: "https://example.invalid/runs/42",
+      jobs: [],
     });
     expect(runView).toHaveBeenCalledTimes(6);
     expect(Date.now() - started).toBeLessThan(300_000);
@@ -96,6 +99,40 @@ describe("waitForGitHubRun behavior", () => {
     expect(await failure).toContain("did not complete after 12 checks");
     expect(await failure).toContain("20 were requested, but only 12 fit the 285 s polling budget");
     expect(runView).toHaveBeenCalledTimes(12);
+  });
+
+  it("reports the last observed run state and unfinished jobs when a wait times out", async () => {
+    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const jobs = [
+      {
+        name: "build",
+        status: "completed",
+        conclusion: "success",
+        url: "https://example.invalid/jobs/1",
+      },
+      {
+        name: "release",
+        status: "in_progress",
+        conclusion: "",
+        url: "https://example.invalid/jobs/2",
+      },
+    ];
+    const runView = vi.fn().mockResolvedValue(response("in_progress", "", jobs));
+    const input = { id: 42, repo: "cv/pit", attempts: 2, intervalMs: 1000, initialDelayMs: 0 };
+    const returned = wait({ gh: { runView } }, { ...input, raise: false });
+    const failure = wait({ gh: { runView } }, input).then(
+      () => "resolved",
+      (error: Error) => error.message,
+    );
+    await vi.runAllTimersAsync();
+    expect(await returned).toMatchObject({
+      status: "timed_out",
+      lastStatus: "in_progress",
+      url: "https://example.invalid/runs/42",
+      jobs,
+    });
+    expect(await failure).toContain("last status in_progress, unfinished jobs: release");
+    expect(await failure).not.toContain("build");
   });
 
   it("fails rather than reporting success when the requested attempts are exhausted", async () => {

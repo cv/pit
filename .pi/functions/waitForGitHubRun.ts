@@ -2,8 +2,8 @@
  * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
  *
  * @param input.attempts - Maximum status checks (1-120). The default is 12. Checks that would not
- *   fit the 285 s polling budget after the initial delay are skipped; a timeout reports both
- *   attempts made and requestedAttempts.
+ *   fit the 285 s polling budget after the initial delay are skipped; a timeout reports attempts
+ *   made, requestedAttempts, and the last observed run status, URL, and jobs.
  * @param input.intervalMs - Delay between checks (1000-30000). The default is 15000 ms.
  * @param input.initialDelayMs - Delay before the first check (0-120000). The default is 120000 ms.
  * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
@@ -45,23 +45,26 @@ async function waitForGitHubRun(
   if (initialDelayMs > 0) {
     await new Promise<void>((resolve) => setTimeout(resolve, initialDelayMs));
   }
+  type Job = { name: string; status: string; conclusion: string; url: string };
+  const summarizeJobs = (jobs: Job[] | undefined) =>
+    jobs?.map((job) => ({
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion,
+      url: job.url,
+    }));
+  let last: { status: string; url: string; jobs?: Job[] } | undefined;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const result = await runView(input.id, { repo: input.repo, raise: true });
     const run = JSON.parse(result.stdout);
+    last = run;
     if (run.status === "completed") {
       const summary = {
         attempt,
         status: run.status,
         conclusion: run.conclusion,
         url: run.url,
-        jobs: run.jobs?.map(
-          (job: { name: string; status: string; conclusion: string; url: string }) => ({
-            name: job.name,
-            status: job.status,
-            conclusion: job.conclusion,
-            url: job.url,
-          }),
-        ),
+        jobs: summarizeJobs(run.jobs),
       };
       if (raise && run.conclusion !== "success") {
         throw new Error(
@@ -78,10 +81,25 @@ async function waitForGitHubRun(
     attempts < requestedAttempts
       ? `; ${requestedAttempts} were requested, but only ${attempts} fit the ${POLLING_BUDGET_MS / 1000} s polling budget`
       : "";
+  const unfinished = (last?.jobs ?? [])
+    .filter((job) => job.status !== "completed")
+    .map((job) => job.name);
+  const unfinishedNote = unfinished.length
+    ? `, unfinished jobs: ${unfinished.slice(0, 10).join(", ")}${unfinished.length > 10 ? ` and ${unfinished.length - 10} more` : ""}`
+    : "";
+  const progressNote = last ? `; last status ${last.status}${unfinishedNote}` : "";
   if (raise) {
     throw new Error(
-      `GitHub Actions run ${input.id} did not complete after ${attempts} checks${budgetNote}`,
+      `GitHub Actions run ${input.id} did not complete after ${attempts} checks${budgetNote}${progressNote}`,
     );
   }
-  return { status: "timed_out", id: input.id, attempts, requestedAttempts };
+  return {
+    status: "timed_out",
+    id: input.id,
+    attempts,
+    requestedAttempts,
+    lastStatus: last?.status,
+    url: last?.url,
+    jobs: summarizeJobs(last?.jobs),
+  };
 }
