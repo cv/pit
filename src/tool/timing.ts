@@ -1,15 +1,15 @@
+import type { RendererState, WithRendererState } from "./renderer-state.js";
+
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const SPINNER_INTERVAL_MS = 200;
+const TIMING_STATE = Symbol("pit-timing");
+
+type Phase = "generation" | "execution";
 
 interface ActiveTimingState {
   startedAt?: number;
   completedAt?: number;
   timer?: ReturnType<typeof setInterval> | undefined;
-}
-
-interface TypeScriptRendererState {
-  generation?: ActiveTimingState;
-  execution?: ActiveTimingState;
 }
 
 export interface ToolCallTimingContext {
@@ -27,22 +27,24 @@ export interface ToolResultTimingContext {
   invalidate?: () => void;
 }
 
+interface PhaseClock {
+  /** Whether this phase has ended, which stops its clock. */
+  complete: boolean;
+  /** Whether the row is final rather than still streaming or running. */
+  finished: boolean;
+  executionStarted: boolean | undefined;
+  invalidate: (() => void) | undefined;
+}
+
 function spinnerFrame(elapsedMs: number): string {
   const index = Math.floor(Math.max(0, elapsedMs) / SPINNER_INTERVAL_MS) % SPINNER_FRAMES.length;
   return SPINNER_FRAMES[index] as (typeof SPINNER_FRAMES)[number];
 }
 
-function rendererState(value: unknown): TypeScriptRendererState {
-  return value && typeof value === "object" ? (value as TypeScriptRendererState) : {};
-}
-
-function timingState(
-  state: TypeScriptRendererState,
-  phase: keyof TypeScriptRendererState,
-): ActiveTimingState {
-  const timing = state[phase] ?? {};
-  state[phase] = timing;
-  return timing;
+function phaseState(state: RendererState, phase: Phase): ActiveTimingState {
+  state[TIMING_STATE] ??= {};
+  const phases = state[TIMING_STATE] as Partial<Record<Phase, ActiveTimingState>>;
+  return (phases[phase] ??= {});
 }
 
 function activeTiming(
@@ -69,36 +71,46 @@ function activeTiming(
   };
 }
 
-export function generationTiming(context: ToolCallTimingContext): {
+function phaseTiming(
+  state: ActiveTimingState,
+  clock: PhaseClock,
+): { duration: string; spinner: string } {
+  const timing = activeTiming(state, clock.complete, clock.invalidate);
+  // A final row whose execution start was never observed was replayed from history: its clock
+  // measured the replay, not the work.
+  return clock.finished && clock.executionStarted === false
+    ? { ...timing, duration: "time unavailable" }
+    : timing;
+}
+
+export function generationTiming(context: WithRendererState<ToolCallTimingContext>): {
   duration: string;
   complete: boolean;
   spinner: string;
 } {
-  const state = rendererState(context.state);
-  context.state = state;
   const complete =
     context.argsComplete || context.executionStarted === true || context.isPartial === false;
   if (context.executionStarted === true) {
-    timingState(state, "execution").startedAt ??= Date.now();
+    phaseState(context.state, "execution").startedAt ??= Date.now();
   }
-  const timing = activeTiming(timingState(state, "generation"), complete, context.invalidate);
-  return {
-    ...timing,
-    ...(context.executionStarted === false && context.isPartial === false
-      ? { duration: "time unavailable" }
-      : {}),
+  const timing = phaseTiming(phaseState(context.state, "generation"), {
     complete,
-  };
+    // Generation can end before execution starts, so only a final row can be a replay.
+    finished: context.isPartial === false,
+    executionStarted: context.executionStarted,
+    invalidate: context.invalidate,
+  });
+  return { ...timing, complete };
 }
 
 export function executionTiming(
-  context: ToolResultTimingContext,
+  context: WithRendererState<ToolResultTimingContext>,
   complete: boolean,
 ): { duration: string; spinner: string } {
-  const state = rendererState(context.state);
-  context.state = state;
-  const timing = activeTiming(timingState(state, "execution"), complete, context.invalidate);
-  return context.executionStarted === false && complete
-    ? { ...timing, duration: "time unavailable" }
-    : timing;
+  return phaseTiming(phaseState(context.state, "execution"), {
+    complete,
+    finished: complete,
+    executionStarted: context.executionStarted,
+    invalidate: context.invalidate,
+  });
 }
