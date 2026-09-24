@@ -6,6 +6,7 @@ import {
 } from "../execution/dashboard-model.js";
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { outcomeMarker } from "./shared.js";
 
 interface ExecutionDashboardDetails extends ExecutionProgressSnapshot {
   functions?: FunctionActivity[];
@@ -59,7 +60,7 @@ function callMarker(call: DashboardCall, theme: ExecutionDashboardTheme, settled
   if (call.status === "succeeded") {
     return theme.fg("dim", "·");
   }
-  return theme.fg("error", "✗");
+  return outcomeMarker(theme, "error");
 }
 
 function statusLabel(status: CapabilityTraceStatus, settled: boolean): string {

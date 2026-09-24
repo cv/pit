@@ -1,6 +1,14 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
-import { hasOnlyKeys, isRecord, languageForFile, plural, renderHashedFile } from "./shared.js";
+import {
+  hasOnlyKeys,
+  isRecord,
+  languageForFile,
+  offsetHangingIndents,
+  outcomeMarker,
+  plural,
+  renderHashedFile,
+} from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 export function renderRead(
@@ -60,12 +68,8 @@ export function renderRead(
     lines,
     summary: `${value.file}, ${range}, ${flags}`,
     detailLines: [theme.fg("dim", `revision: ${value.revision}`), ...lines.slice(1)],
-    hangingIndents: Object.fromEntries(
-      Object.entries(detailHangingIndents).map(([index, width]) => [Number(index) + 1, width]),
-    ),
-    detailHangingIndents: Object.fromEntries(
-      Object.entries(detailHangingIndents).map(([index, width]) => [Number(index) + 1, width]),
-    ),
+    hangingIndents: offsetHangingIndents(detailHangingIndents, { lines: 1 }),
+    detailHangingIndents: offsetHangingIndents(detailHangingIndents, { lines: 1 }),
   };
 }
 
@@ -187,7 +191,7 @@ export function renderEdit(
   return {
     kind: "edit",
     lines: [
-      `${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(value.file))} ${action} ${theme.fg("dim", `(${plural(value.applied, "change")}, ${value.bytes} bytes, ${revision})`)}`,
+      `${outcomeMarker(theme, "success")} ${theme.fg("toolTitle", theme.bold(value.file))} ${action} ${theme.fg("dim", `(${plural(value.applied, "change")}, ${value.bytes} bytes, ${revision})`)}`,
     ],
     summary: `${value.file}, ${action}, ${plural(value.applied, "change")}, ${value.bytes} bytes`,
     detailLines: [theme.fg("dim", revision)],

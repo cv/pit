@@ -8,6 +8,7 @@ import {
   type JsonRecord,
   languageForFile,
   MAX_RECURSIVE_DEPTH,
+  offsetHangingIndents,
   plural,
   renderJson,
   syntaxLanguageForHint,
@@ -138,10 +139,13 @@ export function renderCompound(
       `${context.theme.fg("accent", context.theme.bold(safeSectionLabel(key)))} ${context.theme.fg("dim", `(${description})`)}`,
       ...indent(detailLines),
     );
-    const detailHangingIndents = rendered.detailHangingIndents ?? rendered.hangingIndents ?? {};
-    for (const [index, width] of Object.entries(detailHangingIndents)) {
-      hangingIndents[detailStart + Number(index)] = width + 2;
-    }
+    Object.assign(
+      hangingIndents,
+      offsetHangingIndents(rendered.detailHangingIndents ?? rendered.hangingIndents, {
+        lines: detailStart,
+        columns: 2,
+      }),
+    );
   }
   return {
     kind: "compound",
@@ -184,10 +188,13 @@ export function renderArrayCompound(
       `${context.theme.fg("accent", context.theme.bold(`[${index}]`))} ${context.theme.fg("dim", `(${description})`)}`,
       ...indent(detailLines),
     );
-    const detailHangingIndents = rendered.detailHangingIndents ?? rendered.hangingIndents ?? {};
-    for (const [lineIndex, width] of Object.entries(detailHangingIndents)) {
-      hangingIndents[detailStart + Number(lineIndex)] = width + 2;
-    }
+    Object.assign(
+      hangingIndents,
+      offsetHangingIndents(rendered.detailHangingIndents ?? rendered.hangingIndents, {
+        lines: detailStart,
+        columns: 2,
+      }),
+    );
   }
   return {
     kind: "array",
