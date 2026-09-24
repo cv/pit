@@ -1,5 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
+import { terminationError } from "../shared/termination-errors.js";
+
 interface SandboxLifecycleOptions {
   child: ChildProcessWithoutNullStreams;
   timeoutMs: number;
@@ -27,9 +29,16 @@ export class SandboxLifecycle {
     this.capabilitySignal = options.signal
       ? AbortSignal.any([options.signal, this.#capabilityController.signal])
       : this.#capabilityController.signal;
-    this.#onAbort = () => this.finish(new Error("TypeScript execution cancelled"));
+    this.#onAbort = () =>
+      this.finish(terminationError("cancelled", "TypeScript execution cancelled"));
     this.#timer = setTimeout(
-      () => this.finish(new Error(`TypeScript execution timed out after ${options.timeoutMs}ms`)),
+      () =>
+        this.finish(
+          terminationError(
+            "timeout",
+            `TypeScript execution timed out after ${options.timeoutMs}ms`,
+          ),
+        ),
       options.timeoutMs,
     );
     this.#timer.unref?.();

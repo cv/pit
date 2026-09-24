@@ -255,7 +255,9 @@ process.stdin.on("data", (chunk) => {
       }
       pending.delete(message.id);
       if (typeof message.error === "string") {
-        request.reject(new Error(message.error));
+        const error = new Error(message.error);
+        if (typeof message.errorName === "string") error.name = message.errorName;
+        request.reject(error);
       } else {
         request.resolve(message.value);
       }

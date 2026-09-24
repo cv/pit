@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { terminationError } from "../shared/termination-errors.js";
 import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
 import {
   parseFunctionExecutionContext,
@@ -60,11 +61,13 @@ export function createWasmtimeFunctionExecutor({
 }: WasmtimeFunctionExecutorOptions): FunctionExecutor {
   return {
     async execute(program, handler: CapabilityHandler, options): Promise<unknown> {
-      if (options.signal?.aborted) throw new Error("TypeScript execution cancelled");
+      if (options.signal?.aborted)
+        throw terminationError("cancelled", "TypeScript execution cancelled");
       const signal = executionSignal(options);
       const waiters = new Map<number, (response: string) => void>();
       let resultReceived = false;
       let result: unknown;
+      let guestErrorName: string | undefined;
       const dispatcher = new CapabilityDispatcher({
         handler,
         signal,
@@ -104,6 +107,10 @@ export function createWasmtimeFunctionExecutor({
           await delay(request.delayMs, undefined, { signal });
           return JSON.stringify({ value: null });
         }
+        if (request.type === "failure") {
+          if (typeof request.name === "string") guestErrorName = request.name.slice(0, 100);
+          return JSON.stringify({ value: null });
+        }
         const message = request as WireMessage;
         if (message.type === "result") {
           resultReceived = true;
@@ -139,16 +146,23 @@ export function createWasmtimeFunctionExecutor({
         );
       } catch (error) {
         if (options.signal?.aborted) {
-          throw new Error("TypeScript execution cancelled", { cause: error });
+          throw terminationError("cancelled", "TypeScript execution cancelled", { cause: error });
         }
         const message = error instanceof Error ? error.message : String(error);
         if (signal.aborted || /wasm trap: interrupt/i.test(message)) {
-          throw new Error(`TypeScript execution timed out after ${options.timeoutMs}ms`, {
-            cause: error,
-          });
+          throw terminationError(
+            "timeout",
+            `TypeScript execution timed out after ${options.timeoutMs}ms`,
+            { cause: error },
+          );
         }
         if (/all fuel consumed|out of fuel/i.test(message)) {
           throw new Error("TypeScript execution exceeded its fuel limit", { cause: error });
+        }
+        if (guestErrorName) {
+          const failure = new Error(message, { cause: error });
+          failure.name = guestErrorName;
+          throw failure;
         }
         throw error;
       } finally {

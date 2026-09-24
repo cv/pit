@@ -96,4 +96,24 @@ describe("generated Wasmtime guest behavior", () => {
       },
     ]);
   });
+
+  it("keeps host error names and reports an uncaught named failure before rejecting", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const pitCall = async (message: string) => {
+      const frame = JSON.parse(message) as Record<string, unknown>;
+      requests.push(frame);
+      return frame.type === "call"
+        ? JSON.stringify({ error: "deadline reached", errorName: "TimeoutError" })
+        : "{}";
+    };
+    await expect(
+      runGuest(
+        'async ({ http: { request } }) => request("https://example.test")',
+        undefined,
+        pitCall,
+      ),
+    ).rejects.toMatchObject({ name: "TimeoutError", message: "deadline reached" });
+    expect(requests.map(({ type }) => type)).toEqual(["call", "failure"]);
+    expect(requests.at(-1)).toEqual({ type: "failure", name: "TimeoutError" });
+  });
 });

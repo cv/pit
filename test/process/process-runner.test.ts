@@ -47,4 +47,43 @@ describe("process runner", () => {
     expect(result).toMatchObject({ code: 124, stderr: "Command timed out after 20ms" });
     expect(progress.at(-1)).toEqual({ phase: "end", code: 124 });
   });
+
+  it("raises streaming deadlines as named timeouts", async () => {
+    await expect(
+      executeHostProcess({
+        pi: {} as any,
+        defaultCwd: process.cwd(),
+        program: process.execPath,
+        args: ["-e", "setInterval(() => {}, 1000)"],
+        options: { timeoutMs: 20, raise: true },
+        onProgress: () => undefined,
+      }),
+    ).rejects.toMatchObject({
+      name: "TimeoutError",
+      message: expect.stringContaining("Command timed out after 20ms"),
+    });
+  });
+
+  it.each<{ name: string; killed: boolean; aborted: boolean; errorName: string }>([
+    { name: "a killed deadline", killed: true, aborted: false, errorName: "TimeoutError" },
+    { name: "a killed cancellation", killed: true, aborted: true, errorName: "AbortError" },
+    { name: "a program's own exit code 124", killed: false, aborted: false, errorName: "Error" },
+  ])("names raised failures for $name by termination, not exit code", async (row) => {
+    const controller = new AbortController();
+    if (row.aborted) controller.abort();
+    const exec = async () => ({ stdout: "", stderr: "stopped", code: 124, killed: row.killed });
+    await expect(
+      executeHostProcess({
+        pi: { exec } as any,
+        defaultCwd: process.cwd(),
+        program: "worker",
+        args: [],
+        options: { raise: true },
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({
+      name: row.errorName,
+      message: "Command failed with exit code 124: worker\nstopped",
+    });
+  });
 });

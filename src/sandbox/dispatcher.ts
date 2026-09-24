@@ -120,6 +120,9 @@ export class CapabilityDispatcher {
             type: "response",
             id,
             error: error instanceof Error ? error.message : String(error),
+            ...(error instanceof Error && error.name !== "Error"
+              ? { errorName: error.name.slice(0, 100) }
+              : {}),
           });
           finishTrace("failed");
           return undefined;
