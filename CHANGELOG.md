@@ -10,6 +10,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 - Allow selected Pi tools alongside `typescript` through a trusted project's `allowedTools` configuration, with case-sensitive names and `*` patterns that respect Pi's tool restrictions.
 - Lead npm audit, outdated, and pack results with useful overviews while keeping complete retained payloads inspectable.
+- Record monotonic invocation phase timings in `details.timings`, including failed and replayed calls.
 
 ### Changed
 
@@ -17,6 +18,9 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Preserve semantic outcomes, retained fields, and explicit truncation notices across workspace, process, Git, GitHub, HTTP, and compound results.
 - Bound live dashboards with counted omissions while keeping active and failed work visible and exposing all retained calls in the final expanded view.
 - Compose trusted project workflows through shared helpers, with jq-backed session analysis, byte-bounded inspection, strict input ranges, and workflow-specific CI discovery.
+- Reuse validated dependency graphs and share bounded source formatting between execution and display, reducing cached preparation to about 2 ms in isolated samples.
+- Link process progress to its host capability call, keeping concurrent and nested process output attributed without duplicate sections.
+- Show small values, stdout, and homogeneous file-read summaries in collapsed results while deferring highlighting of hidden bodies.
 - Update the tested Pi integration to 0.86.0 and refresh development dependencies.
 
 ### Fixed
