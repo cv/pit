@@ -9,7 +9,7 @@ import {
   type SavedFunctionPreparationRequest,
 } from "./preparation.js";
 import { planSavedFunctionRemoval, type SavedFunctionRemovalPlan } from "./removal.js";
-import { getPersistentFunctionMetadata } from "./source.js";
+import { getPersistentFunctionMetadata, withPersistentSummary } from "./source.js";
 import { assertFunctionsAvailable } from "./storage/validation.js";
 export type { PreparedSavedFunctionExecution } from "./preparation.js";
 import {
@@ -69,7 +69,7 @@ function persistentFunctionSource(
   if (!normalizedSummary) {
     throw new Error(`${scope === "user" ? "User" : "Project"} function summary is required`);
   }
-  return `/** ${normalizedSummary} */\n${source}`;
+  return withPersistentSummary(source, normalizedSummary);
 }
 
 function projectFunctionSource(source: string, summary: string): string {
