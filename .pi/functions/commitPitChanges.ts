@@ -66,7 +66,7 @@ async function commitPitChanges(
   const extra = staged.filter((file) => !requested.has(file));
   if (unchanged.length > 0 || extra.length > 0) {
     throw new Error(
-      `Staged files do not match the request (unchanged: ${unchanged.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}). Nothing was committed; the listed files remain staged.`,
+      `Staged files do not match the request (unchanged: ${unchanged.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}). Nothing was committed; listed files that were staged remain staged.`,
     );
   }
   await commit(["-m", message], { raise: true, maxBytes: 20000 });
