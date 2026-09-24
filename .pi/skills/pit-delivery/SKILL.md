@@ -29,14 +29,17 @@ This skill owns workflow policy: sequencing, judgment, acceptance criteria, and 
 Use only the helpers relevant to the current phase:
 
 ```ts
-runPitTargetedTests({ files: ["test/example.test.ts"] })
+runPitTargetedTests({ files: ["test/example.test.ts"], slowest: 5 })
 reviewPitChanges()
 inspectPitCoverageGaps({ files: ["src/example.ts"] })
 formatPitChanges()
 auditPitCodeQuality({ limit: 25 })
+commitPitChanges({ files: ["src/example.ts"], message: "fix: example", push: true })
 ```
 
 - Use `runPitTargetedTests()` during the implementation loop, not the full suite after every edit.
+- `runPitTargetedTests()` reports failures from Vitest's JSON report. Add `testNamePattern` to rerun one case and `slowest` to measure where time goes.
+- Use `commitPitChanges()` for commits. It stages exactly the listed files, refuses unrelated staged changes, and can push the branch.
 - Use `reviewPitChanges()` before validation and after substantial corrections.
 - Use `inspectPitCoverageGaps()` after coverage has generated its HTML report.
 - Use `auditPitCodeQuality()` for broad feature or refactor work where maintainability risk matters.
@@ -85,6 +88,8 @@ waitForGitHubRun({ id, repo, raise: true })
 ```
 
 Treat a missing run as a synchronization or trigger problem. Do not wait on an unrelated run.
+
+For a pull request, `waitForGitHubPullRequestChecks({ number, repo })` waits for every reported check and returns the merge state. When a run fails, call `inspectGitHubRunFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it.
 
 ## Finish an issue
 

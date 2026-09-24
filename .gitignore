@@ -2,3 +2,10 @@ node_modules/
 .DS_Store
 *.log
 coverage/
+
+
+# Pit tracks its project Pi configuration, functions, and skills even when a global
+# ignore excludes .pi/. Project-scoped package installs remain machine-local.
+!/.pi/
+/.pi/git/
+/.pi/npm/

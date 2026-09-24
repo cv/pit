@@ -9,7 +9,9 @@ adding another function.
 - **Inspection** converts host output into domain data. `listChangedGitFiles()` owns
   Git porcelain parsing; `findGitHubRunForCommit()` owns commit/workflow selection.
   Neither mutates the worktree or waits for CI completion.
+  `inspectGitHubRunFailure()` owns failed-job log excerpts.
 - **Actions** consume inspected data and perform one operation.
+  `commitPitChanges()` owns exact-file staging and commit verification.
   `formatPitChanges()` owns supported extensions, the formatting limit, and anchor
   invalidation. It does not parse Git output.
 - **Orchestration** composes existing operations. `reviewPitChanges()` adds diffs and
@@ -27,9 +29,21 @@ result types from injected functions instead of copying their schemas.
 
 - Numeric inputs are integers within the ranges their documentation states.
   Fractional, non-finite, or out-of-range values are rejected before any host call
-  instead of being silently clamped. The only derived cap is `waitForGitHubRun()`'s
-  285-second polling budget: checks that would not fit after the initial delay are
-  skipped, and a timeout reports both `attempts` made and `requestedAttempts`.
+  instead of being silently clamped. The only derived cap is the 285-second polling
+  budget shared by `waitForGitHubRun()` and `waitForGitHubPullRequestChecks()`: polls
+  that would not fit after the initial delay are skipped, and a timeout reports both the
+  `attempts` made and `requestedAttempts`.
+- `waitForGitHubPullRequestChecks()` treats SUCCESS, NEUTRAL, and SKIPPED as passing,
+  stops at the first failed check, and treats an empty check rollup as pending.
+- `runPitTargetedTests()` reads Vitest's JSON report through `jq`. It returns at most 15
+  failures and 5 suite load errors, each clipped to 8 lines of 160 characters without
+  dependency stack frames or the repository root, and counts what it omits. Without a
+  report it falls back to a 120-line output tail.
+- `inspectGitHubRunFailure()` reads the last 51,200 bytes of each failed job's log and
+  anchors the excerpt on its last `##[error]` line, because logs end with post-job
+  cleanup. `logTruncated` means earlier output was not fetched.
+- `commitPitChanges()` refuses unrelated staged paths, directories, and unchanged listed
+  files. It stages tracked paths with `git add -u` and never force-adds an ignored new file.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
 - `listChangedGitFiles()` preserves literal filenames, uses rename destinations,
