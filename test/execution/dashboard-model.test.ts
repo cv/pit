@@ -77,7 +77,13 @@ describe("execution dashboard model", () => {
             capability: "gh",
             method: "runView",
             status: "running",
-            summary: "2 succeeded, 1 running over 11.0s",
+            count: 3,
+            statuses: [
+              { status: "succeeded", count: 2 },
+              { status: "running", count: 1 },
+            ],
+            durationMs: 11_000,
+            unfinished: true,
           },
         ],
       },
@@ -136,11 +142,13 @@ describe("execution dashboard model", () => {
       kind: "function",
       name: "waitForRun",
       events: [
-        { kind: "call", status: "failed", summary: "failed, 0.0s" },
+        { kind: "call", status: "failed", count: 1, durationMs: 10, unfinished: false },
         {
           kind: "function",
           name: "child",
-          events: [{ kind: "call", status: "rejected", summary: "rejected, 0.0s" }],
+          events: [
+            { kind: "call", status: "rejected", count: 1, durationMs: 20, unfinished: false },
+          ],
         },
       ],
     });
