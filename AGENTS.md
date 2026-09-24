@@ -25,6 +25,8 @@
 
 ## Testing
 
+- Load [pit-test-audit](.pi/skills/pit-test-audit/SKILL.md) before writing, changing, reviewing, or auditing tests. Apply its authoring gate; keep audit discovery read-only until candidate evidence is recorded.
+
 - Prefer typed `it.each` tables when cases share setup and assertion shape but vary inputs and expected outputs.
 - Give table rows descriptive names; keep lifecycle, concurrency, ordering, and heterogeneous workflows as explicit standalone tests.
 - Do not move substantial control flow into table data merely to reduce line count.

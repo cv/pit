@@ -47,13 +47,10 @@ describe("project agent workflow resources", () => {
       dir: resolve(".pi/skills"),
       source: "project",
     });
+    const requiredSkills = ["pit-delivery", "pit-terminal-ux", "pit-test-audit"];
     expect(diagnostics).toEqual([]);
-    expect(skills.map((skill) => skill.name)).toEqual(
-      expect.arrayContaining(["pit-delivery", "pit-terminal-ux"]),
-    );
-    for (const skill of skills.filter((entry) =>
-      ["pit-delivery", "pit-terminal-ux"].includes(entry.name),
-    )) {
+    expect(skills.map((skill) => skill.name)).toEqual(expect.arrayContaining(requiredSkills));
+    for (const skill of skills.filter((entry) => requiredSkills.includes(entry.name))) {
       expect(skill.description.trim().length).toBeGreaterThan(0);
       expect(skill.disableModelInvocation).toBe(false);
     }
