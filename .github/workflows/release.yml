@@ -50,8 +50,9 @@ jobs:
         run: npm run package:check
       - name: Run static checks
         run: npm run check
-      - name: Test with coverage
-        run: npm run coverage
+      # The tagged commit passed coverage in CI; this run tests the freshly built runtime.
+      - name: Test this release's runtime
+        run: npm test
       - name: Inspect package contents
         run: npm pack --dry-run
       - name: Generate prebuild checksums
