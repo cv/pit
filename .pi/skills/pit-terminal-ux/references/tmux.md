@@ -13,7 +13,7 @@ The [offline fixture provider](../assets/fixture-provider.ts) emits deterministi
 5. On the isolated server only, enable `extended-keys` for modified keys. For clipboard checks, enable `set-clipboard on`; with no attached client, this exercises OSC 52 into a test tmux buffer without altering the user's desktop clipboard.
 6. Verify the fixture model appears in the footer before sending a case name. `--offline` alone only disables startup networking; isolation and the deterministic provider are what prevent real model requests.
 
-Use `shell.execFile` through TypeScript, with argument arrays. Keep one parameterized helper for the isolated socket and one for repeated case/capture sequencing. Always target the socket, session, window, and pane explicitly. **Never send keys to the active conversation pane, load the fixture provider in a normal session, or issue a bare `tmux kill-server`.** Do not modify the user's tmux configuration.
+Use the project functions. `managePitUxSession` performs steps 1-6 and returns the run's root, socket, and target. `runPitUxCase` sends a prompt or tmux keys and captures rows once a new completion appears. `runPitUxFixtures` runs fixtures in new sessions and reports their status rows. `inspectPitUxRowStyle` reports a row's SGR codes. They refuse sockets outside `/tmp/pit-ux-*`, and stopping removes only the run's own server and directory. For checks they do not cover, such as mouse selection, use `shell.execFile` with argument arrays against the same socket and target. **Never send keys to the active conversation pane, load the fixture provider in a normal session, or issue a bare `tmux kill-server`.** Do not modify the user's tmux configuration.
 
 ## Fixtures and controls
 

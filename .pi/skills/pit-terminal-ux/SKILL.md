@@ -119,4 +119,22 @@ Preserve useful path/line references and nested function attribution. Treat canc
 5. Use `runPitTargetedTests()` for the affected renderer/producer suites during development. Follow [pit-delivery](../pit-delivery/SKILL.md) for dependency diagnosis, final gates, result interpretation, and loaded-versus-disk checks; do not duplicate that execution workflow here. Review actual rendered output, including warning and error paths.
 6. After a renderer behavior change, follow the non-closing delivery/reload workflow and exercise it in live Pi. Prefer the [isolated tmux workflow](references/tmux.md) for agent-driven captures, resizing, search, selection/copy, and cancellation when available; do not delegate automatable checks to the user. Headless output cannot certify colour contrast, scroll stability, click/key handling, cancellation, or interaction with the surrounding transcript. State which observations are headless versus interactive.
 
+The tmux workflow's project functions start and stop the isolated Pi (`managePitUxSession`), submit prompts or keys and capture the pane (`runPitUxCase`), run fixtures in new sessions and summarize their outcomes (`runPitUxFixtures`), and read a row's styles for theme checks (`inspectPitUxRowStyle`). They refuse sockets outside their own runs. Always stop the session, and give runs a 300000 ms tool timeout:
+
+```ts pit-example
+async ({ managePitUxSession, runPitUxFixtures }, input: { fixtures: string[] }) => {
+  const session = await managePitUxSession({ action: "start" });
+  if (session.action !== "start") throw new Error("expected a started session");
+  try {
+    return await runPitUxFixtures({
+      socket: session.socket,
+      target: session.target,
+      fixtures: input.fixtures,
+    });
+  } finally {
+    await managePitUxSession({ action: "stop", socket: session.socket, root: session.root });
+  }
+}
+```
+
 Do not accept a renderer because it looks attractive on one happy-path value at 200 columns. Accept it when users can reliably understand what happened, inspect what matters, and recover when it did not work.
