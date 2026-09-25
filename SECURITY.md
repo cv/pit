@@ -9,7 +9,7 @@ Pit provides security fixes for the latest tagged release.
 | 0.16.x           | Yes       |
 | Earlier releases | No        |
 
-Pit requires Node.js 22.19 or newer as the Pi extension host. The installer verifies SHA-256 checksums before activating release-built Wasmtime addons for Linux, macOS, and Windows on ARM64 or x64. Missing or unsupported prebuilds fall back to the deprecated Node executor.
+Pit requires Node.js 22.19 or newer as the Pi extension host. The installer verifies SHA-256 checksums before activating release-built Wasmtime addons for Linux, macOS, and Windows on ARM64 or x64. Missing or unsupported prebuilds disable TypeScript execution with an explanatory error; there is no fallback runtime.
 
 ## Reporting a vulnerability
 
