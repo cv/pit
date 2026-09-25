@@ -62,6 +62,25 @@ result types from injected functions instead of copying their schemas.
   only that workflow's runs; an unknown workflow fails rather than returning
   `found: false`.
 
+## Terminal acceptance
+
+`managePitUxSession`, `runPitUxCase`, `runPitUxFixtures`, and `inspectPitUxRowStyle` drive
+the isolated Pi of the pit-terminal-ux skill's tmux workflow. The skill decides what to
+exercise and when a change is accepted.
+
+- Start creates `/tmp/pit-ux-*`, a private tmux server with an empty configuration, and Pi
+  under `env -i` with temporary home and agent directories and only this repository's
+  extension and fixture provider. If the fixture model does not appear within 20 s, start
+  kills that server, removes the directory, and fails with the last screen rows.
+- Stop requires the run's root and its `tmux.sock`, checked before any tmux call. The other
+  functions refuse sockets outside `/tmp/pit-ux-*/tmux.sock`, so none can send keys to the
+  conversation's pane.
+- `runPitUxCase` settles on a new match of its completion pattern after submitting a prompt;
+  an earlier completion still on screen does not count. `settled: false` means the timeout
+  expired, not that the fixture failed.
+- `runPitUxFixtures` reports up to four rows from each fixture's entry: status lines and
+  decisive diagnostic rows. It is a summary; use `runPitUxCase` to inspect a whole entry.
+
 ## Session analysis and jq
 
 `analyzePitSessions → analyzePitSession → readPitSessionEvents → jq` keeps four
