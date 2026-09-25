@@ -1,5 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
+import { LIMITS, type SliceKeep, TextCapture, type TextBudget } from "../shared/bounds.js";
+
 const EXIT_STDIO_GRACE_MS = 100;
 const FORCE_KILL_DELAY_MS = 5000;
 
@@ -9,12 +11,17 @@ export interface StreamingProcessResult {
   code: number;
   killed: boolean;
   termination?: "timeout" | "abort";
+  /** Whether either stream exceeded its capture window. */
+  truncated: boolean;
 }
 
 export interface StreamingProcessOptions {
   cwd: string;
   timeout: number;
   signal?: AbortSignal;
+  /** Per-stream capture window. The default is Pit's process stream budget, keeping the tail. */
+  capture?: { budget: TextBudget; keep: SliceKeep };
+  /** Receives decoded text; a character split across pipe chunks is delivered whole. */
   onChunk: (stream: "stdout" | "stderr", chunk: string) => void;
 }
 
@@ -116,8 +123,10 @@ export async function executeStreamingProcess(
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  let stdout = "";
-  let stderr = "";
+  const capture = options.capture ?? { budget: LIMITS.processStream, keep: "tail" };
+  // Retain only the window the caller can return, so memory stays bounded for any output size.
+  const stdout = new TextCapture(capture.budget, capture.keep);
+  const stderr = new TextCapture(capture.budget, capture.keep);
   let killed = false;
   let termination: StreamingProcessResult["termination"];
   let timeout: NodeJS.Timeout | undefined;
@@ -139,14 +148,12 @@ export async function executeStreamingProcess(
   };
   const abortProcess = () => killProcess("abort");
   const onStdout = (data: Buffer) => {
-    const chunk = data.toString();
-    stdout += chunk;
-    options.onChunk("stdout", chunk);
+    const chunk = stdout.push(data);
+    if (chunk) options.onChunk("stdout", chunk);
   };
   const onStderr = (data: Buffer) => {
-    const chunk = data.toString();
-    stderr += chunk;
-    options.onChunk("stderr", chunk);
+    const chunk = stderr.push(data);
+    if (chunk) options.onChunk("stderr", chunk);
   };
   child.stdout?.on("data", onStdout);
   child.stderr?.on("data", onStderr);
@@ -160,18 +167,13 @@ export async function executeStreamingProcess(
   if (options.timeout > 0) {
     timeout = setTimeout(() => killProcess("timeout"), options.timeout);
   }
+  let code: number;
   try {
-    const code = await waitForChildProcess(child);
+    const exitCode = await waitForChildProcess(child);
     const terminatedCode = termination === "timeout" ? 124 : termination === "abort" ? 130 : 1;
-    return {
-      stdout,
-      stderr,
-      code: code ?? terminatedCode,
-      killed,
-      ...(termination ? { termination } : {}),
-    };
+    code = exitCode ?? terminatedCode;
   } catch {
-    return { stdout, stderr, code: 1, killed, ...(termination ? { termination } : {}) };
+    code = 1;
   } finally {
     if (timeout) {
       clearTimeout(timeout);
@@ -180,4 +182,14 @@ export async function executeStreamingProcess(
     child.stdout?.removeListener("data", onStdout);
     child.stderr?.removeListener("data", onStderr);
   }
+  const out = stdout.finish();
+  const err = stderr.finish();
+  return {
+    stdout: out.text,
+    stderr: err.text,
+    code,
+    killed,
+    truncated: out.truncated || err.truncated,
+    ...(termination ? { termination } : {}),
+  };
 }

@@ -75,6 +75,7 @@ export async function executeHostProcess({
         cwd,
         timeout,
         ...(signal ? { signal } : {}),
+        capture: { budget: { maxBytes, maxLines }, keep },
         onChunk: (stream, chunk) => onProgress({ phase: "output", stream, chunk }),
       })
     : await pi.exec(program, args, {
@@ -120,6 +121,7 @@ export async function executeHostProcess({
     stdout: stdout.text,
     stderr: stderr.text,
     code: result.code,
-    truncated: stdout.truncated || stderr.truncated,
+    truncated:
+      stdout.truncated || stderr.truncated || ("truncated" in result && result.truncated === true),
   };
 }

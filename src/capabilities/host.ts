@@ -15,6 +15,7 @@ import {
   stringValue as string,
   stringArrayValue as stringArray,
 } from "../shared/argument-values.js";
+import { completeUtf8Length, LIMITS } from "../shared/bounds.js";
 import { handleWorkspace } from "../workspace/capability.js";
 import { createCommandsCapabilityHandler } from "./handlers/commands.js";
 import { prepareGhCommand } from "./handlers/gh.js";
@@ -28,7 +29,6 @@ import {
   validateCapabilityCall,
 } from "./registry.js";
 
-const MAX_HTTP_BYTES = 1_000_000;
 // One storage instance; each host dispatch owns its async scope, including overlapping tools.
 const processTraceContext = new AsyncLocalStorage<number | undefined>();
 
@@ -77,7 +77,10 @@ async function readHttpBody(
       break;
     }
   }
-  return { body: Buffer.concat(chunks, bytes).toString("utf8"), truncated };
+  const body = Buffer.concat(chunks, bytes);
+  // A byte cut can end inside a character; return only complete characters.
+  const complete = truncated ? body.subarray(0, completeUtf8Length(body)) : body;
+  return { body: complete.toString("utf8"), truncated };
 }
 
 const PROMOTION_SUGGESTION_RUNS = 5;
@@ -230,8 +233,8 @@ export function createCapabilities({
       const maxBytes = boundedInteger(
         options.maxBytes,
         "options.maxBytes",
-        MAX_HTTP_BYTES,
-        MAX_HTTP_BYTES,
+        LIMITS.httpBody.maxBytes,
+        LIMITS.httpBody.maxBytes,
       );
       const response = await fetch(url, {
         ...(options.method === undefined ? {} : { method: string(options.method, "method") }),
