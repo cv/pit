@@ -452,7 +452,7 @@ describe("runInSandbox", () => {
     expect(completed).toBe(true);
   });
 
-  // Budgets exceed runtime startup, which can take seconds on small CI runners (#136), so the
+  // Budgets exceed the process's one-time guest compilation on small CI runners, so the
   // call is in flight when the deadline passes.
   it("enforces the deadline when a capability handler never settles", async () => {
     let invoked = false;
@@ -464,11 +464,11 @@ describe("runInSandbox", () => {
           invoked = true;
           return new Promise(() => {});
         },
-        { timeoutMs: 10_000 },
+        { timeoutMs: 3_000 },
       ),
-    ).rejects.toThrow("timed out after 10000ms");
+    ).rejects.toThrow("timed out after 3000ms");
     expect(invoked).toBe(true);
-    expect(Date.now() - started).toBeLessThan(30_000);
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 
   it("aborts cooperative capability handlers on timeout", async () => {
@@ -487,7 +487,7 @@ describe("runInSandbox", () => {
               { once: true },
             );
           }),
-        { timeoutMs: 10_000 },
+        { timeoutMs: 3_000 },
       ),
     ).rejects.toThrow("timed out");
     await vi.waitFor(() => expect(aborted).toBe(true), { timeout: 5_000 });
