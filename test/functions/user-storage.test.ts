@@ -195,10 +195,9 @@ describe("user function storage", () => {
     expect(invalid.size).toBe(1);
   });
 
-  it("rejects case and namespace collisions without a discovery-order winner", async () => {
+  it("rejects namespace collisions without a discovery-order winner", async () => {
     const directory = userFunctionDirectory();
     await mkdir(join(directory, "thing"), { recursive: true });
-    await writeFile(join(directory, "Thing.ts"), "/** Upper. */ async function Thing({}) {} ");
     await writeFile(join(directory, "thing.ts"), "/** Lower. */ async function thing({}) {} ");
     await writeFile(
       join(directory, "thing", "child.ts"),
@@ -208,8 +207,24 @@ describe("user function storage", () => {
     const registry = new Map<string, string>();
     expect((await loadUserFunctions(registry, new Map(), invalid)).length).toBeGreaterThan(0);
     expect(registry.size).toBe(0);
-    expect([...invalid.keys()].sort()).toEqual(["Thing", "thing", "thing.child"]);
+    expect([...invalid.keys()].sort()).toEqual(["thing", "thing.child"]);
   });
+
+  // Names that differ only by case cannot coexist on default macOS and Windows filesystems.
+  it.skipIf(process.platform === "darwin" || process.platform === "win32")(
+    "rejects case collisions without a discovery-order winner",
+    async () => {
+      const directory = userFunctionDirectory();
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, "Thing.ts"), "/** Upper. */ async function Thing({}) {} ");
+      await writeFile(join(directory, "thing.ts"), "/** Lower. */ async function thing({}) {} ");
+      const invalid = new Map<string, string>();
+      const registry = new Map<string, string>();
+      expect((await loadUserFunctions(registry, new Map(), invalid)).length).toBeGreaterThan(0);
+      expect(registry.size).toBe(0);
+      expect([...invalid.keys()].sort()).toEqual(["Thing", "thing"]);
+    },
+  );
 
   it("does not read or mutate symlinked definitions and subdirectories", async () => {
     const directory = userFunctionDirectory();
