@@ -17,10 +17,11 @@ function inlineValue(value: unknown): string | undefined {
 export function describeResult(
   value: unknown,
   structured: RenderedResultValue | undefined,
-  options: { truncated: boolean; fallback: string; expanded: boolean },
+  options: { unretained: boolean; fallback: string; expanded: boolean },
 ): string {
-  const { truncated, fallback, expanded } = options;
-  if (truncated) {
+  const { unretained, fallback, expanded } = options;
+  // Only the model-visible text survived; there is no value to describe.
+  if (unretained) {
     return "Truncated output";
   }
   if (structured) {

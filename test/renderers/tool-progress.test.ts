@@ -1,11 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { fitValue } from "../../src/shared/json-budget.js";
 import { cleanupHarness, renderToolResult, setupHarness } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
 describe("tool rendering", () => {
+  it("renders fitted truncated results through their domain view", () => {
+    const stdout = Array.from({ length: 3_000 }, (_, index) => `line ${index} end`).join("\n");
+    const fitted = fitValue(
+      { stdout, stderr: "boom", code: 0, truncated: false },
+      { maxBytes: 20_000, maxLines: 2_000 },
+    );
+    const result = {
+      content: [{ type: "text", text: fitted.text }],
+      details: { value: fitted.value, truncated: fitted.truncated },
+    };
+
+    const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
+    expect(collapsed).toContain("exit 0, truncated");
+    expect(collapsed).toContain("(truncated, 0.0s)");
+    expect(collapsed).toContain("⚠");
+    expect(collapsed).not.toContain("Truncated output");
+
+    const expanded = renderToolResult(result, { expanded: true, isPartial: false });
+    expect(expanded).toContain("line 0 end");
+    expect(expanded).toContain("line 2999 end");
+    expect(expanded).toMatch(/… \d+ lines omitted …/);
+    expect(expanded).toContain("boom");
+    expect(expanded).toContain("Result truncated to fit the output budget");
+  });
+
   it("renders result values as highlighted JSON", () => {
     const value = Object.fromEntries(
       Array.from({ length: 15 }, (_, index) => [`key${index + 1}`, index + 1]),

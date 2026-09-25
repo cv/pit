@@ -164,16 +164,16 @@ describe("retained process output", () => {
   });
 
   it.each([
-    { name: "tool error", isError: true, truncated: false },
-    { name: "upstream-truncated result", isError: false, truncated: true },
+    { name: "tool error", isError: true, truncated: false, value: shared },
+    { name: "unretained truncated result", isError: false, truncated: true, value: undefined },
   ])(
     "keeps diagnostics when $name does not display the returned value",
-    ({ isError, truncated }) => {
+    ({ isError, truncated, value }) => {
       const rendered = renderTypeScriptToolResult(
         {
           content: [{ type: "text", text: "Original diagnostic or retained prefix" }],
           details: {
-            value: shared,
+            value,
             truncated,
             progress: [
               { id: 1, command: "smoke fixture", status: "done", code: 0, output: shared.stdout },
