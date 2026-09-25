@@ -105,7 +105,7 @@ describe("pit extension", () => {
     const info = await value("async ({ context: { get } }) => get()");
     expect(info.savedFunctions).toEqual(["greet"]);
     expect(branchEntries.some((entry) => entry.data?.name === "broken")).toBe(false);
-  }, 15_000);
+  });
 
   it("saves named functions without executing them", async () => {
     const source = `async function deferred({ shell: { execFile } }) {
