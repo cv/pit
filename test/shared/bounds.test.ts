@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +15,12 @@ import {
 
 const lines = (count: number) => Array.from({ length: count }, (_, index) => `line ${index}`);
 const lineCount = (text: string) => (text === "" ? 0 : text.split("\n").length);
+
+describe("LIMITS", () => {
+  it("matches Pi's tool-output budget", () => {
+    expect(LIMITS.result).toEqual({ maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+  });
+});
 
 describe("sliceText", () => {
   it.each<{
