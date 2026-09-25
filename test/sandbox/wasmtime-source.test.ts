@@ -94,6 +94,7 @@ describe("generated Wasmtime guest behavior", () => {
         method: "read",
         args: ["restricted.txt"],
       },
+      { type: "failure", name: "Error", message: "permission denied" },
     ]);
   });
 
@@ -114,6 +115,10 @@ describe("generated Wasmtime guest behavior", () => {
       ),
     ).rejects.toMatchObject({ name: "TimeoutError", message: "deadline reached" });
     expect(requests.map(({ type }) => type)).toEqual(["call", "failure"]);
-    expect(requests.at(-1)).toEqual({ type: "failure", name: "TimeoutError" });
+    expect(requests.at(-1)).toEqual({
+      type: "failure",
+      name: "TimeoutError",
+      message: "deadline reached",
+    });
   });
 });

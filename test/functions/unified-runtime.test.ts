@@ -19,11 +19,20 @@ async function execute(
   const compiled = await transform(`(${generated})`, { loader: "ts", target: "es2022" });
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
   const main = (0, eval)(compiled.code) as (
-    capabilities: object,
+    capabilities: (context: unknown) => object,
     input: unknown,
-    runSaved: (name: string, layer: string, callback: () => Promise<unknown>) => Promise<unknown>,
+    runSaved: (
+      name: string,
+      layer: string,
+      parent: unknown,
+      callback: (context: unknown) => Promise<unknown>,
+    ) => Promise<unknown>,
   ) => Promise<unknown>;
-  return main(capabilities, input, async (_name, _layer, callback) => callback());
+  return main(
+    () => capabilities,
+    input,
+    async (name, layer, _parent, callback) => callback({ name, layer }),
+  );
 }
 
 describe("unified function runtime", () => {

@@ -67,7 +67,7 @@ export function createWasmtimeFunctionExecutor({
       const waiters = new Map<number, (response: string) => void>();
       let resultReceived = false;
       let result: unknown;
-      let guestErrorName: string | undefined;
+      let guestFailure: { name: string; message?: string } | undefined;
       const dispatcher = new CapabilityDispatcher({
         handler,
         signal,
@@ -108,7 +108,10 @@ export function createWasmtimeFunctionExecutor({
           return JSON.stringify({ value: null });
         }
         if (request.type === "failure") {
-          if (typeof request.name === "string") guestErrorName = request.name.slice(0, 100);
+          guestFailure = {
+            name: typeof request.name === "string" ? request.name.slice(0, 100) : "Error",
+            ...(typeof request.message === "string" ? { message: request.message } : {}),
+          };
           return JSON.stringify({ value: null });
         }
         const message = request as WireMessage;
@@ -120,20 +123,47 @@ export function createWasmtimeFunctionExecutor({
         if (!isCapabilityCallMessage(message)) {
           throw new Error("Invalid Pit guest request");
         }
+        // After the deadline or cancellation, answer without dispatching to a handler.
+        if (stopped) {
+          affected = true;
+          return stoppedResponse(message.id);
+        }
         return new Promise<string>((resolve) => {
           waiters.set(message.id, resolve);
           dispatcher.handle(message);
         });
       };
       const executionId = randomUUID();
-      const interrupt = (): void => {
+      let stopped: "timeout" | "cancelled" | undefined;
+      // Whether stopping reached the guest; a guest that failed on its own keeps its error.
+      let affected = false;
+      const stoppedResponse = (id: number): string =>
+        JSON.stringify({
+          type: "response",
+          id,
+          error:
+            stopped === "cancelled"
+              ? "TypeScript execution cancelled"
+              : `TypeScript execution timed out after ${options.timeoutMs}ms`,
+        });
+      const interrupt = (): boolean => {
         try {
-          addon.interruptQueuedJavascript?.(executionId);
+          return addon.interruptQueuedJavascript?.(executionId) === true;
         } catch {
           // Native timeout interruption remains a bounded fallback if explicit cancellation fails.
+          return false;
         }
       };
-      options.signal?.addEventListener("abort", interrupt, { once: true });
+      // The deadline holds even when a capability handler ignores its abort signal: answer every
+      // waiting guest call so the guest resumes, then interrupt it natively.
+      const stop = (): void => {
+        stopped = options.signal?.aborted ? "cancelled" : "timeout";
+        affected = waiters.size > 0;
+        for (const [id, waiter] of waiters) waiter(stoppedResponse(id));
+        waiters.clear();
+        affected = interrupt() || affected;
+      };
+      signal.addEventListener("abort", stop, { once: true });
       try {
         await addon.executeQueuedJavascript(
           component,
@@ -149,7 +179,9 @@ export function createWasmtimeFunctionExecutor({
           throw terminationError("cancelled", "TypeScript execution cancelled", { cause: error });
         }
         const message = error instanceof Error ? error.message : String(error);
-        if (signal.aborted || /wasm trap: interrupt/i.test(message)) {
+        // Report a timeout only when this executor stopped the guest or the native deadline
+        // interrupted it; a guest's own error stays its error even if the budget also elapsed.
+        if ((stopped === "timeout" && affected) || /wasm trap: interrupt/i.test(message)) {
           throw terminationError(
             "timeout",
             `TypeScript execution timed out after ${options.timeoutMs}ms`,
@@ -159,16 +191,23 @@ export function createWasmtimeFunctionExecutor({
         if (/all fuel consumed|out of fuel/i.test(message)) {
           throw new Error("TypeScript execution exceeded its fuel limit", { cause: error });
         }
-        if (guestErrorName) {
-          const failure = new Error(message, { cause: error });
-          failure.name = guestErrorName;
+        if (guestFailure) {
+          // The guest's own message excludes the native stack frame of the generated program.
+          const failure = new Error(guestFailure.message ?? message, { cause: error });
+          if (guestFailure.name !== "Error") failure.name = guestFailure.name;
           throw failure;
         }
         throw error;
       } finally {
-        options.signal?.removeEventListener("abort", interrupt);
+        signal.removeEventListener("abort", stop);
       }
-      if (!resultReceived) throw new Error("QuickJS guest completed without a result");
+      // With no pending host work, the guest can only finish early by awaiting a promise that
+      // nothing will settle; report that immediately instead of waiting for the deadline.
+      if (!resultReceived) {
+        throw new Error(
+          "TypeScript program finished without a result: it awaited a promise that never settles",
+        );
+      }
       return result;
     },
   };

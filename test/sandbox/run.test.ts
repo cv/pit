@@ -3,14 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
 import type { CapabilityRequest } from "../../src/sandbox/dispatcher.js";
 import type { FunctionExecutor } from "../../src/sandbox/executor.js";
-import {
-  runInSandbox,
-  runWithFunctionExecutor,
-  SandboxRemoteError,
-  sandboxFatalError,
-} from "../../src/sandbox/run.js";
+import { runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
-import { runRawNodeProgram } from "../support/node-executor.js";
+import { runInSandbox, runRawProgram } from "../support/sandbox.js";
 
 describe("runInSandbox", () => {
   it.each<{ name: string; source: string }>([
@@ -332,63 +327,21 @@ describe("runInSandbox", () => {
     ).rejects.toThrow("function dependency cycle: first -> second -> first");
   });
 
-  it("returns bounded structured remote diagnostics without enumerable stack frames", async () => {
-    let failure: unknown;
-    try {
-      await runInSandbox(
-        `({}) => {
-          const error = new Error("remote boom");
-          error.stack = "Error: remote boom\\n" + Array.from(
-            { length: 40 },
-            (_, index) => "    at frame" + index + " (/private/path/" + index + ".js:1:1)",
-          ).join("\\n");
-          throw error;
-        }`,
-        async () => null,
-      );
-    } catch (error) {
-      failure = error;
-    }
-    expect(failure).toBeInstanceOf(SandboxRemoteError);
-    const remote = failure as SandboxRemoteError;
-    expect(remote.message).toBe("remote boom");
-    expect(remote.remoteName).toBe("Error");
-    expect(remote.remoteFrames).toHaveLength(20);
-    expect(remote.remoteTruncated).toBe(true);
-    expect(JSON.stringify(remote)).not.toContain("private/path");
-
-    const bounded = await runInSandbox(
-      `({}) => { throw new Error("x".repeat(20_000)); }`,
+  it("reports guest errors by name and message without stack frames", async () => {
+    const failure = await runInSandbox(
+      `({}) => {
+        const error = new TypeError("remote boom");
+        error.stack = "TypeError: remote boom\\n    at frame (/private/path/0.js:1:1)";
+        throw error;
+      }`,
       async () => null,
     ).then(
-      () => {
-        throw new Error("expected sandbox failure");
-      },
-      (error: unknown) => error as SandboxRemoteError,
+      () => new Error("expected a guest failure"),
+      (error: unknown) => error as Error,
     );
-    expect(Buffer.byteLength(bounded.message)).toBeLessThanOrEqual(8_000);
-    expect(bounded.remoteTruncated).toBe(true);
-  });
 
-  it("accepts legacy and defensive sandbox fatal error shapes", () => {
-    expect(sandboxFatalError("legacy failure").message).toBe("legacy failure");
-    expect(sandboxFatalError(undefined).message).toBe("TypeScript sandbox failed");
-    expect(sandboxFatalError({ name: "Error" }).message).toBe("TypeScript sandbox failed");
-
-    const minimal = sandboxFatalError({ message: "minimal" }) as SandboxRemoteError;
-    expect(minimal.remoteName).toBe("Error");
-    expect(minimal.remoteFrames).toEqual([]);
-    expect(minimal.remoteTruncated).toBe(false);
-
-    const structured = sandboxFatalError({
-      name: "TypeError",
-      message: "structured",
-      frames: ["    at one", 42, "    at two"],
-      truncated: true,
-    }) as SandboxRemoteError;
-    expect(structured.remoteName).toBe("TypeError");
-    expect(structured.remoteFrames).toEqual(["    at one", "    at two"]);
-    expect(structured.remoteTruncated).toBe(true);
+    expect(failure).toMatchObject({ name: "TypeError", message: "remote boom" });
+    expect(`${failure.message} ${failure.stack}`).not.toMatch(/private\/path|<input>|pit-program/);
   });
 
   it("contextually types expressions using active saved functions", () => {
@@ -427,34 +380,24 @@ describe("runInSandbox", () => {
     ).rejects.toThrow("host refused");
   });
 
-  it("cannot read arbitrary files directly", async () => {
-    await expect(
-      runRawNodeProgram(
-        `async ({}) => process.getBuiltinModule("node:fs").readFileSync("/etc/passwd", "utf8")`,
-      ),
-    ).rejects.toThrow(/permission|access|denied|ERR_ACCESS_DENIED/i);
-  });
+  it("gives unvalidated guest code no host globals, modules, or ungranted capabilities", async () => {
+    // Bypasses authoring validation: the runtime and the host's grants are the boundary.
+    const result = await runRawProgram(`async () => ({
+      globals: [typeof process, typeof require, typeof module, typeof fetch, typeof WebAssembly],
+      module: await import("fs").then(() => "loaded", () => "unavailable"),
+      direct: JSON.parse(await pitCall(JSON.stringify({
+        type: "call", id: 1, capability: "shell", method: "exec", args: ["id"],
+      }))),
+    })`);
 
-  it("isolates the environment and tolerates untrusted process output", async () => {
-    const result = await runRawNodeProgram(
-      `async ({}) => {
-        console.log("diagnostic");
-        process.stdout.write("not json\\n");
-        process.stdout.write(JSON.stringify({ token: "wrong", type: "result", value: 1 }) + "\\n");
-        await new Promise(resolve => setTimeout(resolve, 10));
-        return { secret: process.env.HOME };
-      }`,
-    );
-    expect(result).toEqual({});
+    expect(result).toEqual({
+      globals: ["undefined", "undefined", "undefined", "undefined", "undefined"],
+      module: "unavailable",
+      direct: expect.objectContaining({ error: "Function grant does not allow shell.exec" }),
+    });
   });
 
   it("bounds protocol frames in both directions", async () => {
-    await expect(
-      runRawNodeProgram(
-        `async ({}) => { process.stdout.write("x".repeat(8_000_001)); return null; }`,
-      ),
-    ).rejects.toThrow(/RPC frame exceeds/);
-
     await expect(
       runInSandbox("async ({ context: { get } }) => get()", async () => "x".repeat(8_000_001)),
     ).rejects.toThrow(/Capability response exceeds RPC limit/);
@@ -464,24 +407,25 @@ describe("runInSandbox", () => {
         `async ({ context: { get } }) => (get as any)("x".repeat(8_000_001))`,
         async () => null,
       ),
-    ).rejects.toThrow(/RPC frame exceeds/);
+    ).rejects.toThrow(/request exceeds bounds/);
   });
 
-  it("bounds concurrent and total capability calls", async () => {
-    const rejected: CapabilityTrace[] = [];
-    await expect(
-      runInSandbox(
-        `async ({ context: { get } }) => Promise.all(
-          Array.from({ length: 33 }, () => get())
-        )`,
-        async () => {
-          await new Promise((resolve) => setTimeout(resolve, 25));
-          return null;
-        },
-        { onCapabilityTrace: (trace) => rejected.push(trace) },
-      ),
-    ).rejects.toThrow(/Concurrent RPC call limit exceeded/);
-    expect(rejected.some((trace) => trace.status === "rejected")).toBe(true);
+  it("queues calls beyond the concurrency bound and rejects beyond the total bound", async () => {
+    let active = 0;
+    let maximum = 0;
+    const completed = await runInSandbox(
+      `async ({ context: { get } }) => (await Promise.all(Array.from({ length: 33 }, () => get()))).length`,
+      async () => {
+        active++;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        active--;
+        return null;
+      },
+    );
+    // The runtime runs up to 32 host calls at once and queues the rest instead of failing.
+    expect(completed).toBe(33);
+    expect(maximum).toBe(32);
 
     await expect(
       runInSandbox(
@@ -491,7 +435,7 @@ describe("runInSandbox", () => {
         }`,
         async () => null,
       ),
-    ).rejects.toThrow(/RPC call limit exceeded/);
+    ).rejects.toThrow(/call limit exceeded/);
   });
 
   it("waits for floating capability calls before reporting success", async () => {
@@ -506,6 +450,16 @@ describe("runInSandbox", () => {
     );
     expect(result).toBe(42);
     expect(completed).toBe(true);
+  });
+
+  it("enforces the deadline when a capability handler never settles", async () => {
+    const started = Date.now();
+    await expect(
+      runInSandbox("async ({ context: { get } }) => get()", () => new Promise(() => {}), {
+        timeoutMs: 1_000,
+      }),
+    ).rejects.toThrow("timed out after 1000ms");
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it("aborts cooperative capability handlers on timeout", async () => {
@@ -524,20 +478,11 @@ describe("runInSandbox", () => {
               { once: true },
             );
           }),
-        { timeoutMs: 100 },
+        // Long enough that the call is in flight, not answered after the deadline.
+        { timeoutMs: 1_000 },
       ),
     ).rejects.toThrow("timed out");
     await vi.waitFor(() => expect(aborted).toBe(true), { timeout: 5_000 });
-  });
-
-  it("reports a child that exits without a result", async () => {
-    await expect(runRawNodeProgram("({}) => process.exit(7)")).rejects.toThrow(/exit 7/);
-  });
-
-  it("reports a child terminated by a signal", async () => {
-    await expect(runRawNodeProgram(`({}) => process.kill(process.pid, "SIGTERM")`)).rejects.toThrow(
-      /SIGTERM/,
-    );
   });
 
   it("handles non-Error capability failures", async () => {
@@ -560,16 +505,6 @@ describe("runInSandbox", () => {
       ),
     ).rejects.toThrow("timed out");
     await new Promise((resolve) => setTimeout(resolve, 60));
-  });
-
-  it("reports failure to start the sandbox process", async () => {
-    const original = process.execPath;
-    process.execPath = "/definitely/missing/node";
-    try {
-      await expect(runInSandbox("({}) => 1", async () => null)).rejects.toThrow(/ENOENT/);
-    } finally {
-      process.execPath = original;
-    }
   });
 
   it("runs with an explicitly empty PATH and custom memory limit", async () => {

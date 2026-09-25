@@ -13,6 +13,36 @@ const program = (effects: string[]): PreparedSandboxProgram => ({
 const options = { memoryLimitMb: 64, timeoutMs: 500 };
 
 describe("createWasmtimeFunctionExecutor", () => {
+  it.each<{ name: string; interrupted: boolean; expected: object }>([
+    {
+      name: "did not reach the guest",
+      interrupted: false,
+      expected: { name: "RangeError", message: "guest boom" },
+    },
+    {
+      name: "interrupted the guest",
+      interrupted: true,
+      expected: { name: "TimeoutError", message: expect.stringContaining("timed out") },
+    },
+  ])("classifies a deadline stop that $name", async ({ interrupted, expected }) => {
+    // The deadline passes before the guest fails; only a stop that reached it is a timeout.
+    const addon: WasmtimeAddon = {
+      interruptQueuedJavascript: () => interrupted,
+      async executeQueuedJavascript(_component, _source, callback) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        await callback(
+          JSON.stringify({ type: "failure", name: "RangeError", message: "guest boom" }),
+        );
+        throw new Error("RangeError: guest boom\n    at <anonymous> (<input>:32:110)");
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+
+    await expect(
+      executor.execute(program([]), async () => null, { memoryLimitMb: 64, timeoutMs: 20 }),
+    ).rejects.toMatchObject(expected);
+  });
+
   it("dispatches granted calls and returns the guest result", async () => {
     const executeQueuedJavascript = vi.fn<WasmtimeAddon["executeQueuedJavascript"]>(
       async (_component, _source, callback) => {
@@ -101,7 +131,7 @@ describe("createWasmtimeFunctionExecutor", () => {
     const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
 
     await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
-      "completed without a result",
+      "finished without a result",
     );
   });
 
