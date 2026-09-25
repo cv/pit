@@ -10,6 +10,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Changed
 
+- Compile the QuickJS guest once per process instead of on every execution. On linux-arm64, a trivial program's steady-state execution drops from about 140 ms to 6 ms.
 - Share one set of text budgets and bounding primitives across results, processes, HTTP, reads, failures, progress, and labels, with consistent counted omission markers.
 - Render truncated results through their domain view, reporting truncation once and retaining the fitted value in details.
 

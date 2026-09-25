@@ -42,7 +42,7 @@ There are three distinct authority layers:
 2. **Each submitted program runs in an untrusted Wasm guest.** Its restricted WASI context inherits no filesystem, environment, network, arguments, or stdio. Fuel, epoch deadlines, store limits, and protocol limits bound each invocation.
 3. **Injected functions deliberately reintroduce selected host authority.** The sandbox is a boundary around direct access, not around effects explicitly exposed by a function. The host enforces the exact resolved transitive effect grant.
 
-Pit has no long-lived code worker or daemon. Each TypeScript invocation creates a new Wasmtime engine, store, and QuickJS runtime; only extension-host state, the loaded component bytes, and persisted function definitions survive between calls.
+Pit has no long-lived code worker or daemon. Each TypeScript invocation creates a new Wasmtime engine, store, and QuickJS runtime; only extension-host state, the loaded component and its compiled code, and persisted function definitions survive between calls.
 
 ## Extension composition and Pi lifecycle
 
@@ -144,7 +144,7 @@ After validation and scope resolution, esbuild transforms the generated TypeScri
 
 `src/sandbox/wasmtime-executor.ts` gives every invocation a random execution ID and creates a bounded dispatcher for the program's resolved effects. It wraps the compiled program as an ES module that exposes a queued `pitCall()` bridge. The custom component retains JavaScript Promise resolvers, exports queued requests to Rust, accepts completions, and pumps pending QuickJS jobs.
 
-The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a capability handler. At most 32 host calls run at once; further calls queue in the addon. When the deadline passes or the call is cancelled, the executor answers every pending guest call and interrupts the guest, so a capability handler that ignores its abort signal cannot extend the execution.
+The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. It compiles the QuickJS component once per process and loads that compiled code into each engine; engines stay per invocation because deadlines interrupt through the engine epoch. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a capability handler. At most 32 host calls run at once; further calls queue in the addon. When the deadline passes or the call is cancelled, the executor answers every pending guest call and interrupts the guest, so a capability handler that ignores its abort signal cannot extend the execution.
 
 Saved-function attribution is passed explicitly: every generated function receives its caller's invocation context, and capability calls carry the context of the function that made them. QuickJS has no async context tracking, so no invocation state is shared between concurrent calls.
 

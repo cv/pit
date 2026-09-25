@@ -14,7 +14,7 @@ use napi::{
 use napi_derive::napi;
 use wasmtime::{
     Config, Engine, Instance, Module, Store, StoreLimits, StoreLimitsBuilder,
-    component::ResourceTable,
+    component::{Component, ResourceTable},
 };
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
@@ -92,6 +92,42 @@ fn engine() -> Result<Engine> {
     config.wasm_component_model(true);
     config.epoch_interruption(true);
     Engine::new(&config).map_err(js_error)
+}
+
+/// The guest compiled by `Component::serialize`, keyed by the component bytes it came from.
+struct CompiledComponent {
+    source: Vec<u8>,
+    serialized: Arc<[u8]>,
+}
+
+static COMPILED_COMPONENT: Mutex<Option<CompiledComponent>> = Mutex::new(None);
+
+fn cache_unavailable<T>(_: T) -> Error {
+    Error::from_reason("Wasmtime component cache is unavailable")
+}
+
+/// Compiling the QuickJS guest takes about 100 ms, so it is compiled once per process and each
+/// execution loads the compiled code into its own engine. Engines stay per execution because
+/// deadlines interrupt through the engine epoch.
+fn queued_component(engine: &Engine, source: &[u8]) -> Result<Component> {
+    let cached = COMPILED_COMPONENT
+        .lock()
+        .map_err(cache_unavailable)?
+        .as_ref()
+        .filter(|compiled| compiled.source == source)
+        .map(|compiled| Arc::clone(&compiled.serialized));
+    if let Some(serialized) = cached {
+        // SAFETY: this process produced the bytes with `Component::serialize` under the same
+        // engine configuration.
+        return unsafe { Component::deserialize(engine, &*serialized) }.map_err(js_error);
+    }
+    let component = Component::new(engine, source).map_err(js_error)?;
+    let serialized = component.serialize().map_err(js_error)?;
+    *COMPILED_COMPONENT.lock().map_err(cache_unavailable)? = Some(CompiledComponent {
+        source: source.to_vec(),
+        serialized: serialized.into(),
+    });
+    Ok(component)
 }
 
 fn store<T>(engine: &Engine, data: T, fuel: u64) -> Result<Store<T>> {
@@ -182,13 +218,13 @@ pub async fn execute_queued_javascript(
     execution_id: Option<String>,
 ) -> Result<bool> {
     use queued::exports::pit::quickjs::runner::{Completion, PollState};
-    use wasmtime::component::{Component, Linker};
+    use wasmtime::component::Linker;
 
     if source.len() > MAX_MESSAGE_BYTES {
         return Err(Error::from_reason("JavaScript source exceeds bounds"));
     }
     let engine = engine()?;
-    let component = Component::new(&engine, component.as_ref()).map_err(js_error)?;
+    let component = queued_component(&engine, component.as_ref())?;
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(js_error)?;
     let memory_limit = usize::try_from(memory_limit_mb.unwrap_or(128))

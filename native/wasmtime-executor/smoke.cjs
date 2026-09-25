@@ -5,6 +5,66 @@ const fs = require("node:fs");
 const executor = require("./pit_wasmtime_executor.node");
 const { createWasmtimeFunctionExecutor } = require("./wasmtime-adapter.cjs");
 
+// The guest compiles once per process; later executions load the compiled code.
+async function checkCompiledOnce(queuedGuest) {
+  const timeExecution = async () => {
+    const started = process.hrtime.bigint();
+    await executor.executeQueuedJavascript(queuedGuest, "const value = 1;", async () => "null");
+    return Number(process.hrtime.bigint() - started) / 1e6;
+  };
+  const firstExecutionMs = await timeExecution();
+  const cachedExecutionMs = Math.min(await timeExecution(), await timeExecution());
+  assert.ok(
+    cachedExecutionMs * 5 < firstExecutionMs,
+    `a cached execution took ${cachedExecutionMs} ms after a ${firstExecutionMs} ms first execution`,
+  );
+  return {
+    firstExecutionMs: Math.round(firstExecutionMs),
+    cachedExecutionMs: Math.round(cachedExecutionMs * 10) / 10,
+  };
+}
+
+async function checkCancellation(queuedGuest) {
+  // An interrupt that arrives before its execution registers is kept for it.
+  const earlyCancellationId = "smoke-early-cancellation";
+  assert.equal(executor.interruptQueuedJavascript(earlyCancellationId), false);
+  await assert.rejects(
+    executor.executeQueuedJavascript(
+      queuedGuest,
+      `await pitCall(JSON.stringify({ type: "cancel" }));`,
+      async () => JSON.stringify({ value: null }),
+      4_000_000_000,
+      30_000,
+      64,
+      earlyCancellationId,
+    ),
+    /epoch|interrupt|deadline/i,
+  );
+
+  // A running execution is interrupted once its pending host call returns.
+  const cancellationId = "smoke-cancellation";
+  let hostCallStarted;
+  const hostCall = new Promise((resolve) => {
+    hostCallStarted = resolve;
+  });
+  const cancelled = executor.executeQueuedJavascript(
+    queuedGuest,
+    `await pitCall(JSON.stringify({ type: "cancel" }));`,
+    async () => {
+      hostCallStarted();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return JSON.stringify({ value: null });
+    },
+    4_000_000_000,
+    30_000,
+    64,
+    cancellationId,
+  );
+  await hostCall;
+  assert.equal(executor.interruptQueuedJavascript(cancellationId), true);
+  await assert.rejects(cancelled, /epoch|interrupt|deadline/i);
+}
+
 async function main() {
   const answer = executor.executeWat(`
     (module
@@ -41,6 +101,9 @@ async function main() {
 
   const prepared = JSON.parse(fs.readFileSync("./prepared-program.json", "utf8"));
   const queuedGuest = fs.readFileSync("./pit_queued_quickjs_guest.wasm");
+
+  const compilation = await checkCompiledOnce(queuedGuest);
+
   let activeCalls = 0;
   let maximumActiveCalls = 0;
   const concurrentExecuted = await executor.executeQueuedJavascript(
@@ -79,22 +142,7 @@ async function main() {
     /epoch|interrupt|deadline/i,
   );
 
-  const cancellationId = "smoke-cancellation";
-  const cancelled = executor.executeQueuedJavascript(
-    queuedGuest,
-    `await pitCall(JSON.stringify({ type: "cancel" }));`,
-    async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      return JSON.stringify({ value: null });
-    },
-    4_000_000_000,
-    30_000,
-    64,
-    cancellationId,
-  );
-  await new Promise((resolve) => setTimeout(resolve, 25));
-  assert.equal(executor.interruptQueuedJavascript(cancellationId), false);
-  await assert.rejects(cancelled, /epoch|interrupt|deadline/i);
+  await checkCancellation(queuedGuest);
 
   await assert.rejects(
     executor.executeQueuedJavascript(
@@ -142,6 +190,7 @@ async function main() {
       functionExecutorAdapter: true,
       queuedRquickjsGuest: true,
       concurrentHostCalls: maximumActiveCalls,
+      ...compilation,
     }),
   );
 }

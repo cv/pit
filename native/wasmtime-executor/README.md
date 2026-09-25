@@ -11,6 +11,8 @@ Each invocation receives:
 - bounded 8 MB JSON protocol frames; and
 - explicit execution-ID cancellation routed through the epoch timer.
 
+The component is compiled once per process and kept as serialized code. Each invocation loads it into its own engine, so one execution's epoch deadline cannot interrupt another.
+
 The component imports WASI Preview 2 runtime interfaces required by Javy. The host links them to a fresh `WasiCtx` with no inherited filesystem, environment, network, arguments, or stdio.
 
 ## Queued QuickJS protocol
