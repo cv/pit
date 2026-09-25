@@ -51,7 +51,7 @@ describe("executeStreamingProcess", () => {
         onChunk: () => undefined,
       },
     );
-    const lines = result.stdout.split("\n");
+    const lines = result.stdout.trimEnd().split("\n");
     expect(result.truncated).toBe(true);
     expect(lines).toHaveLength(10);
     expect([lines[0], lines.at(-1)]).toEqual([first, last]);
