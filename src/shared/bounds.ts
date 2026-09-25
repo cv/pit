@@ -95,8 +95,10 @@ function utf8Suffix(text: string, maxBytes: number): string {
 
 /**
  * Verbatim slice for data returned to guest code: whole lines within both limits, no marker.
- * When the edge line alone exceeds the byte budget, it is cut at a character boundary rather
- * than returning empty text, unless `partialLine` is false.
+ * Head slices end at a line boundary; tail slices are exact suffixes, keeping a trailing newline
+ * so text appended later cannot merge into the last line. When the edge line alone exceeds the
+ * byte budget, it is cut at a character boundary rather than returning empty text, unless
+ * `partialLine` is false.
  */
 export function sliceText(
   text: string,
@@ -109,23 +111,35 @@ export function sliceText(
   if (lines.length <= maxLines && Buffer.byteLength(text) <= budget.maxBytes) {
     return { text, truncated: false, lines: lines.length, partial: false };
   }
+  const trailing = keep === "tail" && text.endsWith("\n") ? "\n" : "";
+  const available = budget.maxBytes - trailing.length;
   const kept: string[] = [];
   let bytes = 0;
   for (let offset = 0; offset < lines.length && kept.length < maxLines; offset++) {
     const line = lines[keep === "head" ? offset : lines.length - 1 - offset] as string;
     const cost = Buffer.byteLength(line) + (kept.length > 0 ? 1 : 0);
-    if (bytes + cost > budget.maxBytes) break;
+    if (bytes + cost > available) break;
     kept.push(line);
     bytes += cost;
   }
   if (kept.length === 0 && lines.length > 0 && maxLines >= 1 && partialLine) {
     const edge = keep === "head" ? (lines[0] as string) : (lines.at(-1) as string);
     const partial =
-      keep === "head" ? utf8Prefix(edge, budget.maxBytes) : utf8Suffix(edge, budget.maxBytes);
-    return { text: partial, truncated: true, lines: partial ? 1 : 0, partial: true };
+      keep === "head" ? utf8Prefix(edge, budget.maxBytes) : utf8Suffix(edge, available);
+    return {
+      text: partial ? partial + trailing : "",
+      truncated: true,
+      lines: partial ? 1 : 0,
+      partial: true,
+    };
   }
   if (keep === "tail") kept.reverse();
-  return { text: kept.join("\n"), truncated: true, lines: kept.length, partial: false };
+  return {
+    text: kept.length > 0 ? kept.join("\n") + trailing : "",
+    truncated: true,
+    lines: kept.length,
+    partial: false,
+  };
 }
 
 /** A counted, in-band omission marker. */

@@ -49,6 +49,14 @@ describe("sliceText", () => {
       truncated: true,
     },
     {
+      name: "an exact suffix, including the trailing newline",
+      text: "a\nb\nc\n",
+      budget: { maxBytes: 100, maxLines: 2 },
+      keep: "tail",
+      expected: "b\nc\n",
+      truncated: true,
+    },
+    {
       name: "a character-safe prefix of an over-long first line",
       text: `${"é".repeat(10)}\nnext`,
       budget: { maxBytes: 5 },

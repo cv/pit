@@ -27,6 +27,17 @@ function startCapabilityTrace(
 afterEach(() => vi.useRealTimers());
 
 describe("ExecutionProgressController", () => {
+  it("keeps retained shell lines separate after the tail is bounded", () => {
+    const c = new ExecutionProgressController();
+    const output = Array.from({ length: 50 }, (_, index) => `OUT_${index}\n`).join("");
+    c.recordShell({ id: 1, command: "noisy", phase: "start" });
+    c.recordShell({ id: 1, command: "noisy", phase: "output", stream: "stdout", chunk: output });
+    c.recordShell({ id: 1, command: "noisy", phase: "output", stream: "stderr", chunk: "ERR\n" });
+
+    const retained = c.snapshot().progress?.[0]?.output ?? "";
+    expect(retained.split("\n").slice(-3)).toEqual(["OUT_49", "ERR", ""]);
+  });
+
   it("emits immediately and coalesces burst transitions for 200 ms", () => {
     vi.useFakeTimers();
     vi.setSystemTime(1000);
