@@ -560,7 +560,7 @@ Submit a new read or search call. Use only the new revision and anchors in the n
 
 ### A result is truncated
 
-Reduce the requested line count or result limit. Narrow the file path, glob, or search query. Return a summary instead of a complete data set.
+Oversized results stay valid JSON within the output budget. Omitted parts are marked `… N lines omitted …`, `… N bytes omitted …`, `… N items omitted …`, or `… N keys omitted …` and are not retained. Reduce the requested line count or result limit. Narrow the file path, glob, or search query. Return a summary instead of a complete data set.
 
 ### A UI method fails
 
