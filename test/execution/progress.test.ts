@@ -34,8 +34,33 @@ describe("ExecutionProgressController", () => {
     c.recordShell({ id: 1, command: "noisy", phase: "output", stream: "stdout", chunk: output });
     c.recordShell({ id: 1, command: "noisy", phase: "output", stream: "stderr", chunk: "ERR\n" });
 
-    const retained = c.snapshot().progress?.[0]?.output ?? "";
+    const entry = c.snapshot().progress?.[0];
+    const retained = entry?.output ?? "";
     expect(retained.split("\n").slice(-3)).toEqual(["OUT_49", "ERR", ""]);
+    // Every dropped line and byte is counted for the views' omission marker.
+    expect(entry?.omitted).toEqual({
+      lines: 51 - (retained.split("\n").length - 1),
+      bytes: Buffer.byteLength(output + "ERR\n") - Buffer.byteLength(retained),
+    });
+  });
+
+  it("counts dropped bytes when the retained tail starts inside a line", () => {
+    const c = new ExecutionProgressController();
+    c.recordShell({ id: 1, command: "wide", phase: "start" });
+    c.recordShell({
+      id: 1,
+      command: "wide",
+      phase: "output",
+      stream: "stdout",
+      chunk: "y".repeat(10_000),
+    });
+
+    const entry = c.snapshot().progress?.[0];
+    expect(entry?.omitted).toEqual({
+      lines: 0,
+      bytes: 10_000 - Buffer.byteLength(entry?.output ?? ""),
+      partialLine: true,
+    });
   });
 
   it("emits immediately and coalesces burst transitions for 200 ms", () => {

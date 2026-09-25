@@ -41,7 +41,7 @@ export class ExecutionProgressController {
     if (this.#disposed) {
       return;
     }
-    const current = this.#shell.get(event.id) ?? {
+    const current: ShellProgress = this.#shell.get(event.id) ?? {
       id: event.id,
       ...(event.traceSequence === undefined ? {} : { traceSequence: event.traceSequence }),
       command: sanitizeTerminalText(event.command),
@@ -49,9 +49,17 @@ export class ExecutionProgressController {
       output: "",
     };
     if (event.phase === "output") {
-      current.output = retainShellOutputTail(
-        current.output + sanitizeTerminalText(event.chunk, { preserveSgr: true }),
-      );
+      const combined = current.output + sanitizeTerminalText(event.chunk, { preserveSgr: true });
+      current.output = retainShellOutputTail(combined);
+      // The tail is an exact suffix, so the dropped prefix is known; count it for the views.
+      const dropped = combined.slice(0, combined.length - current.output.length);
+      if (dropped) {
+        current.omitted = {
+          lines: (current.omitted?.lines ?? 0) + dropped.split("\n").length - 1,
+          bytes: (current.omitted?.bytes ?? 0) + Buffer.byteLength(dropped),
+          ...(dropped.endsWith("\n") ? {} : { partialLine: true as const }),
+        };
+      }
     }
     if (event.phase === "end") {
       current.status = "done";

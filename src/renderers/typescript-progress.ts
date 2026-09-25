@@ -3,7 +3,11 @@ import type { FunctionActivity } from "../functions/core.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
-import { linkedProcessProgress, processProgressRenderer } from "./process-progress.js";
+import {
+  linkedProcessProgress,
+  processProgressRenderer,
+  retainedOutputLines,
+} from "./process-progress.js";
 
 interface ProgressDetails extends ExecutionProgressSnapshot {
   functions?: FunctionActivity[];
@@ -62,10 +66,10 @@ function shellProgressState(group: ShellProgressGroup): string {
   return states.join(", ");
 }
 
-function shellProgressOutput(group: ShellProgressGroup): string {
+function shellProgressOutput(group: ShellProgressGroup, theme: RenderTheme): string {
   const latest = group.entries[group.entries.length - 1] as ShellProgress;
   if (group.entries.length === 1 || latest.status === "running") {
-    return latest.output;
+    return retainedOutputLines(latest, theme, (line) => theme.fg("muted", line)).join("\n");
   }
   return "";
 }
@@ -120,9 +124,9 @@ export function renderPartialToolResult(input: {
     }
     for (const group of visible) {
       text += `\n${input.theme.fg("accent", `[${shellProgressState(group)}]`)} ${input.theme.fg("dim", group.command)}`;
-      const output = shellProgressOutput(group);
+      const output = shellProgressOutput(group, input.theme);
       if (output) {
-        text += `\n${input.theme.fg("muted", output)}`;
+        text += `\n${output}`;
       }
     }
   }

@@ -18,7 +18,13 @@ export interface ShellProgress {
   traceSequence?: number;
   command: string;
   status: "running" | "done";
+  /** Exact tail of the combined output retained for display. */
   output: string;
+  /**
+   * Earlier output the retained tail dropped: complete lines and bytes. `partialLine` means the
+   * tail starts inside a line, so only the byte count describes the omission exactly.
+   */
+  omitted?: { lines: number; bytes: number; partialLine?: true };
   code?: number;
 }
 

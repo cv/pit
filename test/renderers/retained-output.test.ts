@@ -2,7 +2,10 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { retainShellOutputTail } from "../../src/execution/progress.js";
+import {
+  ExecutionProgressController,
+  retainShellOutputTail,
+} from "../../src/execution/progress.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 import { renderTypeScriptToolResult } from "../../src/renderers/typescript-tool.js";
 
@@ -189,6 +192,55 @@ describe("retained process output", () => {
       expect(output).not.toContain("(output shown above)");
     },
   );
+
+  it.each<{ name: string; output: string; marker: string; kept: string; dropped: string }>([
+    {
+      name: "whole lines",
+      output: Array.from({ length: 50 }, (_, index) => `OUT_${index}\n`).join(""),
+      marker: "… 42 lines omitted …",
+      kept: "OUT_42",
+      dropped: "OUT_41",
+    },
+    {
+      name: "part of one long line",
+      output: `START_${"y".repeat(10_000)}END_SENTINEL`,
+      marker: "bytes omitted …",
+      kept: "END_SENTINEL",
+      dropped: "START_",
+    },
+  ])("marks dropped $name in live and settled views", ({ output, marker, kept, dropped }) => {
+    const controller = new ExecutionProgressController();
+    controller.recordShell({ id: 1, command: "noisy", phase: "start" });
+    controller.recordShell({
+      id: 1,
+      command: "noisy",
+      phase: "output",
+      stream: "stdout",
+      chunk: output,
+    });
+    const render = (details: object, isPartial: boolean) =>
+      renderTypeScriptToolResult(
+        { content: [{ type: "text", text: "done" }], details },
+        { expanded: true, isPartial },
+        theme,
+        {},
+      )
+        .render(120)
+        .map(stripTerminalSequences)
+        .join("\n");
+    const live = render(controller.snapshot(), true);
+    controller.recordShell({ id: 1, command: "noisy", phase: "end", code: 0 });
+    const settled = render({ value: "done", truncated: false, ...controller.snapshot() }, false);
+
+    for (const view of [live, settled]) {
+      // Join wrapped rows so a long retained line reads as one string.
+      const flat = view.replace(/\n\s*/g, "");
+      const at = flat.indexOf(marker);
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(flat.indexOf(kept)).toBeGreaterThan(at);
+      expect(flat).not.toContain(dropped);
+    }
+  });
 
   it("keeps an unfinished call's tail even when a returned text matches it", () => {
     const rendered = renderTypeScriptToolResult(
