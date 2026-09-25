@@ -4,15 +4,22 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
-### Removed
+## [0.18.0] - 2026-09-25
 
-- Remove the deprecated Node executor, its fallback, and `PIT_FUNCTION_EXECUTOR`. TypeScript always runs in the Wasmtime/QuickJS runtime; without a usable prebuild, Pit still loads and each run explains how to install one.
+### Added
+
+- Add project functions for agent-driven terminal acceptance: start and stop an isolated Pi on a private tmux server, run fixtures and cases, and inspect row styles. They refuse any tmux server outside their own runs.
 
 ### Changed
 
 - Compile the QuickJS guest once per process instead of on every execution. On linux-arm64, a trivial program's steady-state execution drops from about 140 ms to 6 ms.
+- Run coverage and version-independent checks once per CI run, test release runtimes without repeating coverage, and seed native build caches on `main` so pull requests and releases can reuse them.
 - Share one set of text budgets and bounding primitives across results, processes, HTTP, reads, failures, progress, and labels, with consistent counted omission markers.
 - Render truncated results through their domain view, reporting truncation once and retaining the fitted value in details.
+
+### Removed
+
+- Remove the deprecated Node executor, its fallback, and `PIT_FUNCTION_EXECUTOR`. TypeScript always runs in the Wasmtime/QuickJS runtime; without a usable prebuild, Pit still loads and each run explains how to install one.
 
 ### Fixed
 
@@ -169,7 +176,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/cv/pit/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/cv/pit/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/cv/pit/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/cv/pit/compare/v0.15.1...v0.16.0
