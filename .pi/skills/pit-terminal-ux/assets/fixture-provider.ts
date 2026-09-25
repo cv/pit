@@ -189,6 +189,33 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
       truncated: false,
     },
   },
+  "oversized-process": processFixture(
+    "UX OVERSIZED: capped stdout returned directly",
+    "for(let i=0;i<3000;i++)console.log('OUT_LINE_'+i+' '+'x'.repeat(20));console.error('STDERR_SENTINEL');",
+  ),
+  "oversized-failure": processFixture(
+    "UX OVERSIZED: capped stdout with exit 3",
+    "for(let i=0;i<3000;i++)console.log('OUT_LINE_'+i+' '+'x'.repeat(20));console.error('STDERR_SENTINEL');process.exitCode=3;",
+  ),
+  "long-stderr": processFixture(
+    "UX LONG STDERR: raised failure tail",
+    "for(let i=0;i<2000;i++)console.error('ERR_LINE_'+i);console.error('CAUSE_SENTINEL: final diagnostic');process.exitCode=2;",
+    5000,
+    true,
+  ),
+  "oversized-string": {
+    label: "UX OVERSIZED: single-line string",
+    code: 'async ({}) => "HEAD_SENTINEL" + "x".repeat(200000) + "TAIL_SENTINEL"',
+  },
+  "oversized-array": {
+    label: "UX OVERSIZED: array over the line budget",
+    code: 'async ({}) => ({ count: 3000, items: Array.from({ length: 3000 }, (_, id) => ({ id, name: "ITEM_" + id })) })',
+  },
+  "oversized-read": {
+    label: "UX OVERSIZED: hashed read beyond the result budget",
+    code: 'async ({ workspace: { read } }) => read("package-lock.json")',
+    timeoutMs: 10000,
+  },
   json: {
     label: "UX JSON: nested multiline data",
     code: "async ({}, value: { identity: string; rows: { filename: string; patch: string; reviewed: boolean }[]; extra: string; flag: boolean }) => value",
