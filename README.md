@@ -62,7 +62,7 @@ pi install git:github.com/cv/pit@v0.17.0
 
 See [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) for what changed between versions. Pit is distributed from GitHub only; it isn't published to npm.
 
-Pit uses a prebuilt Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. Without one, it warns and falls back to a deprecated, permission-restricted Node executor.
+Pit runs TypeScript in a QuickJS guest on a prebuilt Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. The installer downloads the addon for the current platform from the matching release, or from the latest release for an unreleased version. Without a usable runtime, Pit still loads, and each TypeScript run explains what is missing and how to install it.
 
 > [!IMPORTANT]
 > Pi extensions run with your user's permissions, so review the source before installing. Pit sandboxes the code the model writes, but the capabilities it exposes can still change files, run commands, and reach the network.
@@ -395,7 +395,7 @@ Display formatting changes only the TUI. It does not change the serialized tool 
 
 ## Security model
 
-Authored functions use a portable JavaScript contract: standard language globals, bounded `setTimeout`, and `console.log/warn/error`. Node globals such as `process`, `require`, and `Buffer` are not part of that contract, including when using the Node fallback; use injected functions for host operations. Wasmtime discards console output without accessing host stdio—return structured diagnostics when they need to be visible.
+Authored functions use a portable JavaScript contract: standard language globals, bounded `setTimeout`, and `console.log/warn/error`. Node globals such as `process`, `require`, and `Buffer` are not available; use injected functions for host operations. Wasmtime discards console output without accessing host stdio—return structured diagnostics when they need to be visible.
 
 Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store:
 
@@ -532,7 +532,7 @@ Output is bounded. Read metadata uses sparse defaults:
 
 ## Limitations
 
-- Wasmtime prebuild installation requires access to the tagged GitHub release assets. Missing or unsupported prebuilds fall back to the deprecated Node executor. Pit requires Node 22.19 or newer as the Pi extension host.
+- Wasmtime prebuild installation requires access to GitHub release assets. Without a prebuild for the current platform, Pit cannot run TypeScript; set `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` to use a local build. Pit requires Node 22.19 or newer as the Pi extension host.
 - Session functions belong to one session branch.
 - User functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
 - Workspace paths are not restricted to the current project.

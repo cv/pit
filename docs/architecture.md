@@ -13,7 +13,7 @@ Pi extension host
 │  ├─ FunctionState                    persistent/session source state
 │  ├─ SavedFunctionService             preparation, promotion, persistence, removal
 │  ├─ saved-function lifecycle         Pi events, prompt catalogs, /functions
-│  ├─ configured FunctionExecutor      Wasmtime default; Node fallback
+│  ├─ configured FunctionExecutor      Wasmtime/QuickJS; no fallback runtime
 │  └─ TypeScript tool adapter          request orchestration and rendering
 │
 ├─ trusted preparation path
@@ -140,11 +140,13 @@ After validation and scope resolution, esbuild transforms the generated TypeScri
 
 ## Sandbox and RPC boundary
 
-`scripts/install-wasmtime.mjs` selects the current OS and architecture during Pi's Git package `npm install`, downloads only that release addon plus the shared QuickJS component, verifies both against the release checksum manifest, and writes them atomically under `native/prebuilds/<target>/`. `src/sandbox/wasmtime-loader.ts` loads those artifacts by default. Missing implicit artifacts warn and fall back to the deprecated Node child; explicit Wasmtime configuration remains strict. `PIT_FUNCTION_EXECUTOR=node` selects Node deliberately, while `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` can replace both installed artifacts together.
+`scripts/install-wasmtime.mjs` selects the current OS and architecture during Pi's Git package `npm install`, downloads only that release addon plus the shared QuickJS component, verifies both against the release checksum manifest, and writes them atomically under `native/prebuilds/<target>/` with a `pit-release.json` marker. When the package version has no published release, it uses the latest release's artifacts and checksums instead. Artifacts from another release, or without a marker, are refreshed; a failed download leaves working artifacts in place. `src/sandbox/wasmtime-loader.ts` loads those artifacts by default, or `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` together. A missing or unloadable runtime warns once and yields an executor whose every run fails with the cause and recovery, so the extension and tool stay registered.
 
 `src/sandbox/wasmtime-executor.ts` gives every invocation a random execution ID and creates a bounded dispatcher for the program's resolved effects. It wraps the compiled program as an ES module that exposes a queued `pitCall()` bridge. The custom component retains JavaScript Promise resolvers, exports queued requests to Rust, accepts completions, and pumps pending QuickJS jobs.
 
-The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a capability handler.
+The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a capability handler. At most 32 host calls run at once; further calls queue in the addon. When the deadline passes or the call is cancelled, the executor answers every pending guest call and interrupts the guest, so a capability handler that ignores its abort signal cannot extend the execution.
+
+Saved-function attribution is passed explicitly: every generated function receives its caller's invocation context, and capability calls carry the context of the function that made them. QuickJS has no async context tracking, so no invocation state is shared between concurrent calls.
 
 Current defensive bounds are:
 

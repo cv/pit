@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the deprecated Node executor, its fallback, and `PIT_FUNCTION_EXECUTOR`. TypeScript always runs in the Wasmtime/QuickJS runtime; without a usable prebuild, Pit still loads and each run explains how to install one.
+
 ### Changed
 
 - Share one set of text budgets and bounding primitives across results, processes, HTTP, reads, failures, progress, and labels, with consistent counted omission markers.
@@ -18,6 +22,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Keep bounded tails exact suffixes, so later process output no longer merges into the last retained line.
 - Preview collapsed failures with their leading context and decisive tail, such as the last stderr lines of a failed command, around one exact omission count that folds in markers from earlier bounds.
 - Count output dropped by live and retained process tails and mark it in progress and execution views.
+- Enforce execution deadlines even when a capability handler never settles; previously such a call could keep a tool invocation running past its timeout.
+- Attribute capability calls to the correct saved function when saved functions run concurrently.
+- Report guest errors by name and message instead of appending a stack frame that pointed into generated code.
+- Report a guest's own failure as that failure when the deadline elapsed without interrupting it, and explain programs that await a promise that never settles.
+- Refresh stale or unmarked Wasmtime prebuilds on install, and use the latest release's prebuilds for unreleased versions; linux-arm64 prebuilds are no longer committed to Git.
 
 ## [0.17.0] - 2026-09-24
 
