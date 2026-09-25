@@ -1,7 +1,5 @@
 import { StringDecoder } from "node:string_decoder";
 
-import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from "@earendil-works/pi-coding-agent";
-
 /** A text budget. Lines are counted like Pi: a trailing newline does not start another line. */
 export interface TextBudget {
   maxBytes: number;
@@ -9,14 +7,20 @@ export interface TextBudget {
 }
 
 /**
+ * Pi's tool-output budget (its DEFAULT_MAX_BYTES and DEFAULT_MAX_LINES). Defined here and checked
+ * against Pi in tests, so modules in the sandbox adapter bundle without importing Pi at runtime.
+ */
+const PI_TOOL_OUTPUT = { maxBytes: 50 * 1024, maxLines: 2000 } as const;
+
+/**
  * Text budgets shared by producers and presenters. Item caps such as search results, glob
  * entries, and capability traces are domain limits and stay with their owners.
  */
 export const LIMITS = {
   /** Model-visible text of one invocation result: Pi's tool-output budget. */
-  result: { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES },
+  result: PI_TOOL_OUTPUT,
   /** Default and maximum capture per process stream. */
-  processStream: { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES },
+  processStream: PI_TOOL_OUTPUT,
   /** Diagnostic excerpt embedded in a raised process error. */
   processError: { maxBytes: 4_000 },
   /** Default and maximum HTTP response body. */

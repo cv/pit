@@ -1,3 +1,4 @@
+import { build } from "esbuild";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PreparedSandboxProgram } from "../../src/sandbox/program.js";
@@ -13,6 +14,21 @@ const program = (effects: string[]): PreparedSandboxProgram => ({
 const options = { memoryLimitMb: 64, timeoutMs: 500 };
 
 describe("createWasmtimeFunctionExecutor", () => {
+  it("bundles standalone for the native smoke test", async () => {
+    // Mirrors the prebuild workflow's esbuild step; Pi cannot load from a CommonJS bundle.
+    const result = await build({
+      entryPoints: ["src/sandbox/wasmtime-executor.ts"],
+      bundle: true,
+      platform: "node",
+      format: "cjs",
+      write: false,
+      metafile: true,
+      logLevel: "silent",
+    });
+    const inputs = Object.keys(result.metafile.inputs);
+    expect(inputs.filter((input) => input.includes("node_modules"))).toEqual([]);
+  });
+
   it.each<{ name: string; interrupted: boolean; expected: object }>([
     {
       name: "did not reach the guest",
