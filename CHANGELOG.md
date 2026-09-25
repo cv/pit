@@ -16,6 +16,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Keep multi-byte characters whole across process pipe chunks and HTTP byte limits.
 - Bound process output while capturing instead of buffering complete streams before truncation.
 - Keep bounded tails exact suffixes, so later process output no longer merges into the last retained line.
+- Preview collapsed failures with their leading context and decisive tail, such as the last stderr lines of a failed command, around one exact omission count that folds in markers from earlier bounds.
+- Count output dropped by live and retained process tails and mark it in progress and execution views.
 
 ## [0.17.0] - 2026-09-24
 

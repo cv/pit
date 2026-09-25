@@ -1,6 +1,7 @@
 import { retainShellOutputTail } from "../execution/progress.js";
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import { parseProcessResult, sanitizeProcessText } from "../process/results.js";
+import { omissionMarker } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { ResultTheme } from "./types.js";
 
@@ -23,6 +24,20 @@ export function linkedProcessProgress(details: ExecutionProgressSnapshot | undef
     }
   }
   return { linked, unlinked };
+}
+
+/** Display lines for a retained tail, led by a counted marker when earlier output was dropped. */
+export function retainedOutputLines(
+  entry: ShellProgress,
+  theme: Pick<ResultTheme, "fg">,
+  style: (line: string) => string = (line) => line,
+): string[] {
+  const lines = entry.output ? entry.output.replace(/\n$/, "").split("\n").map(style) : [];
+  if (!entry.omitted) return lines;
+  const marker = entry.omitted.partialLine
+    ? omissionMarker(entry.omitted.bytes, "bytes")
+    : omissionMarker(entry.omitted.lines, "lines");
+  return [theme.fg("dim", marker), ...lines];
 }
 
 interface ReturnedOutput {
@@ -86,8 +101,7 @@ export function processProgressRenderer(theme: Pick<ResultTheme, "fg">, returned
       outputs ??= returnedOutputs(returnedValue);
       text += returnedWhole(entry, outputs)
         ? `${options.compact ? " · " : `\n${indent}`}${theme.fg("dim", "(output shown above)")}`
-        : `\n${entry.output
-            .split("\n")
+        : `\n${retainedOutputLines(entry, theme)
             .map((line) => indent + line)
             .join("\n")}`;
     }
