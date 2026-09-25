@@ -23,8 +23,8 @@ export const LIMITS = {
   httpBody: { maxBytes: 1_000_000 },
   /** Root error text retained in structured failure details. */
   failure: { maxBytes: 8_000, maxLines: 24 },
-  /** First line of a collapsed failure. */
-  failureHeadline: { maxBytes: 2_000, maxLines: 1 },
+  /** Collapsed failure preview: leading context and the decisive tail around a marker. */
+  failurePreview: { maxBytes: 2_000, maxLines: 5 },
   /** Live output retained per shell call for progress views. */
   shellTail: { maxBytes: 4_000, maxLines: 8 },
 } as const satisfies Record<string, TextBudget>;
@@ -142,6 +142,14 @@ export function sliceText(
   };
 }
 
+const MARKER = /^… (\d+) lines? omitted …$/;
+
+/** Lines represented by an existing line-count marker row, or undefined. */
+function markedLines(row: string): number | undefined {
+  const match = MARKER.exec(row);
+  return match ? Number(match[1]) : undefined;
+}
+
 /** A counted, in-band omission marker. */
 export function omissionMarker(count: number, unit: "lines" | "bytes" | "items" | "keys"): string {
   return `… ${count} ${count === 1 ? unit.slice(0, -1) : unit} omitted …`;
@@ -168,8 +176,8 @@ export function boundText(
 ): { text: string; truncated: boolean } {
   const maxLines = budget.maxLines ?? Number.POSITIVE_INFINITY;
   const totalBytes = Buffer.byteLength(text);
-  const totalLines = splitLines(text).length;
-  if (totalLines <= maxLines && totalBytes <= budget.maxBytes) {
+  const rows = splitLines(text);
+  if (rows.length <= maxLines && totalBytes <= budget.maxBytes) {
     return { text, truncated: false };
   }
   // Reserve the widest marker this text can need, plus its separating newlines.
@@ -189,17 +197,34 @@ export function boundText(
     tailBytes > 0 && tailLines > 0
       ? sliceText(text, { maxBytes: tailBytes, maxLines: tailLines }, "tail")
       : empty;
-  const marker =
-    head.partial || tail.partial
-      ? omissionMarker(
-          totalBytes - Buffer.byteLength(head.text) - Buffer.byteLength(tail.text),
-          "bytes",
-        )
-      : omissionMarker(totalLines - head.lines - tail.lines, "lines");
-  return {
-    text: [head.text, marker, tail.text].filter((part) => part !== "").join("\n"),
-    truncated: true,
-  };
+  if (head.partial || tail.partial) {
+    const omitted = totalBytes - Buffer.byteLength(head.text) - Buffer.byteLength(tail.text);
+    return {
+      text: [head.text, omissionMarker(omitted, "bytes"), tail.text]
+        .filter((part) => part !== "")
+        .join("\n"),
+      truncated: true,
+    };
+  }
+  // Markers from earlier bounds, inside the cut or at its edges, fold into one exact count:
+  // each omitted row stands for the lines it represents.
+  let headCount = head.lines;
+  let tailCount = tail.lines;
+  if (headCount > 0 && markedLines(rows[headCount - 1] as string) !== undefined) headCount--;
+  if (tailCount > 0 && markedLines(rows[rows.length - tailCount] as string) !== undefined) {
+    tailCount--;
+  }
+  let omitted = 0;
+  for (const row of rows.slice(headCount, rows.length - tailCount)) {
+    omitted += markedLines(row) ?? 1;
+  }
+  const trailing = text.endsWith("\n") ? "\n" : "";
+  const parts = [
+    ...(headCount > 0 ? [rows.slice(0, headCount).join("\n")] : []),
+    omissionMarker(omitted, "lines"),
+    ...(tailCount > 0 ? [rows.slice(rows.length - tailCount).join("\n") + trailing] : []),
+  ];
+  return { text: parts.join("\n"), truncated: true };
 }
 
 /** Shortens a single-line label to `maxCharacters`, ending with `…` and keeping surrogate pairs. */

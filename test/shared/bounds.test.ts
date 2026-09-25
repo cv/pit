@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LIMITS,
   boundText,
   clipText,
   completeUtf8Length,
@@ -73,6 +74,14 @@ describe("sliceText", () => {
       truncated: true,
     },
     {
+      name: "nothing when the budget cannot hold one character",
+      text: "éé",
+      budget: { maxBytes: 1 },
+      keep: "head",
+      expected: "",
+      truncated: true,
+    },
+    {
       name: "nothing when partial lines are refused",
       text: "x".repeat(20),
       budget: { maxBytes: 5 },
@@ -121,6 +130,38 @@ describe("boundText", () => {
     expect(head).toMatch(/^a+$/);
     expect(tail).toMatch(/^b+$/);
     expect(marker).toBe(`… ${omitted} bytes omitted …`);
+  });
+
+  it("folds a marker at the tail edge into one exact count", () => {
+    // An earlier head bound leaves its marker directly above a footer the outer bound keeps.
+    const inner = boundText(lines(500).join("\n"), { maxBytes: 100_000, maxLines: 11 }, "head");
+    const rows = boundText(
+      `${inner.text}\nfooter`,
+      { maxBytes: 2_000, maxLines: 5 },
+      "ends",
+    ).text.split("\n");
+    const shown = rows.filter((row) => row.startsWith("line "));
+
+    expect(rows.filter((row) => row.includes("omitted"))).toEqual([
+      `… ${500 - shown.length} lines omitted …`,
+    ]);
+    expect(rows.at(-1)).toBe("footer");
+  });
+
+  it("keeps one exact count through stacked bounds", () => {
+    // A raised process error bounds stderr, failure details bound the error, and the collapsed
+    // preview bounds the details; every earlier marker folds into the outermost count.
+    const stderr = `${lines(500).join("\n")}\n`;
+    const raised = `Command failed\n${boundText(stderr, LIMITS.processError, "tail").text}`;
+    const failure = boundText(raised, LIMITS.failure, "ends").text;
+    const rows = boundText(failure, LIMITS.failurePreview, "ends").text.split("\n");
+    const shown = rows.filter((row) => row.startsWith("line "));
+
+    expect(rows.filter((row) => row.includes("omitted"))).toEqual([
+      `… ${500 - shown.length} lines omitted …`,
+    ]);
+    expect(rows[0]).toBe("Command failed");
+    expect(shown.at(-1)).toBe("line 499");
   });
 
   it("returns text within budget unchanged", () => {

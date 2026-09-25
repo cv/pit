@@ -112,8 +112,42 @@ describe("tool rendering", () => {
       { expanded: false, isPartial: false },
       { isError: true },
     );
-    expect(compactFailure).toContain("failure line 0 …");
-    expect(compactFailure).not.toContain("failure line 1");
+    // The collapsed preview keeps leading context and the decisive tail around a counted marker.
+    for (const kept of [
+      "failure line 0",
+      "failure line 1",
+      "… 16 lines omitted …",
+      "failure line 18",
+      "failure line 19",
+    ]) {
+      expect(compactFailure).toContain(kept);
+    }
+    expect(compactFailure).not.toContain("failure line 2");
+
+    const commandFailure = [
+      'Command failed with exit code 3: node "/tmp/failure.mjs"',
+      ...Array.from({ length: 500 }, (_, index) => `stderr line ${index}`),
+      "DECISIVE_STDERR_TAIL_128",
+      "    at __pit_rpc (pit-program:27:23)",
+      "",
+    ].join("\n");
+    const compactCommand = renderToolResult(
+      {
+        content: [{ type: "text", text: commandFailure }],
+        details: {
+          value: undefined,
+          truncated: false,
+          failure: { functionPath: [], rootError: commandFailure, kind: "capability" },
+        },
+      },
+      { expanded: false, isPartial: false },
+      { isError: true },
+    );
+    expect(compactCommand).toContain("Command failed with exit code 3");
+    expect(compactCommand).toContain("… 498 lines omitted …");
+    expect(compactCommand).toContain("DECISIVE_STDERR_TAIL_128");
+    // Routine guest frames stay in the expanded view instead of displacing the cause.
+    expect(compactCommand).not.toContain("__pit_rpc");
 
     const singleLine = `${"x".repeat(5_000)}END`;
     const singleLineFailure = renderToolResult(
@@ -128,10 +162,10 @@ describe("tool rendering", () => {
       { expanded: false, isPartial: false },
       { isError: true },
     );
-    // An over-long first line keeps a visible prefix rather than collapsing to the ellipsis.
+    // An over-long line keeps both ends around a counted byte omission.
     expect(singleLineFailure.split("x").length - 1).toBeGreaterThan(1_000);
-    expect(singleLineFailure).toContain("…");
-    expect(singleLineFailure).not.toContain("END");
+    expect(singleLineFailure).toMatch(/… \d+ bytes omitted …/);
+    expect(singleLineFailure).toContain("END");
 
     const expandedFailure = renderToolResult(
       {
