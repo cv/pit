@@ -1,6 +1,6 @@
 # Wasmtime executor
 
-Pit executes submitted JavaScript in-process through a platform prebuilt N-API addon, a fresh Wasmtime store, and a custom QuickJS component. Wasmtime is the default function executor on supported Linux, macOS, and Windows ARM64/x64 targets. The permission-restricted Node child remains a deprecated fallback.
+Pit executes submitted JavaScript in-process through a platform prebuilt N-API addon, a fresh Wasmtime store, and a custom QuickJS component. It is Pit's only function executor, with prebuilds for Linux, macOS, and Windows on ARM64 and x64.
 
 Each invocation receives:
 
