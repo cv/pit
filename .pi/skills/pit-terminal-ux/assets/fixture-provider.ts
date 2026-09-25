@@ -203,6 +203,17 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     5000,
     true,
   ),
+  "failure-tail": processFixture(
+    "UX FAILURE TAIL: decisive stderr after 500 lines",
+    "for(let i=0;i<500;i++)console.error('STDERR_LINE_'+i);console.error('DECISIVE_STDERR_TAIL_128');process.exitCode=3;",
+    5000,
+    true,
+  ),
+  "progress-boundary": processFixture(
+    "UX PROGRESS BOUNDARY: bounded tail keeps lines apart",
+    "for(let i=0;i<10;i++)console.log('PROGRESS_LINE_'+i);await new Promise(r=>setTimeout(r,1500));console.log('BOUNDARY_NEXT_128');await new Promise(r=>setTimeout(r,1500));",
+    10000,
+  ),
   "oversized-string": {
     label: "UX OVERSIZED: single-line string",
     code: 'async ({}) => "HEAD_SENTINEL" + "x".repeat(200000) + "TAIL_SENTINEL"',
