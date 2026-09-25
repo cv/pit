@@ -4,6 +4,18 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- Share one set of text budgets and bounding primitives across results, processes, HTTP, reads, failures, progress, and labels, with consistent counted omission markers.
+- Render truncated results through their domain view with a truncated state, retaining the fitted value in details.
+
+### Fixed
+
+- Keep oversized results valid JSON within Pi's output budget, including appended notices: a process result whose output reached its cap no longer collapses to `{`, long strings keep both ends instead of disappearing, and small fields such as exit codes and stderr survive.
+- Show a character-safe prefix instead of empty text when a collapsed failure headline or raw read's first line exceeds its budget.
+- Keep multi-byte characters whole across process pipe chunks and HTTP byte limits.
+- Bound process output while capturing instead of buffering complete streams before truncation.
+
 ## [0.17.0] - 2026-09-24
 
 ### Added

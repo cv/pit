@@ -93,7 +93,7 @@ Persistent function source is not copied into the prompt. Session overrides are 
 3. **Validate the candidate registry.** The new definition is evaluated against the registry that would exist after a successful commit. This makes the definition available to its own first execution without mutating live state prematurely.
 4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh Wasmtime store, and dispatches capability calls.
 5. **Commit only after success.** A named direct submission is appended to Pi's session history and installed in memory only after execution succeeds. Failed definitions do not become active. With `saveOnly`, execution is skipped but the same validated commit path is used.
-6. **Build a bounded result.** The model receives truncated text when needed, saved-function guidance, promotion suggestions, and a compact session catalog. Structured details retain traces, progress, and untruncated values only when safe to do so.
+6. **Build a bounded result.** The model receives the result fitted to Pi's output budget as valid JSON with counted omission markers, followed by saved-function guidance, promotion suggestions, and a compact session catalog. Structured details retain traces, progress, and the same fitted value.
 
 Anonymous expressions do not mutate function state. Top-level `params` are accepted only for function expressions and are supplied as the second argument to the submitted function. The public tool timeout defaults to 30 seconds and is bounded to 1–300,000 milliseconds.
 
@@ -263,7 +263,7 @@ Rollback is best-effort because filesystem failures can also affect recovery. Ba
 - Typed capabilities construct argument arrays and spawn without a shell.
 - `shell.exec` is the only general path that intentionally asks a shell to parse a command string.
 
-Process calls default to a 120-second timeout and bounded head or tail output. `raise: true` converts nonzero exits into bounded exceptions; otherwise exit status is data. Streaming cancellation first sends `SIGTERM`, escalates to `SIGKILL` after five seconds, maps timeout to code 124, and maps abort to code 130. A short post-exit grace handles descendants that inherited output pipes without allowing the tool to hang indefinitely.
+Process calls default to a 120-second timeout and bounded head or tail output, captured within that window while streaming. `raise: true` converts nonzero exits into bounded exceptions; otherwise exit status is data. Streaming cancellation first sends `SIGTERM`, escalates to `SIGKILL` after five seconds, maps timeout to code 124, and maps abort to code 130. A short post-exit grace handles descendants that inherited output pipes without allowing the tool to hang indefinitely.
 
 ## Progress, traces, results, and rendering
 
@@ -278,6 +278,8 @@ The TypeScript tool returns two views:
 
 1. bounded text content for the model; and
 2. structured details for Pit's renderers and Pi's expanded result view.
+
+Text budgets and bounding primitives live in `src/shared/bounds.ts`. Data returned to guest code (process streams, HTTP bodies, and file reads) is a verbatim slice with a `truncated` flag and no in-band marker, because guest code may parse it. Text shown to the model or user (the tool result, failure diagnostics, and raised process errors) carries a counted `… N lines omitted …` or `… N bytes omitted …` marker within the same budget. `src/shared/json-budget.ts` fits the final result structurally: oversized strings, then oversized arrays and objects, keep both ends around markers while small fields survive, and an enclosing `truncated` flag is set when its contents were shortened.
 
 `src/renderers/` turns those details into partial and final TUI components. Renderers do not own execution state or perform effects. Failure enrichment similarly consumes captured execution context after failure rather than changing the underlying error path.
 
