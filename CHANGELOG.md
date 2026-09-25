@@ -7,7 +7,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 ### Changed
 
 - Share one set of text budgets and bounding primitives across results, processes, HTTP, reads, failures, progress, and labels, with consistent counted omission markers.
-- Render truncated results through their domain view with a truncated state, retaining the fitted value in details.
+- Render truncated results through their domain view, reporting truncation once and retaining the fitted value in details.
 
 ### Fixed
 
@@ -15,6 +15,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Show a character-safe prefix instead of empty text when a collapsed failure headline or raw read's first line exceeds its budget.
 - Keep multi-byte characters whole across process pipe chunks and HTTP byte limits.
 - Bound process output while capturing instead of buffering complete streams before truncation.
+- Keep bounded tails exact suffixes, so later process output no longer merges into the last retained line.
 
 ## [0.17.0] - 2026-09-24
 
