@@ -23,6 +23,40 @@ describe("executeStreamingProcess", () => {
     );
   });
 
+  it("delivers a character split across pipe chunks whole", async () => {
+    const chunks: string[] = [];
+    const result = await executeStreamingProcess(
+      process.execPath,
+      [
+        "-e",
+        "process.stdout.write(Buffer.from([0xc3])); setTimeout(() => process.stdout.write(Buffer.from([0xa9, 0x0a])), 50);",
+      ],
+      { cwd: process.cwd(), timeout: 5000, onChunk: (_stream, chunk) => chunks.push(chunk) },
+    );
+    expect(result.stdout).toBe("é\n");
+    expect(chunks.join("")).toBe("é\n");
+  });
+
+  it.each<{ keep: "head" | "tail"; first: string; last: string }>([
+    { keep: "head", first: "line 0", last: "line 9" },
+    { keep: "tail", first: "line 19990", last: "line 19999" },
+  ])("returns only the $keep capture window of large output", async ({ keep, first, last }) => {
+    const result = await executeStreamingProcess(
+      process.execPath,
+      ["-e", "for (let i = 0; i < 20000; i++) process.stdout.write('line ' + i + '\\n');"],
+      {
+        cwd: process.cwd(),
+        timeout: 20_000,
+        capture: { budget: { maxBytes: 10_000, maxLines: 10 }, keep },
+        onChunk: () => undefined,
+      },
+    );
+    const lines = result.stdout.split("\n");
+    expect(result.truncated).toBe(true);
+    expect(lines).toHaveLength(10);
+    expect([lines[0], lines.at(-1)]).toEqual([first, last]);
+  });
+
   it("kills timed out and aborted processes", async () => {
     const timedOut = await executeStreamingProcess(
       process.execPath,

@@ -430,6 +430,18 @@ describe("host capabilities", () => {
     ).rejects.toThrow("options.maxBytes must be an integer between 1 and 1000000");
   });
 
+  it("cuts HTTP bodies at character boundaries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("ééé")),
+    );
+    const result =
+      await value(`async ({ http: { request: httpRequest } }) => httpRequest("https://example.test", {
+      maxBytes: 3,
+    })`);
+    expect(result).toMatchObject({ body: "é", truncated: true });
+  });
+
   it("uses default HTTP options and validates arguments", async () => {
     vi.stubGlobal(
       "fetch",
