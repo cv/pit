@@ -99,7 +99,7 @@ describe("user functions", () => {
       'async ({ functions: { getUser, getSaved, listUser, planRemoval, promote, removeUser } }) => getSaved("sharedValue", "user")',
     );
     expect(user).toMatchObject({ scope: "user", overridesUser: false });
-  }, 15_000);
+  });
 
   it("loads user functions automatically regardless of obsolete opt-outs", async () => {
     await writeUserFunction(
@@ -427,7 +427,7 @@ it("handles cancelled and absent user manager operations", async () => {
     "User function file was absent: absentUserFile",
     "warning",
   );
-}, 15_000);
+});
 
 it("keeps invalid user configuration quiet without a UI", async () => {
   await mkdir(agentDir(), { recursive: true });

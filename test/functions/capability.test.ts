@@ -164,7 +164,7 @@ describe("functions capability", () => {
       projectFunctions: ["capabilityProject", "capabilitySession"],
       sessionFunctions: [],
     });
-  }, 15_000);
+  });
 
   it("reports session overrides and blocked project removal plans", async () => {
     await writeProjectFunction(
@@ -220,7 +220,7 @@ describe("functions capability", () => {
         `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => functionGet("projectPlanBase")`,
       ),
     ).resolves.toMatchObject({ name: "projectPlanBase" });
-  }, 15_000);
+  });
 
   it("rejects unavailable and unknown operations", async () => {
     await expect(

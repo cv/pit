@@ -263,7 +263,7 @@ describe("project function storage", () => {
       reconcileProjectFunctionsForSession(functions, docs, new Map(), active, activeDocs),
     ).toEqual([]);
     expect([...active.keys()]).toEqual(["zzValidCandidate"]);
-  }, 10_000);
+  });
 
   it("reconciles byte capacity when a same-name session override is removed", () => {
     const candidates = new Map(

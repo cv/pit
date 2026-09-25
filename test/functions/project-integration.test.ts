@@ -432,7 +432,7 @@ async function projectTests({ npm: { test } }) {
         "async ({ versionedProject, sessionHelper }) => Promise.all([versionedProject(), sessionHelper()])",
       ),
     ).toEqual([2, 42]);
-  }, 15_000);
+  });
 
   it("keeps legacy scope markers session-scoped until explicit promotion", async () => {
     const saved = await run(`/** Legacy marker. @pit project */
@@ -491,7 +491,7 @@ async function markedSession({}) {
       sessionFunctions.filter((name) => ["capacityParallelA", "capacityParallelB"].includes(name)),
     ).toHaveLength(1);
     expect(branchEntries).toHaveLength(10);
-  }, 15_000);
+  });
 
   it("reconciles the project function when a session override is deleted", async () => {
     await writeProjectFunction(
