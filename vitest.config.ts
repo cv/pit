@@ -9,8 +9,8 @@ export default defineConfig({
     // concurrent compilation only oversubscribes the CPU and inflates individual test times.
     maxWorkers: Math.min(8, availableParallelism()),
 
-    // Each Wasmtime execution compiles the guest component (#136), which takes seconds on small
-    // CI runners; integration tests run many executions.
+    // Runtimes before the #136 fix compile the guest on every execution, which takes seconds on
+    // small CI runners, and CI uses the latest release's runtime until the fix is released.
     testTimeout: 60_000,
     hookTimeout: 60_000,
     coverage: {

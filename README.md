@@ -611,7 +611,7 @@ npm run format
 
 `npm run check` verifies the generated capability contract and structural boundaries, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The structure check limits root-level source files and rejects internal import cycles. The custom quality audit retains Pit's file, function, and complexity limits.
 
-Pull requests and pushes to `main` run package verification, static checks, dependency auditing, and coverage on the supported Node.js matrix. Public branch protection requires those checks before merge. See [the release guide](docs/releasing.md) for tagged GitHub releases.
+Pull requests and pushes to `main` run the tests on each supported Node.js version, and package verification, static checks, dependency auditing, and coverage once. Public branch protection requires those checks before merge. See [the release guide](docs/releasing.md) for tagged GitHub releases.
 
 ## License
 
