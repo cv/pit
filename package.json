@@ -5,7 +5,6 @@
   "type": "module",
   "files": [
     "src",
-    "native/prebuilds",
     "scripts/install-wasmtime.mjs",
     "prompts",
     "docs",
