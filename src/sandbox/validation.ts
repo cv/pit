@@ -115,7 +115,7 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
       : "";
   return (
     `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
-    (omitted > 0 ? `\n... ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
+    (omitted > 0 ? `\n… ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
     savedCapabilityHint +
     savedHint
   );

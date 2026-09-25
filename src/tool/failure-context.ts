@@ -1,20 +1,13 @@
-import { type ExtensionAPI, truncateHead, truncateTail } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { boundText, LIMITS } from "../shared/bounds.js";
 import { terminationKind } from "../shared/termination-errors.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 
-const MAX_FAILURE_BYTES = 8_000;
-const MAX_FAILURE_LINES = 24;
 const MAX_FUNCTION_PATH = 32;
-const OMITTED_DIAGNOSTIC = "… diagnostic middle omitted before rendering; not retained …";
 const OMITTED_CALLS = "… further calls not retained …";
-// Head and tail halves, joined by newline-delimited omission markers, stay within the maximums.
-const DIAGNOSTIC_HALF = {
-  maxBytes: Math.floor((MAX_FAILURE_BYTES - Buffer.byteLength(OMITTED_DIAGNOSTIC) - 2) / 2),
-  maxLines: Math.floor((MAX_FAILURE_LINES - 1) / 2),
-};
 const PATH_HEAD = Math.ceil((MAX_FUNCTION_PATH - 1) / 2);
 const PATH_TAIL = MAX_FUNCTION_PATH - 1 - PATH_HEAD;
 const FUNCTION_FAILURE_PREFIX = /^(?:Saved function|Function) "([^"]+)" failed: /;
@@ -75,15 +68,8 @@ export function structureTypeScriptFailure(
     }
   }
   const kind = failureKind(rootError, errorName(error));
-  const bounded = truncateHead(rootError, {
-    maxBytes: MAX_FAILURE_BYTES,
-    maxLines: MAX_FAILURE_LINES,
-  });
-  if (bounded.truncated) {
-    const head = truncateHead(rootError, DIAGNOSTIC_HALF).content;
-    const tail = truncateTail(rootError, DIAGNOSTIC_HALF).content;
-    rootError = `${head}\n${OMITTED_DIAGNOSTIC}\n${tail}`;
-  }
+  // Keep the leading context and the trailing cause around a counted omission.
+  rootError = boundText(rootError, LIMITS.failure, "ends").text;
   const boundedPath =
     functionPath.length > MAX_FUNCTION_PATH
       ? [...functionPath.slice(0, PATH_HEAD), OMITTED_CALLS, ...functionPath.slice(-PATH_TAIL)]

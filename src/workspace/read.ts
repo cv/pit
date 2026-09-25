@@ -1,12 +1,7 @@
 import { createHash, type Hash } from "node:crypto";
 import { createReadStream } from "node:fs";
 
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  truncateHead,
-} from "@earendil-works/pi-coding-agent";
-
+import { LIMITS, sliceText } from "../shared/bounds.js";
 import { object, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 
 export type WorkspaceReadFormat = "hashed" | "raw";
@@ -40,7 +35,7 @@ export class WorkspaceReadScanner {
   constructor(
     private readonly offset: number,
     limit: number,
-    private readonly maximumCaptureCharacters = DEFAULT_MAX_BYTES + 1,
+    private readonly maximumCaptureCharacters = LIMITS.result.maxBytes + 1,
   ) {
     this.#selectionEnd = offset + limit - 1;
   }
@@ -140,7 +135,7 @@ function parseReadRequest(cwd: string, args: unknown[]): WorkspaceReadRequest {
     throw new Error('options.format must be "hashed" or "raw"');
   }
   const offset = Number(options.offset ?? 1);
-  const limit = Number(options.limit ?? DEFAULT_MAX_LINES);
+  const limit = Number(options.limit ?? LIMITS.result.maxLines);
   if (!Number.isInteger(offset) || offset < 1 || !Number.isInteger(limit) || limit < 1) {
     throw new Error("offset and limit must be positive integers");
   }
@@ -161,14 +156,16 @@ function hashedContent(scan: WorkspaceReadScan, offset: number): string {
 
 function readResult(cwd: string, request: WorkspaceReadRequest, scan: WorkspaceReadScan) {
   const content = request.format === "hashed" ? hashedContent(scan, request.offset) : scan.selected;
-  const result = truncateHead(content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: request.limit });
+  // A partial hashed line would carry the anchor of the whole line, so hashed reads keep whole lines.
+  const result = sliceText(
+    content,
+    { maxBytes: LIMITS.result.maxBytes, maxLines: request.limit },
+    "head",
+    { partialLine: request.format === "raw" },
+  );
   let returnedLines =
-    result.content === ""
-      ? scan.selectedHashes.length > 0
-        ? 1
-        : 0
-      : Math.max(1, result.outputLines);
-  if (request.format === "raw" && result.content.endsWith("\n")) {
+    result.text === "" ? (scan.selectedHashes.length > 0 ? 1 : 0) : Math.max(1, result.lines);
+  if (request.format === "raw" && result.text.endsWith("\n")) {
     returnedLines++;
   }
   const hasMore = request.offset + request.limit - 1 < scan.totalLines;
@@ -176,7 +173,7 @@ function readResult(cwd: string, request: WorkspaceReadRequest, scan: WorkspaceR
   return {
     file: workspaceResultPath(cwd, request.path),
     format: request.format,
-    content: result.content,
+    content: result.text,
     revision: scan.revision,
     ...(request.offset === 1 ? {} : { offset: request.offset }),
     lines: returnedLines,

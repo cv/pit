@@ -1,4 +1,5 @@
 import type { FunctionScope } from "../functions/core.js";
+import { clipText } from "../shared/bounds.js";
 
 export type CapabilityTraceStatus = "running" | "succeeded" | "failed" | "rejected";
 
@@ -70,9 +71,7 @@ const MAX_TRACE_NAME_CHARS = 80;
 const MAX_TRACE_ARGUMENTS = 8;
 
 function boundedName(value: string): string {
-  return value.length <= MAX_TRACE_NAME_CHARS
-    ? value
-    : `${value.slice(0, MAX_TRACE_NAME_CHARS - 1)}…`;
+  return clipText(value, MAX_TRACE_NAME_CHARS);
 }
 
 function argumentSummary(value: unknown): CapabilityArgumentSummary {

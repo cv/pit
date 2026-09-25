@@ -330,7 +330,7 @@ describe("terminal UX contract", () => {
     );
     expect(bounded.rootError).toContain("FIRST_SENTINEL");
     expect(bounded.rootError).toContain("LAST_SENTINEL");
-    expect(bounded.rootError).toContain("not retained");
+    expect(bounded.rootError).toMatch(/\n… \d+ lines omitted …\n/);
     expect(Buffer.byteLength(bounded.rootError)).toBeLessThanOrEqual(8000);
   });
 

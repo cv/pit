@@ -115,6 +115,24 @@ describe("tool rendering", () => {
     expect(compactFailure).toContain("failure line 0 …");
     expect(compactFailure).not.toContain("failure line 1");
 
+    const singleLine = `${"x".repeat(5_000)}END`;
+    const singleLineFailure = renderToolResult(
+      {
+        content: [{ type: "text", text: singleLine }],
+        details: {
+          value: undefined,
+          truncated: false,
+          failure: { functionPath: [], rootError: singleLine, kind: "user" },
+        },
+      },
+      { expanded: false, isPartial: false },
+      { isError: true },
+    );
+    // An over-long first line keeps a visible prefix rather than collapsing to the ellipsis.
+    expect(singleLineFailure.split("x").length - 1).toBeGreaterThan(1_000);
+    expect(singleLineFailure).toContain("…");
+    expect(singleLineFailure).not.toContain("END");
+
     const expandedFailure = renderToolResult(
       {
         content: [{ type: "text", text: longFailure }],
