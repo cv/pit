@@ -227,7 +227,13 @@ function renderCompletedToolResult(input: {
 }) {
   const { expanded, details, fallback, duration, theme, rendering } = input;
   const shown = expanded ? rendering.lines : [];
-  const state = details?.truncated ? `truncated, ${duration}` : duration;
+  // Domain values that own a truncated flag already report it in their summary; say it once.
+  const reportedByValue =
+    rendering.structuredResult !== undefined &&
+    rendering.structuredResult.kind !== "compound" &&
+    isRecord(details?.value) &&
+    details.value.truncated === true;
+  const state = details?.truncated && !reportedByValue ? `truncated, ${duration}` : duration;
   const resultLabel = describeResult(details?.value, rendering.structuredResult, {
     unretained: details?.truncated === true && !retainsValue(details),
     fallback: details && Object.hasOwn(details, "value") ? "" : fallback,

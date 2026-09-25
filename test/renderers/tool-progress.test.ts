@@ -19,10 +19,23 @@ describe("tool rendering", () => {
     };
 
     const collapsed = renderToolResult(result, { expanded: false, isPartial: false });
-    expect(collapsed).toContain("exit 0, truncated");
-    expect(collapsed).toContain("(truncated, 0.0s)");
+    // The process summary already reports truncation, so the state does not repeat it.
+    expect(collapsed).toContain("exit 0, truncated (0.0s)");
     expect(collapsed).toContain("⚠");
     expect(collapsed).not.toContain("Truncated output");
+
+    const generic = fitValue(
+      { items: Array.from({ length: 3_000 }, (_, index) => index) },
+      { maxBytes: 20_000, maxLines: 2_000 },
+    );
+    const genericCollapsed = renderToolResult(
+      {
+        content: [{ type: "text", text: generic.text }],
+        details: { value: generic.value, truncated: true },
+      },
+      { expanded: false, isPartial: false },
+    );
+    expect(genericCollapsed).toContain("Returned 1 field: items (truncated, 0.0s)");
 
     const expanded = renderToolResult(result, { expanded: true, isPartial: false });
     expect(expanded).toContain("line 0 end");
