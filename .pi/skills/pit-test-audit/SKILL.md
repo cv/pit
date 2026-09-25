@@ -76,23 +76,53 @@ Record:
 
 Missing evidence means **defer**, not delete. If there is no stronger proof for an important contract, strengthen or relocate it. Keep read-only audit findings distinct from implemented changes. Record counterfactual probes separately from baseline passing tests; a surviving mutation demonstrates a coverage gap, not a production bug.
 
+## Run a counterfactual through the saved workflow
+
+Use `probePitAuditMutation()` for a supported literal source mutation; do not recreate its temporary config/report/cleanup workflow. The caller must first establish a passing baseline for the same files and name filter. Read the owner freshly, review the proposed defect, and supply the mutation through tool `params` rather than editing production source on disk.
+
+The marked example is type-checked against the actual project functions, not executed by the resource tests. Use a 300000 ms tool timeout for the sequential baseline and probe:
+
+```ts pit-example
+async (
+  { runPitTargetedTests, probePitAuditMutation },
+  input: {
+    label: string;
+    owner: string;
+    before: string;
+    after: string;
+    files: string[];
+    testNamePattern?: string;
+  },
+) => {
+  const baseline = await runPitTargetedTests({
+    files: input.files,
+    ...(input.testNamePattern === undefined ? {} : { testNamePattern: input.testNamePattern }),
+    raise: true,
+  });
+  if (!("counts" in baseline) || !baseline.counts || baseline.counts.passed < 1) {
+    throw new Error("No passing baseline assertions were reported; do not run the mutation");
+  }
+  return probePitAuditMutation(input);
+}
+```
+
+Interpret the result before drawing a conclusion:
+
+- A thrown runner/match/cleanup error is a probe failure, not evidence of a detected regression. Inspect the cause and any retained-artifact warning before retrying.
+- `inconclusive: true` means no usable assertion proof, including empty selections or suite-load failures. Do not label it a killed or surviving mutation.
+- With `mutationApplied: true` and `inconclusive: false`, inspect the failing test names and reasons. Only the intended assertion failures demonstrate sensitivity; a nonzero `code` alone does not. A passing mutant identifies a possible coverage gap, not a product bug or automatic deletion permission.
+- Report omitted failures and shortened diagnostics explicitly. Narrow the files/filter when the decisive cause was not retained.
+
+The helper does not rewrite the owner, but selected tests still execute their normal effects. Use reviewed test files, run probes sequentially, and do not edit code while a runner is active. The workflow requires jq and a `/tmp`-capable host. Route environment/API failures through `inspectPitDependencyInstall()` and the delivery skill's recovery guidance, not test deletion.
+
 ## Edit and validate one coherent batch
 
 1. Record the evidence and scope before editing. Never edit source or tests while Vitest runs in the same checkout.
 2. Prefer removing redundant tests and obsolete seams over adding wrappers or aliases. Do not chase net-negative LOC when that would discard independent proof.
-3. Use existing boundary fixtures and trusted project helpers:
-
-   ```ts
-   runPitTargetedTests({ files: ["test/tool/source-formatter.test.ts"] })
-   reviewPitChanges()
-   formatPitChanges()
-   validatePit({ coverage: true, packageCheck: true })
-   preparePitDelivery()
-   ```
-
-4. Run the smallest owner and relevant sibling suites first. Use `testNamePattern` for a single case. Counterfactuals requiring unsupported runner options may use a temporary Vite transform through `shell.execFile`; do not rewrite checked-in owners while tests run, and remove temporary artifacts afterward.
+3. Reuse boundary fixtures and `runPitTargetedTests()` for the owner and relevant siblings. Use `testNamePattern` to isolate a case, without changing the meaning of a reported baseline.
+4. Use the counterfactual composition above when it fits. If an experiment cannot be expressed by the helper, document the missing capability before a narrow `shell.execFile` fallback; preserve the same baseline, bounds, no-owner-rewrite, and cleanup requirements.
 5. If removing a source/prose check, run the executable contract or policy gate that replaces it. For project skills, exercise Pi's real discovery API; do not add a test that copies the skill's sentences.
-6. Format only changed files and re-read before further edits. Review the final diff, then use `validatePit()` for standard gates and `preparePitDelivery()` for Git readiness. Do not run full tests and coverage concurrently. `auditPitCodeQuality()` measures maintainability signals, not test value.
+6. Delegate final review, changed-file formatting, standard validation, and Git readiness to [pit-delivery](../pit-delivery/SKILL.md), including its result interpretation and loaded-versus-disk checks. Do not run full tests and coverage concurrently. `auditPitCodeQuality()` measures maintainability signals, not test value.
 7. Apply `pit-delivery`'s reload/live-acceptance requirements to any changed TUI, extension-loading, saved-function, sandbox, or partial-update behavior. Headless assertions do not certify interactive behavior.
 
 Commit, push, open PRs, and close issues only when authorized. Do not use closing keywords before required interactive acceptance.
