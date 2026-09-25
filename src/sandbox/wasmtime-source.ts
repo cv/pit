@@ -6,7 +6,6 @@ export function createWasmtimeGuestSource(program: PreparedSandboxProgram, input
   return `
 let __pit_next_id = 1;
 let __pit_next_invocation_id = 1;
-let __pit_function_context;
 
 // The guest has no inherited stdio. Do not enter Javy's WASI-backed console:
 // synchronous WASI stream calls cannot run inside the addon's async runtime.
@@ -22,12 +21,7 @@ globalThis.setTimeout = (handler, timeout = 0, ...args) => {
 };
 
 const __pit_rpc = async (message) => {
-  const response = JSON.parse(await pitCall(JSON.stringify({
-    ...message,
-    ...(message.type === "call" && __pit_function_context
-      ? { functionContext: __pit_function_context }
-      : {}),
-  })));
+  const response = JSON.parse(await pitCall(JSON.stringify(message)));
   if (typeof response.error === "string") {
     const error = new Error(response.error);
     if (typeof response.errorName === "string") error.name = response.errorName;
@@ -36,7 +30,9 @@ const __pit_rpc = async (message) => {
   return response.value;
 };
 
-const __pit_capabilities = new Proxy(Object.create(null), {
+// Capabilities are bound to the calling saved-function invocation, if any. QuickJS has no async
+// context tracking, so attribution travels explicitly instead of through shared state.
+const __pit_capabilities = (context) => new Proxy(Object.create(null), {
   get(_target, capability) {
     if (capability === Symbol.toStringTag) return "PitFunctions";
     if (typeof capability !== "string") return undefined;
@@ -51,29 +47,23 @@ const __pit_capabilities = new Proxy(Object.create(null), {
           capability,
           method,
           args,
+          ...(context ? { functionContext: context } : {}),
         });
       },
     });
   },
 });
 
-const __pit_run_saved = async (name, scope, callback) => {
-  const parent = __pit_function_context;
+const __pit_run_saved = async (name, scope, parent, callback) => {
   const depth = (parent?.depth ?? 0) + 1;
   if (depth > 32) throw new Error("Function call depth exceeded 32");
-  const context = {
+  return callback({
     invocationId: __pit_next_invocation_id++,
     ...(parent ? { parentInvocationId: parent.invocationId } : {}),
     name,
     scope,
     depth,
-  };
-  __pit_function_context = context;
-  try {
-    return await callback();
-  } finally {
-    __pit_function_context = parent;
-  }
+  });
 };
 
 const __pit_main = (0, eval)(${compiled});
@@ -85,10 +75,13 @@ try {
     __pit_run_saved,
   );
 } catch (error) {
-  // The host receives only the message of an uncaught guest error; report a non-default name.
-  if (typeof error?.name === "string" && error.name !== "Error") {
-    await __pit_rpc({ type: "failure", name: error.name.slice(0, 100) });
-  }
+  // Report the name and message directly: the native error text also carries a stack frame
+  // that points into this generated program rather than the author's source.
+  await __pit_rpc({
+    type: "failure",
+    name: typeof error?.name === "string" ? error.name.slice(0, 100) : "Error",
+    message: String(error?.message ?? error).slice(0, 100000),
+  });
   throw error;
 }
 await __pit_rpc({ type: "result", value: __pit_value });

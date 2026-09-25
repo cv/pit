@@ -40,7 +40,8 @@ function renderDependencyTree(tree: DependencyTree, indexes: ReadonlyMap<string,
     /* v8 ignore next -- graph nodes and dependency targets are produced together. */
     if (index === undefined)
       throw new Error(`resolved function node "${tree.target}" is unavailable`);
-    return `__pit_function_${index}`;
+    // Each dependency is bound to the calling invocation's context.
+    return `__pit_function_${index}(__pit_context)`;
   }
   const properties = [...tree.children]
     .sort(([left], [right]) => left.localeCompare(right))
@@ -52,7 +53,7 @@ function renderNativeAssignment(
   index: number,
   definition: Extract<FunctionDefinition, { kind: "native" }>,
 ): string {
-  return `__pit_function_${index} = (...__pit_args) => __pit_capabilities[${JSON.stringify(definition.capability)}][${JSON.stringify(definition.method)}](...__pit_args);`;
+  return `__pit_function_${index} = (__pit_context) => (...__pit_args) => __pit_capabilities(__pit_context)[${JSON.stringify(definition.capability)}][${JSON.stringify(definition.method)}](...__pit_args);`;
 }
 
 function renderSourceAssignment(
@@ -71,11 +72,11 @@ function renderSourceAssignment(
   const prefix = JSON.stringify(`Function "${node.definition.id}" failed: `);
   return `__pit_function_${index} = (() => {
     const __pit_implementation = (${node.definition.source});
-    const __pit_dependencies = ${dependencies};
-    return async (...__pit_args) => __pit_run_saved(${name}, ${layer}, async () => {
-      await __pit_capabilities.__pit.savedFunctionRun(${name});
+    const __pit_dependencies = (__pit_context) => ${dependencies};
+    return (__pit_parent) => async (...__pit_args) => __pit_run_saved(${name}, ${layer}, __pit_parent, async (__pit_context) => {
+      await __pit_capabilities(__pit_context).__pit.savedFunctionRun(${name});
       try {
-        return await __pit_implementation(__pit_dependencies, ...__pit_args);
+        return await __pit_implementation(__pit_dependencies(__pit_context), ...__pit_args);
       } catch (__pit_error) {
         const __pit_failure = new Error(${prefix} + (__pit_error?.message ?? String(__pit_error)), { cause: __pit_error });
         // Keep the name so termination kinds such as TimeoutError survive the wrapper.
@@ -99,10 +100,12 @@ export function unifiedRuntimeProgram(source: string, graph: ResolvedFunctionGra
     dependencyTree(graph.roots, graph.nextKey),
     indexes,
   );
-  const invocation = `__pit_submission(${rootDependencies}, __pit_input)`;
+  const root = `(__pit_context) => __pit_submission(${rootDependencies}, __pit_input)`;
   const execution = graph.definition
-    ? `__pit_run_saved(${JSON.stringify(graph.definition.id)}, ${JSON.stringify(graph.definition.layer)}, () => ${invocation})`
-    : invocation;
+    ? `__pit_run_saved(${JSON.stringify(graph.definition.id)}, ${JSON.stringify(graph.definition.layer)}, undefined, ${root})`
+    : `(${root})(undefined)`;
+  // Invocation context flows through parameters, never shared state, so concurrent saved-function
+  // calls keep their own attribution on runtimes without async context tracking.
   return `async (__pit_capabilities, __pit_input, __pit_run_saved) => {
     const __pit_dependency_object = (__pit_values) => Object.freeze(Object.assign(Object.create(null), __pit_values));
     ${declarations.join("\n")}

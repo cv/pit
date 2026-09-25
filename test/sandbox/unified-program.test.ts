@@ -6,9 +6,14 @@ async function compiledProgram(source: string, projectFunctions: ReadonlyMap<str
   const compiled = await compileSandboxSource(source, { projectFunctions });
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
   return (0, eval)(compiled) as (
-    capabilities: object,
+    capabilities: (context: unknown) => object,
     input: unknown,
-    runSaved: (name: string, layer: string, callback: () => Promise<unknown>) => Promise<unknown>,
+    runSaved: (
+      name: string,
+      layer: string,
+      parent: unknown,
+      callback: (context: unknown) => Promise<unknown>,
+    ) => Promise<unknown>,
   ) => Promise<unknown>;
 }
 
@@ -27,9 +32,9 @@ describe("compileSandboxSource", () => {
 
     await expect(
       main(
-        { workspace: { read }, __pit: { savedFunctionRun: async () => null } },
+        () => ({ workspace: { read }, __pit: { savedFunctionRun: async () => null } }),
         { file: "README.md" },
-        async (_name, _layer, callback) => callback(),
+        async (name, layer, _parent, callback) => callback({ name, layer }),
       ),
     ).resolves.toBe("read:README.md");
     expect(read).toHaveBeenCalledWith("README.md", { format: "raw" });
@@ -61,7 +66,11 @@ describe("compileSandboxSource", () => {
     const main = await compiledProgram("async ({ context: { get } }) => get()", new Map());
     const get = vi.fn(async () => ({ cwd: "/project" }));
     await expect(
-      main({ context: { get } }, undefined, async (_name, _layer, callback) => callback()),
+      main(
+        () => ({ context: { get } }),
+        undefined,
+        async (name, layer, _parent, callback) => callback({ name, layer }),
+      ),
     ).resolves.toEqual({ cwd: "/project" });
     expect(get).toHaveBeenCalledExactlyOnceWith();
   });

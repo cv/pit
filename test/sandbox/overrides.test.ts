@@ -5,12 +5,13 @@ import { createLayeredFunctionRegistry } from "../../src/functions/definitions.j
 import { sourceFunctionDefinition } from "../../src/functions/resolved-graph.js";
 import { functionTypeModel } from "../../src/sandbox/function-types.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
-import { runInSandbox, runWithFunctionExecutor } from "../../src/sandbox/run.js";
+import { runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js";
 import { terminationError } from "../../src/shared/termination-errors.js";
 import { structureTypeScriptFailure } from "../../src/tool/failure-context.js";
 import { typeDiagnostics } from "../helpers/type-contract.js";
+import { runInSandbox } from "../support/sandbox.js";
 
 const base = "async function calculate({}, value: number): Promise<number> { return value + 1; }";
 
@@ -194,75 +195,69 @@ describe("layered override contracts", () => {
     ).rejects.toThrow("TypeScript validation failed");
   });
 
-  it.runIf(process.platform === "linux" && process.arch === "arm64")(
-    "executes named next chains in Wasmtime with one event per lower invocation",
-    async () => {
-      const project =
-        "async function calculate({ $next }, value: number) { return (await $next(value)) * 2; }";
-      const session =
-        "async function calculate({ $next }, value: number) { return (await $next(value)) + 3; }";
-      const handler = vi.fn(async () => null);
-      const result = await runWithFunctionExecutor(
-        session,
-        handler,
-        {
-          userFunctions: new Map([["calculate", base]]),
-          projectFunctions: new Map([["calculate", project]]),
-          sessionFunctions: new Map([["calculate", session]]),
-          definition: { id: "calculate", layer: "session" },
-          input: 4,
-          timeoutMs: 5000,
-        },
-        configuredFunctionExecutor({ backend: "wasmtime" }),
-      );
-      expect(result).toBe(13);
-      expect(handler).toHaveBeenCalledTimes(2);
-      expect(handler).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          functionContext: expect.objectContaining({ scope: "project", depth: 2 }),
-        }),
-      );
-      expect(handler).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          functionContext: expect.objectContaining({ scope: "user", depth: 3 }),
-        }),
-      );
-    },
-  );
+  it("executes named next chains in Wasmtime with one event per lower invocation", async () => {
+    const project =
+      "async function calculate({ $next }, value: number) { return (await $next(value)) * 2; }";
+    const session =
+      "async function calculate({ $next }, value: number) { return (await $next(value)) + 3; }";
+    const handler = vi.fn(async () => null);
+    const result = await runWithFunctionExecutor(
+      session,
+      handler,
+      {
+        userFunctions: new Map([["calculate", base]]),
+        projectFunctions: new Map([["calculate", project]]),
+        sessionFunctions: new Map([["calculate", session]]),
+        definition: { id: "calculate", layer: "session" },
+        input: 4,
+        timeoutMs: 5000,
+      },
+      configuredFunctionExecutor(),
+    );
+    expect(result).toBe(13);
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        functionContext: expect.objectContaining({ scope: "project", depth: 2 }),
+      }),
+    );
+    expect(handler).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        functionContext: expect.objectContaining({ scope: "user", depth: 3 }),
+      }),
+    );
+  });
 
-  it.runIf(process.platform === "linux" && process.arch === "arm64")(
-    "keeps a capability termination name through saved-function wrappers in Wasmtime",
-    async () => {
-      const user =
-        "async function calculate({ context: { get } }, value: number): Promise<number> { await get(); return value + 1; }";
-      const session =
-        "async function calculate({ $next }, value: number) { return (await $next(value)) + 3; }";
-      const failure = await runWithFunctionExecutor(
-        session,
-        async ({ capability }) => {
-          if (capability === "context") throw terminationError("timeout", "deadline reached");
-          return null;
-        },
-        {
-          userFunctions: new Map([["calculate", user]]),
-          sessionFunctions: new Map([["calculate", session]]),
-          definition: { id: "calculate", layer: "session" },
-          input: 4,
-          timeoutMs: 5000,
-        },
-        configuredFunctionExecutor({ backend: "wasmtime" }),
-      ).catch((error: unknown) => error);
+  it("keeps a capability termination name through saved-function wrappers in Wasmtime", async () => {
+    const user =
+      "async function calculate({ context: { get } }, value: number): Promise<number> { await get(); return value + 1; }";
+    const session =
+      "async function calculate({ $next }, value: number) { return (await $next(value)) + 3; }";
+    const failure = await runWithFunctionExecutor(
+      session,
+      async ({ capability }) => {
+        if (capability === "context") throw terminationError("timeout", "deadline reached");
+        return null;
+      },
+      {
+        userFunctions: new Map([["calculate", user]]),
+        sessionFunctions: new Map([["calculate", session]]),
+        definition: { id: "calculate", layer: "session" },
+        input: 4,
+        timeoutMs: 5000,
+      },
+      configuredFunctionExecutor(),
+    ).catch((error: unknown) => error);
 
-      expect(failure).toMatchObject({ name: "TimeoutError" });
-      expect(structureTypeScriptFailure(failure, [])).toMatchObject({
-        functionPath: ["calculate"],
-        kind: "timeout",
-        rootError: expect.stringMatching(/^deadline reached(?:\n|$)/),
-      });
-    },
-  );
+    expect(failure).toMatchObject({ name: "TimeoutError" });
+    expect(structureTypeScriptFailure(failure, [])).toMatchObject({
+      functionPath: ["calculate"],
+      kind: "timeout",
+      rootError: expect.stringMatching(/^deadline reached(?:\n|$)/),
+    });
+  });
 
   it("does not compile an unavailable effective global through a fallback", async () => {
     await expect(

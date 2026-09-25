@@ -2,20 +2,8 @@ import type { CapabilityTrace } from "../execution/capability-trace.js";
 import type { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { FunctionEnvironment, FunctionDefinitionReference } from "../functions/environment.js";
 import type { CapabilityHandler } from "./dispatcher.js";
-import {
-  parseFunctionExecutionContext,
-  type FunctionExecutionOptions,
-  type FunctionExecutor,
-} from "./executor.js";
-import { nodeFunctionExecutor, SandboxRemoteError, sandboxFatalError } from "./node-executor.js";
+import type { FunctionExecutionOptions, FunctionExecutor } from "./executor.js";
 import { prepareSandboxProgram } from "./program.js";
-
-export {
-  nodeFunctionExecutor,
-  parseFunctionExecutionContext,
-  SandboxRemoteError,
-  sandboxFatalError,
-};
 
 export interface SandboxOptions extends FunctionEnvironment {
   definition?: FunctionDefinitionReference;
@@ -63,13 +51,4 @@ export async function runWithFunctionExecutor(
   });
   options.timings?.enter("execution");
   return executor.execute(program, handler, execution);
-}
-
-/** @deprecated Use `configuredFunctionExecutor()` and `runWithFunctionExecutor()`. */
-export function runInSandbox(
-  source: string,
-  handler: CapabilityHandler,
-  options: SandboxOptions = {},
-): Promise<unknown> {
-  return runWithFunctionExecutor(source, handler, options, nodeFunctionExecutor);
 }

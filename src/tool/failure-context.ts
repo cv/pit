@@ -28,10 +28,7 @@ export interface TypeScriptFailureDetails extends ExecutionProgressSnapshot {
 }
 
 function errorName(error: unknown): string | undefined {
-  if (!(error instanceof Error)) return undefined;
-  // The Node executor wraps guest errors and keeps the guest error name separately.
-  const remoteName = (error as { remoteName?: unknown }).remoteName;
-  return typeof remoteName === "string" ? remoteName : error.name;
+  return error instanceof Error ? error.name : undefined;
 }
 
 function failureKind(message: string, name?: string): StructuredTypeScriptFailure["kind"] {

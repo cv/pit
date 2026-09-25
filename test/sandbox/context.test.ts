@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFunctionExecutionContext } from "../../src/sandbox/run.js";
+import { parseFunctionExecutionContext } from "../../src/sandbox/executor.js";
 
 describe("function execution wire context", () => {
   it.each(["global", "user", "project", "session"] as const)(

@@ -87,35 +87,49 @@ describe("retained execution traces", () => {
     },
   );
 
+  // Budgets leave room for runtime startup, so only the timeout row reaches its deadline.
   it.each([
     {
       name: "validation rejection",
       code: "async ({}) => missingName",
+      timeoutMs: 10_000,
       phase: "validation",
       kind: "user",
     },
     {
       name: "guest failure",
       code: "async ({}) => { throw new Error('intentional'); }",
+      timeoutMs: 10_000,
+      phase: "execution",
+      kind: "user",
+    },
+    {
+      name: "unsettled promise",
+      code: "async ({}) => new Promise(() => {})",
+      timeoutMs: 10_000,
       phase: "execution",
       kind: "user",
     },
     {
       name: "timeout",
-      code: "async ({}) => new Promise(() => {})",
+      code: "async ({}) => { for (;;) {} }",
+      timeoutMs: 500,
       phase: "execution",
       kind: "timeout",
     },
-  ])("retains completed and interrupted phases on $name", async ({ code, phase, kind }) => {
-    await expect(
-      tool.execute("failure", { code, timeoutMs: 100 }, undefined, undefined, context()),
-    ).rejects.toThrow();
-    const enriched = toolResult({ toolName: "typescript", toolCallId: "failure", isError: true });
-    expectPartition(enriched.details.timings);
-    expect(enriched.details.timings.phases).toHaveProperty(phase);
-    expect(enriched.details.timings.phases).not.toHaveProperty("result");
-    expect(enriched.details.failure.kind).toBe(kind);
-  });
+  ])(
+    "retains completed and interrupted phases on $name",
+    async ({ code, timeoutMs, phase, kind }) => {
+      await expect(
+        tool.execute("failure", { code, timeoutMs }, undefined, undefined, context()),
+      ).rejects.toThrow();
+      const enriched = toolResult({ toolName: "typescript", toolCallId: "failure", isError: true });
+      expectPartition(enriched.details.timings);
+      expect(enriched.details.timings.phases).toHaveProperty(phase);
+      expect(enriched.details.timings.phases).not.toHaveProperty("result");
+      expect(enriched.details.failure.kind).toBe(kind);
+    },
+  );
 
   it("links overlapping processes to their own host trace, not the process counter", async () => {
     const updates: ExecutionProgressSnapshot[] = [];

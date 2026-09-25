@@ -6,8 +6,8 @@ import {
   getSandboxCacheStats,
   prepareSandboxProgram,
 } from "../../src/sandbox/program.js";
-import { runInSandbox } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
+import { runInSandbox } from "../support/sandbox.js";
 
 describe("sandbox caches", () => {
   it("reuses validated graphs without leaking mutations or stale grants", async () => {

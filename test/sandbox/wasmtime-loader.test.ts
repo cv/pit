@@ -4,10 +4,12 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { nodeFunctionExecutor, runWithFunctionExecutor } from "../../src/sandbox/run.js";
+import type { PreparedSandboxProgram } from "../../src/sandbox/program.js";
+import { runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import {
   configuredFunctionExecutor,
   WASMTIME_PREBUILT_TARGETS,
+  type WasmtimeRuntimeConfig,
 } from "../../src/sandbox/wasmtime-loader.js";
 
 const supportedTargets: Array<{
@@ -23,9 +25,21 @@ const supportedTargets: Array<{
   { name: "Windows x64", platform: "win32", architecture: "x64" },
 ];
 
+const program: PreparedSandboxProgram = { compiled: "async () => 42", effects: [] };
+const options = { memoryLimitMb: 64, timeoutMs: 5_000 };
+
 function availableOperations() {
   return {
-    loadAddon: vi.fn(() => ({ executeQueuedJavascript: vi.fn() })),
+    loadAddon: vi.fn(() => ({
+      async executeQueuedJavascript(
+        _component: Uint8Array,
+        _source: string,
+        callback: (request: string) => Promise<string>,
+      ) {
+        await callback(JSON.stringify({ type: "result", value: "loaded" }));
+        return true;
+      },
+    })),
     readComponent: vi.fn(() => new Uint8Array([1, 2, 3])),
     artifactExists: vi.fn(() => true),
     warn: vi.fn(),
@@ -39,12 +53,12 @@ describe("configuredFunctionExecutor", () => {
     );
   });
 
-  it.each(supportedTargets)("loads the $name prebuild", ({ platform, architecture }) => {
+  it.each(supportedTargets)("loads the $name prebuild", async ({ platform, architecture }) => {
     const operations = availableOperations();
     const executor = configuredFunctionExecutor({ platform, architecture }, operations);
     const target = `${platform}-${architecture}`;
 
-    expect(executor).not.toBe(nodeFunctionExecutor);
+    await expect(executor.execute(program, async () => null, options)).resolves.toBe("loaded");
     expect(operations.loadAddon).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`native/prebuilds/${target}/pit_wasmtime_executor\\.node$`)),
     );
@@ -58,89 +72,99 @@ describe("configuredFunctionExecutor", () => {
 
   it("selects the current host target when none is injected", () => {
     const operations = availableOperations();
-    expect(configuredFunctionExecutor({}, operations)).not.toBe(nodeFunctionExecutor);
-    expect(operations.loadAddon).toHaveBeenCalled();
-  });
-
-  it("falls back to Node when an implicit target is unsupported", () => {
-    const operations = availableOperations();
-    const executor = configuredFunctionExecutor(
-      { platform: "freebsd", architecture: "riscv64" },
-      operations,
-    );
-
-    expect(executor).toBe(nodeFunctionExecutor);
-    expect(operations.warn).toHaveBeenCalledWith(
-      expect.stringContaining("does not support freebsd-riscv64"),
+    configuredFunctionExecutor({}, operations);
+    expect(operations.loadAddon).toHaveBeenCalledWith(
+      expect.stringContaining(`${process.platform}-${process.arch}`),
     );
   });
 
-  it("falls back to Node when an implicit prebuild is unavailable", () => {
-    const operations = { ...availableOperations(), artifactExists: vi.fn(() => false) };
-    const executor = configuredFunctionExecutor(
-      { platform: "darwin", architecture: "arm64" },
-      operations,
-    );
+  it.each<{
+    name: string;
+    config: WasmtimeRuntimeConfig;
+    override?: (operations: ReturnType<typeof availableOperations>) => void;
+    reason: string;
+  }>([
+    {
+      name: "an unsupported target",
+      config: { platform: "freebsd", architecture: "riscv64" },
+      reason: "Pit has no Wasmtime prebuild for freebsd-riscv64",
+    },
+    {
+      name: "a missing prebuild",
+      config: { platform: "darwin", architecture: "arm64" },
+      override: (operations) => operations.artifactExists.mockReturnValue(false),
+      reason: "Pit's Wasmtime prebuild for darwin-arm64 is not installed",
+    },
+    {
+      name: "an addon that fails to load",
+      config: { platform: "linux", architecture: "x64" },
+      override: (operations) =>
+        operations.loadAddon.mockImplementation(() => {
+          throw new Error("incompatible native ABI\nRequire stack:\n- /pit/src/sandbox/loader.ts");
+        }),
+      reason: "could not load the Wasmtime prebuild for linux-x64: incompatible native ABI",
+    },
+    {
+      name: "a non-Error load failure",
+      config: { platform: "linux", architecture: "x64" },
+      override: (operations) =>
+        operations.loadAddon.mockImplementation(() => {
+          throw "native load refused";
+        }),
+      reason: "native load refused",
+    },
+    {
+      name: "an unreadable configured component",
+      config: { addonPath: "custom.node", componentPath: "custom.wasm" },
+      override: (operations) =>
+        operations.readComponent.mockImplementation(() => {
+          throw new Error("component read failed");
+        }),
+      reason: "could not load the configured Wasmtime runtime: component read failed",
+    },
+    {
+      name: "only one configured artifact path",
+      config: { addonPath: "native/addon.node" },
+      reason: "PIT_WASMTIME_ADDON and PIT_WASMTIME_COMPONENT must be set together",
+    },
+  ])(
+    "stays loadable and explains $name on every execution",
+    async ({ config, override, reason }) => {
+      const operations = availableOperations();
+      override?.(operations);
+      const executor = configuredFunctionExecutor(config, operations);
 
-    expect(executor).toBe(nodeFunctionExecutor);
-    expect(operations.warn).toHaveBeenCalledWith(
-      expect.stringContaining("prebuild for darwin-arm64 is unavailable"),
-    );
-    expect(operations.loadAddon).not.toHaveBeenCalled();
-  });
-
-  it("keeps explicit Wasmtime target failures strict", () => {
-    const unsupported = availableOperations();
-    expect(() =>
-      configuredFunctionExecutor(
-        { backend: "wasmtime", platform: "freebsd", architecture: "x64" },
-        unsupported,
-      ),
-    ).toThrow("does not support freebsd-x64");
-
-    const unavailable = { ...availableOperations(), artifactExists: vi.fn(() => false) };
-    expect(() =>
-      configuredFunctionExecutor(
-        { backend: "wasmtime", platform: "linux", architecture: "x64" },
-        unavailable,
-      ),
-    ).toThrow("prebuild for linux-x64 is unavailable");
-  });
-
-  it("retains Node as an explicit deprecated fallback and rejects unknown backends", () => {
-    expect(configuredFunctionExecutor({ backend: "node" })).toBe(nodeFunctionExecutor);
-    expect(() => configuredFunctionExecutor({ backend: "unknown" })).toThrow(
-      "Unknown Pit function executor",
-    );
-  });
-
-  it("requires explicit native artifact paths together", () => {
-    expect(() =>
-      configuredFunctionExecutor({ backend: "wasmtime", addonPath: "native/addon.node" }),
-    ).toThrow("must be set together");
-    expect(() =>
-      configuredFunctionExecutor({ backend: "wasmtime", componentPath: "native/guest.wasm" }),
-    ).toThrow("must be set together");
-  });
+      expect(operations.warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(reason));
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(executor.execute(program, async () => null, options)).rejects.toThrow(
+          new RegExp(`${reason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*Reinstall or update Pit`),
+        );
+      }
+      // Loader require stacks name Pit's own files, not the cause.
+      const failure = await executor
+        .execute(program, async () => null, options)
+        .then(
+          () => new Error("expected an unavailable runtime"),
+          (error: unknown) => error as Error,
+        );
+      expect(failure.message).not.toContain("Require stack");
+    },
+  );
 
   it("loads resolved explicit artifacts into a Wasmtime executor", () => {
     const operations = availableOperations();
-    const executor = configuredFunctionExecutor(
-      {
-        backend: "wasmtime",
-        addonPath: "native/addon.node",
-        componentPath: "native/guest.wasm",
-      },
+    configuredFunctionExecutor(
+      { addonPath: "native/addon.node", componentPath: "native/guest.wasm" },
       operations,
     );
 
-    expect(executor).toBeDefined();
     expect(operations.loadAddon).toHaveBeenCalledWith(
       expect.stringMatching(/native\/addon\.node$/),
     );
     expect(operations.readComponent).toHaveBeenCalledWith(
       expect.stringMatching(/native\/guest\.wasm$/),
     );
+    expect(operations.warn).not.toHaveBeenCalled();
   });
 
   it("executes with the environment-selected addon and component using default filesystem operations", async () => {
@@ -163,7 +187,6 @@ describe("configuredFunctionExecutor", () => {
         ),
         writeFile(component, new Uint8Array([0, 97, 115, 109])),
       ]);
-      vi.stubEnv("PIT_FUNCTION_EXECUTOR", "wasmtime");
       vi.stubEnv("PIT_WASMTIME_ADDON", addon);
       vi.stubEnv("PIT_WASMTIME_COMPONENT", component);
 
@@ -174,7 +197,7 @@ describe("configuredFunctionExecutor", () => {
           async () => {
             throw new Error("unexpected capability call");
           },
-          { memoryLimitMb: 64, timeoutMs: 5_000 },
+          options,
           configuredFunctionExecutor(),
         ),
       ).resolves.toEqual({ addon: "environment-override", component: [0, 97, 115, 109] });
@@ -184,59 +207,20 @@ describe("configuredFunctionExecutor", () => {
     }
   });
 
-  it.runIf(process.platform === "linux" && process.arch === "arm64")(
-    "executes through the packaged default prebuild",
-    async () => {
-      const executor = configuredFunctionExecutor({});
-      expect(executor).not.toBe(nodeFunctionExecutor);
-      await expect(
-        runWithFunctionExecutor(
-          `async ({}) => {
-            console.log("diagnostic"); console.warn("warning"); console.error("error");
-            await new Promise<void>(resolve => setTimeout(resolve, 10));
-            return { answer: 42, process: typeof (globalThis as any).process };
-          }`,
-          async () => {
-            throw new Error("unexpected capability call");
-          },
-          { memoryLimitMb: 64, timeoutMs: 5_000 },
-          executor,
-        ),
-      ).resolves.toEqual({ answer: 42, process: "undefined" });
-    },
-  );
-
-  it.each<{ name: string; failure: unknown }>([
-    { name: "ABI error", failure: new Error("incompatible native ABI") },
-    { name: "non-Error failure", failure: "native load refused" },
-  ])("falls back for an implicit prebuild $name", ({ failure }) => {
-    const operations = availableOperations();
-    operations.loadAddon.mockImplementation(() => {
-      throw failure;
-    });
-    expect(configuredFunctionExecutor({ platform: "linux", architecture: "x64" }, operations)).toBe(
-      nodeFunctionExecutor,
-    );
-    expect(operations.warn).toHaveBeenCalledWith(expect.stringContaining("could not be loaded"));
-  });
-
-  it("does not hide load failures when Wasmtime was explicitly requested", () => {
-    const operations = availableOperations();
-    operations.readComponent.mockImplementation(() => {
-      throw new Error("component read failed");
-    });
-    expect(() =>
-      configuredFunctionExecutor(
-        { backend: "wasmtime", platform: "linux", architecture: "x64" },
-        operations,
+  it("executes through the installed default prebuild", async () => {
+    await expect(
+      runWithFunctionExecutor(
+        `async ({}) => {
+          console.log("diagnostic"); console.warn("warning"); console.error("error");
+          await new Promise<void>(resolve => setTimeout(resolve, 10));
+          return { answer: 42, process: typeof (globalThis as any).process };
+        }`,
+        async () => {
+          throw new Error("unexpected capability call");
+        },
+        options,
+        configuredFunctionExecutor({}),
       ),
-    ).toThrow("component read failed");
-    expect(() =>
-      configuredFunctionExecutor(
-        { addonPath: "custom.node", componentPath: "custom.wasm" },
-        operations,
-      ),
-    ).toThrow("component read failed");
-    expect(operations.warn).not.toHaveBeenCalled();
+    ).resolves.toEqual({ answer: 42, process: "undefined" });
   });
 });

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { SandboxRemoteError } from "../../src/sandbox/node-executor.js";
 import { terminationError } from "../../src/shared/termination-errors.js";
 import {
   captureTypeScriptFailure,
@@ -33,8 +32,8 @@ describe("TypeScript failure context", () => {
       kind: "cancelled",
     },
     {
-      name: "Node executor guest timeout",
-      error: new SandboxRemoteError({ name: "TimeoutError", message: "deadline reached" }),
+      name: "guest error named for a timeout",
+      error: Object.assign(new Error("deadline reached"), { name: "TimeoutError" }),
       kind: "timeout",
     },
     {

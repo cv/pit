@@ -146,7 +146,6 @@ export async function setupHarness(): Promise<void> {
   initTheme("dark");
   cwd = await mkdtemp(join(tmpdir(), "pit-test-"));
   vi.stubEnv("PI_CODING_AGENT_DIR", join(cwd, "agent"));
-  vi.stubEnv("PIT_FUNCTION_EXECUTOR", "node");
   branchEntries = [];
   sessionName = undefined;
   slashCommands = [];
