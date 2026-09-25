@@ -2,6 +2,8 @@ node_modules/
 .DS_Store
 *.log
 coverage/
+# Wasmtime prebuilds are release artifacts installed per host by scripts/install-wasmtime.mjs.
+native/prebuilds/
 
 
 # Pit tracks its project Pi configuration, functions, and skills even when a global

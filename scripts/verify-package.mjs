@@ -9,11 +9,8 @@ const piProvided = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui",
 const requiredRuntimeFiles = [
   "src/index.ts",
   "src/sandbox/run.ts",
-  "src/sandbox/node-executor.ts",
+  "src/sandbox/wasmtime-loader.ts",
   "scripts/install-wasmtime.mjs",
-  "src/sandbox/runner.mjs",
-  "native/prebuilds/linux-arm64/pit_wasmtime_executor.node",
-  "native/prebuilds/linux-arm64/pit_queued_quickjs_guest.wasm",
   "src/generated/capability-contract.d.ts",
   "prompts/pit-reflect.md",
   "docs/architecture.md",
@@ -69,23 +66,6 @@ const declaredExtensions = packageJson.pi.extensions.map((entry) => {
 
 for (const path of new Set([...requiredRuntimeFiles, ...declaredExtensions])) {
   await access(resolve(root, path));
-}
-
-const wasmtimeAddon = await readFile(
-  resolve(root, "native/prebuilds/linux-arm64/pit_wasmtime_executor.node"),
-);
-if (
-  wasmtimeAddon.length < 20 ||
-  wasmtimeAddon.subarray(0, 4).toString("hex") !== "7f454c46" ||
-  wasmtimeAddon.readUInt16LE(18) !== 183
-) {
-  fail("Wasmtime addon must be a Linux ARM64 ELF binary");
-}
-const quickjsGuest = await readFile(
-  resolve(root, "native/prebuilds/linux-arm64/pit_queued_quickjs_guest.wasm"),
-);
-if (quickjsGuest.subarray(0, 4).toString("hex") !== "0061736d") {
-  fail("QuickJS guest must be a WebAssembly binary");
 }
 
 for (const dependency of piProvided) {
