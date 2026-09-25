@@ -129,7 +129,7 @@ export function sliceText(
 }
 
 /** A counted, in-band omission marker. */
-export function omissionMarker(count: number, unit: "lines" | "bytes"): string {
+export function omissionMarker(count: number, unit: "lines" | "bytes" | "items" | "keys"): string {
   return `… ${count} ${count === 1 ? unit.slice(0, -1) : unit} omitted …`;
 }
 

@@ -25,6 +25,18 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
   failure?: StructuredTypeScriptFailure;
 }
 
+/**
+ * Whether details retain the returned value. Truncated results keep a fitted value; older
+ * sessions and unstructured fallbacks kept only the model-visible text.
+ */
+function retainsValue(details: TypeScriptDetails | undefined): details is TypeScriptDetails {
+  return (
+    details !== undefined &&
+    Object.hasOwn(details, "value") &&
+    !(details.truncated && details.value === undefined)
+  );
+}
+
 function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | undefined {
   if (!details.traces || details.tracesTruncated) {
     return;
@@ -125,7 +137,7 @@ function renderStructuredToolValue(input: {
   context: StatefulResultContext;
 }): ResultRenderingState {
   const { details, fallback, theme, context } = input;
-  if (!(details && !details.truncated && Object.hasOwn(details, "value"))) {
+  if (!retainsValue(details)) {
     return {
       lines: input.expanded && fallback ? highlightCode(fallback, "typescript") : [],
       hangingIndents: {},
@@ -183,9 +195,9 @@ function renderExecutionDetails(
   returnedLines: string[] = [],
 ): string {
   let text = "";
-  // Error and upstream-truncated views may not display details.value at all.
+  // Error and unretained views may not display details.value at all.
   const returnedValue =
-    returnedLines.length > 0 && !details?.truncated ? details?.value : undefined;
+    returnedLines.length > 0 && retainsValue(details) ? details.value : undefined;
   const retained = renderRetainedShellOutput(details, theme, returnedValue);
   if (retained)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Retained process output (tails)"))}${retained}`;
@@ -200,7 +212,7 @@ function renderExecutionDetails(
       text += `\n\n${theme.bold(theme.fg("toolTitle", "Invocation timing"))}\n${phases.join(" · ")}`;
   }
   if (details?.truncated)
-    text += `\n${theme.fg("warning", "Output was truncated before rendering; omitted data is unavailable here.")}`;
+    text += `\n${theme.fg("warning", "Result truncated to fit the output budget; omitted parts are not retained.")}`;
   return text;
 }
 
@@ -217,7 +229,7 @@ function renderCompletedToolResult(input: {
   const shown = expanded ? rendering.lines : [];
   const state = details?.truncated ? `truncated, ${duration}` : duration;
   const resultLabel = describeResult(details?.value, rendering.structuredResult, {
-    truncated: details?.truncated === true,
+    unretained: details?.truncated === true && !retainsValue(details),
     fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
     expanded,
   });

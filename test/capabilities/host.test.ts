@@ -518,10 +518,37 @@ describe("host capabilities", () => {
     expect((await run("({}) => undefined")).content[0].text).toBe("undefined");
   });
 
-  it("truncates oversized tool output", async () => {
+  it("fits oversized tool output within the budget with explicit omissions", async () => {
     const result = await run(`({}) => "x".repeat(200000)`);
-    expect(result.content[0].text).toContain("[Result truncated]");
-    expect(result.details).toMatchObject({ value: undefined, truncated: true });
+    const text = result.content[0].text;
+    const [returned, notice] = text.split("\n[Result truncated");
+
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(51_200);
+    expect(notice).toContain('omissions are marked "… N omitted …"');
+    expect(returned).toMatch(/^x+\n… \d+ bytes omitted …\nx+$/);
+    expect(result.details).toMatchObject({ value: returned, truncated: true });
     expect(result.details.timings.totalMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("returns a capped process result as valid JSON that keeps its exit code and stderr", async () => {
+    const stdout = Array.from({ length: 3_000 }, (_, index) => `line ${index} ${"x".repeat(20)}`);
+    execMock.mockResolvedValueOnce({ stdout: stdout.join("\n"), stderr: "boom", code: 3 });
+    const result = await run(`async ({ shell: { exec: shellExec } }) => shellExec("noisy")`);
+    const [returned] = result.content[0].text.split("\n[Result truncated");
+    const parsed = JSON.parse(returned);
+
+    expect(parsed).toMatchObject({ stderr: "boom", code: 3, truncated: true });
+    expect(parsed.stdout).toMatch(/… \d+ lines omitted …/);
+    expect(result.details.value).toEqual(parsed);
+  });
+
+  it("keeps the result and its notices within the output budget", async () => {
+    const result = await run(
+      `async function noisyLongNamedSessionHelper({}) { return Array.from({ length: 1000 }, () => "q".repeat(80)).join("\\n"); }`,
+    );
+    const text = result.content[0].text;
+
+    expect(text).toContain("[Saved function");
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(51_200);
   });
 });

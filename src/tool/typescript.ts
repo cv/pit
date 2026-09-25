@@ -3,11 +3,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  truncateHead,
-} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { createCapabilities } from "../capabilities/host.js";
@@ -24,6 +19,8 @@ import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
 import { runWithFunctionExecutor } from "../sandbox/run.js";
+import { LIMITS } from "../shared/bounds.js";
+import { fitValue } from "../shared/json-budget.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
@@ -42,19 +39,10 @@ import {
 } from "./metadata.js";
 import { formatTypeScriptSource } from "./source-formatter.js";
 
-export function display(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (value === undefined) {
-    return "undefined";
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
+export { display } from "../shared/json-budget.js";
+
+const TRUNCATION_NOTICE =
+  '\n[Result truncated to fit the output budget; omissions are marked "… N omitted …".]';
 
 const MAX_SAVED_FUNCTION_CATALOG_BYTES = 1200;
 
@@ -222,10 +210,6 @@ function buildToolResult(input: {
   promotionSuggestions: string[];
   executionProgress: ExecutionProgressController;
 }) {
-  const output = truncateHead(display(input.value), {
-    maxBytes: DEFAULT_MAX_BYTES,
-    maxLines: DEFAULT_MAX_LINES,
-  });
   const savedSignature = input.namedFunction
     ? getSavedFunctionCallSignature(input.functionState.effective.get(input.namedFunction) ?? "")
     : undefined;
@@ -237,20 +221,26 @@ function buildToolResult(input: {
       ? `\n[Saved ${input.projectFunction ? "project " : ""}function "${input.namedFunction}" without executing it${invocationGuidance}]`
       : `\n[Saved ${input.projectFunction ? "project " : ""}function "${input.namedFunction}"${invocationGuidance}]`
     : "";
+  const notices =
+    savedNotice +
+    promotionSuggestionNotice(input.promotionSuggestions) +
+    savedFunctionCatalogNotice(input.functionState.session);
+  // The result gets the budget the notices leave, so the complete text stays within Pi's limit.
+  const reserved = TRUNCATION_NOTICE + notices;
+  const output = fitValue(input.value, {
+    maxBytes: LIMITS.result.maxBytes - Buffer.byteLength(reserved),
+    maxLines: LIMITS.result.maxLines - (reserved.split("\n").length - 1),
+  });
   return {
     content: [
       {
         type: "text" as const,
-        text:
-          output.content +
-          (output.truncated ? "\n[Result truncated]" : "") +
-          savedNotice +
-          promotionSuggestionNotice(input.promotionSuggestions) +
-          savedFunctionCatalogNotice(input.functionState.session),
+        text: output.text + (output.truncated ? TRUNCATION_NOTICE : "") + notices,
       },
     ],
     details: {
-      value: output.truncated ? undefined : input.value,
+      // A truncated result keeps its fitted value, so the TUI shows what the model received.
+      value: output.value,
       truncated: output.truncated,
       ...(input.functionActivity.length > 0 ? { functions: input.functionActivity } : {}),
       ...input.executionProgress.snapshot(),
@@ -318,7 +308,7 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
   pi.registerTool({
     name: "typescript",
     label: "TypeScript Workspace",
-    description: createToolDescription(DEFAULT_MAX_BYTES),
+    description: createToolDescription(LIMITS.result.maxBytes),
     promptSnippet: PROMPT_SNIPPET,
     promptGuidelines: [...PROMPT_GUIDELINES],
     parameters: Type.Object({
