@@ -3,6 +3,7 @@ import {
   recordValue as object,
   stringValue as string,
 } from "../../shared/argument-values.js";
+import { clipText } from "../../shared/bounds.js";
 import { terminationError } from "../../shared/termination-errors.js";
 import type { PiControlServices } from "./services.js";
 
@@ -20,9 +21,7 @@ const MAX_REFRESH_ERROR_CHARS = 300;
 
 function boundedErrorMessage(error: Error): string {
   const message = error.message.replace(/\s+/g, " ").trim();
-  return message.length <= MAX_REFRESH_ERROR_CHARS
-    ? message
-    : `${message.slice(0, MAX_REFRESH_ERROR_CHARS - 1)}…`;
+  return clipText(message, MAX_REFRESH_ERROR_CHARS);
 }
 
 function refreshDiagnostics(result: ModelRefreshResult) {

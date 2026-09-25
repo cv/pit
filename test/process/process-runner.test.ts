@@ -25,6 +25,24 @@ describe("process runner", () => {
     expect(formatProcessCommand("git", ["status", "two words"])).toBe('git "status" "two words"');
   });
 
+  it("raises a bounded tail of long diagnostics with a counted omission", async () => {
+    const stderr = Array.from({ length: 2_000 }, (_, index) => `error ${index}`).join("\n");
+    const exec = async () => ({ stdout: "", stderr, code: 2 });
+    const error = await executeHostProcess({
+      pi: { exec } as any,
+      defaultCwd: process.cwd(),
+      program: "build",
+      args: [],
+      options: { raise: true },
+    }).catch((failure: Error) => failure);
+    const [headline, ...detail] = (error as Error).message.split("\n");
+
+    expect(headline).toBe("Command failed with exit code 2: build");
+    expect(detail[0]).toMatch(/^… \d+ lines omitted …$/);
+    expect(detail.at(-1)).toBe("error 1999");
+    expect(Buffer.byteLength(detail.join("\n"))).toBeLessThanOrEqual(4_000);
+  });
+
   it("runs object requests through configured dependencies", async () => {
     const exec = async () => ({ stdout: "ok", stderr: "", code: 0 });
     const runner = createProcessRunner({ exec } as any, process.cwd());

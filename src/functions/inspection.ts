@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { clipText } from "../shared/bounds.js";
 import type { FunctionScope } from "./core.js";
 import type { FunctionDefinition } from "./definitions.js";
 import { getFunctionDependencies, type FunctionDependencies } from "./dependencies.js";
@@ -71,9 +72,6 @@ type InspectionEntry =
   | { id: string; layer: "user" | "project"; kind: "invalid"; error: string; sealed?: false };
 
 const rank = (scope: FunctionScope): number => FUNCTION_LAYERS.indexOf(scope);
-const bounded = (text: string, limit: number): string =>
-  text.length > limit ? text.slice(0, limit - 1) + "…" : text;
-
 export class FunctionInspector {
   readonly #registry: ReturnType<typeof functionRegistry>;
   readonly #chains = new Map<string, InspectionEntry[]>();
@@ -179,7 +177,7 @@ export class FunctionInspector {
     let analysis: { effects: string[]; error?: string };
     if (entry.kind === "native") analysis = { effects: [entry.effect] };
     else if (entry.kind === "invalid")
-      analysis = { effects: [], error: bounded(entry.error, 2000) };
+      analysis = { effects: [], error: clipText(entry.error, 2000) };
     else {
       try {
         analysis = {
@@ -191,7 +189,7 @@ export class FunctionInspector {
       } catch (failure) {
         analysis = {
           effects: [],
-          error: bounded(failure instanceof Error ? failure.message : String(failure), 2000),
+          error: clipText(failure instanceof Error ? failure.message : String(failure), 2000),
         };
       }
     }
@@ -227,7 +225,7 @@ export class FunctionInspector {
           : entry.kind === "source"
             ? (getSavedFunctionCallSignature(entry.source, entry.id) ?? `${entry.id}(…)`)
             : "<unavailable>",
-      summary: bounded(summary, 256),
+      summary: clipText(summary, 256),
       origin: this.#origin(entry),
       lines: entry.kind === "source" ? entry.source.split("\n").length : 0,
       bytes: entry.kind === "source" ? Buffer.byteLength(entry.source) : 0,
@@ -269,7 +267,7 @@ export class FunctionInspector {
       throw new Error("function list offset must be non-negative and limit must be 1–200");
     const entries = this.summaries(options);
     const functions = entries.slice(offset, offset + limit);
-    for (const entry of functions) entry.signature = bounded(entry.signature, 1000);
+    for (const entry of functions) entry.signature = clipText(entry.signature, 1000);
     const next = offset + functions.length;
     return {
       functions,

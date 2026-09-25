@@ -1,5 +1,4 @@
-import { truncateTail } from "@earendil-works/pi-coding-agent";
-
+import { LIMITS, sliceText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { type CapabilityTrace, CapabilityTraceCollector } from "./capability-trace.js";
 import type {
@@ -12,10 +11,8 @@ import type {
 const UPDATE_INTERVAL_MS = 200;
 const MAX_COMPLETED_SHELL_CALLS = 32;
 /** Live output kept per shell call, shown by progress views and retained-output sections. */
-const SHELL_OUTPUT_TAIL = { maxBytes: 4000, maxLines: 8 } as const;
-
 export function retainShellOutputTail(output: string): string {
-  return truncateTail(output, SHELL_OUTPUT_TAIL).content;
+  return sliceText(output, LIMITS.shellTail, "tail").text;
 }
 
 export class ExecutionProgressController {

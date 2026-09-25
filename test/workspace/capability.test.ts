@@ -49,12 +49,23 @@ describe("workspace read and edit", () => {
     const result =
       await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => ({
       large: await workspaceRead("large.txt"),
+      largeRaw: await workspaceRead("large.txt", { format: "raw" }).then((read) => ({
+        truncated: read.truncated,
+        lines: read.lines,
+        length: read.content.length,
+        onlyX: /^x+$/.test(read.content),
+      })),
       empty: await workspaceRead("empty.txt"),
       missingRange: await workspaceRead("empty.txt", { offset: 2 }),
     })`);
     expect(result.large).toMatchObject({ truncated: true, lines: 1 });
     expect(result.large).not.toHaveProperty("totalLines");
     expect(result.large.content.length).toBeLessThan(100_000);
+    // Hashed reads never show part of a line under a whole-line anchor; raw reads keep a prefix.
+    expect(result.large.content).toBe("");
+    expect(result.largeRaw).toMatchObject({ truncated: true, lines: 1, onlyX: true });
+    expect(result.largeRaw.length).toBeGreaterThan(50_000);
+    expect(result.largeRaw.length).toBeLessThanOrEqual(51_200);
     expect(result.empty.content).toBe(`${lineAnchor(1, "")}|`);
     expect(result.missingRange.content).toBe("");
   });

@@ -1,13 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  truncateHead,
-  truncateTail,
-} from "@earendil-works/pi-coding-agent";
 
 import type { HostShellProgressEvent } from "../execution/types.js";
 import { boundedIntegerValue } from "../shared/argument-values.js";
+import { boundText, LIMITS, sliceText, type SliceKeep } from "../shared/bounds.js";
 import { terminationError } from "../shared/termination-errors.js";
 import { resolveWorkspacePath } from "../workspace/paths.js";
 import { executeStreamingProcess } from "./host.js";
@@ -59,20 +54,20 @@ export async function executeHostProcess({
   const maxBytes = boundedIntegerValue(
     options.maxBytes,
     "options.maxBytes",
-    DEFAULT_MAX_BYTES,
-    DEFAULT_MAX_BYTES,
+    LIMITS.processStream.maxBytes,
+    LIMITS.processStream.maxBytes,
   );
   const maxLines = boundedIntegerValue(
     options.maxLines,
     "options.maxLines",
-    DEFAULT_MAX_LINES,
-    DEFAULT_MAX_LINES,
+    LIMITS.processStream.maxLines,
+    LIMITS.processStream.maxLines,
   );
   const truncate = options.truncate ?? "tail";
   if (truncate !== "head" && truncate !== "tail") {
     throw new Error('options.truncate must be "head" or "tail"');
   }
-  const truncateOutput = truncate === "head" ? truncateHead : truncateTail;
+  const keep: SliceKeep = truncate === "head" ? "head" : "tail";
   const timeout = Number(options.timeoutMs ?? 120_000);
   onProgress?.({ phase: "start" });
   const result = onProgress
@@ -95,10 +90,14 @@ export async function executeHostProcess({
       : "termination" in result && result.termination === "abort"
         ? "Command aborted"
         : "");
-  const stdout = truncateOutput(result.stdout, { maxBytes, maxLines });
-  const stderr = truncateOutput(processStderr, { maxBytes, maxLines });
+  const stdout = sliceText(result.stdout, { maxBytes, maxLines }, keep);
+  const stderr = sliceText(processStderr, { maxBytes, maxLines }, keep);
   if (options.raise === true && result.code !== 0) {
-    const detail = (stderr.content.trim() || stdout.content.trim()).slice(-4000);
+    const detail = boundText(
+      stderr.text.trim() || stdout.text.trim(),
+      LIMITS.processError,
+      "tail",
+    ).text;
     const message =
       `Command failed with exit code ${result.code}: ${displayCommand}` +
       (detail ? `\n${detail}` : "");
@@ -118,8 +117,8 @@ export async function executeHostProcess({
         : new Error(message);
   }
   return {
-    stdout: stdout.content,
-    stderr: stderr.content,
+    stdout: stdout.text,
+    stderr: stderr.text,
     code: result.code,
     truncated: stdout.truncated || stderr.truncated,
   };

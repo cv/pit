@@ -144,9 +144,12 @@ describe("TypeScript failure context", () => {
 
     const multiline = Array.from({ length: 50 }, (_, index) => `diagnostic ${index}`).join("\n");
     const bounded = structureTypeScriptFailure(multiline, []);
-    expect(bounded.rootError.split("\n").length).toBeLessThanOrEqual(24);
-    expect(bounded.rootError).toContain("diagnostic 49");
-    expect(bounded.rootError).toContain("not retained");
+    const rows = bounded.rootError.split("\n");
+    const kept = rows.filter((row) => row.startsWith("diagnostic "));
+    expect(rows.length).toBeLessThanOrEqual(24);
+    expect(rows[0]).toBe("diagnostic 0");
+    expect(rows.at(-1)).toBe("diagnostic 49");
+    expect(rows).toContain(`… ${50 - kept.length} lines omitted …`);
     expect(Buffer.byteLength(bounded.rootError)).toBeLessThanOrEqual(8_000);
   });
 
