@@ -23,7 +23,7 @@ The guest protocol is defined in `queued-guest/wit/world.wit` and mirrored for t
 
 `.github/workflows/wasmtime-prebuilds.yml` builds and smoke-tests native addons on Linux, macOS, and Windows ARM64/x64 runners. The QuickJS component is built once because it is platform-independent. A tagged release calls the same workflow, collects its artifacts, creates a SHA-256 manifest, and publishes everything as release assets.
 
-Pi runs `npm install` for Git packages. `scripts/install-wasmtime.mjs` downloads only the current target's addon and the shared component, verifies their release checksums, and writes them atomically under `native/prebuilds/<target>/`. Missing assets warn and leave the deprecated Node fallback available. Set `PIT_WASMTIME_INSTALL_STRICT=1` when installation must fail instead.
+Pi runs `npm install` for Git packages. `scripts/install-wasmtime.mjs` downloads only the current target's addon and the shared component from the release matching the package version, or from the latest release while that version is unpublished. It verifies their release checksums, writes them atomically under `native/prebuilds/<target>/`, and records the release so a later install replaces stale or missing files. Missing assets warn; Pit still loads, and each run explains how to install the runtime. Set `PIT_WASMTIME_INSTALL_STRICT=1` when installation must fail instead.
 
 ## Local build and smoke test
 
