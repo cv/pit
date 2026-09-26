@@ -57,7 +57,7 @@ describe("project agent workflow resources", () => {
       }),
     ).not.toThrow();
     // Full graph validation can pass 15 s on contended CI runners with coverage enabled.
-  }, 30_000);
+  });
 
   it("does not enable repository workflows without project trust", async () => {
     const ctx = { cwd: process.cwd(), isProjectTrusted: () => false } as ExtensionContext;
