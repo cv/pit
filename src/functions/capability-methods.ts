@@ -15,7 +15,7 @@ import type { FunctionState, FunctionStateCommit } from "./state.js";
 import { userFunctionDirectory, userFunctionPath } from "./storage/user.js";
 
 type FunctionMethod = (typeof CAPABILITY_METHODS)["functions"][number];
-type FunctionMethodHandler = (args: unknown[]) => unknown | Promise<unknown>;
+type FunctionMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
 interface FunctionCapabilityServices {
   pi: ExtensionAPI;
@@ -164,7 +164,7 @@ function createPersistentFunctionHandlers({
       }
       return { ...functionState.userMetadata.get(name), source };
     },
-    removeUser: async (args) => {
+    removeUser: async (args, signal) => {
       const name = requiredName(args);
       if (!ctx.hasUI) {
         throw new Error("User function removal requires interactive confirmation");
@@ -172,8 +172,10 @@ function createPersistentFunctionHandlers({
       const confirmed = await ctx.ui.confirm(
         `Remove user function ${name}?`,
         `Delete ${userFunctionPath(name)} for every project?`,
+        { signal },
       );
-      if (!confirmed) {
+      // An answer that arrives after the call ended must not change anything.
+      if (!confirmed || signal.aborted) {
         throw terminationError("cancelled", "User function removal was cancelled");
       }
       const removed = await service.removeFromUser(name);
@@ -229,7 +231,7 @@ export function createFunctionCapabilityMethods({
         functionScope(args[1]) ?? new FunctionInspector(functionState, ctx.cwd).inspect(name).scope;
       return service.planRemoval(name, scope);
     },
-    promote: async (args) => {
+    promote: async (args, signal) => {
       const name = requiredName(args);
       const summary = string(args[1], "summary");
       const target = promotionTarget(args[2]);
@@ -243,8 +245,10 @@ export function createFunctionCapabilityMethods({
         const confirmed = await ctx.ui.confirm(
           `Save ${name} to user scope?`,
           `Make ${name} available in every Pit project under ${userFunctionDirectory()}?`,
+          { signal },
         );
-        if (!confirmed) {
+        // An answer that arrives after the call ended must not change anything.
+        if (!confirmed || signal.aborted) {
           throw terminationError("cancelled", "User function promotion was cancelled");
         }
         await service.promoteToUser({ name, summary, context: ctx, activity });

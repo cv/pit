@@ -7,6 +7,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 ### Fixed
 
 - Stop a cancelled or timed-out command's descendants too, such as a shell pipeline's processes, which previously kept running after Pit reported the command stopped. Commands now run in their own process group without Pi's controlling terminal, so programs that prompt on `/dev/tty` fail instead of writing into Pi's screen.
+- Dismiss a program's `ui.confirm`, `ui.input`, and `ui.select` dialogs when its call ends by cancellation, deadline, or session change; previously they stayed open after the call reported its outcome.
+- Ignore user function promotion and removal confirmations answered after their call ended; previously a late Yes still promoted or deleted the function while the transcript recorded only the timeout.
 
 ## [0.18.0] - 2026-09-25
 
