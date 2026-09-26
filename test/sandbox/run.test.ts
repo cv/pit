@@ -452,6 +452,29 @@ describe("runInSandbox", () => {
     expect(completed).toBe(true);
   });
 
+  // The PitProgram assignability chain does not say how to fix a result that is not JSON.
+  it.each<{ name: string; source: string; hinted: boolean }>([
+    {
+      name: "an unknown array",
+      source: "async ({}) => ({ items: [] as unknown[] })",
+      hinted: true,
+    },
+    {
+      name: "a record of unknown values",
+      source: "async ({}) => ({}) as Record<string, unknown>",
+      hinted: true,
+    },
+    {
+      name: "an unrelated type error",
+      source: "async ({}) => (1 as number).toUpperCase()",
+      hinted: false,
+    },
+  ])("hints at JSON results only for non-JSON results: $name", async ({ source, hinted }) => {
+    const error = await runInSandbox(source, async () => null).catch((caught: unknown) => caught);
+    expect(String(error)).toContain("TypeScript validation failed");
+    expect(String(error).includes("result must be JSON")).toBe(hinted);
+  });
+
   // Budgets exceed the process's one-time guest compilation on small CI runners, so the
   // call is in flight when the deadline passes.
   it("enforces the deadline when a capability handler never settles", async () => {
