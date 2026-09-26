@@ -90,6 +90,35 @@ describe("inspectGitHubRunFailure", () => {
     );
   });
 
+  it("lists failed Vitest tests with their errors and counts failures outside the log window", async () => {
+    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const log = [
+      stamp("##[group]Run npm run coverage"),
+      stamp(" FAIL  test/a.test.ts > suite > times out"),
+      stamp("Error: Test timed out in 15000ms."),
+      stamp(" FAIL  test/b.test.ts > compares"),
+      stamp("\u001b[31mAssertionError: expected 1 to be 2\u001b[39m"),
+      stamp(" FAIL  test/a.test.ts > suite > times out"),
+      stamp("      Tests  3 failed | 10 passed (13)"),
+      stamp("##[error]Process completed with exit code 1."),
+    ].join("\n");
+    const api = vi.fn().mockResolvedValue(processResult({ stdout: log, truncated: true }));
+    const result = await inspect(
+      { gh: { runView: runView([job(7)]), api } },
+      { repo: "cv/pit", id: 42 },
+    );
+    const [failed] = result.failedJobs as Array<Record<string, unknown>>;
+    expect(failed).toMatchObject({
+      testSummary: "Tests 3 failed | 10 passed (13)",
+      testFailures: [
+        { test: "test/a.test.ts > suite > times out", error: "Error: Test timed out in 15000ms." },
+        { test: "test/b.test.ts > compares", error: "AssertionError: expected 1 to be 2" },
+      ],
+      // The summary reports a third failure that the fetched window no longer contained.
+      testFailuresOmitted: 1,
+    });
+  });
+
   it("falls back to the lines before post-job cleanup when no error was logged", async () => {
     const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
     const log = [

@@ -113,6 +113,8 @@ Interpret the result before drawing a conclusion:
 - With `mutationApplied: true` and `inconclusive: false`, inspect the failing test names and reasons. Only the intended assertion failures demonstrate sensitivity; a nonzero `code` alone does not. A passing mutant identifies a possible coverage gap, not a product bug or automatic deletion permission.
 - Report omitted failures and shortened diagnostics explicitly. Narrow the files/filter when the decisive cause was not retained.
 
+`probePitAuditMutation()` mutates modules through a Vite transform, so it cannot reach `.pi/functions` sources, which the workflow tests load with `readFile`. For those, apply one mutation on disk at a time, restore it in `finally`, and confirm the file is byte-identical before the next run; read failures from the runner's report, not its exit code.
+
 The helper does not rewrite the owner, but selected tests still execute their normal effects. Use reviewed test files, run probes sequentially, and do not edit code while a runner is active. The workflow requires jq and a `/tmp`-capable host. Route environment/API failures through `inspectPitDependencyInstall()` and the delivery skill's recovery guidance, not test deletion.
 
 ## Edit and validate one coherent batch

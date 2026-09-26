@@ -9,6 +9,9 @@
  *   "Fixture completed\.". A submitted prompt needs a new match; otherwise any match settles.
  * @param input.timeoutMs - Maximum wait (1000-120000). The default is 20000 ms; settled is false
  *   when it expires.
+ * @param input.delayMs - Capture after this fixed delay (100-120000 ms) instead of waiting for a
+ *   completion, for states without one such as a running command. Cannot be combined with
+ *   waitFor; settled is false.
  * @param input.history - Scrollback rows captured above the screen (0-50000). The default is 400.
  * @param input.match - Regular expression selecting captured rows to return with their indexes,
  *   at most the last 40.
@@ -25,6 +28,7 @@ async function runPitUxCase(
     width?: number;
     waitFor?: string;
     timeoutMs?: number;
+    delayMs?: number;
     history?: number;
     match?: string;
     tail?: number;
@@ -58,6 +62,13 @@ async function runPitUxCase(
   const tail = integerInput("tail", input.tail, 25, 1, 200);
   const width =
     input.width === undefined ? undefined : integerInput("width", input.width, 0, 40, 400);
+  const delayMs =
+    input.delayMs === undefined
+      ? undefined
+      : integerInput("delayMs", input.delayMs, 0, 100, 120000);
+  if (delayMs !== undefined && input.waitFor !== undefined) {
+    throw new Error("delayMs and waitFor cannot be combined");
+  }
   const completion = new RegExp(input.waitFor ?? "Fixture completed\\.", "g");
   const pattern = input.match === undefined ? undefined : new RegExp(input.match);
 
@@ -80,9 +91,13 @@ async function runPitUxCase(
   }
   if (input.keys?.length) await tmux(["send-keys", "-t", input.target, ...input.keys]);
 
-  const deadline = Date.now() + timeoutMs;
+  const deadline = delayMs === undefined ? Date.now() + timeoutMs : 0;
   let rows = await capture();
   let settled = false;
+  if (delayMs !== undefined) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    rows = await capture();
+  }
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 400));
     rows = await capture();

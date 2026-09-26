@@ -1,7 +1,9 @@
 /**
  * Explains a failed GitHub Actions run: its failed jobs and steps, plus a bounded log excerpt
  * ending at each job's last `##[error]` line. Job logs end with post-job cleanup, so the excerpt
- * anchors on the error instead of the log tail.
+ * anchors on the error instead of the log tail. Test jobs also list each failed Vitest test with
+ * its first error line (at most 30) and Vitest's summary; `testFailuresOmitted` counts failures
+ * beyond that list or outside the fetched log window.
  *
  * @param input.lines - Log lines to keep before each job's last error (5-200). The default is 40.
  * @param input.jobs - Failed jobs to inspect (1-10). The default is 3; `omittedJobs` counts the rest.
@@ -67,6 +69,31 @@ async function inspectGitHubRunFailure(
       .slice(0, 300);
   const ERROR_MARKER = "##[error]";
   const STEP_MARKER = "##[group]Run ";
+  // Vitest's summary lists each failed test as "FAIL  file > name", followed by its error.
+  const FAILED_TEST = /^ ?FAIL\s+(.+)$/;
+  const ERROR_LINE = /^[A-Za-z]*Error\b/;
+  const TEST_LIMIT = 30;
+  const testFailures = (lines: string[]) => {
+    const failures = new Map<string, string>();
+    lines.forEach((line, index) => {
+      const test = FAILED_TEST.exec(line)?.[1];
+      if (!test || failures.has(test)) return;
+      const error = lines.slice(index + 1, index + 4).find((next) => ERROR_LINE.test(next));
+      failures.set(test, (error ?? "").slice(0, 200));
+    });
+    // The last totals line wins; Vitest prints it once, at the end of the run.
+    let summary: string | null = null;
+    for (const line of lines) {
+      if (/^\s*Tests\s+\d+ failed/.test(line)) summary = line.trim().replace(/\s+/g, " ");
+    }
+    const reported = Number(summary?.match(/(\d+) failed/)?.[1] ?? 0);
+    const listed = Math.min(failures.size, TEST_LIMIT);
+    return {
+      testSummary: summary,
+      testFailures: [...failures].slice(0, TEST_LIMIT).map(([test, error]) => ({ test, error })),
+      testFailuresOmitted: Math.max(failures.size, reported) - listed,
+    };
+  };
 
   const failedJobs = await Promise.all(
     failed.slice(0, jobLimit).map(async (job) => {
@@ -90,6 +117,7 @@ async function inspectGitHubRunFailure(
           excerpt: "",
           logTruncated: false,
           logError: (log.stderr || log.stdout).trim().slice(0, 300),
+          ...testFailures([]),
         });
       }
       const lines = log.stdout.split("\n").map(clean);
@@ -113,6 +141,7 @@ async function inspectGitHubRunFailure(
           .filter((line) => line !== "##[endgroup]")
           .join("\n"),
         logTruncated: log.truncated,
+        ...testFailures(lines),
       });
     }),
   );
