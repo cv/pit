@@ -70,6 +70,9 @@ result types from injected functions instead of copying their schemas.
 - `delivery.commit()` refuses unrelated staged paths, directories, and unchanged listed
   files. It stages tracked paths with `git add -u`, never force-adds an ignored new file, and
   commits an already-staged deletion such as a `git mv` source as staged.
+- `tests.probeMutation()` mutates `src/` owners through a temporary Vite transform and
+  `.pi/functions` owners through the workflow test loader, never rewriting the owner. A
+  workflow mutation that no selected test loads fails as not applied.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
 - `delivery.listChangedFiles()` preserves literal filenames, uses rename destinations,

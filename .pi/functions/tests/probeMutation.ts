@@ -1,4 +1,4 @@
-/** Runs one guarded literal source mutation through a temporary Vite transform and explicit targeted tests without rewriting the owner. Requires a passing baseline; reports bounded failures, omissions, and inconclusive runs. Uses /tmp, removes its temporary artifacts, and preserves runner/cleanup errors. */
+/** Runs one guarded literal source mutation and explicit targeted tests without rewriting the owner: a temporary Vite transform mutates `src/` modules, and the workflow test loader mutates `.pi/functions` sources. Requires a passing baseline; reports bounded failures, omissions, and inconclusive runs. Uses /tmp, removes its temporary artifacts, and preserves runner/cleanup errors. */
 async function probeMutation(
   { context: { get }, workspace: { edit, read }, shell: { execFile }, jq },
   input: {
@@ -17,8 +17,10 @@ async function probeMutation(
     file.endsWith(suffix) &&
     [...file].every((char) => allowed.includes(char)) &&
     file.split("/").every((part) => part !== "" && part !== "." && part !== "..");
-  if (!safePath(input.owner, "src/", ".ts"))
-    throw new Error("Expected an explicit source owner path");
+  // Workflow sources are read by the workflow test loader, not imported through Vite.
+  const workflowSource = safePath(input.owner, ".pi/functions/", ".ts");
+  if (!workflowSource && !safePath(input.owner, "src/", ".ts"))
+    throw new Error("Expected an explicit src/ or .pi/functions/ owner path");
   if (!input.label.trim() || input.label.length > 200)
     throw new Error("label must contain 1-200 characters");
   if (
@@ -53,6 +55,7 @@ async function probeMutation(
   const id = `pit-audit-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const configFile = `/tmp/${id}.config.mjs`;
   const reportFile = `/tmp/${id}.json`;
+  const markerFile = `/tmp/${id}.applied`;
   const marker = `APPLIED_${id}`;
   const mutation = {
     owner: `${cwd}/${input.owner}`,
@@ -60,18 +63,30 @@ async function probeMutation(
     after: input.after,
     marker,
   };
-  const content = [
-    `import base from ${JSON.stringify(`${cwd}/vitest.config.ts`)};`,
-    `const mutation = ${JSON.stringify(mutation)};`,
-    `export default { ...base, root: ${JSON.stringify(cwd)}, plugins: [...(base.plugins ?? []), {`,
-    'name: "pit-audit-mutation", enforce: "pre",',
-    "transform(source, id) {",
-    "if (id !== mutation.owner) return;",
-    'if (source.split(mutation.before).length !== 2) throw new Error("Expected exactly one audit mutation match");',
-    "console.error(mutation.marker);",
-    "return { code: source.replace(mutation.before, () => mutation.after), map: null };",
-    "} }] };",
-  ].join("\n");
+  const workflowMutation = {
+    path: input.owner,
+    before: input.before,
+    after: input.after,
+    markerFile,
+  };
+  const content = workflowSource
+    ? [
+        `import base from ${JSON.stringify(`${cwd}/vitest.config.ts`)};`,
+        `const mutation = ${JSON.stringify(workflowMutation)};`,
+        `export default { ...base, root: ${JSON.stringify(cwd)}, test: { ...base.test, env: { ...(base.test?.env ?? {}), PIT_WORKFLOW_MUTATION: JSON.stringify(mutation) } } };`,
+      ].join("\n")
+    : [
+        `import base from ${JSON.stringify(`${cwd}/vitest.config.ts`)};`,
+        `const mutation = ${JSON.stringify(mutation)};`,
+        `export default { ...base, root: ${JSON.stringify(cwd)}, plugins: [...(base.plugins ?? []), {`,
+        'name: "pit-audit-mutation", enforce: "pre",',
+        "transform(source, id) {",
+        "if (id !== mutation.owner) return;",
+        'if (source.split(mutation.before).length !== 2) throw new Error("Expected exactly one audit mutation match");',
+        "console.error(mutation.marker);",
+        "return { code: source.replace(mutation.before, () => mutation.after), map: null };",
+        "} }] };",
+      ].join("\n");
   const filter = String.raw`
     if (.testResults | type) != "array" then error("Missing Vitest testResults") else . end
     | [.testResults[] | .assertionResults[] | select(.status == "failed")
@@ -128,9 +143,17 @@ async function probeMutation(
       ],
       { cwd, timeoutMs: 120000, maxBytes: 8000, maxLines: 80, truncate: "head", raise: false },
     );
-    if (!(result.stdout + result.stderr).includes(marker))
+    const applied = workflowSource
+      ? await read(markerFile, { format: "raw", limit: 1 }).then(
+          () => true,
+          () => false,
+        )
+      : (result.stdout + result.stderr).includes(marker);
+    if (!applied)
       throw new Error(
-        `Mutation was not observed in bounded runner output: ${result.stderr.slice(0, 1200)}`,
+        workflowSource
+          ? `Mutation was not applied: no selected test loaded ${input.owner}`
+          : `Mutation was not observed in bounded runner output: ${result.stderr.slice(0, 1200)}`,
       );
     const parsed = await jq({ file: reportFile, filter });
     const report = parsed.values[0] as Report | undefined;
@@ -156,7 +179,7 @@ async function probeMutation(
     failure = (error instanceof Error ? error.message : String(error)).slice(0, 2000);
   }
   const cleanupErrors: string[] = [];
-  for (const file of [configFile, reportFile]) {
+  for (const file of [configFile, reportFile, markerFile]) {
     try {
       const current = await read(file, { format: "raw", limit: 1 });
       await edit(file, { revision: current.revision, changes: [{ kind: "deleteFile" }] });

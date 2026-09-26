@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 
 import ts from "typescript";
@@ -9,7 +9,8 @@ import ts from "typescript";
 export async function loadWorkflowFunction(id: string) {
   const segments = id.split(".");
   const name = segments.at(-1) ?? id;
-  const source = await readFile(`.pi/functions/${segments.join("/")}.ts`, "utf8");
+  const path = `.pi/functions/${segments.join("/")}.ts`;
+  const source = await mutated(path, await readFile(path, "utf8"));
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   });
@@ -17,6 +18,28 @@ export async function loadWorkflowFunction(id: string) {
     dependencies: Record<string, unknown>,
     input?: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+}
+
+/**
+ * tests.probeMutation's counterfactual for workflow sources: they are read here, not imported
+ * through Vite, so its transform cannot reach them. The mutation must match exactly once, and the
+ * marker file records that it was applied.
+ */
+async function mutated(path: string, source: string): Promise<string> {
+  const raw = process.env.PIT_WORKFLOW_MUTATION;
+  if (raw === undefined) return source;
+  const mutation = JSON.parse(raw) as {
+    path: string;
+    before: string;
+    after: string;
+    markerFile: string;
+  };
+  if (mutation.path !== path) return source;
+  if (source.split(mutation.before).length !== 2) {
+    throw new Error("Expected exactly one audit mutation match");
+  }
+  await appendFile(mutation.markerFile, `${path}\n`);
+  return source.replace(mutation.before, () => mutation.after);
 }
 
 export function processResult(
