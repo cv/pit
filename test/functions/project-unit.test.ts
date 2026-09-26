@@ -195,6 +195,7 @@ describe("project function storage", () => {
   it("loads valid files and reports malformed files", async () => {
     const directory = join(cwd, ".pi/functions");
     await mkdir(join(directory, "ignored-directory.ts"), { recursive: true });
+    await mkdir(join(directory, "functions"), { recursive: true });
     await Promise.all([
       writeFile(join(directory, "ignored.txt"), "ignored"),
       writeFile(
@@ -218,6 +219,10 @@ describe("project function storage", () => {
         join(directory, "invalid.ts"),
         "/** Invalid. */ async function invalid({}) { return 1n; }",
       ),
+      writeFile(
+        join(directory, "functions/listAll.ts"),
+        "/** Rejected override. */ async function listAll({}) { return []; }",
+      ),
       writeFile(join(directory, "oversized.ts"), "x".repeat(100_001)),
     ]);
     const functions = registry();
@@ -227,6 +232,9 @@ describe("project function storage", () => {
     expect([...docs.keys()]).toEqual(["alpha", "beta"]);
     expect(errors.join("\n")).toMatch(
       /persistent functions require a JSDoc summary|filename must be|source exceeds|TypeScript validation failed/,
+    );
+    expect(errors).toContainEqual(
+      expect.stringContaining('global function "functions.listAll" is sealed'),
     );
     expect(await loadProjectFunctions(ctx(false), functions, docs)).toEqual([]);
     expect(functions.size).toBe(0);

@@ -171,6 +171,12 @@ describe("hashline primitives", () => {
       }),
     ).toThrow(/revision: null/);
     expect(() =>
+      prepareEdit("existing", {
+        revision: null,
+        changes: [{ kind: "replaceFile", content: "replacement" }],
+      }),
+    ).toThrow(/Revision mismatch.*Re-read/);
+    expect(() =>
       prepareEdit(undefined, { revision: null, changes: [{ kind: "deleteFile" }] }),
     ).toThrow(/exactly one replaceFile/);
     expect(() => prepareEdit("x", null)).toThrow(/changes must be an object/);

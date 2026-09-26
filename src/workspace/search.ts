@@ -2,8 +2,9 @@ import { readFile, stat } from "node:fs/promises";
 
 import fg from "fast-glob";
 
+import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
 import { fileRevision, lineAnchor } from "./hashline.js";
-import { checkAbort, object, resolveWorkspacePath, string, workspaceResultPath } from "./paths.js";
+import { checkAbort, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { InterruptibleRegexMatcher } from "./regex-worker.js";
 
 const MAX_SEARCH_FILE_BYTES = 1_000_000;

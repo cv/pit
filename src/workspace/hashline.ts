@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
+
 const ANCHOR_PATTERN = /^([1-9][0-9]*):([A-Za-z0-9_-]{5})$/;
 const NEWLINE_PATTERN = /\r\n|\n|\r/g;
 const LINE_HASH_LENGTH = 5;
@@ -127,20 +129,6 @@ function dominantSeparator(lines: readonly FileLine[]): "\n" | "\r\n" {
     }
   }
   return crlf > lf ? "\r\n" : "\n";
-}
-
-function object(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function string(value: unknown, label: string): string {
-  if (typeof value !== "string") {
-    throw new TypeError(`${label} must be a string`);
-  }
-  return value;
 }
 
 function parseSpec(raw: unknown): EditChangeSpec {

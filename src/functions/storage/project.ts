@@ -18,8 +18,6 @@ import {
 } from "./files.js";
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
-const PROJECT_FUNCTION_DIRECTORY = ["functions"] as const;
-
 export interface ProjectFunctionConfig {
   enabled: boolean;
   allowedTools?: string[];
@@ -27,19 +25,11 @@ export interface ProjectFunctionConfig {
 }
 
 export function projectFunctionDirectory(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, ...PROJECT_FUNCTION_DIRECTORY);
+  return join(cwd, CONFIG_DIR_NAME, "functions");
 }
 
-function configPath(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, "pit.json");
-}
-
-function pathFor(directory: string, name: string): string {
-  return join(directory, functionRelativePath(name));
-}
-
-function currentPathFor(cwd: string, name: string): string {
-  return pathFor(projectFunctionDirectory(cwd), name);
+function projectFunctionPath(cwd: string, name: string): string {
+  return join(projectFunctionDirectory(cwd), functionRelativePath(name));
 }
 
 export async function loadProjectFunctionConfig(
@@ -50,7 +40,7 @@ export async function loadProjectFunctionConfig(
   }
   let source: string;
   try {
-    source = await readFile(configPath(ctx.cwd), "utf8");
+    source = await readFile(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "utf8");
   } catch (error) {
     if (isMissingFileError(error)) {
       return { enabled: false };
@@ -63,24 +53,18 @@ export async function loadProjectFunctionConfig(
       throw new Error("configuration must be a JSON object");
     }
     const values = config as Record<string, unknown>;
-    const enabledSection = (key: "projectFunctions"): boolean | undefined => {
-      const section = values[key];
-      if (section === undefined) {
-        return;
-      }
+    const section = values.projectFunctions;
+    let projectEnabled = false;
+    if (section !== undefined) {
       if (!(section && typeof section === "object" && !Array.isArray(section))) {
-        throw new Error(`${key} must be an object`);
+        throw new Error("projectFunctions must be an object");
       }
       const enabled = (section as Record<string, unknown>).enabled;
-      if (enabled === undefined) {
-        return;
+      if (enabled !== undefined && typeof enabled !== "boolean") {
+        throw new Error("projectFunctions.enabled must be a boolean");
       }
-      if (typeof enabled !== "boolean") {
-        throw new Error(`${key}.enabled must be a boolean`);
-      }
-      return enabled;
-    };
-    const projectEnabled = enabledSection("projectFunctions") ?? false;
+      projectEnabled = enabled ?? false;
+    }
     const allowedTools = values.allowedTools;
     if (
       allowedTools !== undefined &&
@@ -115,14 +99,14 @@ export async function saveProjectFunction(
   validatePersistentFunction(name, source, candidates, { layer: "project", userFunctions: user });
   const replaced = registry.has(name);
   await assertPersistentPath(projectFunctionDirectory(cwd), name);
-  await writePersistentFunctionFile(currentPathFor(cwd, name), source);
+  await writePersistentFunctionFile(projectFunctionPath(cwd, name), source);
   registry.set(name, source);
   return replaced;
 }
 
 export async function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
   await assertPersistentPath(projectFunctionDirectory(cwd), name);
-  return removePersistentFunctionFile(currentPathFor(cwd, name));
+  return removePersistentFunctionFile(projectFunctionPath(cwd, name));
 }
 
 export async function loadProjectFunctions(
