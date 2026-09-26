@@ -11,9 +11,9 @@ function deferredResult() {
   return { promise, finish: () => resolve(processResult()) };
 }
 
-describe("validatePit workflow behavior", () => {
+describe("delivery.validate workflow behavior", () => {
   it("starts independent gates together, then waits before coverage and packaging", async () => {
-    const validate = await loadWorkflowFunction("validatePit");
+    const validate = await loadWorkflowFunction("delivery.validate");
     const check = deferredResult();
     const tests = deferredResult();
     const coverage = deferredResult();
@@ -53,7 +53,7 @@ describe("validatePit workflow behavior", () => {
   ])(
     "runs $name without duplicating or adding unrequested gates",
     async ({ coverage, packageCheck }) => {
-      const validate = await loadWorkflowFunction("validatePit");
+      const validate = await loadWorkflowFunction("delivery.validate");
       const run = vi.fn(async (_script: string) => processResult());
       const test = vi.fn(async () => processResult());
       const output = await validate({ npm: { run, test } }, { coverage, packageCheck });
@@ -78,7 +78,7 @@ describe("validatePit workflow behavior", () => {
   ])(
     "stops after $stage fails and retains a bounded diagnostic tail",
     async ({ stage, forbidden }) => {
-      const validate = await loadWorkflowFunction("validatePit");
+      const validate = await loadWorkflowFunction("delivery.validate");
       const calls: string[] = [];
       const execute = async (name: string, options: { raise?: boolean } = {}) => {
         calls.push(name);

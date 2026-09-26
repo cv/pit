@@ -116,23 +116,23 @@ Preserve useful path/line references and nested function attribution. Treat canc
 2. Write a brief design: user question, primary information, state/outcome mapping, collapsed/expanded/partial hierarchy, completeness strategy, and constraints. Record intentional exceptions and why.
 3. Use the [review guide](references/review.md) to build a representative before/after gallery. Reuse existing harnesses and project helpers. Compare density without sacrificing meaning.
 4. Apply [pit-test-audit](../pit-test-audit/SKILL.md) when authoring or reviewing assertions. Protect semantic correctness, retained-field visibility, composition, omission notices, and width—not only snapshots or substring matches. Keep lifecycle/concurrency tests explicit; use descriptive typed tables for input/output variations.
-5. Use `runPitTargetedTests()` for the affected renderer/producer suites during development. Follow [pit-delivery](../pit-delivery/SKILL.md) for dependency diagnosis, final gates, result interpretation, and loaded-versus-disk checks; do not duplicate that execution workflow here. Review actual rendered output, including warning and error paths.
+5. Use `tests.runTargeted()` for the affected renderer/producer suites during development. Follow [pit-delivery](../pit-delivery/SKILL.md) for dependency diagnosis, final gates, result interpretation, and loaded-versus-disk checks; do not duplicate that execution workflow here. Review actual rendered output, including warning and error paths.
 6. After a renderer behavior change, follow the non-closing delivery/reload workflow and exercise it in live Pi. Prefer the [isolated tmux workflow](references/tmux.md) for agent-driven captures, resizing, search, selection/copy, and cancellation when available; do not delegate automatable checks to the user. Headless output cannot certify colour contrast, scroll stability, click/key handling, cancellation, or interaction with the surrounding transcript. State which observations are headless versus interactive.
 
-The tmux workflow's project functions start and stop the isolated Pi (`managePitUxSession`), submit prompts or keys and capture the pane (`runPitUxCase`), run fixtures in new sessions and summarize their outcomes (`runPitUxFixtures`), and read a row's styles for theme checks (`inspectPitUxRowStyle`). They refuse sockets outside their own runs. Always stop the session, and give runs a 300000 ms tool timeout:
+The tmux workflow's project functions start and stop the isolated Pi (`ux.manageSession`), submit prompts or keys and capture the pane (`ux.runCase`), run fixtures in new sessions and summarize their outcomes (`ux.runFixtures`), and read a row's styles for theme checks (`ux.inspectRowStyle`). They refuse sockets outside their own runs. Always stop the session, and give runs a 300000 ms tool timeout:
 
 ```ts pit-example
-async ({ managePitUxSession, runPitUxFixtures }, input: { fixtures: string[] }) => {
-  const session = await managePitUxSession({ action: "start" });
+async ({ ux: { manageSession, runFixtures } }, input: { fixtures: string[] }) => {
+  const session = await manageSession({ action: "start" });
   if (session.action !== "start") throw new Error("expected a started session");
   try {
-    return await runPitUxFixtures({
+    return await runFixtures({
       socket: session.socket,
       target: session.target,
       fixtures: input.fixtures,
     });
   } finally {
-    await managePitUxSession({ action: "stop", socket: session.socket, root: session.root });
+    await manageSession({ action: "stop", socket: session.socket, root: session.root });
   }
 }
 ```

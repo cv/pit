@@ -1,17 +1,17 @@
 /**
- * Runs offline fixtures one at a time in an isolated Pi from managePitUxSession, each in a new Pi
+ * Runs offline fixtures one at a time in an isolated Pi from ux.manageSession, each in a new Pi
  * session, and returns whether each settled and its status rows and decisive diagnostics.
  *
  * @param input.fixtures - Fixture names to run in order (1-30), such as trace-a or timeout.
  * @param input.timeoutMs - Maximum wait per fixture (1000-120000). The default is 40000 ms.
  */
-async function runPitUxFixtures(
-  { runPitUxCase, shell: { execFile } },
+async function runFixtures(
+  { ux: { runCase }, shell: { execFile } },
   input: { socket: string; target: string; fixtures: string[]; timeoutMs?: number },
 ) {
-  // Checked here too because /new is sent before runPitUxCase validates its input.
+  // Checked here too because /new is sent before ux.runCase validates its input.
   if (!/^\/tmp\/pit-ux-[A-Za-z0-9]+\/tmux\.sock$/.test(input.socket)) {
-    throw new Error("socket must come from managePitUxSession (/tmp/pit-ux-*/tmux.sock)");
+    throw new Error("socket must come from ux.manageSession (/tmp/pit-ux-*/tmux.sock)");
   }
   if (!/^[A-Za-z0-9_-]+:\d+\.\d+$/.test(input.target)) {
     throw new Error("target must be session:window.pane");
@@ -36,7 +36,7 @@ async function runPitUxFixtures(
       });
     }
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    const run = await runPitUxCase({
+    const run = await runCase({
       socket: input.socket,
       target: input.target,
       fixture,

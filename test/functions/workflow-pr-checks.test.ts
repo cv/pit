@@ -27,9 +27,9 @@ const pullRequest = (rollup: unknown[] | null, mergeStateStatus = "BLOCKED") =>
     }),
   });
 
-describe("waitForGitHubPullRequestChecks", () => {
+describe("pr.waitForChecks", () => {
   it("polls until every check passes and reports the merge state", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi
       .fn()
       .mockResolvedValueOnce(
@@ -67,7 +67,7 @@ describe("waitForGitHubPullRequestChecks", () => {
   });
 
   it("asks for the current repository when no repo is given", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn().mockResolvedValue(pullRequest([check("test", "COMPLETED", "SUCCESS")]));
     await wait({ gh: { prView } }, { number: 7 });
     expect(prView.mock.calls[0]?.[1]).not.toHaveProperty("repo");
@@ -81,7 +81,7 @@ describe("waitForGitHubPullRequestChecks", () => {
     ]);
 
   it("raises at failed checks while others are still pending", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn().mockResolvedValue(failingRollup());
     await expect(wait({ gh: { prView } }, { number: 7 })).rejects.toThrow(
       "has failed checks: test (FAILURE), legacy (ERROR)",
@@ -90,7 +90,7 @@ describe("waitForGitHubPullRequestChecks", () => {
   });
 
   it("returns failed and pending checks when raising is suppressed", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn().mockResolvedValue(failingRollup());
     expect(await wait({ gh: { prView } }, { number: 7, raise: false })).toMatchObject({
       outcome: "failed",
@@ -103,7 +103,7 @@ describe("waitForGitHubPullRequestChecks", () => {
   });
 
   it("explains a timeout when no checks were reported", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn().mockResolvedValue(pullRequest(null));
     const input = { number: 7, attempts: 3, intervalMs: 1000 };
     const returned = wait({ gh: { prView } }, { ...input, raise: false });
@@ -122,7 +122,7 @@ describe("waitForGitHubPullRequestChecks", () => {
   });
 
   it("keeps the whole wait inside the polling budget", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn().mockResolvedValue(pullRequest([check("test", "QUEUED")]));
     const started = Date.now();
     const pending = wait(
@@ -148,7 +148,7 @@ describe("waitForGitHubPullRequestChecks", () => {
     { name: "long initial delay", input: { number: 7, initialDelayMs: 120_001 } },
     { name: "malformed repository", input: { number: 7, repo: "not a repo" } },
   ])("rejects $name before querying GitHub", async ({ input }) => {
-    const wait = await loadWorkflowFunction("waitForGitHubPullRequestChecks");
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn();
     await expect(wait({ gh: { prView } }, input)).rejects.toThrow();
     expect(prView).not.toHaveBeenCalled();

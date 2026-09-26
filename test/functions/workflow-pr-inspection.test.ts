@@ -88,7 +88,7 @@ function dependencies(view = rawView, commits: unknown[] = defaultCommits) {
 
 describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   it("projects a large body before the process cap and reports omitted discussion and pages", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+    const inspect = await loadWorkflowFunction("pr.inspect");
     const gh = dependencies();
     const result = await inspect({ gh }, { number: 1 });
     expect(result).toMatchObject({
@@ -126,7 +126,7 @@ describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   });
 
   it("fits a long discussion into the output budget with explicit shortening", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+    const inspect = await loadWorkflowFunction("pr.inspect");
     const gh = dependencies(
       {
         ...rawView,
@@ -172,7 +172,7 @@ describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   });
 
   it("retries multibyte previews instead of failing on transport truncation", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+    const inspect = await loadWorkflowFunction("pr.inspect");
     const emoji = "\u{1F642}";
     const gh = dependencies({
       ...rawView,
@@ -191,7 +191,7 @@ describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   });
 
   it("projects commit subjects and flags longer messages", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+    const inspect = await loadWorkflowFunction("pr.inspect");
     const gh = dependencies();
     await inspect({ gh }, { number: 1 });
     const query = gh.api.mock.calls.find(([endpoint]) => endpoint.endsWith("/commits"))?.[1]?.[1];
@@ -220,7 +220,7 @@ describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   it.each(["view", "metadata", "commits", "files"])(
     "rejects truncated %s JSON before parsing it",
     async (stage) => {
-      const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+      const inspect = await loadWorkflowFunction("pr.inspect");
       const gh = dependencies();
       const broken = processResult({ stdout: "[partial", truncated: true });
       if (stage === "view") gh.prView.mockResolvedValue(broken);
@@ -242,14 +242,14 @@ describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   );
 
   it("distinguishes malformed complete JSON from truncation", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+    const inspect = await loadWorkflowFunction("pr.inspect");
     const gh = dependencies();
     gh.prView.mockResolvedValue(processResult({ stdout: "not json" }));
     await expect(inspect({ gh }, { number: 1 })).rejects.toThrow("view returned invalid JSON");
   });
 
   it("rejects a summary that cannot fit even without text previews", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+    const inspect = await loadWorkflowFunction("pr.inspect");
     const gh = dependencies();
     gh.api.mockImplementation(async (endpoint) =>
       processResult({
@@ -268,7 +268,7 @@ describe.skipIf(skipWithoutJq)("bounded PR inspection", () => {
   it.each([{ number: 0 }, { number: 1, repo: "invalid/repo/path" }])(
     "validates identifiers before requests: %j",
     async (input) => {
-      const inspect = await loadWorkflowFunction("inspectGitHubPullRequest");
+      const inspect = await loadWorkflowFunction("pr.inspect");
       const gh = dependencies();
       await expect(inspect({ gh }, input)).rejects.toThrow();
       expect(gh.prView).not.toHaveBeenCalled();

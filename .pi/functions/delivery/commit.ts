@@ -9,8 +9,8 @@
  * @param input.push - Push the current branch, setting its upstream on the first push. The default
  *   is false.
  */
-async function commitPitChanges(
-  { shell: { execFile }, git: { commit, push } },
+async function commit(
+  { shell: { execFile }, git: { commit: gitCommit, push } },
   input: { files: string[]; message: string; push?: boolean },
 ) {
   const files = [...new Set(input.files.map((file) => file.replace(/^\.\//, "")))];
@@ -69,7 +69,7 @@ async function commitPitChanges(
       `Staged files do not match the request (unchanged: ${unchanged.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}). Nothing was committed; listed files that were staged remain staged.`,
     );
   }
-  await commit(["-m", message], { raise: true, maxBytes: 20000 });
+  await gitCommit(["-m", message], { raise: true, maxBytes: 20000 });
   const [sha = "", branch = ""] = (await git(["rev-parse", "HEAD", "--abbrev-ref", "HEAD"])).stdout
     .trim()
     .split("\n");

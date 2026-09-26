@@ -5,8 +5,11 @@ import ts from "typescript";
 
 // Execute trusted repository source with ordinary injected fakes. The resource tests
 // separately validate contextual types and load the complete saved-function graph.
-export async function loadWorkflowFunction(name: string) {
-  const source = await readFile(`.pi/functions/${name}.ts`, "utf8");
+// A dotted identifier maps to a directory per namespace; the file declares the last segment.
+export async function loadWorkflowFunction(id: string) {
+  const segments = id.split(".");
+  const name = segments.at(-1) ?? id;
+  const source = await readFile(`.pi/functions/${segments.join("/")}.ts`, "utf8");
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   });

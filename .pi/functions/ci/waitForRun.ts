@@ -8,7 +8,7 @@
  * @param input.initialDelayMs - Delay before the first check (0-120000). The default is 120000 ms.
  * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
  */
-async function waitForGitHubRun(
+async function waitForRun(
   { gh: { runView } },
   input: {
     id: number;

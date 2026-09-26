@@ -4,7 +4,7 @@
  * @param input.files - Optional source paths such as src/index.ts.
  * @param input.limit - Maximum uncovered markers (1-500). The default is 100.
  */
-async function inspectPitCoverageGaps(
+async function inspectCoverageGaps(
   { workspace: { read, search } },
   input: { files?: string[]; limit?: number } = {},
 ) {
@@ -37,7 +37,8 @@ async function inspectPitCoverageGaps(
   if (!summaryResult && availableSearches.length === 0) {
     return {
       available: false,
-      message: "Coverage artifacts are unavailable. Run validatePit({ coverage: true }) first.",
+      message:
+        "Coverage artifacts are unavailable. Run delivery.validate({ coverage: true }) first.",
     };
   }
   const decode = (text: string) =>

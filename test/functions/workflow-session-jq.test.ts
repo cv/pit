@@ -20,7 +20,7 @@ afterEach(async () => {
 
 async function workflows() {
   const [adapter, reader, analyzer] = await Promise.all(
-    ["jq", "readPitSessionEvents", "analyzePitSession"].map(loadWorkflowFunction),
+    ["jq", "sessions.readEvents", "sessions.analyze"].map(loadWorkflowFunction),
   );
   if (!adapter || !reader || !analyzer) throw new Error("Missing workflow source");
   const query = (input: Record<string, unknown>) =>
@@ -44,7 +44,7 @@ async function workflows() {
     query,
     events,
     analyze: (input: Record<string, unknown>) =>
-      analyzer({ context: { get: async () => ({}) }, readPitSessionEvents: events }, input),
+      analyzer({ context: { get: async () => ({}) }, sessions: { readEvents: events } }, input),
   };
 }
 
@@ -308,7 +308,7 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
     { name: "fractional page size", input: { limit: 1.5 } },
     { name: "oversized page", input: { limit: 501 } },
   ])("rejects $name without invoking jq", async ({ input }) => {
-    const reader = await loadWorkflowFunction("readPitSessionEvents");
+    const reader = await loadWorkflowFunction("sessions.readEvents");
     await expect(reader({}, { file: "unused", ...input })).rejects.toThrow("Session page requires");
   });
 });

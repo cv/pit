@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 async function inspect(input?: Record<string, unknown>) {
-  const run = await loadWorkflowFunction("inspectPitDependencyInstall");
+  const run = await loadWorkflowFunction("delivery.inspectDependencies");
   return run(
     {
       shell: {
@@ -68,7 +68,7 @@ async function fixture(options: {
   }
 }
 
-describe("inspectPitDependencyInstall", () => {
+describe("delivery.inspectDependencies", () => {
   it.each<{
     name: string;
     installed?: string;
@@ -161,7 +161,7 @@ describe("inspectPitDependencyInstall", () => {
     { name: "zero limit", input: { limit: 0 } },
     { name: "fractional limit", input: { limit: 1.5 } },
   ])("rejects $name before effects", async ({ input }) => {
-    const run = await loadWorkflowFunction("inspectPitDependencyInstall");
+    const run = await loadWorkflowFunction("delivery.inspectDependencies");
     const execFile = vi.fn();
     await expect(run({ shell: { execFile } }, input)).rejects.toThrow();
     expect(execFile).not.toHaveBeenCalled();
@@ -179,7 +179,7 @@ describe("inspectPitDependencyInstall", () => {
       error: "truncated",
     },
   ])("rejects $name rather than returning incomplete evidence", async ({ output, error }) => {
-    const run = await loadWorkflowFunction("inspectPitDependencyInstall");
+    const run = await loadWorkflowFunction("delivery.inspectDependencies");
     await expect(run({ shell: { execFile: async () => output } })).rejects.toThrow(error);
   });
 });

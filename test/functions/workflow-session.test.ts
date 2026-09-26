@@ -17,7 +17,7 @@ const page = (events: unknown[] = [], hasMore = false, nextLine = 0) => ({
   nextLine,
 });
 
-describe("analyzePitSession", () => {
+describe("sessions.analyze", () => {
   it.each<{ name: string; label: string; error: string; category: string; workflow: number }>([
     {
       name: "expected failure takes precedence",
@@ -50,7 +50,7 @@ describe("analyzePitSession", () => {
     {
       name: "validation gate",
       label: "Run tests",
-      error: 'Function "validatePit" failed: failure',
+      error: 'Function "delivery.validate" failed: failure',
       category: "gate",
       workflow: 0,
     },
@@ -69,13 +69,13 @@ describe("analyzePitSession", () => {
       workflow: 1,
     },
   ])("classifies $name in TypeScript", async ({ label, error, category, workflow }) => {
-    const analyze = await loadWorkflowFunction("analyzePitSession");
-    const readPitSessionEvents = vi
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const readEvents = vi
       .fn()
       .mockResolvedValue(page([{ calls: [call("id", label)], failure: failure("id", error) }]));
     const get = vi.fn();
     expect(
-      await analyze({ context: { get }, readPitSessionEvents }, { file: "/session.jsonl" }),
+      await analyze({ context: { get }, sessions: { readEvents } }, { file: "/session.jsonl" }),
     ).toMatchObject({
       toolCalls: 1,
       failures: 1,
@@ -88,8 +88,8 @@ describe("analyzePitSession", () => {
   });
 
   it("correlates calls across empty pages and bounds examples without losing counts", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSession");
-    const readPitSessionEvents = vi
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const readEvents = vi
       .fn()
       .mockResolvedValueOnce(
         page(
@@ -131,7 +131,7 @@ describe("analyzePitSession", () => {
         ),
       );
     const get = vi.fn().mockResolvedValue({ sessionFile: "/current.jsonl" });
-    const result = await analyze({ context: { get }, readPitSessionEvents }, { examples: 1 });
+    const result = await analyze({ context: { get }, sessions: { readEvents } }, { examples: 1 });
     expect(result).toMatchObject({
       file: "/current.jsonl",
       toolCalls: 1,
@@ -148,18 +148,16 @@ describe("analyzePitSession", () => {
       ],
     });
     expect(result.recentFailureExamples).toHaveLength(1);
-    expect(readPitSessionEvents.mock.calls.map(([input]) => input.afterLine)).toEqual([
-      0, 200, 400,
-    ]);
+    expect(readEvents.mock.calls.map(([input]) => input.afterLine)).toEqual([0, 200, 400]);
     expect(result.recommendations).toContain("Split workflows that repeat the same failing label.");
   });
 
   it("returns a complete zero-count report for an empty session", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSession");
+    const analyze = await loadWorkflowFunction("sessions.analyze");
     expect(
       await analyze({
         context: { get: async () => ({ sessionFile: "/empty" }) },
-        readPitSessionEvents: async () => page(),
+        sessions: { readEvents: async () => page() },
       }),
     ).toMatchObject({
       toolCalls: 0,
@@ -171,35 +169,35 @@ describe("analyzePitSession", () => {
   });
 
   it("rejects a non-advancing page cursor", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSession");
+    const analyze = await loadWorkflowFunction("sessions.analyze");
     await expect(
       analyze(
-        { context: { get: vi.fn() }, readPitSessionEvents: async () => page([], true, 0) },
+        { context: { get: vi.fn() }, sessions: { readEvents: async () => page([], true, 0) } },
         { file: "/session" },
       ),
     ).rejects.toThrow("cursor did not advance");
   });
 
   it("refuses an incomplete audit at the session line budget", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSession");
-    const readPitSessionEvents = vi.fn(async ({ afterLine }: { afterLine: number }) =>
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const readEvents = vi.fn(async ({ afterLine }: { afterLine: number }) =>
       page([], true, afterLine + 200),
     );
     await expect(
-      analyze({ context: { get: vi.fn() }, readPitSessionEvents }, { file: "/session" }),
+      analyze({ context: { get: vi.fn() }, sessions: { readEvents } }, { file: "/session" }),
     ).rejects.toThrow("100000 lines");
-    const cursors = readPitSessionEvents.mock.calls.map(([input]) => input.afterLine);
+    const cursors = readEvents.mock.calls.map(([input]) => input.afterLine);
     expect(Math.max(...cursors)).toBeLessThan(100_000);
   });
 
   it("propagates projection failure rather than returning earlier partial counts", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSession");
-    const readPitSessionEvents = vi
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const readEvents = vi
       .fn()
       .mockResolvedValueOnce(page([], true, 200))
       .mockRejectedValueOnce(new Error("jq output was truncated"));
     await expect(
-      analyze({ context: { get: vi.fn() }, readPitSessionEvents }, { file: "/session" }),
+      analyze({ context: { get: vi.fn() }, sessions: { readEvents } }, { file: "/session" }),
     ).rejects.toThrow("truncated");
   });
 });
@@ -217,20 +215,20 @@ const audit = (file: string) => ({
   recommendations: ["Action needed"],
 });
 
-describe("analyzePitSessions", () => {
+describe("sessions.analyzeRecent", () => {
   it("selects newest filenames before limiting and escapes directory glob syntax", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSessions");
+    const analyzeRecent = await loadWorkflowFunction("sessions.analyzeRecent");
     const directory = "/sessions/[project](name)";
     const glob = vi.fn().mockResolvedValue({
       entries: [`${directory}/a.jsonl`, `${directory}/c\nnew.jsonl`, `${directory}/b.jsonl`],
       truncated: false,
     });
-    const analyzePitSession = vi.fn(async ({ file }: { file: string }) => audit(file));
-    const result = await analyze(
+    const analyzeSession = vi.fn(async ({ file }: { file: string }) => audit(file));
+    const result = await analyzeRecent(
       {
         context: { get: async () => ({ sessionFile: `${directory}/current.jsonl` }) },
         workspace: { glob },
-        analyzePitSession,
+        sessions: { analyze: analyzeSession },
       },
       { limit: 2, examples: 3 },
     );
@@ -239,7 +237,7 @@ describe("analyzePitSessions", () => {
       dot: true,
       limit: 10000,
     });
-    expect(analyzePitSession.mock.calls.map(([input]) => input)).toEqual([
+    expect(analyzeSession.mock.calls.map(([input]) => input)).toEqual([
       { file: `${directory}/c\nnew.jsonl`, examples: 3 },
       { file: `${directory}/b.jsonl`, examples: 3 },
     ]);
@@ -256,12 +254,12 @@ describe("analyzePitSessions", () => {
   });
 
   it("bounds concurrent audits while returning every selected session", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSessions");
+    const analyzeRecent = await loadWorkflowFunction("sessions.analyzeRecent");
     const releases: Array<() => void> = [];
     const completed: string[] = [];
     let active = 0;
     let peak = 0;
-    const analyzePitSession = ({ file }: { file: string }) => {
+    const analyzeSession = ({ file }: { file: string }) => {
       active++;
       peak = Math.max(peak, active);
       return new Promise((resolve) =>
@@ -273,10 +271,10 @@ describe("analyzePitSessions", () => {
       );
     };
     const files = Array.from({ length: 9 }, (_, i) => `/sessions/${i}.jsonl`);
-    const pending = analyze({
+    const pending = analyzeRecent({
       context: { get: async () => ({ sessionFile: "/sessions/current.jsonl" }) },
       workspace: { glob: async () => ({ entries: files, truncated: false }) },
-      analyzePitSession,
+      sessions: { analyze: analyzeSession },
     });
     while (completed.length < files.length) {
       await vi.waitFor(() => expect(releases.length).toBeGreaterThan(0));
@@ -289,21 +287,21 @@ describe("analyzePitSessions", () => {
   });
 
   it("refuses truncated discovery before starting audits", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSessions");
-    const analyzePitSession = vi.fn();
+    const analyzeRecent = await loadWorkflowFunction("sessions.analyzeRecent");
+    const analyzeSession = vi.fn();
     await expect(
-      analyze({
+      analyzeRecent({
         context: { get: async () => ({ sessionFile: "/sessions/current" }) },
         workspace: { glob: async () => ({ entries: [], truncated: true }) },
-        analyzePitSession,
+        sessions: { analyze: analyzeSession },
       }),
     ).rejects.toThrow("incomplete selection");
-    expect(analyzePitSession).not.toHaveBeenCalled();
+    expect(analyzeSession).not.toHaveBeenCalled();
   });
 
   it("does not combine a clean-session recommendation with actionable recommendations", async () => {
-    const analyze = await loadWorkflowFunction("analyzePitSessions");
-    const analyzePitSession = vi
+    const analyzeRecent = await loadWorkflowFunction("sessions.analyzeRecent");
+    const analyzeSession = vi
       .fn()
       .mockResolvedValueOnce({
         ...audit("a"),
@@ -311,10 +309,10 @@ describe("analyzePitSessions", () => {
       })
       .mockResolvedValueOnce(audit("b"));
     expect(
-      await analyze({
+      await analyzeRecent({
         context: { get: async () => ({ sessionFile: "/sessions/current" }) },
         workspace: { glob: async () => ({ entries: ["a", "b"], truncated: false }) },
-        analyzePitSession,
+        sessions: { analyze: analyzeSession },
       }),
     ).toMatchObject({ recommendations: ["Action needed"] });
   });

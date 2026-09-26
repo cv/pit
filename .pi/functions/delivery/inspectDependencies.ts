@@ -1,5 +1,5 @@
 /** Read-only comparison of direct dependency requirements, package-lock v2/v3 metadata, and installed versions. Reports missing or mismatched packages with bounded fields and explicit omissions; never installs packages or claims semver/content verification. */
-async function inspectPitDependencyInstall(
+async function inspectDependencies(
   { shell: { execFile } },
   input: { packages?: string[]; limit?: number } = {},
 ) {

@@ -8,7 +8,7 @@
  * @param input.lines - Log lines to keep before each job's last error (5-200). The default is 40.
  * @param input.jobs - Failed jobs to inspect (1-10). The default is 3; `omittedJobs` counts the rest.
  */
-async function inspectGitHubRunFailure(
+async function inspectFailure(
   { gh: { runView, api } },
   input: { repo: string; id: number; lines?: number; jobs?: number },
 ) {

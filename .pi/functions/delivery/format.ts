@@ -3,11 +3,11 @@
  *
  * @param input.checkOnly - Check formatting without writing files.
  */
-async function formatPitChanges(
-  { listChangedGitFiles, shell: { execFile } },
+async function format(
+  { delivery: { listChangedFiles }, shell: { execFile } },
   input: { checkOnly?: boolean } = {},
 ) {
-  const { files: candidates } = await listChangedGitFiles();
+  const { files: candidates } = await listChangedFiles();
   const supportedExtensions = [
     ".ts",
     ".tsx",
