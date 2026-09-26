@@ -45,7 +45,7 @@ async ({ runPitTargetedTests }, input: { files: string[]; testNamePattern?: stri
 - Use `reviewPitChanges()` before validation and after substantial corrections.
 - Use `inspectPitCoverageGaps()` after coverage has generated its HTML report.
 - Use `auditPitCodeQuality()` for broad feature or refactor work where maintainability risk matters.
-- `formatPitChanges()` formats only changed supported files and invalidates their anchors. Re-read every written file before another mutation.
+- `formatPitChanges()` formats only changed supported files and invalidates their anchors. Re-read every written file before another mutation. It cannot see committed files, so run it after the last edit and before `commitPitChanges()`.
 - Use `analyzePitSession()` for one session and `analyzePitSessions()` for project-wide workflow trends. These diagnose agent workflow; they do not replace code validation.
 
 For pull-request work, inspect bounded metadata first:
@@ -106,7 +106,7 @@ async ({ waitForGitHubPullRequestChecks }, input: { number: number; repo: string
   waitForGitHubPullRequestChecks({ ...input, raise: true })
 ```
 
-Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. When a run fails, call `inspectGitHubRunFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it.
+Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. When a run fails, call `inspectGitHubRunFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
 
 ## Finish an issue
 

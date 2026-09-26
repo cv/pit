@@ -77,6 +77,22 @@ describe("managePitUxSession", () => {
     ]);
   });
 
+  it("keeps the pane's shell running after Pi only when asked", async () => {
+    const manage = await loadWorkflowFunction("managePitUxSession");
+    const paneCommand = async (keepShell: boolean) => {
+      const { execFile, calls } = host(["fixture\n"]);
+      const started = manage(
+        { context: { get: vi.fn() }, shell: { execFile } },
+        { action: "start", cwd: "/repo", keepShell },
+      );
+      await vi.runAllTimersAsync();
+      await started;
+      return calls.find((call) => call.args.includes("new-session"))?.args.at(-1) ?? "";
+    };
+    expect(await paneCommand(true)).toMatch(/'regular'; exec sleep 86400$/);
+    expect(await paneCommand(false)).toMatch(/'regular'$/);
+  });
+
   it("stops only its own server, then removes the run directory", async () => {
     const manage = await loadWorkflowFunction("managePitUxSession");
     const { execFile, calls } = host();
@@ -167,6 +183,25 @@ describe("runPitUxCase", () => {
     expect(calls.filter((args) => args.includes("send-keys")).map((args) => args.slice(5))).toEqual(
       [["-l", "trace-a"], ["Enter"]],
     );
+  });
+
+  it("captures after a fixed delay without waiting for a completion", async () => {
+    const runCase = await loadWorkflowFunction("runPitUxCase");
+    const started = Date.now();
+    const execFile = vi.fn(async (_program: string, args: string[]) =>
+      processResult({
+        stdout:
+          args.includes("capture-pane") && Date.now() - started >= 1000 ? "TICK 2\n" : "TICK 1\n",
+      }),
+    );
+    const run = runCase(
+      { shell: { execFile } },
+      { socket: SOCKET, target: TARGET, fixture: "cancel", delayMs: 1500 },
+    );
+    await vi.runAllTimersAsync();
+    expect(await run).toEqual({ settled: false, rows: 1, matched: [], tail: ["TICK 2"] });
+    // It captured at the delay, not after the default 20 s wait.
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   it("reports an unsettled capture when the deadline passes", async () => {
@@ -293,6 +328,18 @@ describe("UX acceptance input boundaries", () => {
       fn: "runPitUxCase",
       input: { socket: SOCKET, target: TARGET, timeoutMs: 500 },
       error: "timeoutMs must be an integer between 1000 and 120000",
+    },
+    {
+      name: "runPitUxCase with both a delay and a completion pattern",
+      fn: "runPitUxCase",
+      input: { socket: SOCKET, target: TARGET, delayMs: 1000, waitFor: "done" },
+      error: "delayMs and waitFor cannot be combined",
+    },
+    {
+      name: "runPitUxCase with an out-of-range delay",
+      fn: "runPitUxCase",
+      input: { socket: SOCKET, target: TARGET, delayMs: 50 },
+      error: "delayMs must be an integer between 100 and 120000",
     },
     {
       name: "runPitUxFixtures with a prompt instead of a fixture name",

@@ -41,7 +41,9 @@ result types from injected functions instead of copying their schemas.
   report it falls back to a 120-line output tail.
 - `inspectGitHubRunFailure()` reads the last 51,200 bytes of each failed job's log and
   anchors the excerpt on its last `##[error]` line, because logs end with post-job
-  cleanup. `logTruncated` means earlier output was not fetched.
+  cleanup. `logTruncated` means earlier output was not fetched. From that window it lists
+  at most 30 failed Vitest tests with their first error line; `testFailuresOmitted` also
+  counts failures that Vitest's summary reports but the window no longer contained.
 - `commitPitChanges()` refuses unrelated staged paths, directories, and unchanged listed
   files. It stages tracked paths with `git add -u` and never force-adds an ignored new file.
 - Check process truncation before parsing machine output. A partial filename list
@@ -77,7 +79,10 @@ exercise and when a change is accepted.
   conversation's pane.
 - `runPitUxCase` settles on a new match of its completion pattern after submitting a prompt;
   an earlier completion still on screen does not count. `settled: false` means the timeout
-  expired, not that the fixture failed.
+  expired, not that the fixture failed. `delayMs` captures after a fixed delay instead, for
+  states without a completion marker, and cannot be combined with `waitFor`.
+- `keepShell` keeps the pane's shell alive after Pi exits, as a terminal does; exit checks
+  need it, because a closing pane hangs up Pi's descendants regardless of Pit.
 - `runPitUxFixtures` reports up to four rows from each fixture's entry: status lines and
   decisive diagnostic rows. It is a summary; use `runPitUxCase` to inspect a whole entry.
 

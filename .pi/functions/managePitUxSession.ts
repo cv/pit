@@ -9,6 +9,9 @@
  * @param input.height - Initial window rows (10-200). The default is 50.
  * @param input.extraEnv - Additional variables for the isolated Pi, such as PIT_WASMTIME_ADDON.
  *   Names must be uppercase shell identifiers.
+ * @param input.keepShell - Keep the pane's shell running after Pi exits, as a terminal does. Exit
+ *   checks need it: when the pane closes, the hang-up kills Pi's descendants whatever Pit did.
+ *   The default is false.
  * @param input.root - Run directory returned by start; stop kills its server and removes it.
  */
 async function managePitUxSession(
@@ -22,6 +25,7 @@ async function managePitUxSession(
         width?: number;
         height?: number;
         extraEnv?: Record<string, string>;
+        keepShell?: boolean;
       }
     | { action: "stop"; socket: string; root: string },
 ) {
@@ -120,6 +124,7 @@ async function managePitUxSession(
   ];
   // tmux runs the pane command through a shell, so every argument is single-quoted.
   const quoted = command.map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(" ");
+  const paneCommand = input.keepShell ? `${quoted}; exec sleep 86400` : quoted;
   await tmux(socket, [
     "-f",
     "/dev/null",
@@ -151,7 +156,7 @@ async function managePitUxSession(
     String(height),
     "-c",
     cwd,
-    quoted,
+    paneCommand,
   ]);
   let screen = "";
   for (let attempt = 0; attempt < 40; attempt++) {
