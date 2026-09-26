@@ -32,7 +32,11 @@ const commandOptionKeys = [
   "workflow",
   "title",
   "body",
+  "method",
+  "deleteBranch",
+  "auto",
 ];
+const MERGE_METHODS = new Set(["merge", "squash", "rebase"]);
 
 function number(value: unknown, label: string): number {
   if (!Number.isInteger(value)) {
@@ -75,14 +79,14 @@ function repeatedFlag(raw: Record<string, unknown>, key: string, cliFlag = key):
   return list(raw[key], `options.${key}`).flatMap((value) => [`--${cliFlag}`, value]);
 }
 
-function booleanFlag(raw: Record<string, unknown>, key: string): string[] {
+function booleanFlag(raw: Record<string, unknown>, key: string, cliFlag = key): string[] {
   if (raw[key] === undefined) {
     return [];
   }
   if (typeof raw[key] !== "boolean") {
     throw new TypeError(`options.${key} must be a boolean`);
   }
-  return raw[key] ? [`--${key}`] : [];
+  return raw[key] ? [`--${cliFlag}`] : [];
 }
 
 function json(raw: Record<string, unknown>, defaults: string): string[] {
@@ -225,6 +229,46 @@ function preparePullRequestCommand(
           ...repo(o),
           ...extraArgs(o),
           ...json(o, `${prFields},body,comments,reviews`),
+        ],
+        options: options(o),
+      };
+    }
+    case "prCreate": {
+      const o = object(args[0], "input");
+      return {
+        args: [
+          "pr",
+          "create",
+          ...repo(o),
+          "--title",
+          text(o.title, "input.title"),
+          // Without a terminal, gh would prompt for a missing body instead of creating the PR.
+          "--body",
+          o.body === undefined ? "" : text(o.body, "input.body"),
+          ...flag(o, "base"),
+          ...flag(o, "head"),
+          ...booleanFlag(o, "draft"),
+          ...extraArgs(o),
+        ],
+        options: options(o),
+      };
+    }
+    case "prMerge": {
+      const o = object(args[1], "options");
+      // Required: gh prompts without one, and repositories allow different methods.
+      if (!MERGE_METHODS.has(String(o.method))) {
+        throw new TypeError("options.method must be merge, squash, or rebase");
+      }
+      return {
+        args: [
+          "pr",
+          "merge",
+          String(number(args[0], "number")),
+          ...repo(o),
+          `--${String(o.method)}`,
+          ...booleanFlag(o, "deleteBranch", "delete-branch"),
+          ...booleanFlag(o, "auto"),
+          ...extraArgs(o),
         ],
         options: options(o),
       };

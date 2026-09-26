@@ -66,6 +66,12 @@ type PitGhRunListOptions = PitGhJsonOptions & {
   workflow?: string;
 };
 type PitGhCreateOptions = PitGhOptions & { title: string; body?: string };
+type PitGhPrCreateOptions = PitGhCreateOptions & { base?: string; head?: string; draft?: boolean };
+type PitGhPrMergeOptions = PitGhOptions & {
+  method: "merge" | "squash" | "rebase";
+  deleteBranch?: boolean;
+  auto?: boolean;
+};
 
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = `${number}:${string}`;
@@ -341,6 +347,10 @@ interface PitGhCapability {
   prList(options?: PitGhPrListOptions): Promise<PitProcessResult>;
 
   prView(number: number, options?: PitGhJsonOptions): Promise<PitProcessResult>;
+
+  prCreate(input: PitGhPrCreateOptions): Promise<PitProcessResult>;
+
+  prMerge(number: number, options: PitGhPrMergeOptions): Promise<PitProcessResult>;
 
   runList(options?: PitGhRunListOptions): Promise<PitProcessResult>;
 

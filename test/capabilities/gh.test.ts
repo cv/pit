@@ -92,6 +92,68 @@ describe("gh capability", () => {
     ]);
   });
 
+  // Without a terminal, gh prompts for a missing body or merge method instead of failing clearly.
+  it("prepares pull request creation and merging without interactive prompts", () => {
+    expect(
+      prepareGhCommand("prCreate", [
+        {
+          title: "Fix",
+          base: "main",
+          head: "fix",
+          draft: true,
+          repo: "cv/pit",
+          args: ["--label", "bug"],
+          timeoutMs: 5000,
+        },
+      ]),
+    ).toEqual({
+      args: [
+        "pr",
+        "create",
+        "--repo",
+        "cv/pit",
+        "--title",
+        "Fix",
+        "--body",
+        "",
+        "--base",
+        "main",
+        "--head",
+        "fix",
+        "--draft",
+        "--label",
+        "bug",
+      ],
+      options: { timeoutMs: 5000 },
+    });
+    expect(prepareGhCommand("prCreate", [{ title: "Fix", body: "Details" }]).args).toEqual([
+      "pr",
+      "create",
+      "--title",
+      "Fix",
+      "--body",
+      "Details",
+    ]);
+    expect(
+      prepareGhCommand("prMerge", [
+        42,
+        { method: "rebase", deleteBranch: true, auto: true, repo: "cv/pit", timeoutMs: 5000 },
+      ]),
+    ).toEqual({
+      args: ["pr", "merge", "42", "--repo", "cv/pit", "--rebase", "--delete-branch", "--auto"],
+      options: { timeoutMs: 5000 },
+    });
+  });
+
+  it.each<{ name: string; options: unknown }>([
+    { name: "a missing", options: {} },
+    { name: "an unknown", options: { method: "fast-forward" } },
+  ])("rejects $name merge method before running gh", ({ options }) => {
+    expect(() => prepareGhCommand("prMerge", [42, options] as any)).toThrow(
+      "options.method must be merge, squash, or rebase",
+    );
+  });
+
   it.each<{
     name: string;
     method: "issueView" | "prView" | "runView" | "releaseView";

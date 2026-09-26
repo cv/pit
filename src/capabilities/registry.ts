@@ -85,6 +85,12 @@ type PitGhRunListOptions = PitGhJsonOptions & {
   workflow?: string;
 };
 type PitGhCreateOptions = PitGhOptions & { title: string; body?: string };
+type PitGhPrCreateOptions = PitGhCreateOptions & { base?: string; head?: string; draft?: boolean };
+type PitGhPrMergeOptions = PitGhOptions & {
+  method: "merge" | "squash" | "rebase";
+  deleteBranch?: boolean;
+  auto?: boolean;
+};
 
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = \`\${number}:\${string}\`;

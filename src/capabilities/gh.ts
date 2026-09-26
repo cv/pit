@@ -65,6 +65,25 @@ export const ghCapability = defineCapability({
       minimumArguments: 1,
       maximumArguments: 2,
     },
+    prCreate: {
+      callDescription: "Create a GitHub pull request",
+      resultRenderer: "gh",
+      declaration: "prCreate(input: PitGhPrCreateOptions): Promise<PitProcessResult>;",
+      documentation:
+        "gh.prCreate({ title, body?, base?, head?, draft?, repo?, args?, ...processOptions })",
+      minimumArguments: 1,
+      maximumArguments: 1,
+    },
+    prMerge: {
+      callDescription: "Merge a GitHub pull request",
+      resultRenderer: "gh",
+      declaration:
+        "prMerge(number: number, options: PitGhPrMergeOptions): Promise<PitProcessResult>;",
+      documentation:
+        'gh.prMerge(number, { method: "merge" | "squash" | "rebase", deleteBranch?, auto?, repo?, args?, ...processOptions })',
+      minimumArguments: 2,
+      maximumArguments: 2,
+    },
     runList: {
       callDescription: "List GitHub Actions runs",
       resultRenderer: "gh",
