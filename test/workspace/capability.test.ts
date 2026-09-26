@@ -366,6 +366,24 @@ describe("workspace discovery", () => {
 });
 
 describe("workspace search", () => {
+  // A literal query that uses regex syntax almost always meant regex: true.
+  it("hints when a literal query with regex syntax finds nothing", async () => {
+    await mkdir(join(cwd, "hint"));
+    await writeFile(join(cwd, "hint/a.txt"), "alpha\nbeta\n", "utf8");
+    const search = (query: string, regex: boolean) =>
+      value(
+        `async ({ workspace: { search: workspaceSearch } }) => workspaceSearch(${JSON.stringify(query)}, { path: "hint", regex: ${regex} })`,
+      );
+    const literal = await search("alpha|beta", false);
+    expect(literal.matches).toEqual([]);
+    expect(literal.hint).toContain('("|")');
+    expect(literal.hint).toContain("regex: true");
+    const pattern = await search("alpha|beta", true);
+    expect(pattern.matches.map((match: { line: number }) => match.line)).toEqual([1, 2]);
+    expect(pattern).not.toHaveProperty("hint");
+    expect(await search("gamma", false)).not.toHaveProperty("hint");
+  });
+
   it("returns edit-ready anchors, revisions, and bounded context", async () => {
     await mkdir(join(cwd, "search"));
     await writeFile(join(cwd, "search/a.txt"), "Alpha\nneedle one\nNEEDLE two\nend", "utf8");

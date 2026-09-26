@@ -291,6 +291,7 @@ interface PitWorkspaceCapability {
     truncated: boolean;
     filesSearched: number;
     filesSkipped: number;
+    hint?: string;
   }>;
 
   stat(path: string): Promise<{

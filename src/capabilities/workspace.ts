@@ -109,6 +109,7 @@ batch(operations: PitBatchOperation[]): Promise<{
   truncated: boolean;
   filesSearched: number;
   filesSkipped: number;
+  hint?: string;
 }>;`,
       documentation:
         "workspace.search(query, { path?, glob?, regex?, caseSensitive?, contextLines?: 0..10, limit?: 1..500, ignore?, dot? }) returns edit-ready anchors and revisions",

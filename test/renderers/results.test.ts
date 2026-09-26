@@ -207,6 +207,18 @@ describe("result renderers", () => {
         filesSkipped: 0,
       }),
     ).toContain("Found 0 matches, 0 files searched, truncated");
+    // A hinted search keeps its search view, with the hint visible.
+    const hinted = renderValue({
+      matches: [],
+      truncated: false,
+      filesSearched: 1,
+      filesSkipped: 0,
+      hint: "No literal matches, but the query contains regular expression syntax.",
+    });
+    expect(hinted).toContain("Found 0 matches, 1 file searched, regex syntax in a literal query");
+    expect(hinted).toContain(
+      "No literal matches, but the query contains regular expression syntax.",
+    );
     expect(
       renderValue({ file: "old.ts", revision: null, applied: 1, bytes: 0, deleted: true }),
     ).toContain("old.ts, deleted, 1 change, 0 bytes");
