@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CAPABILITY_REGISTRY } from "../../src/capabilities/registry.js";
+import { globalFunctionDefinitions } from "../../src/functions/native.js";
 import {
   capabilityResultRenderer,
   describeCapabilityCall,
@@ -33,18 +33,14 @@ describe("capability presentation", () => {
   });
 
   it("derives labels and renderer routing for every registered method", () => {
-    for (const [capability, definition] of Object.entries(CAPABILITY_REGISTRY)) {
-      for (const [method, methodDefinition] of Object.entries(definition.methods)) {
-        const call = {
-          capability,
-          method,
-          qualifiedName: `${capability}.${method}`,
-        };
-        expect(describeCapabilityCall(call)).toBe(methodDefinition.callDescription);
-        expect(capabilityResultRenderer(call)).toBe(
-          "resultRenderer" in methodDefinition ? methodDefinition.resultRenderer : undefined,
-        );
-      }
+    for (const definition of globalFunctionDefinitions()) {
+      const call = {
+        capability: definition.capability,
+        method: definition.method,
+        qualifiedName: definition.id,
+      };
+      expect(describeCapabilityCall(call)).toBe(definition.summary);
+      expect(capabilityResultRenderer(call)).toBe(definition.resultRenderer);
     }
   });
 });

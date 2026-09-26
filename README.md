@@ -377,7 +377,7 @@ The Wasm guest receives no inherited filesystem, environment, network, arguments
 
 Failed TypeScript calls still use Pi's required thrown-error path and remain `isError: true`. Pit enriches the final result through `tool_result` middleware with a bounded root error, saved-function path, function activity, and redacted capability traces. Expanded TUI failures show the function path and execution dashboard. Non-function failures keep an empty path and concise error text.
 
-The generated capability contract is in [`src/generated/capability-contract.d.ts`](src/generated/capability-contract.d.ts). Authoritative method declarations, arity limits, model summaries, TUI descriptions, and result-renderer keys are in [`src/capabilities/registry.ts`](src/capabilities/registry.ts). Public host dispatch is exhaustive over the registered capability names. A new capability requires a host implementation before TypeScript checks pass.
+The generated capability contract is in [`src/generated/capability-contract.d.ts`](src/generated/capability-contract.d.ts). Canonical global native function definitions live in [`src/functions/builtins/`](src/functions/builtins/), assembled by [`src/functions/native.ts`](src/functions/native.ts). They own method declarations, arity limits, documentation, call summaries, and result-renderer keys; generated contracts and namespace views derive from those definitions. Public host dispatch is exhaustive over the native namespaces. A new native namespace requires a host implementation before TypeScript checks pass.
 
 ## Read results in the TUI
 

@@ -2,7 +2,7 @@ import type { CapabilityCall } from "../capabilities/core.js";
 
 export type { CapabilityCall } from "../capabilities/core.js";
 
-import { getCapabilityMethodDefinition } from "../capabilities/registry.js";
+import { getNativeFunction } from "../functions/native.js";
 import type { ResultRendererKey } from "./types.js";
 
 const CAPABILITY_CALL_PATTERN = /\b([A-Za-z_$][\w$]*)\.(\w+)\s*\(/;
@@ -20,15 +20,11 @@ export function inferCapabilityCall(source: string): CapabilityCall | undefined 
 }
 
 export function describeCapabilityCall(call: CapabilityCall | undefined): string | undefined {
-  return call
-    ? getCapabilityMethodDefinition(call.capability, call.method)?.callDescription
-    : undefined;
+  return call ? getNativeFunction(`${call.capability}.${call.method}`)?.summary : undefined;
 }
 
 export function capabilityResultRenderer(
   call: CapabilityCall | undefined,
 ): ResultRendererKey | undefined {
-  return call
-    ? getCapabilityMethodDefinition(call.capability, call.method)?.resultRenderer
-    : undefined;
+  return call ? getNativeFunction(`${call.capability}.${call.method}`)?.resultRenderer : undefined;
 }

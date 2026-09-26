@@ -1,20 +1,13 @@
-import { CAPABILITY_REGISTRY } from "../capabilities/registry.js";
 import {
   type FunctionLayer,
   type LayeredFunctionDefinition,
   LayeredFunctionRegistry,
 } from "./layered-registry.js";
+import type { NativeFunctionDefinition } from "./native-definition.js";
+import { globalFunctionDefinitions, getNativeFunction } from "./native.js";
 
-export interface NativeFunctionDefinition extends LayeredFunctionDefinition {
-  kind: "native";
-  layer: "global";
-  capability: string;
-  method: string;
-  effect: string;
-  signature: string;
-  summary: string;
-  documentation: string;
-}
+export type { NativeFunctionDefinition } from "./native-definition.js";
+export { globalFunctionDefinitions } from "./native.js";
 
 export interface SourceFunctionDefinition extends LayeredFunctionDefinition {
   kind: "source";
@@ -23,23 +16,6 @@ export interface SourceFunctionDefinition extends LayeredFunctionDefinition {
 }
 
 export type FunctionDefinition = NativeFunctionDefinition | SourceFunctionDefinition;
-
-export function globalFunctionDefinitions(): NativeFunctionDefinition[] {
-  return Object.entries(CAPABILITY_REGISTRY).flatMap(([capability, definition]) =>
-    Object.entries(definition.methods).map(([method, metadata]) => ({
-      id: `${capability}.${method}`,
-      layer: "global" as const,
-      kind: "native" as const,
-      capability,
-      method,
-      effect: `${capability}.${method}`,
-      signature: `${capability}.${metadata.declaration.trim().replace(/\s+/g, " ").replace(/;$/, "")}`,
-      summary: metadata.callDescription,
-      documentation: metadata.documentation,
-      sealed: capability === "functions",
-    })),
-  );
-}
 
 export function createLayeredFunctionRegistry(
   definitions: Iterable<FunctionDefinition> = [],
@@ -55,7 +31,5 @@ export function createLayeredFunctionRegistry(
 }
 
 export function isSealedGlobalFunction(id: string): boolean {
-  return globalFunctionDefinitions().some(
-    (definition) => definition.id === id && definition.sealed,
-  );
+  return getNativeFunction(id)?.sealed ?? false;
 }

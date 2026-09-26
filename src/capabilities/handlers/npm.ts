@@ -1,11 +1,11 @@
+import type { NativeMethod } from "../../functions/native.js";
 import {
   recordValue as object,
   stringValue as string,
   stringArrayValue as stringArray,
 } from "../../shared/argument-values.js";
-import type { CAPABILITY_METHODS } from "../registry.js";
 
-type NpmMethod = (typeof CAPABILITY_METHODS)["npm"][number];
+type NpmMethod = NativeMethod<"npm">;
 
 export interface PreparedNpmCommand {
   args: string[];

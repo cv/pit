@@ -1,23 +1,4 @@
-import { commandsCapability } from "./commands.js";
-import { contextCapability } from "./context.js";
-import {
-  type CapabilityDefinition,
-  type CapabilityMethodDefinition,
-  defineCapabilities,
-} from "./core.js";
-import { functionsCapability } from "./functions.js";
-import { ghCapability } from "./gh.js";
-import { gitCapability } from "./git.js";
-import { httpCapability } from "./http.js";
-import { modelsCapability } from "./models.js";
-import { npmCapability } from "./npm.js";
-import { runtimeCapability } from "./runtime.js";
-import { sessionCapability } from "./session.js";
-import { shellCapability } from "./shell.js";
-import { uiCapability } from "./ui.js";
-import { workspaceCapability } from "./workspace.js";
-
-export type { CapabilityMethodDefinition } from "./core.js";
+import { nativeFunctionGroups } from "./native.js";
 
 export const CAPABILITY_CONTRACT_PREAMBLE = `type PitJsonPrimitive = null | boolean | number | string;
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
@@ -241,75 +222,8 @@ type PitPromotionOptions = { to?: "user" | "project" };
 type PitRemoveOptions = { cascade?: boolean };
 type PitRemoveResult = { name: string; removed: string[] };`;
 
-export const CAPABILITY_REGISTRY = defineCapabilities({
-  workspace: workspaceCapability,
-  git: gitCapability,
-  npm: npmCapability,
-  gh: ghCapability,
-  shell: shellCapability,
-  http: httpCapability,
-  ui: uiCapability,
-  context: contextCapability,
-  session: sessionCapability,
-  commands: commandsCapability,
-  models: modelsCapability,
-  runtime: runtimeCapability,
-  functions: functionsCapability,
-});
-
-export type CapabilityName = keyof typeof CAPABILITY_REGISTRY;
-
-function methodNames<const Registry extends Record<string, CapabilityDefinition>>(
-  registry: Registry,
-) {
-  return Object.fromEntries(
-    Object.entries(registry).map(([name, definition]) => [name, Object.keys(definition.methods)]),
-  ) as { [Name in keyof Registry]: Array<keyof Registry[Name]["methods"] & string> };
-}
-
-export const CAPABILITY_METHODS = methodNames(CAPABILITY_REGISTRY);
-
-export function getCapabilityMethodDefinition(
-  capability: string,
-  method: string,
-): CapabilityMethodDefinition | undefined {
-  const definition = CAPABILITY_REGISTRY[capability as CapabilityName];
-  return definition?.methods[method as keyof typeof definition.methods] as
-    | CapabilityMethodDefinition
-    | undefined;
-}
-
-export function validateCapabilityCall(capability: string, method: string, args: unknown[]): void {
-  const methodDefinition = getCapabilityMethodDefinition(capability, method);
-  if (!methodDefinition) {
-    throw new Error(`Unknown capability or method: ${capability}.${method}`);
-  }
-  if (
-    args.length < methodDefinition.minimumArguments ||
-    args.length > methodDefinition.maximumArguments
-  ) {
-    const range =
-      methodDefinition.minimumArguments === methodDefinition.maximumArguments
-        ? String(methodDefinition.minimumArguments)
-        : `${methodDefinition.minimumArguments}-${methodDefinition.maximumArguments}`;
-    throw new Error(
-      `${capability}.${method} expects ${range} argument(s); received ${args.length}`,
-    );
-  }
-}
-
-export function capabilityDocumentation(): string[] {
-  return Object.entries(CAPABILITY_REGISTRY).map(([name, definition]) => {
-    const promptSummary = "promptSummary" in definition ? definition.promptSummary : undefined;
-    const documentation =
-      promptSummary ??
-      ("documentation" in definition
-        ? definition.documentation
-        : Object.values(definition.methods)
-            .map((method) => method.documentation)
-            .join("; "));
-    return `${name}: ${documentation}.`;
-  });
+function interfaceName(namespace: string): string {
+  return `Pit${namespace.charAt(0).toUpperCase()}${namespace.slice(1)}Capability`;
 }
 
 function indentDeclaration(declaration: string): string {
@@ -320,16 +234,15 @@ function indentDeclaration(declaration: string): string {
 }
 
 export function generateCapabilityContract(): string {
-  const interfaces = Object.values(CAPABILITY_REGISTRY)
-    .map((definition) => {
-      const methods = Object.values(definition.methods)
-        .map((method) => indentDeclaration(method.declaration))
+  const groups = [...nativeFunctionGroups()];
+  const interfaces = groups
+    .map(([name, definitions]) => {
+      const methods = definitions
+        .map((definition) => indentDeclaration(definition.declaration))
         .join("\n\n");
-      return `interface ${definition.interfaceName} {\n${methods}\n}`;
+      return `interface ${interfaceName(name)} {\n${methods}\n}`;
     })
     .join("\n\n");
-  const capabilities = Object.entries(CAPABILITY_REGISTRY)
-    .map(([name, definition]) => `  ${name}: ${definition.interfaceName};`)
-    .join("\n");
+  const capabilities = groups.map(([name]) => `  ${name}: ${interfaceName(name)};`).join("\n");
   return `// Generated by scripts/generate-capability-contract.ts. Do not edit.\n\n${CAPABILITY_CONTRACT_PREAMBLE}\n\n${interfaces}\n\ninterface PitCapabilities {\n${capabilities}\n}\n\ntype PitSavedInput<T extends (...args: any[]) => any> =\n  Parameters<T> extends [any, ...infer Rest] ? Rest[0] : undefined;\n\ntype PitProgram = (\n  capabilities: PitCapabilities,\n  input?: any,\n) => PitResult | void | Promise<PitResult | void>;\n`;
 }

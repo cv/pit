@@ -1,11 +1,11 @@
+import type { NativeMethod } from "../../functions/native.js";
 import {
   stringArrayValue as list,
   recordValue as object,
   stringValue as text,
 } from "../../shared/argument-values.js";
-import type { CAPABILITY_METHODS } from "../registry.js";
 
-type GhMethod = (typeof CAPABILITY_METHODS)["gh"][number];
+type GhMethod = NativeMethod<"gh">;
 export interface PreparedGhCommand {
   args: string[];
   options: Record<string, unknown>;

@@ -164,21 +164,24 @@ Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs
 
 Wasmtime links the WASI interfaces required by Javy, but `WasiCtx::builder().build()` inherits nothing. The guest cannot directly read files, access environment credentials, open network connections, or launch processes. Wasmtime itself is a native addon inside Pi's process, so a native runtime defect shares the trusted host's crash boundary.
 
-## Capability architecture
+## Native function architecture
 
-A capability has two halves.
+Built-ins are package-owned global native functions. `global` describes their resolution layer; `native` describes their implementation through the sandbox/host boundary. There is no separate capability-definition catalog.
 
 ### Definition layer
 
-Files such as `src/capabilities/workspace.ts` and `src/capabilities/git.ts` declare:
+Files such as `src/functions/builtins/workspace.ts` and `src/functions/builtins/git.ts` define native functions with:
 
-- the TypeScript interface name;
-- each method declaration;
-- prompt documentation and call descriptions;
-- minimum and maximum argument counts; and
-- optional result-renderer keys.
+- a public identifier and native dispatch identity;
+- the TypeScript method declaration and reflection signature;
+- documentation and call summaries;
+- minimum and maximum argument counts;
+- optional result-renderer keys; and
+- global-layer, native-kind, effect, and sealing metadata.
 
-`src/capabilities/registry.ts` assembles those definitions into `CAPABILITY_REGISTRY`. The same registry drives method existence checks and generation of `src/generated/capability-contract.d.ts`. A capability change should therefore begin in the definition layer rather than by editing generated declarations.
+`src/functions/native.ts` assembles those definitions. The layered function registry consumes them directly, and native lookup, namespace groupings, and the public `CAPABILITY_METHODS` compatibility view derive from the same catalog. `src/functions/native-contract.ts` generates `src/generated/capability-contract.d.ts`; `src/functions/native-documentation.ts` derives prompt documentation with optional per-namespace summaries. Add or change a built-in in the definition layer rather than editing generated declarations.
+
+Native host validation uses the fixed native definition being invoked, never an effective source override. A wider compatible override cannot relax the argument limits on a `$next` call into the host. Function resolution and `$next` continue to use `session > project > user > global`.
 
 ### Host layer
 

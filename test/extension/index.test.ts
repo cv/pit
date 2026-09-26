@@ -2,7 +2,7 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { validateCapabilityCall } from "../../src/capabilities/registry.js";
+import { validateNativeCall } from "../../src/functions/native.js";
 import {
   branchEntries,
   cleanupHarness,
@@ -31,15 +31,13 @@ describe("pit extension", () => {
     expect((await run("async ({}) => 42")).details.value).toBe(42);
   });
 
-  it("validates capability dispatch and arity from the registry", () => {
-    expect(() => validateCapabilityCall("context", "get", [])).not.toThrow();
-    expect(() => validateCapabilityCall("git", "status", [])).not.toThrow();
-    expect(() => validateCapabilityCall("git", "status", [[], {}, 1])).toThrow(
-      /expects 0-2 argument/,
-    );
-    expect(() => validateCapabilityCall("context", "get", [1])).toThrow(/expects 0 argument/);
-    expect(() => validateCapabilityCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
-    expect(() => validateCapabilityCall("unknown", "method", [])).toThrow(
+  it("validates native dispatch names and arity", () => {
+    expect(() => validateNativeCall("context", "get", [])).not.toThrow();
+    expect(() => validateNativeCall("git", "status", [])).not.toThrow();
+    expect(() => validateNativeCall("git", "status", [[], {}, 1])).toThrow(/expects 0-2 argument/);
+    expect(() => validateNativeCall("context", "get", [1])).toThrow(/expects 0 argument/);
+    expect(() => validateNativeCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
+    expect(() => validateNativeCall("unknown", "method", [])).toThrow(
       "Unknown capability or method",
     );
   });
