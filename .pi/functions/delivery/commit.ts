@@ -2,7 +2,8 @@
  * Stages the listed files, verifies the staged set, and commits it, optionally pushing the
  * current branch. Tracked paths are staged with `git add -u`, so an ignore rule that matches a
  * tracked file (for example a global `.pi` rule) does not block it; new ignored files still fail.
- * Unrelated changes that are already staged stop the commit before anything is staged.
+ * Unrelated changes that are already staged stop the commit before anything is staged. A listed
+ * deletion that is already staged, such as a `git mv` source, is committed as staged.
  *
  * @param input.files - Repository-relative file paths to commit (1-100), including deletions.
  * @param input.message - Commit message (1-5000 characters).
@@ -42,7 +43,8 @@ async function commit(
   const stagedPaths = () => paths(["diff", "--cached", "--name-only", "--no-renames", "-z"]);
   const requested = new Set(files);
 
-  const unrelated = (await stagedPaths()).filter((file) => !requested.has(file));
+  const alreadyStaged = new Set(await stagedPaths());
+  const unrelated = [...alreadyStaged].filter((file) => !requested.has(file));
   if (unrelated.length > 0) {
     throw new Error(
       `Unrelated changes are already staged: ${unrelated.slice(0, 10).join(", ")}. Unstage them or include them in files.`,
@@ -56,7 +58,9 @@ async function commit(
     throw new Error(`List files, not directories: ${directories.join(", ")}`);
   }
   const trackedFiles = files.filter((file) => tracked.has(file));
-  const newFiles = files.filter((file) => !tracked.has(file));
+  // A staged deletion, such as a git mv source, is in neither the index nor the tree: git add would
+  // reject it, and it needs no staging.
+  const newFiles = files.filter((file) => !tracked.has(file) && !alreadyStaged.has(file));
   if (trackedFiles.length > 0) await git(["add", "-u", "--", ...trackedFiles]);
   if (newFiles.length > 0) await git(["add", "--", ...newFiles]);
 
