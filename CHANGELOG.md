@@ -4,11 +4,21 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-26
+
 ### Added
 
 - Add `gh.prCreate` and `gh.prMerge`. They never prompt: a missing body is sent empty, and `prMerge` requires `method: "merge" | "squash" | "rebase"`.
 - Hint when a literal `workspace.search` query that contains regular expression syntax, such as `a|b`, finds nothing: the result's `hint` suggests `regex: true`, and the search view shows it as a warning.
 - Explain how to fix a program whose result is not JSON-typed, such as `unknown[]` or `Record<string, unknown>`, after the validation diagnostics.
+
+### Changed
+
+- Repository maintainer functions: `delivery.commit` commits renames that `git mv` already staged, and `tests.probeMutation` can mutate `.pi/functions` sources through the workflow test loader.
+
+### Fixed
+
+- Say where process options go when `npm.run` receives them in place of its script arguments.
 
 ## [0.18.1] - 2026-09-26
 
@@ -195,7 +205,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.18.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/cv/pit/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/cv/pit/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/cv/pit/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/cv/pit/compare/v0.16.1...v0.17.0
