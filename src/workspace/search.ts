@@ -197,6 +197,17 @@ async function scanSearchFile(input: {
   return { searched: true, skipped: false, truncated: false };
 }
 
+// Syntax that means something only to a regular expression. A literal search for it that finds
+// nothing almost always meant regex: true.
+const REGEX_SYNTAX = /\||\\[bdswBDSW]|\.[*+]|\(\?|^\^|\$$/;
+
+function regexSyntaxHint(query: string): string | undefined {
+  const token = REGEX_SYNTAX.exec(query)?.[0];
+  return token === undefined
+    ? undefined
+    : `No literal matches, but the query contains regular expression syntax (${JSON.stringify(token)}). Pass regex: true to search it as a pattern.`;
+}
+
 export async function searchWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const request = parseSearchRequest(cwd, args);
   const files = await discoverSearchFiles(request);
@@ -227,5 +238,6 @@ export async function searchWorkspace(cwd: string, args: unknown[], signal?: Abo
   } finally {
     await regexMatcher?.close();
   }
-  return { matches, truncated, filesSearched, filesSkipped };
+  const hint = request.regex || matches.length > 0 ? undefined : regexSyntaxHint(request.query);
+  return { matches, truncated, filesSearched, filesSkipped, ...(hint ? { hint } : {}) };
 }

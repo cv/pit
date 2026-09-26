@@ -129,7 +129,8 @@ export function renderSearch(
 ): RenderedResultValue | undefined {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ["matches", "truncated", "filesSearched", "filesSkipped"]) ||
+    !hasOnlyKeys(value, ["matches", "truncated", "filesSearched", "filesSkipped"], ["hint"]) ||
+    !(value.hint === undefined || typeof value.hint === "string") ||
     !Array.isArray(value.matches) ||
     !value.matches.every(isSearchMatch) ||
     typeof value.truncated !== "boolean" ||
@@ -144,6 +145,8 @@ export function renderSearch(
     `${plural(value.filesSearched, "file")} searched`,
     value.filesSkipped > 0 ? `${value.filesSkipped} skipped` : "",
     value.truncated ? "truncated" : "",
+    // The collapsed row explains its warning; the full hint is in the expanded lines.
+    value.hint !== undefined ? "regex syntax in a literal query" : "",
   ]
     .filter(Boolean)
     .join(", ");
@@ -164,9 +167,12 @@ export function renderSearch(
   if (value.matches.length === 0) {
     lines.push(theme.fg("dim", "(no matches)"));
   }
+  // A likely misread query is a warning, not a clean empty result.
+  if (typeof value.hint === "string") lines.push(theme.fg("warning", value.hint));
   return {
     kind: "search",
-    outcome: value.truncated || value.filesSkipped > 0 ? "warning" : "success",
+    outcome:
+      value.truncated || value.filesSkipped > 0 || value.hint !== undefined ? "warning" : "success",
     lines,
     summary,
     detailLines: lines.slice(1),
