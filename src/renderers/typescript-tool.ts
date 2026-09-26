@@ -208,7 +208,7 @@ function renderInvocationTiming(
     ranking.push(`${formatDuration(restMs)} rest`);
   }
   const total = `${formatDuration(timings.totalMs)} total`;
-  return `\n\n${theme.fg("muted", `${total}   ${ranking.join(" › ")}`)}`;
+  return `\n\n${theme.fg("muted", `${total}: ${ranking.join(", ")}`)}`;
 }
 
 function renderExecutionDetails(
