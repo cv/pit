@@ -113,10 +113,9 @@ describe("trace cleanup rendering", () => {
     name: string;
     timings: { totalMs: number; phases: Record<string, number> };
     ranking: string;
-    rest?: string;
   }>([
     {
-      name: "execution dominates with all minor and zero phases retained",
+      name: "execution dominates with minor and zero phases aggregated",
       timings: {
         totalMs: 1071,
         phases: {
@@ -130,7 +129,6 @@ describe("trace cleanup rendering", () => {
         },
       },
       ranking: "1.1s total 1.0s execution › 67ms validation › 4ms rest",
-      rest: "rest: 3ms compilation · 1ms formatting · 0ms preparation · 0ms commit · 0ms result",
     },
     {
       name: "validation dominates instead of execution",
@@ -139,7 +137,6 @@ describe("trace cleanup rendering", () => {
         phases: { execution: 200, compilation: 20, formatting: 10, validation: 610 },
       },
       ranking: "840ms total 610ms validation › 200ms execution › 30ms rest",
-      rest: "rest: 20ms compilation · 10ms formatting",
     },
     {
       name: "three phases fit without an aggregate or repeated detail",
@@ -166,15 +163,39 @@ describe("trace cleanup rendering", () => {
       timings: { totalMs: 15, phases: { execution: 10, future: 5 } },
       ranking: "15ms total 10ms execution › 5ms future",
     },
-  ])("ranks invocation costs: $name", ({ timings, ranking, rest }) => {
+  ])("ranks invocation costs: $name", ({ timings, ranking }) => {
     const before = structuredClone(timings);
     for (const width of [60, 80, 120]) {
       const output = render(42, true, { timings }, width).replace(/\s+/g, " ").trim();
       expect(output).toContain(ranking);
-      expect(output.match(/rest:.*/)?.[0]).toBe(rest);
+      expect(output).not.toContain("rest:");
       expect(render(42, false, { timings }, width)).not.toContain("›");
     }
     expect(timings).toEqual(before);
+  });
+
+  it("shows invocation timing on one line without bold emphasis", () => {
+    const rows = renderTypeScriptToolResult(
+      {
+        content: [],
+        details: {
+          value: 42,
+          truncated: false,
+          timings: {
+            totalMs: 840,
+            phases: { execution: 200, compilation: 20, formatting: 10, validation: 610 },
+          },
+        },
+      },
+      { expanded: true, isPartial: false },
+      { ...theme, bold: (text: string) => `\x1b[1m${text}\x1b[22m` },
+      { executionStarted: false },
+    ).render(120);
+    const timingStart = rows.findIndex((row) => row.includes("840ms total"));
+    expect(timingStart).toBeGreaterThanOrEqual(0);
+    const timingRows = rows.slice(timingStart).filter((row) => stripTerminalSequences(row).trim());
+    expect.soft(timingRows).toHaveLength(1);
+    expect.soft(timingRows.join("\n")).not.toContain("\x1b[1m");
   });
 
   it("joins by sequence, preserves nested attribution and distinct processes, and avoids duplicate sections", () => {

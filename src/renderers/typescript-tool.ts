@@ -197,23 +197,18 @@ function renderInvocationTiming(
   const phases = Object.entries(timings.phases).sort((left, right) => right[1] - left[1]);
   if (!phases.length) return "";
 
-  // Small breakdowns need no aggregation. Larger ones lead with the two biggest costs;
-  // the remaining measurements stay inspectable directly underneath, including zeroes.
+  // Show small breakdowns directly; summarize larger ones as the top two costs plus rest.
   const prominent = phases.length > 3 ? 2 : phases.length;
   const rest = phases.slice(prominent);
-  const ranking = phases.slice(0, prominent).map(([phase, value], index) => {
-    const duration = formatDuration(value);
-    return `${index === 0 ? theme.bold(duration) : duration} ${phase}`;
-  });
-  let restDetail = "";
+  const ranking = phases
+    .slice(0, prominent)
+    .map(([phase, value]) => `${formatDuration(value)} ${phase}`);
   if (rest.length) {
     const restMs = rest.reduce((sum, [, value]) => sum + value, 0);
     ranking.push(theme.fg("muted", `${formatDuration(restMs)} rest`));
-    const breakdown = rest.map(([phase, value]) => `${formatDuration(value)} ${phase}`).join(" · ");
-    restDetail = `\n  ${theme.fg("dim", `rest: ${breakdown}`)}`;
   }
   const total = `${formatDuration(timings.totalMs)} total`;
-  return `\n\n${theme.fg("muted", total)}   ${ranking.join(theme.fg("dim", " › "))}${restDetail}`;
+  return `\n\n${theme.fg("muted", total)}   ${ranking.join(theme.fg("dim", " › "))}`;
 }
 
 function renderExecutionDetails(
