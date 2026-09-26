@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- Add `gh.prCreate` and `gh.prMerge`. They never prompt: a missing body is sent empty, and `prMerge` requires `method: "merge" | "squash" | "rebase"`.
+
 ## [0.18.1] - 2026-09-26
 
 ### Changed

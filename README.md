@@ -455,6 +455,7 @@ Use `shell.execFile("npm", ...)` for unsupported npm commands. npm lifecycle scr
 
 - `issueList(options?)`, `issueView(number, options?)`, `issueCreate(input)`, `issueComment(number, body, options?)`, and `issueClose(number, options?)` manage issues.
 - `prList(options?)` and `prView(number, options?)` inspect pull requests.
+- `prCreate(input)` and `prMerge(number, { method, deleteBranch?, auto? })` open and merge pull requests without interactive prompts: a missing body is sent empty, and the merge method is required.
 - `runList(options?)` and `runView(id, options?)` inspect GitHub Actions runs and jobs.
 - `releaseView(tag?, options?)` and `releaseCreate(tag, input)` inspect and create releases.
 - `api(endpoint, args?, options?)` is a bounded, argument-safe escape hatch.
