@@ -36,6 +36,8 @@ Submit one fixture name as ordinary prompt text:
 | `timeout-tree`      | Pipeline `sleep 3002 \| cat` with a 1 s deadline; no `sleep 3002` may remain after the timeout.                        |
 | `dialog-timeout`    | `ui.confirm` left unanswered past a 3 s deadline; the dialog must close when the call times out.                       |
 | `tty-probe`         | Writes to `/dev/tty`; the command must fail without drawing `PIT_TTY_PROBE` into Pi's screen.                          |
+| `search-hint`       | Literal search containing `\|` that finds nothing; the search view keeps its header and shows the `regex: true` hint.  |
+| `json-hint`         | Result typed `unknown[]`; the validation failure ends with the JSON-result hint.                                       |
 | `save-probe`        | Saves the session function `probeSaved`, for `promote-timeout`.                                                        |
 | `promote-timeout`   | User promotion whose confirmation outlives its 3 s call; the dialog closes and no `probeSaved.ts` is written.          |
 | `json`              | Heterogeneous fields and multiline patch content without field loss.                                                   |

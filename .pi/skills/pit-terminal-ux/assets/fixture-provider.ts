@@ -112,6 +112,14 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     label: "UX TTY: commands have no controlling terminal",
     code: 'async ({ shell: { exec } }) => exec("echo PIT_TTY_PROBE > /dev/tty")',
   },
+  "search-hint": {
+    label: "UX SEARCH HINT: literal query with regex syntax",
+    code: 'async ({ workspace: { search } }) => search("PIT_HINT_SENTINEL_A|PIT_HINT_SENTINEL_B", { path: "src" })',
+  },
+  "json-hint": {
+    label: "UX JSON HINT: result that is not JSON-typed",
+    code: "async ({}) => ({ items: [] as unknown[] })",
+  },
   "save-probe": {
     label: "UX SAVE PROBE: session function",
     code: "async function probeSaved({}) { return 1; }",
