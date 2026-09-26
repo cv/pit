@@ -37,7 +37,7 @@ For a longer first-hand account, see [I Wasn't Trying to Build an App](docs/case
 
 ## Install
 
-Pit needs Node 22.19 or newer and is tested with Pi 0.86.0; other Pi versions may work.
+Pit needs Node 22.19 or newer and is tested with Pi 0.87.1; other Pi versions may work.
 
 Install the latest version:
 
