@@ -106,7 +106,14 @@ async ({ pr: { waitForChecks } }, input: { number: number; repo: string }) =>
   waitForChecks({ ...input, raise: true })
 ```
 
-Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. When a run fails, call `ci.inspectFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
+Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. To compare durations, such as before and after a CI change or cold and warm native builds, time the exact run:
+
+```ts pit-example
+async ({ ci: { inspectTimings } }, input: { repo: string; id: number }) =>
+  inspectTimings({ ...input, steps: "^(Build|Test)" })
+```
+
+When a run fails, call `ci.inspectFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
 
 ## Finish an issue
 

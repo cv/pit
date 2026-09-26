@@ -12,7 +12,7 @@ these namespaces.
 | Namespace   | Operation                                          | Functions                                                                                                          | Owning skill    |
 | ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------- |
 | `delivery`  | Validate, format, review, and commit local changes | `validate`, `format`, `listChangedFiles`, `review`, `prepare`, `commit`, `auditCodeQuality`, `inspectDependencies` | pit-delivery    |
-| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`                                                         | pit-delivery    |
+| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`, `inspectTimings`                                       | pit-delivery    |
 | `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `manageWorktree`                                                                       | pit-delivery    |
 | `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                              | pit-test-audit  |
 | `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                       | pit-terminal-ux |
@@ -64,6 +64,9 @@ result types from injected functions instead of copying their schemas.
   cleanup. `logTruncated` means earlier output was not fetched. From that window it lists
   at most 30 failed Vitest tests with their first error line; `testFailuresOmitted` also
   counts failures that Vitest's summary reports but the window no longer contained.
+- `ci.inspectTimings()` projects job and step timestamps with `gh --jq` before transfer,
+  times at most one page of 100 jobs (`jobsLimited` marks a full page), omits skipped
+  steps, and rejects truncated output instead of reporting a partial run.
 - `delivery.commit()` refuses unrelated staged paths, directories, and unchanged listed
   files. It stages tracked paths with `git add -u` and never force-adds an ignored new file.
 - Check process truncation before parsing machine output. A partial filename list
