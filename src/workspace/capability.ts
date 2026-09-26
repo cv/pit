@@ -4,8 +4,9 @@ import { dirname } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import fg from "fast-glob";
 
+import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
 import { fileRevision, prepareEdit } from "./hashline.js";
-import { checkAbort, object, resolveWorkspacePath, string, workspaceResultPath } from "./paths.js";
+import { checkAbort, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { readWorkspace } from "./read.js";
 import { searchWorkspace } from "./search.js";
 

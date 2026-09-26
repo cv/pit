@@ -20,10 +20,8 @@ import {
   filterPersistentIdentifiers,
 } from "./validation.js";
 
-const USER_FUNCTION_DIRECTORY = ["functions"] as const;
-
 export function userFunctionDirectory(): string {
-  return join(getAgentDir(), ...USER_FUNCTION_DIRECTORY);
+  return join(getAgentDir(), "functions");
 }
 
 export function userFunctionPath(name: string): string {

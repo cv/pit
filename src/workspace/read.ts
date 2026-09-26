@@ -1,8 +1,9 @@
 import { createHash, type Hash } from "node:crypto";
 import { createReadStream } from "node:fs";
 
+import { recordValue as object } from "../shared/argument-values.js";
 import { LIMITS, sliceText } from "../shared/bounds.js";
-import { object, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
+import { resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 
 export type WorkspaceReadFormat = "hashed" | "raw";
 
