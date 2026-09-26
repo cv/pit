@@ -4,9 +4,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-09-26
+
 ### Changed
 
-- Organize the repository's project functions into namespaces by operation (`delivery`, `ci`, `pr`, `tests`, `ux`, `sessions`), with names that drop what the namespace says, such as `delivery.validate` for `validatePit` and `ci.inspectFailure` for `inspectGitHubRunFailure`. `.pi/functions/README.md` maps each namespace to its operation and owning skill.
+- Organize the repository's project functions into namespaces by operation (`delivery`, `ci`, `pr`, `tests`, `ux`, `sessions`), with names that drop what the namespace says, such as `delivery.validate` for `validatePit` and `ci.inspectFailure` for `inspectGitHubRunFailure`. `.pi/functions/README.md` maps each namespace to its operation and owning skill. New maintainer helpers list failed Vitest tests from CI logs, time runs, jobs, and steps (`ci.inspectTimings`), and keep a terminal shell alive for exit checks.
 
 ### Fixed
 
@@ -187,7 +189,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/cv/pit/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/cv/pit/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/cv/pit/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/cv/pit/compare/v0.16.0...v0.16.1
