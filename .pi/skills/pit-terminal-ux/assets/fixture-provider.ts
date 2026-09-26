@@ -92,6 +92,40 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     "for(let n=1;n<=6;n++){console.log('PROGRESS_STEP_'+n);await new Promise(r=>setTimeout(r,700));}",
     10000,
   ),
+  // Cancellation probes. Unique sleep durations let a process probe find descendants by name.
+  "cancel-tree": {
+    label: "UX CANCEL TREE: press Escape",
+    code: 'async ({ shell: { exec } }) => exec("echo TREE_STARTED; sleep 3001 | cat; echo TREE_DONE", { timeoutMs: 120000 })',
+    timeoutMs: 130000,
+  },
+  "cancel-silent": {
+    label: "UX CANCEL SILENT: quiet direct child",
+    code: 'async ({ shell: { execFile } }) => execFile("sleep", ["3003"], { timeoutMs: 120000 })',
+    timeoutMs: 130000,
+  },
+  "timeout-tree": {
+    label: "UX TIMEOUT TREE: pipeline deadline",
+    code: 'async ({ shell: { exec } }) => exec("sleep 3002 | cat", { timeoutMs: 1000 })',
+    timeoutMs: 10000,
+  },
+  "tty-probe": {
+    label: "UX TTY: commands have no controlling terminal",
+    code: 'async ({ shell: { exec } }) => exec("echo PIT_TTY_PROBE > /dev/tty")',
+  },
+  "save-probe": {
+    label: "UX SAVE PROBE: session function",
+    code: "async function probeSaved({}) { return 1; }",
+  },
+  "promote-timeout": {
+    label: "UX PROMOTE TIMEOUT: leave the confirmation unanswered",
+    code: 'async ({ functions: { promote } }) => promote("probeSaved", "Probe", { to: "user" })',
+    timeoutMs: 3000,
+  },
+  "dialog-timeout": {
+    label: "UX DIALOG TIMEOUT: leave unanswered",
+    code: 'async ({ ui: { confirm } }) => confirm("PIT_DIALOG_SENTINEL", "Leave this unanswered")',
+    timeoutMs: 3000,
+  },
   calls: {
     label: "UX CALLS: more call groups than the live budget",
     code: 'async ({ workspace: { stat, list }, shell: { execFile } }, input: { rounds: number; script: string }) => { for (let round = 0; round < input.rounds; round++) { await stat("package.json"); await list("src"); } return execFile("node", ["--input-type=module", "--eval", input.script], { timeoutMs: 15000 }); }',
