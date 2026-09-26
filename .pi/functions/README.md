@@ -68,7 +68,8 @@ result types from injected functions instead of copying their schemas.
   times at most one page of 100 jobs (`jobsLimited` marks a full page), omits skipped
   steps, and rejects truncated output instead of reporting a partial run.
 - `delivery.commit()` refuses unrelated staged paths, directories, and unchanged listed
-  files. It stages tracked paths with `git add -u` and never force-adds an ignored new file.
+  files. It stages tracked paths with `git add -u`, never force-adds an ignored new file, and
+  commits an already-staged deletion such as a `git mv` source as staged.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
 - `delivery.listChangedFiles()` preserves literal filenames, uses rename destinations,

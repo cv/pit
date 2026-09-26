@@ -33,6 +33,10 @@ function repository(options: {
           if (options.ignored?.includes(path)) {
             throw new Error(`The following paths are ignored: ${path}`);
           }
+          // Like git, a plain add rejects a path that is in neither the tree nor the index.
+          if (!command.includes("-u") && !options.changed.includes(path)) {
+            throw new Error(`fatal: pathspec '${path}' did not match any files`);
+          }
           if (options.changed.includes(path)) staged.add(path);
         }
         return processResult();
@@ -118,6 +122,18 @@ describe("delivery.commit", () => {
       error,
     );
     expect(repo.commit).not.toHaveBeenCalled();
+  });
+
+  // git mv stages both halves of a rename; its source is then in neither the index nor the tree.
+  it("commits a rename that git mv already staged", async () => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({ tracked: ["new.ts"], changed: [], staged: ["old.ts", "new.ts"] });
+    const result = await commitChanges(repo.dependencies, {
+      files: ["old.ts", "new.ts"],
+      message: "refactor: rename",
+    });
+    expect(result).toMatchObject({ files: ["old.ts", "new.ts"] });
+    expect(repo.commit).toHaveBeenCalledOnce();
   });
 
   it("surfaces an ignored new file instead of forcing it", async () => {
