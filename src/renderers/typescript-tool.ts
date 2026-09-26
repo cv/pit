@@ -193,13 +193,8 @@ function renderInvocationTiming(
   timings: ExecutionProgressSnapshot["timings"],
   theme: RenderTheme,
 ): string {
-  if (!isRecord(timings?.phases)) return "";
-  const phases = Object.entries(timings.phases)
-    .filter(
-      (entry): entry is [string, number] =>
-        typeof entry[1] === "number" && Number.isFinite(entry[1]) && entry[1] >= 0,
-    )
-    .sort((left, right) => right[1] - left[1]);
+  if (!timings) return "";
+  const phases = Object.entries(timings.phases).sort((left, right) => right[1] - left[1]);
   if (!phases.length) return "";
 
   // Small breakdowns need no aggregation. Larger ones lead with the two biggest costs;
@@ -210,21 +205,15 @@ function renderInvocationTiming(
     const duration = formatDuration(value);
     return `${index === 0 ? theme.bold(duration) : duration} ${phase}`;
   });
+  let restDetail = "";
   if (rest.length) {
     const restMs = rest.reduce((sum, [, value]) => sum + value, 0);
     ranking.push(theme.fg("muted", `${formatDuration(restMs)} rest`));
-  }
-  const totalMs = timings.totalMs;
-  const total =
-    typeof totalMs === "number" && Number.isFinite(totalMs) && totalMs >= 0
-      ? `${formatDuration(totalMs)} total`
-      : "Timing";
-  let text = `\n\n${theme.fg("muted", total)}   ${ranking.join(theme.fg("dim", " › "))}`;
-  if (rest.length) {
     const breakdown = rest.map(([phase, value]) => `${formatDuration(value)} ${phase}`).join(" · ");
-    text += `\n  ${theme.fg("dim", `rest: ${breakdown}`)}`;
+    restDetail = `\n  ${theme.fg("dim", `rest: ${breakdown}`)}`;
   }
-  return text;
+  const total = `${formatDuration(timings.totalMs)} total`;
+  return `\n\n${theme.fg("muted", total)}   ${ranking.join(theme.fg("dim", " › "))}${restDetail}`;
 }
 
 function renderExecutionDetails(
@@ -304,6 +293,22 @@ function renderCompletedToolResult(input: {
   return new HangingIndentText(text, displayedHangingIndents);
 }
 
+/** Pi supplies unknown details, including replayed entries. Validate once before rendering. */
+function assertInvocationTimings(
+  timings: unknown,
+): asserts timings is ExecutionProgressSnapshot["timings"] {
+  if (timings === undefined) return;
+  if (
+    !isRecord(timings) ||
+    !isRecord(timings.phases) ||
+    ![timings.totalMs, ...Object.values(timings.phases)].every(
+      (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
+    )
+  ) {
+    throw new Error("Invalid invocation timing metadata");
+  }
+}
+
 function renderToolResult(
   result: ToolResultLike,
   options: { expanded: boolean; isPartial: boolean },
@@ -314,17 +319,12 @@ function renderToolResult(
     .filter((content) => content.type === "text")
     .map((content) => content.text ?? "")
     .join("\n");
-  const details = isRecord(result.details)
-    ? (result.details as unknown as TypeScriptDetails)
-    : undefined;
+  const rawDetails = isRecord(result.details) ? result.details : undefined;
   const execution = executionTiming(context, !options.isPartial || context.isError === true);
+  assertInvocationTimings(rawDetails?.timings);
+  const details = rawDetails as unknown as TypeScriptDetails | undefined;
   const recordedMs = details?.timings?.totalMs;
-  if (
-    (!options.isPartial || context.isError) &&
-    typeof recordedMs === "number" &&
-    Number.isFinite(recordedMs) &&
-    recordedMs >= 0
-  ) {
+  if ((!options.isPartial || context.isError) && recordedMs !== undefined) {
     execution.duration = formatDuration(recordedMs);
   }
   for (const key of ["traces", "progress", "functions"] as const) {
