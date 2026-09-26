@@ -189,6 +189,44 @@ function executionNotices(details: TypeScriptDetails | undefined, outcome: strin
   return notices;
 }
 
+function renderInvocationTiming(
+  timings: ExecutionProgressSnapshot["timings"],
+  theme: RenderTheme,
+): string {
+  if (!isRecord(timings?.phases)) return "";
+  const phases = Object.entries(timings.phases)
+    .filter(
+      (entry): entry is [string, number] =>
+        typeof entry[1] === "number" && Number.isFinite(entry[1]) && entry[1] >= 0,
+    )
+    .sort((left, right) => right[1] - left[1]);
+  if (!phases.length) return "";
+
+  // Small breakdowns need no aggregation. Larger ones lead with the two biggest costs;
+  // the remaining measurements stay inspectable directly underneath, including zeroes.
+  const prominent = phases.length > 3 ? 2 : phases.length;
+  const rest = phases.slice(prominent);
+  const ranking = phases.slice(0, prominent).map(([phase, value], index) => {
+    const duration = formatDuration(value);
+    return `${index === 0 ? theme.bold(duration) : duration} ${phase}`;
+  });
+  if (rest.length) {
+    const restMs = rest.reduce((sum, [, value]) => sum + value, 0);
+    ranking.push(theme.fg("muted", `${formatDuration(restMs)} rest`));
+  }
+  const totalMs = timings.totalMs;
+  const total =
+    typeof totalMs === "number" && Number.isFinite(totalMs) && totalMs >= 0
+      ? `${formatDuration(totalMs)} total`
+      : "Timing";
+  let text = `\n\n${theme.fg("muted", total)}   ${ranking.join(theme.fg("dim", " › "))}`;
+  if (rest.length) {
+    const breakdown = rest.map(([phase, value]) => `${formatDuration(value)} ${phase}`).join(" · ");
+    text += `\n  ${theme.fg("dim", `rest: ${breakdown}`)}`;
+  }
+  return text;
+}
+
 function renderExecutionDetails(
   details: TypeScriptDetails | undefined,
   theme: RenderTheme,
@@ -204,13 +242,7 @@ function renderExecutionDetails(
   const dashboard = renderExecutionDashboard(details, theme, true, returnedValue);
   if (dashboard)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Execution (call completion)"))}${dashboard}`;
-  if (isRecord(details?.timings?.phases)) {
-    const phases = Object.entries(details.timings.phases)
-      .filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value >= 0)
-      .map(([phase, value]) => `${phase} ${formatDuration(value as number)}`);
-    if (phases.length)
-      text += `\n\n${theme.bold(theme.fg("toolTitle", "Invocation timing"))}\n${phases.join(" · ")}`;
-  }
+  text += renderInvocationTiming(details?.timings, theme);
   if (details?.truncated)
     text += `\n${theme.fg("warning", "Result truncated to fit the output budget; omitted parts are not retained.")}`;
   return text;

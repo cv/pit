@@ -104,10 +104,93 @@ describe("trace cleanup rendering", () => {
     };
     expect(render(42, false, metadata)).toContain("75ms");
     const before = render(42, true, metadata);
-    expect(before).toContain("validation 10ms");
+    expect(before).toContain("10ms validation");
     expect(before).toBe(render(42, true, metadata));
     expect(render(42, false)).toContain("time unavailable");
     expect(render(42, false, { timings: { totalMs: -1 } })).toContain("time unavailable");
+  });
+
+  it.each<{
+    name: string;
+    timings: unknown;
+    ranking: string;
+    rest?: string;
+  }>([
+    {
+      name: "execution dominates with all minor and zero phases retained",
+      timings: {
+        totalMs: 1071,
+        phases: {
+          formatting: 1,
+          preparation: 0,
+          validation: 67,
+          compilation: 3,
+          execution: 1000,
+          commit: 0,
+          result: 0,
+        },
+      },
+      ranking: "1.1s total 1.0s execution › 67ms validation › 4ms rest",
+      rest: "rest: 3ms compilation · 1ms formatting · 0ms preparation · 0ms commit · 0ms result",
+    },
+    {
+      name: "validation dominates instead of execution",
+      timings: {
+        totalMs: 840,
+        phases: { execution: 200, compilation: 20, formatting: 10, validation: 610 },
+      },
+      ranking: "840ms total 610ms validation › 200ms execution › 30ms rest",
+      rest: "rest: 20ms compilation · 10ms formatting",
+    },
+    {
+      name: "three phases fit without an aggregate or repeated detail",
+      timings: { totalMs: 75, phases: { formatting: 5, validation: 10, execution: 60 } },
+      ranking: "75ms total 60ms execution › 10ms validation › 5ms formatting",
+    },
+    {
+      name: "ties retain their recorded order",
+      timings: { totalMs: 12, phases: { formatting: 4, execution: 4, validation: 4 } },
+      ranking: "12ms total 4ms formatting › 4ms execution › 4ms validation",
+    },
+    {
+      name: "zero measurements remain distinct from absent phases",
+      timings: { totalMs: 0, phases: { formatting: 0, validation: 0 } },
+      ranking: "0ms total 0ms formatting › 0ms validation",
+    },
+    {
+      name: "recorded total is not replaced by an incomplete phase sum",
+      timings: { totalMs: 90, phases: { execution: 30, validation: 20 } },
+      ranking: "90ms total 30ms execution › 20ms validation",
+    },
+    {
+      name: "unknown phase names survive and invalid measurements are ignored",
+      timings: {
+        totalMs: 15,
+        phases: {
+          invalid: NaN,
+          negative: -1,
+          infinite: Infinity,
+          text: "10",
+          execution: 10,
+          future: 5,
+        },
+      },
+      ranking: "15ms total 10ms execution › 5ms future",
+    },
+    {
+      name: "missing total does not fabricate a duration",
+      timings: { phases: { validation: 7 } },
+      ranking: "Timing 7ms validation",
+    },
+  ])("ranks invocation costs: $name", ({ timings, ranking, rest }) => {
+    const before = structuredClone(timings);
+    for (const width of [60, 80, 120]) {
+      const output = render(42, true, { timings }, width).replace(/\s+/g, " ").trim();
+      expect(output).toContain(ranking);
+      expect(output.match(/rest:.*/)?.[0]).toBe(rest);
+      expect(render(42, false, { timings }, width)).not.toContain("›");
+    }
+    expect(timings).toEqual(before);
   });
 
   it("joins by sequence, preserves nested attribution and distinct processes, and avoids duplicate sections", () => {
