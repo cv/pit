@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop a cancelled or timed-out command's descendants too, such as a shell pipeline's processes, which previously kept running after Pit reported the command stopped. Commands now run in their own process group without Pi's controlling terminal, so programs that prompt on `/dev/tty` fail instead of writing into Pi's screen.
+
 ## [0.18.0] - 2026-09-25
 
 ### Added

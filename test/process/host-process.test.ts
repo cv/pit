@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { executeStreamingProcess } from "../../src/process/host.js";
 
@@ -93,6 +93,39 @@ describe("executeStreamingProcess", () => {
       },
     );
     expect(immediate).toMatchObject({ killed: true, termination: "abort", code: 130 });
+  });
+
+  // A shell's children are not signalled with the shell; stopping the command must stop them too.
+  it.skipIf(process.platform === "win32").each<{ name: string; stop: "abort" | "timeout" }>([
+    { name: "cancelled", stop: "abort" },
+    { name: "timed out", stop: "timeout" },
+  ])("terminates the descendants of a $name command", async ({ stop }) => {
+    const controller = new AbortController();
+    let descendant = 0;
+    const running = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      const result = await executeStreamingProcess("/bin/sh", ["-c", "sleep 30 & echo $!; wait"], {
+        cwd: process.cwd(),
+        timeout: stop === "timeout" ? 1000 : 0,
+        signal: controller.signal,
+        onChunk: (_stream, chunk) => {
+          descendant ||= Number.parseInt(chunk, 10);
+          if (stop === "abort") controller.abort();
+        },
+      });
+      expect(result).toMatchObject({ killed: true, termination: stop });
+      expect(descendant).toBeGreaterThan(0);
+      await vi.waitFor(() => expect(running(descendant)).toBe(false), { timeout: 3000 });
+    } finally {
+      if (descendant && running(descendant)) process.kill(descendant, "SIGKILL");
+    }
   });
 
   it("reports externally signaled exits as failures", async () => {

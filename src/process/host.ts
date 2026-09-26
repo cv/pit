@@ -4,6 +4,31 @@ import { LIMITS, type SliceKeep, TextCapture, type TextBudget } from "../shared/
 
 const EXIT_STDIO_GRACE_MS = 100;
 const FORCE_KILL_DELAY_MS = 5000;
+// On POSIX a command leads its own process group (and session), so stopping it reaches its
+// descendants, such as a shell's pipeline, which do not receive the shell's signal. The command
+// also has no controlling terminal, so a program that prompts on /dev/tty fails instead of writing
+// into Pi's screen.
+const OWN_PROCESS_GROUP = process.platform !== "win32";
+
+/** Signals a command and every descendant still in its process group. */
+function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  /* v8 ignore next -- a command that failed to spawn has no process to signal. */
+  if (child.pid === undefined) return;
+  /* v8 ignore next -- Windows has no process groups; taskkill ends the tree. CI runs POSIX. */
+  if (!OWN_PROCESS_GROUP) {
+    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    }).on("error", () => child.kill(signal));
+    return;
+  }
+  /* v8 ignore next -- the group can finish exiting between the stop request and the signal. */
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    // Every process in the group has already exited.
+  }
+}
 
 export interface StreamingProcessResult {
   stdout: string;
@@ -122,6 +147,7 @@ export async function executeStreamingProcess(
     cwd: options.cwd,
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: OWN_PROCESS_GROUP,
   });
   const capture = options.capture ?? { budget: LIMITS.processStream, keep: "tail" };
   // Retain only the window the caller can return, so memory stays bounded for any output size.
@@ -137,12 +163,11 @@ export async function executeStreamingProcess(
     }
     killed = true;
     termination = reason;
-    child.kill("SIGTERM");
-    /* v8 ignore next 5 -- test children terminate on SIGTERM; this is the escalation fallback. */
+    signalProcessTree(child, "SIGTERM");
+    // Escalate for any process still in the group, even after the command itself exited.
+    /* v8 ignore next 3 -- test children terminate on SIGTERM; this is the escalation fallback. */
     const forceKill = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill("SIGKILL");
-      }
+      signalProcessTree(child, "SIGKILL");
     }, FORCE_KILL_DELAY_MS);
     forceKill.unref?.();
   };
