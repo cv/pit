@@ -8,7 +8,9 @@ export default defineConfig({
     // Each worker pays TypeScript startup and one guest compilation; on 20 cores, 8 workers
     // finish the suite faster than 19.
     maxWorkers: Math.min(8, availableParallelism()),
-    testTimeout: 15_000,
+    // The first test in a file pays TypeScript and runtime cold start, which can pass 15 s under
+    // CI coverage.
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
