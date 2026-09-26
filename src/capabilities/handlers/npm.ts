@@ -41,6 +41,12 @@ export function prepareNpmCommand(method: NpmMethod, args: unknown[]): PreparedN
   switch (method) {
     case "run": {
       const script = string(args[0], "script");
+      // Options passed where args belong (possible only through a cast) name the signature.
+      if (args[1] !== null && typeof args[1] === "object" && !Array.isArray(args[1])) {
+        throw new TypeError(
+          "npm.run(script, args?, options?): args must be an array of strings; pass process options such as maxBytes as the third argument",
+        );
+      }
       const scriptArgs = args[1] === undefined ? [] : stringArray(args[1], "args");
       return {
         args: ["run", script, ...(scriptArgs.length > 0 ? ["--", ...scriptArgs] : [])],

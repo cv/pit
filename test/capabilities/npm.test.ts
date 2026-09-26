@@ -21,6 +21,13 @@ function render(method: string, value: unknown) {
 }
 
 describe("npm capability", () => {
+  // A cast call can pass options where args belong; the error names the signature.
+  it("explains that npm.run options go after args", () => {
+    expect(() => prepareNpmCommand("run", ["check", { maxBytes: 3000 }])).toThrow(
+      "npm.run(script, args?, options?): args must be an array of strings; pass process options such as maxBytes as the third argument",
+    );
+  });
+
   it("prepares scripts and tests", () => {
     expect(prepareNpmCommand("run", ["check", ["--fix"], { raise: true }])).toEqual({
       args: ["run", "check", "--", "--fix"],
