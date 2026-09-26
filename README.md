@@ -57,7 +57,7 @@ pi -e git:github.com/cv/pit
 pi install -l git:github.com/cv/pit
 
 # Pin a release (package updates won't move a pinned install)
-pi install git:github.com/cv/pit@v0.18.0
+pi install git:github.com/cv/pit@v0.18.1
 ```
 
 See [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) for what changed between versions. Pit is distributed from GitHub only; it isn't published to npm.
