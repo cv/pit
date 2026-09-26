@@ -52,9 +52,9 @@ function repository(options: {
   return { dependencies: { shell: { execFile }, git: { commit, push } }, calls, commit, push };
 }
 
-describe("commitPitChanges", () => {
+describe("delivery.commit", () => {
   it("stages tracked edits with -u and new files normally, then commits exactly them", async () => {
-    const commitChanges = await loadWorkflowFunction("commitPitChanges");
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({
       tracked: [".pi/functions/a.ts", "README.md"],
       changed: [".pi/functions/a.ts", "test/new.test.ts"],
@@ -87,7 +87,7 @@ describe("commitPitChanges", () => {
   });
 
   it("refuses unrelated staged changes before staging anything", async () => {
-    const commitChanges = await loadWorkflowFunction("commitPitChanges");
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], staged: ["other.ts"] });
     await expect(
       commitChanges(repo.dependencies, { files: ["a.ts"], message: "fix: a" }),
@@ -112,7 +112,7 @@ describe("commitPitChanges", () => {
       error: "not directories: src",
     },
   ])("does not commit $name", async ({ tracked, changed, files, error }) => {
-    const commitChanges = await loadWorkflowFunction("commitPitChanges");
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({ tracked, changed });
     await expect(commitChanges(repo.dependencies, { files, message: "fix: a" })).rejects.toThrow(
       error,
@@ -121,7 +121,7 @@ describe("commitPitChanges", () => {
   });
 
   it("surfaces an ignored new file instead of forcing it", async () => {
-    const commitChanges = await loadWorkflowFunction("commitPitChanges");
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({ tracked: [], changed: ["secret.env"], ignored: ["secret.env"] });
     await expect(
       commitChanges(repo.dependencies, { files: ["secret.env"], message: "chore: add" }),
@@ -138,7 +138,7 @@ describe("commitPitChanges", () => {
       expected: "origin/feature",
     },
   ])("pushes the current branch to $name", async ({ upstream, args, expected }) => {
-    const commitChanges = await loadWorkflowFunction("commitPitChanges");
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], upstream });
     const result = await commitChanges(repo.dependencies, {
       files: ["a.ts"],
@@ -157,7 +157,7 @@ describe("commitPitChanges", () => {
     { name: "a trailing slash", input: { files: ["src/"], message: "fix" } },
     { name: "a blank message", input: { files: ["a.ts"], message: "  " } },
   ])("rejects $name before running Git", async ({ input }) => {
-    const commitChanges = await loadWorkflowFunction("commitPitChanges");
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"] });
     await expect(commitChanges(repo.dependencies, input)).rejects.toThrow();
     expect(repo.calls).toEqual([]);

@@ -14,7 +14,7 @@
  *   The default is false.
  * @param input.root - Run directory returned by start; stop kills its server and removes it.
  */
-async function managePitUxSession(
+async function manageSession(
   { context: { get }, shell: { execFile } },
   input:
     | {

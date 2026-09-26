@@ -3,10 +3,7 @@
  * Previews are bounded before transport and fitted to one output budget. Shortened text and
  * omitted items are explicit, and incomplete JSON is rejected.
  */
-async function inspectGitHubPullRequest(
-  { gh: { api, prView } },
-  input: { number: number; repo?: string },
-) {
+async function inspect({ gh: { api, prView } }, input: { number: number; repo?: string }) {
   interface Preview {
     author?: string;
     state?: string;

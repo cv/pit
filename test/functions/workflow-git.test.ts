@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadWorkflowFunction, processResult } from "../helpers/workflow-function.js";
 
-describe("listChangedGitFiles", () => {
+describe("delivery.listChangedFiles", () => {
   it.each<{ name: string; stdout: string; files: string[] }>([
     { name: "clean worktree", stdout: "", files: [] },
     {
@@ -22,7 +22,7 @@ describe("listChangedGitFiles", () => {
       files: [" space.ts", "-flag.ts", "a -> b.ts", "café.ts", "line\nbreak.ts"],
     },
   ])("lists $name without losing filenames", async ({ stdout, files }) => {
-    const list = await loadWorkflowFunction("listChangedGitFiles");
+    const list = await loadWorkflowFunction("delivery.listChangedFiles");
     const status = vi.fn().mockResolvedValue(processResult({ stdout }));
     expect(await list({ git: { status } })).toEqual({ files });
     expect(status).toHaveBeenCalledWith(
@@ -46,47 +46,47 @@ describe("listChangedGitFiles", () => {
   ])(
     "rejects $name rather than returning a partial list",
     async ({ stdout, truncated = false, error }) => {
-      const list = await loadWorkflowFunction("listChangedGitFiles");
+      const list = await loadWorkflowFunction("delivery.listChangedFiles");
       const status = vi.fn().mockResolvedValue(processResult({ stdout, truncated }));
       await expect(list({ git: { status } })).rejects.toThrow(error);
     },
   );
 });
 
-describe("formatPitChanges", () => {
+describe("delivery.format", () => {
   it.each<{ name: string; checkOnly: boolean; code: number }>([
     { name: "successful write", checkOnly: false, code: 0 },
     { name: "successful check", checkOnly: true, code: 0 },
     { name: "failed check", checkOnly: true, code: 1 },
   ])("reports $name and invalidates anchors only for writes", async ({ checkOnly, code }) => {
-    const format = await loadWorkflowFunction("formatPitChanges");
-    const listChangedGitFiles = vi
+    const format = await loadWorkflowFunction("delivery.format");
+    const listChangedFiles = vi
       .fn()
       .mockResolvedValue({ files: ["-flag.ts", " space.ts", "image.png"] });
     const execFile = vi.fn().mockResolvedValue(processResult({ code, stdout: "formatter output" }));
     const files = ["-flag.ts", " space.ts"];
-    expect(await format({ listChangedGitFiles, shell: { execFile } }, { checkOnly })).toMatchObject(
-      {
-        files,
-        formatted: code === 0,
-        changed: !checkOnly && code === 0,
-        anchorsInvalidated: checkOnly ? [] : files,
-      },
-    );
+    expect(
+      await format({ delivery: { listChangedFiles }, shell: { execFile } }, { checkOnly }),
+    ).toMatchObject({
+      files,
+      formatted: code === 0,
+      changed: !checkOnly && code === 0,
+      anchorsInvalidated: checkOnly ? [] : files,
+    });
     expect(execFile).toHaveBeenCalledWith(
       "npx",
       ["oxfmt", checkOnly ? "--check" : "--write", "--", ...files],
       expect.objectContaining({ raise: false }),
     );
-    expect(listChangedGitFiles).toHaveBeenCalledOnce();
+    expect(listChangedFiles).toHaveBeenCalledOnce();
   });
 
   it("does not start a formatter when there are no supported files", async () => {
-    const format = await loadWorkflowFunction("formatPitChanges");
+    const format = await loadWorkflowFunction("delivery.format");
     const execFile = vi.fn();
     expect(
       await format({
-        listChangedGitFiles: async () => ({ files: ["image.png"] }),
+        delivery: { listChangedFiles: async () => ({ files: ["image.png"] }) },
         shell: { execFile },
       }),
     ).toMatchObject({ files: [], changed: false });
@@ -94,30 +94,33 @@ describe("formatPitChanges", () => {
   });
 
   it("rejects oversized work before any mutation", async () => {
-    const format = await loadWorkflowFunction("formatPitChanges");
+    const format = await loadWorkflowFunction("delivery.format");
     const execFile = vi.fn();
     const files = Array.from({ length: 101 }, (_, i) => `${i}.ts`);
     await expect(
-      format({ listChangedGitFiles: async () => ({ files }), shell: { execFile } }),
+      format({ delivery: { listChangedFiles: async () => ({ files }) }, shell: { execFile } }),
     ).rejects.toThrow("partial list");
     expect(execFile).not.toHaveBeenCalled();
   });
 
   it("stops after inspection failure without invoking the formatter", async () => {
-    const format = await loadWorkflowFunction("formatPitChanges");
+    const format = await loadWorkflowFunction("delivery.format");
     const execFile = vi.fn();
-    const listChangedGitFiles = vi.fn().mockRejectedValue(new Error("Git failed"));
-    await expect(format({ listChangedGitFiles, shell: { execFile } })).rejects.toThrow(
+    const listChangedFiles = vi.fn().mockRejectedValue(new Error("Git failed"));
+    await expect(format({ delivery: { listChangedFiles }, shell: { execFile } })).rejects.toThrow(
       "Git failed",
     );
     expect(execFile).not.toHaveBeenCalled();
   });
 
   it("warns that a failed write can invalidate anchors", async () => {
-    const format = await loadWorkflowFunction("formatPitChanges");
+    const format = await loadWorkflowFunction("delivery.format");
     const execFile = vi.fn().mockResolvedValue(processResult({ code: 1, stderr: "bad syntax" }));
     await expect(
-      format({ listChangedGitFiles: async () => ({ files: ["a.ts"] }), shell: { execFile } }),
+      format({
+        delivery: { listChangedFiles: async () => ({ files: ["a.ts"] }) },
+        shell: { execFile },
+      }),
     ).rejects.toThrow(/re-read all attempted files[\s\S]*bad syntax/);
   });
 });
@@ -135,7 +138,7 @@ describe("Git readiness and review composition", () => {
     { name: "whitespace failure", statusCode: 0, diffCode: 2, truncated: false, ready: false },
     { name: "incomplete inspection", statusCode: 0, diffCode: 0, truncated: true, ready: false },
   ])("reports $name conservatively", async ({ statusCode, diffCode, truncated, ready }) => {
-    const prepare = await loadWorkflowFunction("preparePitDelivery");
+    const prepare = await loadWorkflowFunction("delivery.prepare");
     const status = vi.fn().mockResolvedValue(
       processResult({
         code: statusCode,
@@ -163,7 +166,7 @@ describe("Git readiness and review composition", () => {
   });
 
   it("reuses readiness exactly once and fetches only the additional review data", async () => {
-    const review = await loadWorkflowFunction("reviewPitChanges");
+    const review = await loadWorkflowFunction("delivery.review");
     const readiness = {
       status: "branch",
       diffCheck: "",
@@ -171,7 +174,7 @@ describe("Git readiness and review composition", () => {
       ready: false,
       truncated: false,
     };
-    const preparePitDelivery = vi.fn().mockResolvedValue(readiness);
+    const prepare = vi.fn().mockResolvedValue(readiness);
     const outputs = new Map([
       ["--stat", "unstaged statistics"],
       ["--cached --stat", "staged statistics"],
@@ -185,7 +188,7 @@ describe("Git readiness and review composition", () => {
       }),
     );
     const log = vi.fn().mockResolvedValue(processResult({ stdout: "recent" }));
-    expect(await review({ preparePitDelivery, git: { diff, log } })).toMatchObject({
+    expect(await review({ delivery: { prepare }, git: { diff, log } })).toMatchObject({
       ...readiness,
       truncated: true,
       stat: "unstaged statistics",
@@ -194,13 +197,13 @@ describe("Git readiness and review composition", () => {
       stagedDiff: "staged patch",
       recentCommits: "recent",
     });
-    expect(preparePitDelivery).toHaveBeenCalledOnce();
+    expect(prepare).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(["--oneline", "-5"], expect.objectContaining({ raise: true }));
   });
 
   it("bounds each diff by its own line and byte limits and reports them", async () => {
-    const review = await loadWorkflowFunction("reviewPitChanges");
-    const preparePitDelivery = vi.fn().mockResolvedValue({
+    const review = await loadWorkflowFunction("delivery.review");
+    const prepare = vi.fn().mockResolvedValue({
       status: "",
       diffCheck: "",
       stagedDiffCheck: "",
@@ -212,7 +215,7 @@ describe("Git readiness and review composition", () => {
     );
     const log = vi.fn().mockResolvedValue(processResult());
     const result = await review(
-      { preparePitDelivery, git: { diff, log } },
+      { delivery: { prepare }, git: { diff, log } },
       { diffLines: 100, diffBytes: 15000 },
     );
     expect(result.limits).toEqual({ diffLines: 100, diffBytes: 15000, commits: 5 });

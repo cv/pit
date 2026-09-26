@@ -1,5 +1,5 @@
 /** Runs one guarded literal source mutation through a temporary Vite transform and explicit targeted tests without rewriting the owner. Requires a passing baseline; reports bounded failures, omissions, and inconclusive runs. Uses /tmp, removes its temporary artifacts, and preserves runner/cleanup errors. */
-async function probePitAuditMutation(
+async function probeMutation(
   { context: { get }, workspace: { edit, read }, shell: { execFile }, jq },
   input: {
     label: string;

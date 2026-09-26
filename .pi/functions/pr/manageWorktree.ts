@@ -2,7 +2,7 @@
  * Creates or removes an isolated worktree for reviewing a GitHub pull request.
  *
  */
-async function managePullRequestWorktree(
+async function manageWorktree(
   { context: { get }, shell: { execFile }, workspace: { stat } },
   input:
     | { action: "create"; number: number; remote?: string; path?: string }

@@ -1,22 +1,42 @@
 # Project saved functions
 
 Saved functions expose useful agent operations, not an alternate utility library.
-Keep existing public names and inputs compatible; extend the closest intent before
-adding another function.
+Each lives in the namespace of the operation it serves, and its name drops what the
+namespace already says: `ci.inspectFailure`, not `ci.inspectGitHubRunFailure`. Extend
+the closest function before adding another. Keep names and inputs compatible once
+published; a rename is a deliberate repository-wide change, like the one that introduced
+these namespaces.
+
+## Layout
+
+| Namespace   | Operation                                          | Functions                                                                                                          | Owning skill    |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------- |
+| `delivery`  | Validate, format, review, and commit local changes | `validate`, `format`, `listChangedFiles`, `review`, `prepare`, `commit`, `auditCodeQuality`, `inspectDependencies` | pit-delivery    |
+| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`                                                         | pit-delivery    |
+| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `manageWorktree`                                                                       | pit-delivery    |
+| `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                              | pit-test-audit  |
+| `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                       | pit-terminal-ux |
+| `sessions`  | Audit Pi session transcripts                       | `analyze`, `analyzeRecent`, `readEvents`                                                                           | none            |
+| (top level) | Shared query primitive                             | `jq`                                                                                                               | none            |
+
+A directory is a namespace: `ci/inspectFailure.ts` declares `inspectFailure`, and
+programs call it as `ci.inspectFailure` after injecting `{ ci: { inspectFailure } }`. A
+whole namespace cannot be captured. Namespaces avoid Pit's capability names (`gh`, `git`,
+`session`, and the rest), so a project function is never mistaken for a native one.
 
 ## Abstraction boundaries
 
-- **Inspection** converts host output into domain data. `listChangedGitFiles()` owns
-  Git porcelain parsing; `findGitHubRunForCommit()` owns commit/workflow selection.
+- **Inspection** converts host output into domain data. `delivery.listChangedFiles()` owns
+  Git porcelain parsing; `ci.findRun()` owns commit/workflow selection.
   Neither mutates the worktree or waits for CI completion.
-  `inspectGitHubRunFailure()` owns failed-job log excerpts.
+  `ci.inspectFailure()` owns failed-job log excerpts.
 - **Actions** consume inspected data and perform one operation.
-  `commitPitChanges()` owns exact-file staging and commit verification.
-  `formatPitChanges()` owns supported extensions, the formatting limit, and anchor
+  `delivery.commit()` owns exact-file staging and commit verification.
+  `delivery.format()` owns supported extensions, the formatting limit, and anchor
   invalidation. It does not parse Git output.
-- **Orchestration** composes existing operations. `reviewPitChanges()` adds diffs and
-  history to `preparePitDelivery()`; `waitForGitHubRunForCommit()` discovers a run
-  and delegates completion polling to `waitForGitHubRun()`.
+- **Orchestration** composes existing operations. `delivery.review()` adds diffs and
+  history to `delivery.prepare()`; `ci.waitForCommit()` discovers a run
+  and delegates completion polling to `ci.waitForRun()`.
 - **Policy** stays in the delivery skill: when to validate, push, reload, accept,
   or close an issue. A saved function should not silently make those decisions.
 
@@ -30,30 +50,30 @@ result types from injected functions instead of copying their schemas.
 - Numeric inputs are integers within the ranges their documentation states.
   Fractional, non-finite, or out-of-range values are rejected before any host call
   instead of being silently clamped. The only derived cap is the 285-second polling
-  budget shared by `waitForGitHubRun()` and `waitForGitHubPullRequestChecks()`: polls
+  budget shared by `ci.waitForRun()` and `pr.waitForChecks()`: polls
   that would not fit after the initial delay are skipped, and a timeout reports both the
   `attempts` made and `requestedAttempts`.
-- `waitForGitHubPullRequestChecks()` treats SUCCESS, NEUTRAL, and SKIPPED as passing,
+- `pr.waitForChecks()` treats SUCCESS, NEUTRAL, and SKIPPED as passing,
   stops at the first failed check, and treats an empty check rollup as pending.
-- `runPitTargetedTests()` reads Vitest's JSON report through `jq`. It returns at most 15
+- `tests.runTargeted()` reads Vitest's JSON report through `jq`. It returns at most 15
   failures and 5 suite load errors, each clipped to 8 lines of 160 characters without
   dependency stack frames or the repository root, and counts what it omits. Without a
   report it falls back to a 120-line output tail.
-- `inspectGitHubRunFailure()` reads the last 51,200 bytes of each failed job's log and
+- `ci.inspectFailure()` reads the last 51,200 bytes of each failed job's log and
   anchors the excerpt on its last `##[error]` line, because logs end with post-job
   cleanup. `logTruncated` means earlier output was not fetched. From that window it lists
   at most 30 failed Vitest tests with their first error line; `testFailuresOmitted` also
   counts failures that Vitest's summary reports but the window no longer contained.
-- `commitPitChanges()` refuses unrelated staged paths, directories, and unchanged listed
+- `delivery.commit()` refuses unrelated staged paths, directories, and unchanged listed
   files. It stages tracked paths with `git add -u` and never force-adds an ignored new file.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
-- `listChangedGitFiles()` preserves literal filenames, uses rename destinations,
+- `delivery.listChangedFiles()` preserves literal filenames, uses rename destinations,
   omits deletions, and rejects conflicts or more than 500 paths.
-- `formatPitChanges()` rejects more than 100 supported files instead of silently
+- `delivery.format()` rejects more than 100 supported files instead of silently
   formatting the first 100. A failed write may still have changed files: re-read
   every attempted target before editing again.
-- `preparePitDelivery().ready` means Git inspection and both whitespace checks
+- `delivery.prepare().ready` means Git inspection and both whitespace checks
   succeeded with complete output. It does **not** mean tests passed, the worktree
   is clean, or the branch is synchronized. Review excerpts may be truncated
   independently of readiness.
@@ -66,7 +86,7 @@ result types from injected functions instead of copying their schemas.
 
 ## Terminal acceptance
 
-`managePitUxSession`, `runPitUxCase`, `runPitUxFixtures`, and `inspectPitUxRowStyle` drive
+`ux.manageSession`, `ux.runCase`, `ux.runFixtures`, and `ux.inspectRowStyle` drive
 the isolated Pi of the pit-terminal-ux skill's tmux workflow. The skill decides what to
 exercise and when a change is accepted.
 
@@ -77,18 +97,18 @@ exercise and when a change is accepted.
 - Stop requires the run's root and its `tmux.sock`, checked before any tmux call. The other
   functions refuse sockets outside `/tmp/pit-ux-*/tmux.sock`, so none can send keys to the
   conversation's pane.
-- `runPitUxCase` settles on a new match of its completion pattern after submitting a prompt;
+- `ux.runCase` settles on a new match of its completion pattern after submitting a prompt;
   an earlier completion still on screen does not count. `settled: false` means the timeout
   expired, not that the fixture failed. `delayMs` captures after a fixed delay instead, for
   states without a completion marker, and cannot be combined with `waitFor`.
 - `keepShell` keeps the pane's shell alive after Pi exits, as a terminal does; exit checks
   need it, because a closing pane hangs up Pi's descendants regardless of Pit.
-- `runPitUxFixtures` reports up to four rows from each fixture's entry: status lines and
-  decisive diagnostic rows. It is a summary; use `runPitUxCase` to inspect a whole entry.
+- `ux.runFixtures` reports up to four rows from each fixture's entry: status lines and
+  decisive diagnostic rows. It is a summary; use `ux.runCase` to inspect a whole entry.
 
 ## Session analysis and jq
 
-`analyzePitSessions → analyzePitSession → readPitSessionEvents → jq` keeps four
+`sessions.analyzeRecent → sessions.analyze → sessions.readEvents → jq` keeps four
 separate responsibilities: session discovery/aggregation, TypeScript audit policy,
 session-schema projection, and external query execution.
 
@@ -100,13 +120,13 @@ session-schema projection, and external query execution.
   Filters and paths are argument-safe, but filters are executable jq programs,
   not a security sandbox. Each invocation has a 30-second timeout and rejects
   nonzero exits, invalid JSON, or output beyond 50,000 bytes / 2,000 lines.
-- `readPitSessionEvents()` projects physical-line pages. Its small jq query removes
+- `sessions.readEvents()` projects physical-line pages. Its small jq query removes
   code bodies, images, and successful tool output before crossing into the guest,
   clips long labels, programs, and errors, and ends a page early after about 40 KB
   of projected events, always keeping at least one line. It does not classify
   failures or generate recommendations. Empty event pages can still have
   `hasMore: true`; continue using `nextLine`.
-- `analyzePitSession()` correlates calls across pages, classifies failures, and
+- `sessions.analyze()` correlates calls across pages, classifies failures, and
   retains only the requested number of recent failure examples. It refuses an
   incomplete audit beyond 100,000 physical lines. The query reads one line past
   each page; it does not slurp the session. Paging reopens and scans past the

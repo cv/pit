@@ -24,9 +24,9 @@ const githubRunList = (runs: ReturnType<typeof run>[]) =>
     }),
   );
 
-describe("findGitHubRunForCommit", () => {
+describe("ci.findRun", () => {
   it("asks GitHub for one workflow so other workflows cannot fill the search window", async () => {
-    const find = await loadWorkflowFunction("findGitHubRunForCommit");
+    const find = await loadWorkflowFunction("ci.findRun");
     const runs = [
       ...Array.from({ length: 25 }, (_, i) => run(100 + i, "Other")),
       run(42),
@@ -60,7 +60,7 @@ describe("findGitHubRunForCommit", () => {
   });
 
   it("uses server-side commit filtering for full SHAs and reports both bounds", async () => {
-    const find = await loadWorkflowFunction("findGitHubRunForCommit");
+    const find = await loadWorkflowFunction("ci.findRun");
     const runList = vi
       .fn()
       .mockResolvedValue(
@@ -79,7 +79,7 @@ describe("findGitHubRunForCommit", () => {
     { name: "NaN limit", input: { limit: Number.NaN }, error: "integer" },
     { name: "infinite limit", input: { limit: Number.POSITIVE_INFINITY }, error: "integer" },
   ])("rejects $name before querying GitHub", async ({ input, error }) => {
-    const find = await loadWorkflowFunction("findGitHubRunForCommit");
+    const find = await loadWorkflowFunction("ci.findRun");
     const runList = vi.fn();
     await expect(find({ gh: { runList } }, { repo: "cv/pit", sha, ...input })).rejects.toThrow(
       error,
@@ -88,7 +88,7 @@ describe("findGitHubRunForCommit", () => {
   });
 
   it("distinguishes no matches from a transport-truncated JSON response", async () => {
-    const find = await loadWorkflowFunction("findGitHubRunForCommit");
+    const find = await loadWorkflowFunction("ci.findRun");
     const runList = vi
       .fn()
       .mockResolvedValueOnce(processResult({ stdout: "[]" }))
@@ -105,12 +105,12 @@ describe("findGitHubRunForCommit", () => {
   });
 });
 
-describe("waitForGitHubRunForCommit composition", () => {
+describe("ci.waitForCommit composition", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
   it("retries discovery before waiting on the exact selected run", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
+    const wait = await loadWorkflowFunction("ci.waitForCommit");
     const match = {
       id: 42,
       headSha: sha,
@@ -119,13 +119,13 @@ describe("waitForGitHubRunForCommit composition", () => {
       conclusion: "success",
       url: "url",
     };
-    const findGitHubRunForCommit = vi
+    const findRun = vi
       .fn()
       .mockResolvedValueOnce({ found: false, matches: [] })
       .mockResolvedValueOnce({ found: true, matches: [match] });
-    const waitForGitHubRun = vi.fn().mockResolvedValue({ status: "completed" });
+    const waitForRun = vi.fn().mockResolvedValue({ status: "completed" });
     const pending = wait(
-      { findGitHubRunForCommit, waitForGitHubRun },
+      { ci: { findRun, waitForRun } },
       {
         repo: "cv/pit",
         sha,
@@ -136,14 +136,14 @@ describe("waitForGitHubRunForCommit composition", () => {
       },
     );
     await vi.advanceTimersByTimeAsync(999);
-    expect(findGitHubRunForCommit).toHaveBeenCalledOnce();
-    expect(waitForGitHubRun).not.toHaveBeenCalled();
+    expect(findRun).toHaveBeenCalledOnce();
+    expect(waitForRun).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toEqual({ match, run: { status: "completed" } });
-    expect(findGitHubRunForCommit).toHaveBeenLastCalledWith(
+    expect(findRun).toHaveBeenLastCalledWith(
       expect.objectContaining({ repo: "cv/pit", sha, runName: "CI" }),
     );
-    expect(waitForGitHubRun).toHaveBeenCalledExactlyOnceWith(
+    expect(waitForRun).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         id: 42,
         repo: "cv/pit",
@@ -156,34 +156,35 @@ describe("waitForGitHubRunForCommit composition", () => {
   });
 
   it("stops discovery at once when GitHub rejects the workflow filter", async () => {
-    const find = await loadWorkflowFunction("findGitHubRunForCommit");
-    const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
+    const find = await loadWorkflowFunction("ci.findRun");
+    const wait = await loadWorkflowFunction("ci.waitForCommit");
     const runList = vi
       .fn()
       .mockRejectedValue(new Error("could not find any workflows named NoSuchWorkflow"));
-    const waitForGitHubRun = vi.fn();
+    const waitForRun = vi.fn();
     await expect(
       wait(
         {
-          findGitHubRunForCommit: (input: Record<string, unknown>) =>
-            find({ gh: { runList } }, input),
-          waitForGitHubRun,
+          ci: {
+            findRun: (input: Record<string, unknown>) => find({ gh: { runList } }, input),
+            waitForRun,
+          },
         },
         { repo: "cv/pit", sha, runName: "NoSuchWorkflow", discoveryAttempts: 3 },
       ),
     ).rejects.toThrow("could not find any workflows named NoSuchWorkflow");
     expect(runList).toHaveBeenCalledOnce();
-    expect(waitForGitHubRun).not.toHaveBeenCalled();
+    expect(waitForRun).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("does not poll an unrelated run when discovery is exhausted", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
-    const findGitHubRunForCommit = vi.fn().mockResolvedValue({ found: false, matches: [] });
-    const waitForGitHubRun = vi.fn();
+    const wait = await loadWorkflowFunction("ci.waitForCommit");
+    const findRun = vi.fn().mockResolvedValue({ found: false, matches: [] });
+    const waitForRun = vi.fn();
     await expect(
       wait(
-        { findGitHubRunForCommit, waitForGitHubRun },
+        { ci: { findRun, waitForRun } },
         {
           repo: "cv/pit",
           sha,
@@ -192,26 +193,25 @@ describe("waitForGitHubRunForCommit composition", () => {
         },
       ),
     ).rejects.toThrow('No "CI" GitHub Actions run found');
-    expect(waitForGitHubRun).not.toHaveBeenCalled();
+    expect(waitForRun).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("composes real discovery with waiting when other workflows ran more recently", async () => {
-    const find = await loadWorkflowFunction("findGitHubRunForCommit");
-    const wait = await loadWorkflowFunction("waitForGitHubRunForCommit");
+    const find = await loadWorkflowFunction("ci.findRun");
+    const wait = await loadWorkflowFunction("ci.waitForCommit");
     const runs = [...Array.from({ length: 25 }, (_, i) => run(100 + i, "Other")), run(42)];
     const runList = githubRunList(runs);
-    const waitForGitHubRun = vi.fn().mockResolvedValue({ status: "completed" });
+    const waitForRun = vi.fn().mockResolvedValue({ status: "completed" });
     await wait(
       {
-        findGitHubRunForCommit: (input: Record<string, unknown>) =>
-          find({ gh: { runList } }, input),
-        waitForGitHubRun,
+        ci: {
+          findRun: (input: Record<string, unknown>) => find({ gh: { runList } }, input),
+          waitForRun,
+        },
       },
       { repo: "cv/pit", sha, runName: "CI" },
     );
-    expect(waitForGitHubRun).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 42, initialDelayMs: 0 }),
-    );
+    expect(waitForRun).toHaveBeenCalledWith(expect.objectContaining({ id: 42, initialDelayMs: 0 }));
   });
 });

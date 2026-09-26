@@ -8,7 +8,7 @@
  * @param input.slowest - Slowest files and tests to report (0-20). The default is 0.
  * @param input.raise - Fail when tests fail. The default is true; false returns the failures.
  */
-async function runPitTargetedTests(
+async function runTargeted(
   { shell: { execFile }, jq },
   input: { files: string[]; testNamePattern?: string; slowest?: number; raise?: boolean },
 ) {

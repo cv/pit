@@ -4,8 +4,8 @@
  *
  * @param input.examples - Recent failure examples to retain (1-30). The default is 12.
  */
-async function analyzePitSession(
-  { context: { get }, readPitSessionEvents },
+async function analyze(
+  { context: { get }, sessions: { readEvents } },
   input: { file?: string; examples?: number } = {},
 ) {
   const examples = input.examples ?? 12;
@@ -14,7 +14,7 @@ async function analyzePitSession(
   }
   const file = input.file ?? (await get()).sessionFile;
   if (!file) throw new Error("No Pi session file is available");
-  type Page = Awaited<ReturnType<typeof readPitSessionEvents>>;
+  type Page = Awaited<ReturnType<typeof readEvents>>;
   type Failure = NonNullable<Page["events"][number]["failure"]>;
   const classifyFailure = (label: string, error: string) => {
     if (
@@ -51,7 +51,7 @@ async function analyzePitSession(
       throw new Error(`Session exceeds ${MAX_SESSION_LINES} lines; refusing an incomplete audit`);
     // Each page rescans the file from its start, so request the largest pages; the reader
     // ends dense pages early at its byte budget.
-    const page = await readPitSessionEvents({ file, afterLine, limit: 500 });
+    const page = await readEvents({ file, afterLine, limit: 500 });
     for (const event of page.events) {
       for (const call of event.calls) {
         calls.set(call.id, call.label);
@@ -81,7 +81,7 @@ async function analyzePitSession(
   const recommendations: string[] = [];
   if (categories.has("gate"))
     recommendations.push(
-      'Use targeted tests and npm.run("check") before the final validatePit gate.',
+      'Use targeted tests and npm.run("check") before the final delivery.validate gate.',
     );
   if (categories.has("typescript"))
     recommendations.push(

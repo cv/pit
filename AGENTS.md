@@ -42,6 +42,6 @@
 ## Delivery
 
 - Load the `pit-delivery` skill for issue implementation and finalization.
-- Run `validatePit()` for the standard gates and `preparePitDelivery()` before delivery.
+- Run `delivery.validate()` for the standard gates and `delivery.prepare()` before delivery.
 - For TUI, extension-loading, saved-function, sandbox, or partial-update changes: push a non-closing commit, reload Pi, and smoke-test before closing the issue.
 - Do not use `Closes #...` until interactive acceptance has passed.

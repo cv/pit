@@ -6,10 +6,7 @@
  * @param input.limit - Physical lines per page (1-500), default 200. Pages also end early after
  *   about 40 KB of events, always keeping at least one line. Empty event pages may have more data.
  */
-async function readPitSessionEvents(
-  { jq },
-  input: { file: string; afterLine?: number; limit?: number },
-) {
+async function readEvents({ jq }, input: { file: string; afterLine?: number; limit?: number }) {
   const afterLine = input.afterLine ?? 0;
   const limit = input.limit ?? 200;
   if (

@@ -1,6 +1,6 @@
 /**
  * Waits for every status check reported on a GitHub pull request and returns its merge state.
- * It stops early when any check fails. Use waitForGitHubRunForCommit for one workflow run.
+ * It stops early when any check fails. Use ci.waitForCommit for one workflow run.
  *
  * @param input.repo - GitHub owner/name. The default is the current repository.
  * @param input.attempts - Maximum polls (1-120). The default is 12. Polls that would not fit the
@@ -9,7 +9,7 @@
  * @param input.initialDelayMs - Delay before the first poll (0-120000). The default is 0 ms.
  * @param input.raise - Fail when a check fails or checks are still pending. The default is true.
  */
-async function waitForGitHubPullRequestChecks(
+async function waitForChecks(
   { gh: { prView } },
   input: {
     number: number;

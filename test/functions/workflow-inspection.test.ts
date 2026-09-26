@@ -21,9 +21,9 @@ const vitestArgs = (execFile: { mock: { calls: unknown[][] } }) =>
     .filter(([program]) => program === "npx")
     .map(([, args]) => args);
 
-describe("runPitTargetedTests behavior", () => {
+describe("tests.runTargeted behavior", () => {
   it("runs only the distinct requested files and returns their diagnostic output", async () => {
-    const run = await loadWorkflowFunction("runPitTargetedTests");
+    const run = await loadWorkflowFunction("tests.runTargeted");
     const execFile = vi.fn(async (_program: string, _args: string[]) =>
       processResult({ stdout: "tests passed", stderr: "extra diagnostic" }),
     );
@@ -49,7 +49,7 @@ describe("runPitTargetedTests behavior", () => {
   });
 
   it("reads the JSON report it requested and removes it afterwards", async () => {
-    const run = await loadWorkflowFunction("runPitTargetedTests");
+    const run = await loadWorkflowFunction("tests.runTargeted");
     const events: string[] = [];
     const execFile = vi.fn(async (program: string, args: string[]) => {
       events.push(`${program} ${args.join(" ")}`);
@@ -70,7 +70,7 @@ describe("runPitTargetedTests behavior", () => {
   });
 
   it("passes a name pattern and reports repository-relative timings only on request", async () => {
-    const run = await loadWorkflowFunction("runPitTargetedTests");
+    const run = await loadWorkflowFunction("tests.runTargeted");
     const execFile = vi.fn(async (_program: string, _args: string[]) => processResult());
     const jq = vi.fn().mockResolvedValue(report());
     const result = await run(
@@ -104,7 +104,7 @@ describe("runPitTargetedTests behavior", () => {
     { name: "fractional slowest", input: { files: ["test/a.test.ts"], slowest: 1.5 } },
     { name: "slowest above 20", input: { files: ["test/a.test.ts"], slowest: 21 } },
   ])("rejects $name before starting a process", async ({ input }) => {
-    const run = await loadWorkflowFunction("runPitTargetedTests");
+    const run = await loadWorkflowFunction("tests.runTargeted");
     const execFile = vi.fn();
     const jq = vi.fn();
     await expect(run({ shell: { execFile }, jq }, input)).rejects.toThrow();
@@ -112,7 +112,7 @@ describe("runPitTargetedTests behavior", () => {
   });
 
   it("reports failures from the JSON report instead of the noisy output tail", async () => {
-    const run = await loadWorkflowFunction("runPitTargetedTests");
+    const run = await loadWorkflowFunction("tests.runTargeted");
     const execFile = vi.fn(async (_program: string, _args: string[]) =>
       processResult({ code: 1, stdout: "NOISE\n".repeat(300) }),
     );
@@ -158,7 +158,7 @@ describe("runPitTargetedTests behavior", () => {
   });
 
   it("falls back to the output tail when no JSON report was written", async () => {
-    const run = await loadWorkflowFunction("runPitTargetedTests");
+    const run = await loadWorkflowFunction("tests.runTargeted");
     const execFile = vi.fn(async (program: string, _args: string[]) =>
       program === "npx"
         ? processResult({
@@ -227,9 +227,9 @@ function coverageWorkspace() {
   };
 }
 
-describe("inspectPitCoverageGaps behavior", () => {
+describe("tests.inspectCoverageGaps behavior", () => {
   it("interprets uncovered markers, decodes code, and retains file/line attribution", async () => {
-    const inspect = await loadWorkflowFunction("inspectPitCoverageGaps");
+    const inspect = await loadWorkflowFunction("tests.inspectCoverageGaps");
     const workspace = coverageWorkspace();
     const result = await inspect(
       { workspace },
@@ -267,7 +267,7 @@ describe("inspectPitCoverageGaps behavior", () => {
   });
 
   it("applies the output limit across files and makes omission explicit", async () => {
-    const inspect = await loadWorkflowFunction("inspectPitCoverageGaps");
+    const inspect = await loadWorkflowFunction("tests.inspectCoverageGaps");
     const result = await inspect(
       { workspace: coverageWorkspace() },
       { files: ["src/a.ts", "src/b.ts"], limit: 2 },
@@ -277,7 +277,7 @@ describe("inspectPitCoverageGaps behavior", () => {
   });
 
   it("reports unavailable artifacts rather than claiming there are no gaps", async () => {
-    const inspect = await loadWorkflowFunction("inspectPitCoverageGaps");
+    const inspect = await loadWorkflowFunction("tests.inspectCoverageGaps");
     const missing = async () => {
       throw new Error("missing artifact");
     };

@@ -2,7 +2,7 @@
  * Reports bounded Git delivery readiness without rerunning validation.
  * Ready means Git inspection succeeded and both whitespace checks passed, not that CI passed.
  */
-async function preparePitDelivery({ git: { diff: gitDiff, status: gitStatus } }) {
+async function prepare({ git: { diff: gitDiff, status: gitStatus } }) {
   const options = { maxBytes: 4000, maxLines: 160, raise: false };
   const [status, diffCheck, stagedDiffCheck] = await Promise.all([
     gitStatus(["--short", "--branch"], options),

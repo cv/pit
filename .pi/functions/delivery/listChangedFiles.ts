@@ -2,7 +2,7 @@
  * Lists non-deleted changed Git paths, including staged, unstaged, renamed, and untracked files.
  * Rejects conflicts, incomplete status output, and more than 500 paths rather than returning a partial list.
  */
-async function listChangedGitFiles({ git: { status } }) {
+async function listChangedFiles({ git: { status } }) {
   const result = await status(["--porcelain=v1", "-z", "--untracked-files=all"], {
     raise: true,
     maxBytes: 50000,

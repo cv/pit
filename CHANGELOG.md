@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- Organize the repository's project functions into namespaces by operation (`delivery`, `ci`, `pr`, `tests`, `ux`, `sessions`), with names that drop what the namespace says, such as `delivery.validate` for `validatePit` and `ci.inspectFailure` for `inspectGitHubRunFailure`. `.pi/functions/README.md` maps each namespace to its operation and owning skill.
+
 ### Fixed
 
 - Stop a cancelled or timed-out command's descendants too, such as a shell pipeline's processes, which previously kept running after Pit reported the command stopped. Commands now run in their own process group without Pi's controlling terminal, so programs that prompt on `/dev/tty` fail instead of writing into Pi's screen.

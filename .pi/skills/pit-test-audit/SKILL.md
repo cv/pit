@@ -78,13 +78,13 @@ Missing evidence means **defer**, not delete. If there is no stronger proof for 
 
 ## Run a counterfactual through the saved workflow
 
-Use `probePitAuditMutation()` for a supported literal source mutation; do not recreate its temporary config/report/cleanup workflow. The caller must first establish a passing baseline for the same files and name filter. Read the owner freshly, review the proposed defect, and supply the mutation through tool `params` rather than editing production source on disk.
+Use `tests.probeMutation()` for a supported literal source mutation; do not recreate its temporary config/report/cleanup workflow. The caller must first establish a passing baseline for the same files and name filter. Read the owner freshly, review the proposed defect, and supply the mutation through tool `params` rather than editing production source on disk.
 
 The marked example is type-checked against the actual project functions, not executed by the resource tests. Use a 300000 ms tool timeout for the sequential baseline and probe:
 
 ```ts pit-example
 async (
-  { runPitTargetedTests, probePitAuditMutation },
+  { tests: { runTargeted, probeMutation } },
   input: {
     label: string;
     owner: string;
@@ -94,7 +94,7 @@ async (
     testNamePattern?: string;
   },
 ) => {
-  const baseline = await runPitTargetedTests({
+  const baseline = await runTargeted({
     files: input.files,
     ...(input.testNamePattern === undefined ? {} : { testNamePattern: input.testNamePattern }),
     raise: true,
@@ -102,7 +102,7 @@ async (
   if (!("counts" in baseline) || !baseline.counts || baseline.counts.passed < 1) {
     throw new Error("No passing baseline assertions were reported; do not run the mutation");
   }
-  return probePitAuditMutation(input);
+  return probeMutation(input);
 }
 ```
 
@@ -113,18 +113,18 @@ Interpret the result before drawing a conclusion:
 - With `mutationApplied: true` and `inconclusive: false`, inspect the failing test names and reasons. Only the intended assertion failures demonstrate sensitivity; a nonzero `code` alone does not. A passing mutant identifies a possible coverage gap, not a product bug or automatic deletion permission.
 - Report omitted failures and shortened diagnostics explicitly. Narrow the files/filter when the decisive cause was not retained.
 
-`probePitAuditMutation()` mutates modules through a Vite transform, so it cannot reach `.pi/functions` sources, which the workflow tests load with `readFile`. For those, apply one mutation on disk at a time, restore it in `finally`, and confirm the file is byte-identical before the next run; read failures from the runner's report, not its exit code.
+`tests.probeMutation()` mutates modules through a Vite transform, so it cannot reach `.pi/functions` sources, which the workflow tests load with `readFile`. For those, apply one mutation on disk at a time, restore it in `finally`, and confirm the file is byte-identical before the next run; read failures from the runner's report, not its exit code.
 
-The helper does not rewrite the owner, but selected tests still execute their normal effects. Use reviewed test files, run probes sequentially, and do not edit code while a runner is active. The workflow requires jq and a `/tmp`-capable host. Route environment/API failures through `inspectPitDependencyInstall()` and the delivery skill's recovery guidance, not test deletion.
+The helper does not rewrite the owner, but selected tests still execute their normal effects. Use reviewed test files, run probes sequentially, and do not edit code while a runner is active. The workflow requires jq and a `/tmp`-capable host. Route environment/API failures through `delivery.inspectDependencies()` and the delivery skill's recovery guidance, not test deletion.
 
 ## Edit and validate one coherent batch
 
 1. Record the evidence and scope before editing. Never edit source or tests while Vitest runs in the same checkout.
 2. Prefer removing redundant tests and obsolete seams over adding wrappers or aliases. Do not chase net-negative LOC when that would discard independent proof.
-3. Reuse boundary fixtures and `runPitTargetedTests()` for the owner and relevant siblings. Use `testNamePattern` to isolate a case, without changing the meaning of a reported baseline.
+3. Reuse boundary fixtures and `tests.runTargeted()` for the owner and relevant siblings. Use `testNamePattern` to isolate a case, without changing the meaning of a reported baseline.
 4. Use the counterfactual composition above when it fits. If an experiment cannot be expressed by the helper, document the missing capability before a narrow `shell.execFile` fallback; preserve the same baseline, bounds, no-owner-rewrite, and cleanup requirements.
 5. If removing a source/prose check, run the executable contract or policy gate that replaces it. For project skills, exercise Pi's real discovery API; do not add a test that copies the skill's sentences.
-6. Delegate final review, changed-file formatting, standard validation, and Git readiness to [pit-delivery](../pit-delivery/SKILL.md), including its result interpretation and loaded-versus-disk checks. Do not run full tests and coverage concurrently. `auditPitCodeQuality()` measures maintainability signals, not test value.
+6. Delegate final review, changed-file formatting, standard validation, and Git readiness to [pit-delivery](../pit-delivery/SKILL.md), including its result interpretation and loaded-versus-disk checks. Do not run full tests and coverage concurrently. `delivery.auditCodeQuality()` measures maintainability signals, not test value.
 7. Apply `pit-delivery`'s reload/live-acceptance requirements to any changed TUI, extension-loading, saved-function, sandbox, or partial-update behavior. Headless assertions do not certify interactive behavior.
 
 Commit, push, open PRs, and close issues only when authorized. Do not use closing keywords before required interactive acceptance.

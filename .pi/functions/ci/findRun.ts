@@ -5,7 +5,7 @@
  * @param input.limit - Recent runs to inspect (1-100). The default is 20. searchLimited flags a
  *   full search window.
  */
-async function findGitHubRunForCommit(
+async function findRun(
   { gh: { runList } },
   input: { repo: string; sha: string; runName?: string; limit?: number },
 ) {

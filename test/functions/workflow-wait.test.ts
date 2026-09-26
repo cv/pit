@@ -14,9 +14,9 @@ const response = (status: string, conclusion = "", jobs: unknown[] = []) =>
     }),
   });
 
-describe("waitForGitHubRun behavior", () => {
+describe("ci.waitForRun behavior", () => {
   it("waits before the first request, polls at the requested interval, and stops on completion", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi
       .fn()
       .mockResolvedValueOnce(response("in_progress"))
@@ -40,7 +40,7 @@ describe("waitForGitHubRun behavior", () => {
   it.each(["failure", "cancelled", ""])(
     "rejects completed %s outcomes by default",
     async (conclusion) => {
-      const wait = await loadWorkflowFunction("waitForGitHubRun");
+      const wait = await loadWorkflowFunction("ci.waitForRun");
       const runView = vi.fn().mockResolvedValue(response("completed", conclusion));
       await expect(
         wait({ gh: { runView } }, { id: 42, repo: "cv/pit", initialDelayMs: 0 }),
@@ -50,7 +50,7 @@ describe("waitForGitHubRun behavior", () => {
   );
 
   it("returns an unsuccessful outcome when the caller explicitly suppresses raising", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("completed", "failure"));
     expect(
       await wait({ gh: { runView } }, { id: 42, repo: "cv/pit", initialDelayMs: 0, raise: false }),
@@ -58,7 +58,7 @@ describe("waitForGitHubRun behavior", () => {
   });
 
   it("stays within the tool's time budget and reports how many requested polls fit", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const started = Date.now();
     const pending = wait(
@@ -89,7 +89,7 @@ describe("waitForGitHubRun behavior", () => {
   });
 
   it("names the polling budget when it cut a failed wait short", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const failure = wait({ gh: { runView } }, { id: 42, repo: "cv/pit", attempts: 20 }).then(
       () => "resolved",
@@ -102,7 +102,7 @@ describe("waitForGitHubRun behavior", () => {
   });
 
   it("reports the last observed run state and unfinished jobs when a wait times out", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const wait = await loadWorkflowFunction("ci.waitForRun");
     const jobs = [
       {
         name: "build",
@@ -136,7 +136,7 @@ describe("waitForGitHubRun behavior", () => {
   });
 
   it("fails rather than reporting success when the requested attempts are exhausted", async () => {
-    const wait = await loadWorkflowFunction("waitForGitHubRun");
+    const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const pending = wait(
       { gh: { runView } },

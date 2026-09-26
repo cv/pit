@@ -1,15 +1,15 @@
 /**
  * Reports the SGR style codes on the last row containing a needle in an isolated Pi from
- * managePitUxSession, for comparing themes and emphasis.
+ * ux.manageSession, for comparing themes and emphasis.
  *
  * @param input.needle - Plain text to find (1-200 characters). The last matching row wins.
  */
-async function inspectPitUxRowStyle(
+async function inspectRowStyle(
   { shell: { execFile } },
   input: { socket: string; target: string; needle: string },
 ) {
   if (!/^\/tmp\/pit-ux-[A-Za-z0-9]+\/tmux\.sock$/.test(input.socket)) {
-    throw new Error("socket must come from managePitUxSession (/tmp/pit-ux-*/tmux.sock)");
+    throw new Error("socket must come from ux.manageSession (/tmp/pit-ux-*/tmux.sock)");
   }
   if (!/^[A-Za-z0-9_-]+:\d+\.\d+$/.test(input.target)) {
     throw new Error("target must be session:window.pane");

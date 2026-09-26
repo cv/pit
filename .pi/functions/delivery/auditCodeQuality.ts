@@ -3,7 +3,7 @@
  *
  * @param input.limit - Maximum findings to return (1-100). The default is 30.
  */
-async function auditPitCodeQuality(
+async function auditCodeQuality(
   { context: { get }, shell: { execFile } },
   input: { limit?: number; kinds?: string[] } = {},
 ) {

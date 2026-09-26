@@ -3,10 +3,10 @@
  *
  * @param input.limit - Maximum sessions to inspect (1-20). The default is 12.
  * @param input.examples - Repeated failure labels retained per session (1-30, validated by
- *   analyzePitSession). The default is 5.
+ *   sessions.analyze). The default is 5.
  */
-async function analyzePitSessions(
-  { context: { get }, workspace: { glob }, analyzePitSession },
+async function analyzeRecent(
+  { context: { get }, workspace: { glob }, sessions: { analyze } },
   input: { limit?: number; examples?: number } = {},
 ) {
   const limit = input.limit ?? 12;
@@ -28,13 +28,11 @@ async function analyzePitSessions(
   if (listed.truncated)
     throw new Error("Session discovery was truncated; refusing an incomplete selection");
   const files = [...listed.entries].sort().reverse().slice(0, limit);
-  const audits: Array<Awaited<ReturnType<typeof analyzePitSession>>> = [];
+  const audits: Array<Awaited<ReturnType<typeof analyze>>> = [];
   for (let offset = 0; offset < files.length; offset += 4) {
     const batch = files.slice(offset, offset + 4);
     audits.push(
-      ...(await Promise.all(
-        batch.map((file) => analyzePitSession({ file, examples: input.examples ?? 5 })),
-      )),
+      ...(await Promise.all(batch.map((file) => analyze({ file, examples: input.examples ?? 5 })))),
     );
   }
   const categories = new Map<string, number>();

@@ -3,10 +3,10 @@
  *
  * @param input.discoveryAttempts - Run searches before failing (1-12). The default is 3.
  * @param input.discoveryIntervalMs - Delay between searches (1000-30000). The default is 5000 ms.
- *   findGitHubRunForCommit and waitForGitHubRun validate the remaining inputs.
+ *   ci.findRun and ci.waitForRun validate the remaining inputs.
  */
-async function waitForGitHubRunForCommit(
-  { findGitHubRunForCommit, waitForGitHubRun },
+async function waitForCommit(
+  { ci: { findRun, waitForRun } },
   input: {
     repo: string;
     sha: string;
@@ -41,9 +41,9 @@ async function waitForGitHubRunForCommit(
     1000,
     30000,
   );
-  let match: Awaited<ReturnType<typeof findGitHubRunForCommit>>["matches"][number] | undefined;
+  let match: Awaited<ReturnType<typeof findRun>>["matches"][number] | undefined;
   for (let attempt = 1; attempt <= discoveryAttempts; attempt++) {
-    const found = await findGitHubRunForCommit({
+    const found = await findRun({
       repo: input.repo,
       sha: input.sha,
       limit: input.limit,
@@ -60,7 +60,7 @@ async function waitForGitHubRunForCommit(
       `No${input.runName ? ` ${JSON.stringify(input.runName)}` : ""} GitHub Actions run found for ${input.sha}`,
     );
   }
-  const run = await waitForGitHubRun({
+  const run = await waitForRun({
     id: match.id,
     repo: input.repo,
     attempts: input.attempts,

@@ -35,35 +35,35 @@ Blocks marked `ts pit-example` are complete tool programs checked against the pr
 For a focused test run:
 
 ```ts pit-example
-async ({ runPitTargetedTests }, input: { files: string[]; testNamePattern?: string }) =>
-  runPitTargetedTests({ ...input, slowest: 5 })
+async ({ tests: { runTargeted } }, input: { files: string[]; testNamePattern?: string }) =>
+  runTargeted({ ...input, slowest: 5 })
 ```
 
-- Use `runPitTargetedTests()` during the implementation loop, not the full suite after every edit.
-- `runPitTargetedTests()` reports failures from Vitest's JSON report. Add `testNamePattern` to rerun one case and `slowest` to measure where time goes.
-- Use `commitPitChanges()` only after commit/push authorization. It stages exactly the listed files, refuses unrelated staged changes, and can push the branch. Validation or a skill invocation is not permission to publish.
-- Use `reviewPitChanges()` before validation and after substantial corrections.
-- Use `inspectPitCoverageGaps()` after coverage has generated its HTML report.
-- Use `auditPitCodeQuality()` for broad feature or refactor work where maintainability risk matters.
-- `formatPitChanges()` formats only changed supported files and invalidates their anchors. Re-read every written file before another mutation. It cannot see committed files, so run it after the last edit and before `commitPitChanges()`.
-- Use `analyzePitSession()` for one session and `analyzePitSessions()` for project-wide workflow trends. These diagnose agent workflow; they do not replace code validation.
+- Use `tests.runTargeted()` during the implementation loop, not the full suite after every edit.
+- `tests.runTargeted()` reports failures from Vitest's JSON report. Add `testNamePattern` to rerun one case and `slowest` to measure where time goes.
+- Use `delivery.commit()` only after commit/push authorization. It stages exactly the listed files, refuses unrelated staged changes, and can push the branch. Validation or a skill invocation is not permission to publish.
+- Use `delivery.review()` before validation and after substantial corrections.
+- Use `tests.inspectCoverageGaps()` after coverage has generated its HTML report.
+- Use `delivery.auditCodeQuality()` for broad feature or refactor work where maintainability risk matters.
+- `delivery.format()` formats only changed supported files and invalidates their anchors. Re-read every written file before another mutation. It cannot see committed files, so run it after the last edit and before `delivery.commit()`.
+- Use `sessions.analyze()` for one session and `sessions.analyzeRecent()` for project-wide workflow trends. These diagnose agent workflow; they do not replace code validation.
 
 For pull-request work, inspect bounded metadata first:
 
 ```ts pit-example
-async ({ inspectGitHubPullRequest }, input: { number: number; repo?: string }) =>
-  inspectGitHubPullRequest(input)
+async ({ pr: { inspect } }, input: { number: number; repo?: string }) =>
+  inspect(input)
 ```
 
-When an isolated checkout is needed, use `managePullRequestWorktree({ action: "create", number })`. Always remove the temporary review worktree with its returned path through `managePullRequestWorktree({ action: "remove", path })` after review.
+When an isolated checkout is needed, use `pr.manageWorktree({ action: "create", number })`. Always remove the temporary review worktree with its returned path through `pr.manageWorktree({ action: "remove", path })` after review.
 
 ### Diagnose dependency-related failures
 
 For missing package APIs, unexpected installed versions, or a recently changed lockfile, inspect before reinstalling or changing source:
 
 ```ts pit-example
-async ({ inspectPitDependencyInstall }) =>
-  inspectPitDependencyInstall({ packages: ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "vitest"] })
+async ({ delivery: { inspectDependencies } }) =>
+  inspectDependencies({ packages: ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "vitest"] })
 ```
 
 Read the per-package `issues`, `lockError`, `complete`, and `omitted` fields. `matchesLock: null` means unknown/incomplete, not healthy; narrow the selection or resolve unreadable metadata. `false` calls for diagnosing the reported mismatch, not an automatic install. `true` only compares the selected direct dependencies' metadata/versions with the lockfile; it does not prove semver compatibility, package contents, or unrelated dependencies. Missing optional packages may be intentional.
@@ -75,7 +75,7 @@ If synchronization is justified and authorized, use the repository's lockfile-pr
 Invoke the trusted project function once:
 
 ```ts pit-example
-async ({ validatePit }) => validatePit({ coverage: true, packageCheck: true })
+async ({ delivery: { validate } }) => validate({ coverage: true, packageCheck: true })
 ```
 
 It runs check and tests together, then coverage, then package verification. A failed gate includes a bounded diagnostic tail. Read that output before rerunning a gate. Do not separately rerun completed gates or run full tests and coverage concurrently.
@@ -83,30 +83,30 @@ It runs check and tests together, then coverage, then package verification. A fa
 Before delivery, inspect Git readiness without repeating validation:
 
 ```ts pit-example
-async ({ preparePitDelivery }) => preparePitDelivery()
+async ({ delivery: { prepare } }) => prepare()
 ```
 
-`ready: true` means Git inspection and whitespace checks passed. It does not mean the worktree is clean, tests/CI passed, publication is authorized, or interactive acceptance happened. Review the returned Git status and both diff checks. Similarly, `formatPitChanges({ checkOnly: true })` returning `formatted: false` is a failed formatting check, not successful no-op work. Format only changed files. If delivery preparation exposes a change, correct it and rerun only the affected inner-loop checks before one final validation.
+`ready: true` means Git inspection and whitespace checks passed. It does not mean the worktree is clean, tests/CI passed, publication is authorized, or interactive acceptance happened. Review the returned Git status and both diff checks. Similarly, `delivery.format({ checkOnly: true })` returning `formatted: false` is a failed formatting check, not successful no-op work. Format only changed files. If delivery preparation exposes a change, correct it and rerun only the affected inner-loop checks before one final validation.
 
 ## Verify CI
 
 After pushing, use the existing discovery/wait composition for the exact commit, not the newest unrelated run. Give waiting tool invocations a 300000 ms timeout; a helper's polling budget does not extend the outer tool timeout.
 
 ```ts pit-example
-async ({ waitForGitHubRunForCommit }, input: { repo: string; sha: string }) =>
-  waitForGitHubRunForCommit({ ...input, runName: "ci.yml", raise: true })
+async ({ ci: { waitForCommit } }, input: { repo: string; sha: string }) =>
+  waitForCommit({ ...input, runName: "ci.yml", raise: true })
 ```
 
-Use `findGitHubRunForCommit()` alone when only discovery is needed, or `waitForGitHubRun()` when the exact run ID is already known. A missing run is a synchronization/trigger problem; do not wait on another commit's run.
+Use `ci.findRun()` alone when only discovery is needed, or `ci.waitForRun()` when the exact run ID is already known. A missing run is a synchronization/trigger problem; do not wait on another commit's run.
 
 For a pull request, wait for every reported check:
 
 ```ts pit-example
-async ({ waitForGitHubPullRequestChecks }, input: { number: number; repo: string }) =>
-  waitForGitHubPullRequestChecks({ ...input, raise: true })
+async ({ pr: { waitForChecks } }, input: { number: number; repo: string }) =>
+  waitForChecks({ ...input, raise: true })
 ```
 
-Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. When a run fails, call `inspectGitHubRunFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
+Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. When a run fails, call `ci.inspectFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
 
 ## Finish an issue
 

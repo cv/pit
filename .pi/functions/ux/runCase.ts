@@ -1,5 +1,5 @@
 /**
- * Submits a prompt or keys to an isolated Pi from managePitUxSession, waits for a new completion,
+ * Submits a prompt or keys to an isolated Pi from ux.manageSession, waits for a new completion,
  * and returns the captured rows.
  *
  * @param input.fixture - Single-line prompt text, usually a fixture name such as trace-a.
@@ -18,7 +18,7 @@
  * @param input.tail - Last rows returned (1-200). The default is 25. Rows are clipped to 200
  *   characters.
  */
-async function runPitUxCase(
+async function runCase(
   { shell: { execFile } },
   input: {
     socket: string;
@@ -36,7 +36,7 @@ async function runPitUxCase(
 ) {
   // Only this workflow's private servers: never the pane running the conversation.
   if (!/^\/tmp\/pit-ux-[A-Za-z0-9]+\/tmux\.sock$/.test(input.socket)) {
-    throw new Error("socket must come from managePitUxSession (/tmp/pit-ux-*/tmux.sock)");
+    throw new Error("socket must come from ux.manageSession (/tmp/pit-ux-*/tmux.sock)");
   }
   if (!/^[A-Za-z0-9_-]+:\d+\.\d+$/.test(input.target)) {
     throw new Error("target must be session:window.pane");

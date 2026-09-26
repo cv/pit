@@ -6,8 +6,8 @@
  * @param input.diffBytes - Maximum bytes in each diff (1000-20000). The default is 12000.
  * @param input.commits - Recent commits to include (1-20). The default is 5.
  */
-async function reviewPitChanges(
-  { preparePitDelivery, git: { diff: gitDiff, log: gitLog } },
+async function review(
+  { delivery: { prepare }, git: { diff: gitDiff, log: gitLog } },
   input: { diffLines?: number; diffBytes?: number; commits?: number } = {},
 ) {
   const integerInput = (
@@ -37,7 +37,7 @@ async function reviewPitChanges(
   };
   const summaryOptions = { maxBytes: 4000, maxLines: 120, truncate: "head" as const, raise: true };
   const [readiness, stat, stagedStat, diff, stagedDiff, log] = await Promise.all([
-    preparePitDelivery(),
+    prepare(),
     gitDiff(["--stat"], summaryOptions),
     gitDiff(["--cached", "--stat"], summaryOptions),
     gitDiff([], diffOptions),

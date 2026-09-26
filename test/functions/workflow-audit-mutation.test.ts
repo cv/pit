@@ -101,7 +101,7 @@ function harness(
   };
 }
 
-describe("probePitAuditMutation", () => {
+describe("tests.probeMutation", () => {
   it.each<{ name: string; patch: Record<string, unknown>; error: string }>([
     {
       name: "owner traversal",
@@ -118,7 +118,7 @@ describe("probePitAuditMutation", () => {
     },
     { name: "multiline pattern", patch: { testNamePattern: "first\nsecond" }, error: "one line" },
   ])("rejects $name before effects", async ({ patch, error }) => {
-    const probe = await loadWorkflowFunction("probePitAuditMutation");
+    const probe = await loadWorkflowFunction("tests.probeMutation");
     const get = vi.fn();
     const edit = vi.fn();
     const read = vi.fn();
@@ -136,7 +136,7 @@ describe("probePitAuditMutation", () => {
   it.skipIf(skipWithoutJq)(
     "preserves replacement tokens and removes temporary config/report after success",
     async () => {
-      const probe = await loadWorkflowFunction("probePitAuditMutation");
+      const probe = await loadWorkflowFunction("tests.probeMutation");
       const fixture = harness(passing);
       expect(await probe(fixture.dependencies, input)).toMatchObject({
         code: 0,
@@ -152,7 +152,7 @@ describe("probePitAuditMutation", () => {
   it.skipIf(skipWithoutJq)(
     "bounds noisy assertion and load failures while retaining omissions",
     async () => {
-      const probe = await loadWorkflowFunction("probePitAuditMutation");
+      const probe = await loadWorkflowFunction("tests.probeMutation");
       const fixture = harness({
         numTotalTests: 9,
         numPassedTests: 0,
@@ -200,7 +200,7 @@ describe("probePitAuditMutation", () => {
   );
 
   it.skipIf(skipWithoutJq)("marks a run with no executed assertions inconclusive", async () => {
-    const probe = await loadWorkflowFunction("probePitAuditMutation");
+    const probe = await loadWorkflowFunction("tests.probeMutation");
     const fixture = harness({
       numTotalTests: 0,
       numPassedTests: 0,
@@ -212,14 +212,14 @@ describe("probePitAuditMutation", () => {
   });
 
   it("rejects an unobserved mutation and cleans up both artifacts", async () => {
-    const probe = await loadWorkflowFunction("probePitAuditMutation");
+    const probe = await loadWorkflowFunction("tests.probeMutation");
     const fixture = harness(passing, { omitMarker: true });
     await expect(probe(fixture.dependencies, input)).rejects.toThrow("Mutation was not observed");
     expect(fixture.files.size).toBe(0);
   });
 
   it("preserves runner failure alongside cleanup failure", async () => {
-    const probe = await loadWorkflowFunction("probePitAuditMutation");
+    const probe = await loadWorkflowFunction("tests.probeMutation");
     const fixture = harness(passing, {
       runnerError: "runner crashed",
       cleanupError: "EACCES cleanup denied",

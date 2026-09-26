@@ -46,9 +46,9 @@ const failingLog = [
   stamp("Cleaning up orphan processes"),
 ].join("\n");
 
-describe("inspectGitHubRunFailure", () => {
+describe("ci.inspectFailure", () => {
   it("excerpts each failed job up to its last error instead of the cleanup tail", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const inspect = await loadWorkflowFunction("ci.inspectFailure");
     const view = runView([job(7), job(8, "success")]);
     const api = vi.fn().mockResolvedValue(processResult({ stdout: failingLog, truncated: true }));
     const result = await inspect(
@@ -91,7 +91,7 @@ describe("inspectGitHubRunFailure", () => {
   });
 
   it("lists failed Vitest tests with their errors and counts failures outside the log window", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const inspect = await loadWorkflowFunction("ci.inspectFailure");
     const log = [
       stamp("##[group]Run npm run coverage"),
       stamp(" FAIL  test/a.test.ts > suite > times out"),
@@ -120,7 +120,7 @@ describe("inspectGitHubRunFailure", () => {
   });
 
   it("falls back to the lines before post-job cleanup when no error was logged", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const inspect = await loadWorkflowFunction("ci.inspectFailure");
     const log = [
       stamp("##[group]Run ./build.sh"),
       stamp("compiling"),
@@ -139,7 +139,7 @@ describe("inspectGitHubRunFailure", () => {
   });
 
   it("limits inspected jobs and keeps a job whose log is unavailable", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const inspect = await loadWorkflowFunction("ci.inspectFailure");
     const api = vi
       .fn()
       .mockResolvedValue(processResult({ code: 1, stderr: "gh: HTTP 410: logs expired" }));
@@ -158,7 +158,7 @@ describe("inspectGitHubRunFailure", () => {
   });
 
   it("labels a run that is still in progress", async () => {
-    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const inspect = await loadWorkflowFunction("ci.inspectFailure");
     const api = vi.fn().mockResolvedValue(processResult({ stdout: failingLog }));
     const result = await inspect(
       { gh: { runView: runView([job(7)], "in_progress"), api } },
@@ -177,7 +177,7 @@ describe("inspectGitHubRunFailure", () => {
     { name: "zero jobs", input: { repo: "cv/pit", id: 42, jobs: 0 } },
     { name: "jobs above 10", input: { repo: "cv/pit", id: 42, jobs: 11 } },
   ])("rejects $name before querying GitHub", async ({ input }) => {
-    const inspect = await loadWorkflowFunction("inspectGitHubRunFailure");
+    const inspect = await loadWorkflowFunction("ci.inspectFailure");
     const view = vi.fn();
     const api = vi.fn();
     await expect(inspect({ gh: { runView: view, api } }, input)).rejects.toThrow();
