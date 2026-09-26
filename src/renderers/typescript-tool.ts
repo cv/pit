@@ -205,10 +205,10 @@ function renderInvocationTiming(
     .map(([phase, value]) => `${formatDuration(value)} ${phase}`);
   if (rest.length) {
     const restMs = rest.reduce((sum, [, value]) => sum + value, 0);
-    ranking.push(theme.fg("muted", `${formatDuration(restMs)} rest`));
+    ranking.push(`${formatDuration(restMs)} rest`);
   }
   const total = `${formatDuration(timings.totalMs)} total`;
-  return `\n\n${theme.fg("muted", total)}   ${ranking.join(theme.fg("dim", " › "))}`;
+  return `\n\n${theme.fg("muted", `${total}   ${ranking.join(" › ")}`)}`;
 }
 
 function renderExecutionDetails(

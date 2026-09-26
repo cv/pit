@@ -174,7 +174,11 @@ describe("trace cleanup rendering", () => {
     expect(timings).toEqual(before);
   });
 
-  it("shows invocation timing on one line without bold emphasis", () => {
+  it("shows invocation timing on one uniformly muted line without emphasis", () => {
+    const styledTheme = {
+      fg: (color: string, text: string) => `\x1b[${color === "muted" ? 90 : 37}m${text}\x1b[39m`,
+      bold: (text: string) => `\x1b[1m${text}\x1b[22m`,
+    };
     const rows = renderTypeScriptToolResult(
       {
         content: [],
@@ -188,14 +192,18 @@ describe("trace cleanup rendering", () => {
         },
       },
       { expanded: true, isPartial: false },
-      { ...theme, bold: (text: string) => `\x1b[1m${text}\x1b[22m` },
+      styledTheme,
       { executionStarted: false },
     ).render(120);
     const timingStart = rows.findIndex((row) => row.includes("840ms total"));
     expect(timingStart).toBeGreaterThanOrEqual(0);
-    const timingRows = rows.slice(timingStart).filter((row) => stripTerminalSequences(row).trim());
-    expect.soft(timingRows).toHaveLength(1);
-    expect.soft(timingRows.join("\n")).not.toContain("\x1b[1m");
+    const timingRows = rows
+      .slice(timingStart)
+      .filter((row) => stripTerminalSequences(row).trim())
+      .map((row) => row.trimEnd());
+    expect(timingRows).toEqual([
+      styledTheme.fg("muted", "840ms total   610ms validation › 200ms execution › 30ms rest"),
+    ]);
   });
 
   it("joins by sequence, preserves nested attribution and distinct processes, and avoids duplicate sections", () => {
