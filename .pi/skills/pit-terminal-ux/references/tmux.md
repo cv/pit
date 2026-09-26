@@ -31,6 +31,13 @@ Submit one fixture name as ordinary prompt text:
 | `timeout`           | Actual subprocess deadline, with clear cause and retained output.                                                      |
 | `progress`          | Several real partial updates followed by a stable final result.                                                        |
 | `cancel`            | Long-running subprocess that prints `CANCEL_PID`; Escape should cancel it and terminate that child.                    |
+| `cancel-tree`       | Shell pipeline `sleep 3001 \| cat`; after Escape, no `sleep 3001` may remain.                                          |
+| `cancel-silent`     | Quiet direct child `sleep 3003`, for exit and `/new` checks without output-driven failures.                            |
+| `timeout-tree`      | Pipeline `sleep 3002 \| cat` with a 1 s deadline; no `sleep 3002` may remain after the timeout.                        |
+| `dialog-timeout`    | `ui.confirm` left unanswered past a 3 s deadline; the dialog must close when the call times out.                       |
+| `tty-probe`         | Writes to `/dev/tty`; the command must fail without drawing `PIT_TTY_PROBE` into Pi's screen.                          |
+| `save-probe`        | Saves the session function `probeSaved`, for `promote-timeout`.                                                        |
+| `promote-timeout`   | User promotion whose confirmation outlives its 3 s call; the dialog closes and no `probeSaved.ts` is written.          |
 | `json`              | Heterogeneous fields and multiline patch content without field loss.                                                   |
 | `batch`             | Real settled read batch with one deliberate missing-file failure.                                                      |
 | `calls`             | Sixty interleaved call groups, then a slow subprocess; live and settled dashboards stay honest and usable.             |
