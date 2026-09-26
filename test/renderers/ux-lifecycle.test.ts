@@ -16,23 +16,46 @@ const plain = (component: { render(width: number): string[] }) =>
 beforeEach(() => initTheme("dark"));
 
 describe("terminal UX lifecycle and fallback", () => {
-  it.each([false, true])(
-    "preserves data if presentation metadata is malformed (error=%s)",
-    (isError) => {
-      const result = {
-        content: [{ type: "text", text: "ORIGINAL_SENTINEL" }],
-        details: { value: "VALUE_SENTINEL", traces: "invalid metadata" },
-      };
-      const output = plain(renderTypeScriptToolResult(result, options, theme, { isError }));
-      expect(output).toContain("ORIGINAL_SENTINEL");
-      expect(output).toContain("VALUE_SENTINEL");
-      const collapsed = plain(
-        renderTypeScriptToolResult(result, { ...options, expanded: false }, theme, { isError }),
-      );
-      expect(collapsed).toMatch(/structured view unavailable/i);
-      expect(collapsed).toContain("Expand to inspect retained data");
+  it.each<{ name: string; metadata: Record<string, unknown>; isError?: boolean }>([
+    { name: "invalid traces", metadata: { traces: "invalid metadata" } },
+    { name: "invalid traces on failure", metadata: { traces: "invalid metadata" }, isError: true },
+    { name: "null timings", metadata: { timings: null } },
+    { name: "missing phases", metadata: { timings: { totalMs: 15 } } },
+    { name: "array phases", metadata: { timings: { totalMs: 15, phases: [15] } } },
+    { name: "missing total", metadata: { timings: { phases: { validation: 7 } } } },
+    { name: "negative total", metadata: { timings: { totalMs: -1, phases: {} } } },
+    {
+      name: "NaN phase",
+      metadata: { timings: { totalMs: 15, phases: { execution: 10, invalid: NaN } } },
     },
-  );
+    {
+      name: "infinite phase",
+      metadata: { timings: { totalMs: 15, phases: { execution: 10, invalid: Infinity } } },
+    },
+    {
+      name: "negative phase",
+      metadata: { timings: { totalMs: 15, phases: { execution: 10, invalid: -1 } } },
+    },
+    {
+      name: "text phase",
+      metadata: { timings: { totalMs: 15, phases: { execution: 10, invalid: "10" } } },
+    },
+  ])("preserves data when presentation metadata has $name", ({ metadata, isError = false }) => {
+    const result = {
+      content: [{ type: "text", text: "ORIGINAL_SENTINEL" }],
+      details: { value: "VALUE_SENTINEL", ...metadata },
+    };
+    const output = plain(renderTypeScriptToolResult(result, options, theme, { isError }));
+    expect(output).toMatch(/structured view unavailable/i);
+    expect(output).toContain("ORIGINAL_SENTINEL");
+    expect(output).toContain("VALUE_SENTINEL");
+    for (const key of Object.keys(metadata)) expect(output).toContain(key);
+    const collapsed = plain(
+      renderTypeScriptToolResult(result, { ...options, expanded: false }, theme, { isError }),
+    );
+    expect(collapsed).toMatch(/structured view unavailable/i);
+    expect(collapsed).toContain("Expand to inspect retained data");
+  });
 
   it("puts settled output ahead of inspectable inputs without duplicating source", () => {
     const args = {

@@ -107,12 +107,11 @@ describe("trace cleanup rendering", () => {
     expect(before).toContain("10ms validation");
     expect(before).toBe(render(42, true, metadata));
     expect(render(42, false)).toContain("time unavailable");
-    expect(render(42, false, { timings: { totalMs: -1 } })).toContain("time unavailable");
   });
 
   it.each<{
     name: string;
-    timings: unknown;
+    timings: { totalMs: number; phases: Record<string, number> };
     ranking: string;
     rest?: string;
   }>([
@@ -163,24 +162,9 @@ describe("trace cleanup rendering", () => {
       ranking: "90ms total 30ms execution › 20ms validation",
     },
     {
-      name: "unknown phase names survive and invalid measurements are ignored",
-      timings: {
-        totalMs: 15,
-        phases: {
-          invalid: NaN,
-          negative: -1,
-          infinite: Infinity,
-          text: "10",
-          execution: 10,
-          future: 5,
-        },
-      },
+      name: "unknown phase names survive",
+      timings: { totalMs: 15, phases: { execution: 10, future: 5 } },
       ranking: "15ms total 10ms execution › 5ms future",
-    },
-    {
-      name: "missing total does not fabricate a duration",
-      timings: { phases: { validation: 7 } },
-      ranking: "Timing 7ms validation",
     },
   ])("ranks invocation costs: $name", ({ timings, ranking, rest }) => {
     const before = structuredClone(timings);
