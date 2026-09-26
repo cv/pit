@@ -4,17 +4,17 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-import type { CAPABILITY_METHODS } from "../capabilities/registry.js";
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import { terminationError } from "../shared/termination-errors.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
 import { validateFunctionId as validateSavedFunctionName } from "./identifier.js";
 import { FunctionInspector, type FunctionListOptions } from "./inspection.js";
+import type { NativeMethod } from "./native.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./service.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
 import { userFunctionDirectory, userFunctionPath } from "./storage/user.js";
 
-type FunctionMethod = (typeof CAPABILITY_METHODS)["functions"][number];
+type FunctionMethod = NativeMethod<"functions">;
 type FunctionMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
 interface FunctionCapabilityServices {

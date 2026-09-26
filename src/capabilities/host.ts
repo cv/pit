@@ -5,7 +5,12 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
 import { createFunctionCapabilityHandler } from "../functions/capability-handler.js";
 import { type FunctionActivity, functionRunScope } from "../functions/core.js";
-import { globalFunctionDefinitions } from "../functions/definitions.js";
+import {
+  globalFunctionDefinitions,
+  type NativeMethod,
+  type NativeNamespace,
+  validateNativeCall,
+} from "../functions/native.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { createProcessRunner, formatProcessCommand } from "../process/runner.js";
 import type { CapabilityHandler } from "../sandbox/dispatcher.js";
@@ -23,11 +28,6 @@ import { createModelsCapabilityHandler } from "./handlers/models.js";
 import { prepareNpmCommand } from "./handlers/npm.js";
 import { createRuntimeCapabilityHandler } from "./handlers/runtime.js";
 import { createSessionCapabilityHandler } from "./handlers/session.js";
-import {
-  type CAPABILITY_METHODS,
-  type CapabilityName,
-  validateCapabilityCall,
-} from "./registry.js";
 
 // One storage instance; each host dispatch owns its async scope, including overlapping tools.
 const processTraceContext = new AsyncLocalStorage<number | undefined>();
@@ -37,8 +37,6 @@ type PublicCapabilityHandler = (
   args: unknown[],
   signal: AbortSignal,
 ) => unknown | Promise<unknown>;
-
-type CapabilityMethodName<Name extends CapabilityName> = (typeof CAPABILITY_METHODS)[Name][number];
 
 type CapabilityMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
@@ -98,7 +96,7 @@ export interface HostCapabilityServices {
 
 interface ProcessCapabilityHandlers {
   withTrace<T>(sequence: number | undefined, operation: () => T): T;
-  shell: Record<CapabilityMethodName<"shell">, CapabilityMethodHandler>;
+  shell: Record<NativeMethod<"shell">, CapabilityMethodHandler>;
   run(
     program: string,
     args: string[],
@@ -177,7 +175,7 @@ function createProcessCapabilityHandlers(input: {
  */
 function createUiHandlers(
   ctx: ExtensionContext,
-): Record<CapabilityMethodName<"ui">, CapabilityMethodHandler> {
+): Record<NativeMethod<"ui">, CapabilityMethodHandler> {
   return {
     confirm: (args, signal) =>
       ctx.ui.confirm(string(args[0], "title"), string(args[1], "message"), { signal }),
@@ -222,10 +220,9 @@ export function createCapabilities({
 
   const uiHandlers = createUiHandlers(ctx);
 
-  const publicHandlers: Record<CapabilityName, PublicCapabilityHandler> = {
+  const publicHandlers: Record<NativeNamespace, PublicCapabilityHandler> = {
     workspace: (method, args, signal) => handleWorkspace(ctx.cwd, method, args, signal),
-    shell: (method, args, signal) =>
-      shellHandlers[method as CapabilityMethodName<"shell">](args, signal),
+    shell: (method, args, signal) => shellHandlers[method as NativeMethod<"shell">](args, signal),
     git: (method, args, signal) => {
       const gitArgs = args[0] === undefined ? [] : stringArray(args[0], "args");
       const options = args[1] === undefined ? {} : object(args[1], "options");
@@ -269,7 +266,7 @@ export function createCapabilities({
       if (!ctx.hasUI) {
         throw new Error("UI is not available in this mode");
       }
-      return uiHandlers[method as CapabilityMethodName<"ui">](args, signal);
+      return uiHandlers[method as NativeMethod<"ui">](args, signal);
     },
     context: () => ({
       cwd: ctx.cwd,
@@ -332,7 +329,7 @@ export function createCapabilities({
         return null;
       }
 
-      validateCapabilityCall(capability, method, args);
-      return publicHandlers[capability as CapabilityName](method, args, signal);
+      validateNativeCall(capability, method, args);
+      return publicHandlers[capability as NativeNamespace](method, args, signal);
     });
 }

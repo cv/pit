@@ -8,6 +8,7 @@ import {
   cleanupHarness,
   context,
   cwd,
+  execMock,
   sessionStart,
   setupHarness,
   tool,
@@ -104,6 +105,28 @@ describe("persistent override chains", () => {
     await expect(value("async ({ context: { get } }) => (await get()).cwd")).resolves.toBe(
       cwd + "/decorated",
     );
+  });
+
+  it.each<{ name: string; call: string }>([
+    { name: "missing argv", call: 'execFile("probe")' },
+    { name: "extra positional argument", call: 'execFile("probe", [], {}, "extra")' },
+  ])("enforces native arity through a wider override: $name", async ({ call }) => {
+    await define(
+      "async function execFile({ $next }, ...args: any[]) { return ($next as any)(...args); }",
+      "shell.execFile",
+    );
+    execMock.mockResolvedValue({ stdout: "native result", stderr: "", code: 0 });
+    await expect(
+      value('async ({ shell: { execFile } }) => execFile("probe", ["--flag"])'),
+    ).resolves.toMatchObject({ stdout: "native result", code: 0 });
+    expect(execMock).toHaveBeenCalledWith("probe", ["--flag"], expect.anything());
+    execMock.mockClear();
+
+    // The source override accepts these calls; the native boundary must still reject them.
+    await expect(value(`async ({ shell: { execFile } }) => ${call}`)).rejects.toThrow(
+      "shell.execFile expects 2-3 argument(s)",
+    );
+    expect(execMock).not.toHaveBeenCalled();
   });
 
   it("keeps invalid persistent overrides unavailable instead of revealing the lower implementation", async () => {

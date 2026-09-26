@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { generateCapabilityContract } from "../../src/capabilities/registry.js";
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
+import { generateCapabilityContract } from "../../src/functions/native-contract.js";
 import { sourceFunctionDefinition } from "../../src/functions/resolved-graph.js";
 import { functionTypeModel } from "../../src/sandbox/function-types.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
