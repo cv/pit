@@ -15,6 +15,40 @@ beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
 describe("host capabilities", () => {
+  // Ending a call (cancellation, its deadline, a session change) must not leave its dialog open.
+  it.each<{ method: "confirm" | "input" | "select"; call: string }>([
+    { method: "confirm", call: 'confirm("Title", "Message")' },
+    { method: "input", call: 'input("Title")' },
+    { method: "select", call: 'select("Title", ["a", "b"])' },
+  ])("dismisses a program's $method dialog when the call ends", async ({ method, call }) => {
+    const controller = new AbortController();
+    let dismissed = false;
+    const dialog = vi.fn((...args: unknown[]) => {
+      const options = args.at(-1) as { signal?: AbortSignal } | undefined;
+      return new Promise((resolve) => {
+        options?.signal?.addEventListener(
+          "abort",
+          () => {
+            dismissed = true;
+            resolve(undefined);
+          },
+          { once: true },
+        );
+        controller.abort();
+      });
+    });
+    const base = context();
+    await expect(
+      run(
+        `async ({ ui: { ${method} } }) => ${call}`,
+        context({ ui: { ...base.ui, [method]: dialog } }),
+        controller.signal,
+      ),
+    ).rejects.toThrow(/cancelled/i);
+    expect(dialog).toHaveBeenCalledOnce();
+    expect(dismissed).toBe(true);
+  });
+
   it("executes shell commands with default and explicit options", async () => {
     execMock
       .mockResolvedValueOnce({ stdout: "first", stderr: "warning", code: 2 })

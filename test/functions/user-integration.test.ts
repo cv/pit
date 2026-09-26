@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   beforeAgentStart,
@@ -145,6 +145,78 @@ describe("user functions", () => {
     await expect(
       readFile(join(agentDir(), "functions", "portableHelper.ts"), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  // A confirmation that outlives its call must not change anything: ending the call dismisses it,
+  // and a Yes that still arrives afterwards is ignored.
+  it.each<{ name: string; honorsSignal: boolean }>([
+    { name: "dismissed when the call ends", honorsSignal: true },
+    { name: "answered Yes after the call ended", honorsSignal: false },
+  ])("does not promote when the confirmation is $name", async ({ honorsSignal }) => {
+    await sessionStart({}, context());
+    await run("async function lateHelper({}) { return 1; }");
+    const controller = new AbortController();
+    let dismissed = false;
+    const confirm = vi.fn(
+      (_title: string, _message: string, options?: { signal?: AbortSignal }) =>
+        new Promise<boolean>((resolve) => {
+          if (honorsSignal) {
+            options?.signal?.addEventListener(
+              "abort",
+              () => {
+                dismissed = true;
+                resolve(false);
+              },
+              { once: true },
+            );
+          }
+          controller.abort();
+          setTimeout(() => resolve(true), 20);
+        }),
+    );
+    const base = context();
+    await expect(
+      run(
+        'async ({ functions: { promote } }) => promote("lateHelper", "Late helper.", { to: "user" })',
+        context({ ui: { ...base.ui, confirm } }),
+        controller.signal,
+      ),
+    ).rejects.toThrow(/cancelled/i);
+    // Give a late Yes time to arrive and act.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(dismissed).toBe(honorsSignal);
+    await expect(
+      readFile(join(agentDir(), "functions", "lateHelper.ts"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not remove a user function when the confirmation is answered after the call ended", async () => {
+    await writeUserFunction(
+      "keptUser",
+      "/** Kept user. */ async function keptUser({}) { return 1; }",
+    );
+    await sessionStart({}, context());
+    const controller = new AbortController();
+    // A dialog that cannot be dismissed: Yes arrives after the call has ended.
+    const confirm = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          controller.abort();
+          setTimeout(() => resolve(true), 20);
+        }),
+    );
+    const base = context();
+    await expect(
+      run(
+        'async ({ functions: { removeUser } }) => removeUser("keptUser")',
+        context({ ui: { ...base.ui, confirm } }),
+        controller.signal,
+      ),
+    ).rejects.toThrow(/cancelled/i);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect(readFile(join(agentDir(), "functions", "keptUser.ts"), "utf8")).resolves.toContain(
+      "keptUser",
+    );
   });
 
   it("blocks promotion while non-user dependencies remain", async () => {

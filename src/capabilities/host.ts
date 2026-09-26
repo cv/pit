@@ -171,6 +171,38 @@ function createProcessCapabilityHandlers(input: {
   };
 }
 
+/**
+ * A program's dialogs end with its call: the call's signal dismisses them on cancellation, at the
+ * deadline, or on a session change.
+ */
+function createUiHandlers(
+  ctx: ExtensionContext,
+): Record<CapabilityMethodName<"ui">, CapabilityMethodHandler> {
+  return {
+    confirm: (args, signal) =>
+      ctx.ui.confirm(string(args[0], "title"), string(args[1], "message"), { signal }),
+    input: (args, signal) =>
+      ctx.ui.input(
+        string(args[0], "title"),
+        args[1] === undefined ? undefined : string(args[1], "placeholder"),
+        { signal },
+      ),
+    select: (args, signal) => {
+      if (!Array.isArray(args[1])) {
+        throw new Error("options must be an array");
+      }
+      return ctx.ui.select(string(args[0], "title"), args[1].map(String), { signal });
+    },
+    notify: (args) => {
+      ctx.ui.notify(
+        string(args[0], "message"),
+        (args[1] as "info" | "warning" | "error" | undefined) ?? "info",
+      );
+      return null;
+    },
+  };
+}
+
 export function createCapabilities({
   pi,
   ctx,
@@ -188,27 +220,7 @@ export function createCapabilities({
   const runArgumentSafeProcess = processHandlers.run;
   const shellHandlers = processHandlers.shell;
 
-  const uiHandlers: Record<CapabilityMethodName<"ui">, CapabilityMethodHandler> = {
-    confirm: (args) => ctx.ui.confirm(string(args[0], "title"), string(args[1], "message")),
-    input: (args) =>
-      ctx.ui.input(
-        string(args[0], "title"),
-        args[1] === undefined ? undefined : string(args[1], "placeholder"),
-      ),
-    select: (args) => {
-      if (!Array.isArray(args[1])) {
-        throw new Error("options must be an array");
-      }
-      return ctx.ui.select(string(args[0], "title"), args[1].map(String));
-    },
-    notify: (args) => {
-      ctx.ui.notify(
-        string(args[0], "message"),
-        (args[1] as "info" | "warning" | "error" | undefined) ?? "info",
-      );
-      return null;
-    },
-  };
+  const uiHandlers = createUiHandlers(ctx);
 
   const publicHandlers: Record<CapabilityName, PublicCapabilityHandler> = {
     workspace: (method, args, signal) => handleWorkspace(ctx.cwd, method, args, signal),

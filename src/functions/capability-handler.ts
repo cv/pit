@@ -12,11 +12,15 @@ interface FunctionCapabilityServices {
   activity: FunctionActivity[];
 }
 
-type FunctionCapabilityHandler = (method: string, args: unknown[]) => unknown | Promise<unknown>;
+type FunctionCapabilityHandler = (
+  method: string,
+  args: unknown[],
+  signal: AbortSignal,
+) => unknown | Promise<unknown>;
 
 export function createFunctionCapabilityHandler(
   services: FunctionCapabilityServices,
 ): FunctionCapabilityHandler {
   const methods = createFunctionCapabilityMethods(services);
-  return (method, args) => methods[method as keyof typeof methods]?.(args);
+  return (method, args, signal) => methods[method as keyof typeof methods]?.(args, signal);
 }
