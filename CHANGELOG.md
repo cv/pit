@@ -8,6 +8,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 - Add `gh.prCreate` and `gh.prMerge`. They never prompt: a missing body is sent empty, and `prMerge` requires `method: "merge" | "squash" | "rebase"`.
 - Hint when a literal `workspace.search` query that contains regular expression syntax, such as `a|b`, finds nothing: the result's `hint` suggests `regex: true`, and the search view shows it as a warning.
+- Explain how to fix a program whose result is not JSON-typed, such as `unknown[]` or `Record<string, unknown>`, after the validation diagnostics.
 
 ## [0.18.1] - 2026-09-26
 

@@ -25,6 +25,10 @@ const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 70
 const MAX_DIAGNOSTICS = 8;
 const SAVED_CAPABILITY_HINT =
   'There is no "saved" namespace. Use async ({ functions: { listAll } }) => listAll() to inspect functions; inject a callable by name in the first parameter.';
+// A non-JSON result fails as a long PitResult or PitProgram assignability chain that never says
+// how to fix it.
+const JSON_RESULT_HINT =
+  "A program's result must be JSON: give the returned value concrete types instead of `unknown` or `Record<string, unknown>`, or assert a value you know is JSON with `as PitJsonValue`.";
 const MAX_CACHE_ENTRIES = 128;
 interface ValidatedSource {
   error?: string;
@@ -108,6 +112,14 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
   })
     ? `\n${SAVED_CAPABILITY_HINT}`
     : "";
+  const jsonResultHint = diagnostics.some((diagnostic) => {
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+    return (
+      /\bPit(?:Result|Program|SourceProgram)\b/.test(message) && message.includes("PitJsonValue")
+    );
+  })
+    ? `\n${JSON_RESULT_HINT}`
+    : "";
   const savedHint =
     diagnostics.some((diagnostic) => diagnostic.code === 2304 || diagnostic.code === 2339) &&
     names.length > 0
@@ -117,6 +129,7 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
     `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
     (omitted > 0 ? `\n… ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
     savedCapabilityHint +
+    jsonResultHint +
     savedHint
   );
 }
