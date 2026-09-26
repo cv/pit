@@ -77,7 +77,9 @@ class GuestExecution {
   readonly signal: AbortSignal;
   resultReceived = false;
   result: unknown;
-  readonly #waiters = new Map<number, (response: string) => void>();
+  readonly #waiters = new Map<number, { effect: string; resolve: (response: string) => void }>();
+  // Calls a stop answered while they were still running; their effects may have started.
+  #stillRunning: string[] = [];
   readonly #dispatcher: CapabilityDispatcher;
   #guestFailure: { name: string; message?: string } | undefined;
   #stopped: "timeout" | "cancelled" | undefined;
@@ -131,7 +133,8 @@ class GuestExecution {
   readonly stop = (): void => {
     this.#stopped = this.options.signal?.aborted ? "cancelled" : "timeout";
     this.#affected = this.#waiters.size > 0;
-    for (const [id, waiter] of this.#waiters) waiter(this.#stoppedResponse(id));
+    this.#stillRunning = [...this.#waiters.values()].map((waiter) => waiter.effect);
+    for (const [id, waiter] of this.#waiters) waiter.resolve(this.#stoppedResponse(id));
     this.#waiters.clear();
     this.#affected = this.#interrupt() || this.#affected;
   };
@@ -139,7 +142,9 @@ class GuestExecution {
   /** The error to report for a failed native execution. Other thrown values pass through. */
   failure(error: unknown): unknown {
     if (this.options.signal?.aborted) {
-      return terminationError("cancelled", "TypeScript execution cancelled", { cause: error });
+      return terminationError("cancelled", `TypeScript execution cancelled${this.#runningNote()}`, {
+        cause: error,
+      });
     }
     const message = error instanceof Error ? error.message : String(error);
     // Report a timeout only when this executor stopped the guest or the native deadline
@@ -147,7 +152,7 @@ class GuestExecution {
     if ((this.#stopped === "timeout" && this.#affected) || /wasm trap: interrupt/i.test(message)) {
       return terminationError(
         "timeout",
-        `TypeScript execution timed out after ${this.options.timeoutMs}ms`,
+        `TypeScript execution timed out after ${this.options.timeoutMs}ms${this.#runningNote()}`,
         { cause: error },
       );
     }
@@ -170,9 +175,16 @@ class GuestExecution {
       return Promise.resolve(this.#stoppedResponse(message.id));
     }
     return new Promise<string>((resolve) => {
-      this.#waiters.set(message.id, resolve);
+      this.#waiters.set(message.id, { effect: `${message.capability}.${message.method}`, resolve });
       this.#dispatcher.handle(message);
     });
+  }
+
+  #runningNote(): string {
+    const count = this.#stillRunning.length;
+    if (count === 0) return "";
+    const calls = count === 1 ? "call was" : "calls were";
+    return ` while ${count} capability ${calls} still running: ${[...new Set(this.#stillRunning)].join(", ")}`;
   }
 
   async #wait(delayMs: number): Promise<string> {
@@ -193,7 +205,7 @@ class GuestExecution {
     /* v8 ignore next -- dispatcher sends a bounded fallback after rejection. */
     if (Buffer.byteLength(response) > MAX_PROTOCOL_FRAME_BYTES) return false;
     this.#waiters.delete(message.id);
-    waiter(response);
+    waiter.resolve(response);
     return true;
   }
 

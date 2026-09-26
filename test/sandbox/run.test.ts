@@ -466,9 +466,48 @@ describe("runInSandbox", () => {
         },
         { timeoutMs: 3_000 },
       ),
-    ).rejects.toThrow("timed out after 3000ms");
+    ).rejects.toMatchObject({
+      message:
+        "TypeScript execution timed out after 3000ms while 1 capability call was still running: context.get",
+    });
     expect(invoked).toBe(true);
     expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  // A stopped call's effects may already have started, so the error names calls still running.
+  it.each<{ name: string; program: string; calls: number; cancel: boolean; message: string }>([
+    {
+      name: "names calls still running when the execution is cancelled",
+      program: "async ({ context: { get } }) => Promise.all([get(), get()])",
+      calls: 2,
+      cancel: true,
+      message:
+        "TypeScript execution cancelled while 2 capability calls were still running: context.get",
+    },
+    {
+      name: "does not name a call that finished before the deadline",
+      program: "async ({ context: { get } }) => { await get(); while (true) {} }",
+      calls: 1,
+      cancel: false,
+      message: "TypeScript execution timed out after 3000ms",
+    },
+  ])("reports calls still running when an execution stops: $name", async (row) => {
+    const controller = new AbortController();
+    let invocations = 0;
+    await expect(
+      runInSandbox(
+        row.program,
+        () => {
+          invocations++;
+          // Cancel once every call is in flight; otherwise answer and let the deadline pass.
+          if (!row.cancel) return { cwd: "/" };
+          if (invocations === row.calls) controller.abort();
+          return new Promise(() => {});
+        },
+        { timeoutMs: row.cancel ? 30_000 : 3_000, signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ message: row.message });
+    expect(invocations).toBe(row.calls);
   });
 
   it("aborts cooperative capability handlers on timeout", async () => {
