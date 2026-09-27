@@ -3,32 +3,58 @@ import { describe, expect, it, vi } from "vitest";
 import { loadWorkflowFunction, processResult } from "../helpers/workflow-function.js";
 
 describe("delivery.listChangedFiles", () => {
-  it.each<{ name: string; stdout: string; files: string[] }>([
+  it.each<{ name: string; stdout: string; includeDeleted?: boolean; files: string[] }>([
     { name: "clean worktree", stdout: "", files: [] },
     {
       name: "staged, unstaged and untracked",
       stdout: " M b.ts\0A  a.ts\0?? c.ts\0MM b.ts\0",
       files: ["a.ts", "b.ts", "c.ts"],
     },
-    { name: "deleted files in either column", stdout: " D a.ts\0D  b.ts\0AD c.ts\0", files: [] },
+    {
+      name: "deleted files in either column",
+      stdout: " D a.ts\0D  b.ts\0AD c.ts\0MD d.ts\0",
+      files: [],
+    },
+    {
+      name: "tracked deletions when requested",
+      stdout: " D a.ts\0D  b.ts\0AD c.ts\0MD d.ts\0 M e.ts\0",
+      includeDeleted: true,
+      files: ["a.ts", "b.ts", "d.ts", "e.ts"],
+    },
     {
       name: "rename and copy destinations",
       stdout: "R  new.ts\0old.ts\0 C copy.ts\0source.ts\0",
       files: ["copy.ts", "new.ts"],
     },
     {
+      name: "rename sources but not copy sources when requested",
+      stdout: "R  new.ts\0old.ts\0 C copy.ts\0source.ts\0",
+      includeDeleted: true,
+      files: ["copy.ts", "new.ts", "old.ts"],
+    },
+    {
       name: "literal special characters",
       stdout: "??  space.ts\0?? line\nbreak.ts\0?? café.ts\0?? a -> b.ts\0?? -flag.ts\0",
       files: [" space.ts", "-flag.ts", "a -> b.ts", "café.ts", "line\nbreak.ts"],
     },
-  ])("lists $name without losing filenames", async ({ stdout, files }) => {
+  ])("lists $name without losing filenames", async ({ stdout, includeDeleted, files }) => {
     const list = await loadWorkflowFunction("delivery.listChangedFiles");
     const status = vi.fn().mockResolvedValue(processResult({ stdout }));
-    expect(await list({ git: { status } })).toEqual({ files });
+    const input = includeDeleted === undefined ? [] : [{ includeDeleted }];
+    expect(await list({ git: { status } }, ...input)).toEqual({ files });
     expect(status).toHaveBeenCalledWith(
       ["--porcelain=v1", "-z", "--untracked-files=all"],
       expect.objectContaining({ raise: true }),
     );
+  });
+
+  it("rejects a non-boolean includeDeleted before reading Git status", async () => {
+    const list = await loadWorkflowFunction("delivery.listChangedFiles");
+    const status = vi.fn();
+    await expect(list({ git: { status } }, { includeDeleted: "yes" })).rejects.toThrow(
+      "includeDeleted must be a boolean",
+    );
+    expect(status).not.toHaveBeenCalled();
   });
 
   it.each<{ name: string; stdout: string; truncated?: boolean; error: string }>([

@@ -1,8 +1,17 @@
 /**
- * Lists non-deleted changed Git paths, including staged, unstaged, renamed, and untracked files.
+ * Lists changed Git paths, including staged, unstaged, renamed, and untracked files. Deleted paths
+ * are omitted unless requested, so formatters and editors receive only files that exist.
  * Rejects conflicts, incomplete status output, and more than 500 paths rather than returning a partial list.
+ *
+ * @param input.includeDeleted - Also list tracked deletions and staged rename sources, the paths
+ *   `delivery.commit()` needs to record them. A file added and then deleted before any commit has
+ *   nothing to commit and stays omitted. The default is false.
  */
-async function listChangedFiles({ git: { status } }) {
+async function listChangedFiles({ git: { status } }, input: { includeDeleted?: boolean } = {}) {
+  if (input.includeDeleted !== undefined && typeof input.includeDeleted !== "boolean") {
+    throw new TypeError("includeDeleted must be a boolean");
+  }
+  const includeDeleted = input.includeDeleted === true;
   const result = await status(["--porcelain=v1", "-z", "--untracked-files=all"], {
     raise: true,
     maxBytes: 50000,
@@ -27,9 +36,14 @@ async function listChangedFiles({ git: { status } }) {
     }
     if (/[RC]/.test(state)) {
       // Porcelain -z places the destination first, followed by the original path.
-      if (!records[++index]) throw new Error("Git rename/copy record is missing its original path");
+      const original = records[++index];
+      if (!original) throw new Error("Git rename/copy record is missing its original path");
+      // A staged rename deletes its source; a copy leaves the source in place.
+      if (includeDeleted && state[0] === "R") files.add(original);
     }
-    if (!state.includes("D") && state !== "!!") files.add(record.slice(3));
+    if (state === "!!") continue;
+    // An index addition (A) is absent from HEAD, so deleting it leaves nothing to commit.
+    if (!state.includes("D") || (includeDeleted && state[0] !== "A")) files.add(record.slice(3));
   }
   if (files.size > 500) {
     throw new Error("More than 500 changed paths; narrow the worktree before continuing");

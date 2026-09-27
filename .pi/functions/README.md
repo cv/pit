@@ -76,7 +76,9 @@ result types from injected functions instead of copying their schemas.
 - Check process truncation before parsing machine output. A partial filename list
   must never become a successful partial mutation.
 - `delivery.listChangedFiles()` preserves literal filenames, uses rename destinations,
-  omits deletions, and rejects conflicts or more than 500 paths.
+  omits deletions, and rejects conflicts or more than 500 paths. `includeDeleted: true` adds
+  tracked deletions and staged rename sources for `delivery.commit()`; a path added and then
+  deleted before any commit stays omitted.
 - `delivery.format()` rejects more than 100 supported files instead of silently
   formatting the first 100. A failed write may still have changed files: re-read
   every attempted target before editing again.

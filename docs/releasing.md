@@ -28,9 +28,9 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
 
 ## Publish
 
-1. Commit the version and release documentation without a closing keyword.
-2. Push `main` and verify CI for that exact commit.
-3. Create and push an annotated tag:
+1. Commit the version and release documentation on a `release-X.Y.Z` branch, without a closing keyword, and open a pull request. `main` is protected: it requires a pull request and up-to-date checks, including for administrators.
+2. After its checks pass, rebase-merge the pull request and verify CI for the resulting `main` commit.
+3. Create and push an annotated tag on that merged `main` commit:
 
    ```sh
    git tag -a vX.Y.Z -m "pit vX.Y.Z"
@@ -39,13 +39,26 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
 
 4. The Release workflow builds and smoke-tests all six addons and the shared QuickJS component, validates the package/tag, and publishes them with a versioned SHA-256 manifest.
 5. Verify the release targets the tagged commit and contains exactly six `.node` assets, one `.wasm` component, and `pit-wasmtime-checksums.json`.
-6. Test the installer against the published release with strict checksum verification before declaring delivery complete.
+6. Test the installer against the published release with strict checksum verification before declaring delivery complete. From a fresh clone of the tag, run it with any development overrides removed:
+
+   ```sh
+   git clone --depth 1 --branch vX.Y.Z https://github.com/cv/pit.git /tmp/pit-vX.Y.Z
+   cd /tmp/pit-vX.Y.Z
+   env -u PIT_WASMTIME_ADDON -u PIT_WASMTIME_COMPONENT PIT_WASMTIME_INSTALL_STRICT=1 node scripts/install-wasmtime.mjs
+   ```
+
+   It must report the new version for this platform, and `native/prebuilds/<platform>-<arch>/pit-release.json` must name it.
 
 ## Install and smoke-test the tag
 
+Install the exact tag into a throwaway agent directory so the check does not change your own configuration. Call the Pi binary you intend to test by path: an older `pi` earlier on `PATH` may not support `install` and instead starts a session.
+
 ```sh
-pi install git:github.com/cv/pit@vX.Y.Z
+HOME=/tmp/pit-smoke/home PI_CODING_AGENT_DIR=/tmp/pit-smoke/agent \
+  /path/to/pi install git:github.com/cv/pit@vX.Y.Z < /dev/null
 ```
+
+The installed package is under `/tmp/pit-smoke/agent/git/github.com/cv/pit`. Pass that directory as `cwd` to `ux.manageSession` to exercise the installed tag in an isolated Pi, or install it in your own Pi with `pi install git:github.com/cv/pit@vX.Y.Z`.
 
 Restart Pi after a native addon update (Node caches loaded `.node` modules). For source-only updates, `/reload` is sufficient. Then test:
 
