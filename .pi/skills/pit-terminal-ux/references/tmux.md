@@ -53,6 +53,10 @@ Use `/new` between cases when independent captures are useful. Expansion state p
 
 Resize to 60, 80, and 120 columns with `resize-window`. Capture both the initially visible expanded viewport and the top of the entry. In fullscreen mode, Home/End navigate the transcript; in regular mode they control the editor, so inspect terminal scrollback with `capture-pane -S` instead. Long expanded entries may extend above the initial viewport because Pi follows the bottom; do not confuse off-screen data with missing data, and do not mistake correct document order for good initial viewport placement.
 
+## Source-global acceptance
+
+Run `global-override-save` followed by `global-override-run` with `ux.runCase` in the **same isolated session**, without `/new` between them. The first fixture saves a session override of `shell.execFile` that returns a sentinel instead of launching processes. The second refuses to run without that override, invokes Git/npm/GitHub source globals, and returns their reflection metadata. Expect three `GLOBAL_SOURCE_SENTINEL` commands, `kind: source`, `scope: global`, available source, a direct `shell.execFile` dependency, and no native effects because the override is pure source. Use `/new` afterwards to discard the override before process or npm-pack fixtures.
+
 ## Evidence to collect
 
 - Plain `capture-pane -p` output for collapsed, expanded, partial, and final states; retain ANSI captures (`-e`) when comparing theme/style changes.

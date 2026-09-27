@@ -10,7 +10,7 @@ import {
   type NativeMethod,
   type NativeNamespace,
   validateNativeCall,
-} from "../functions/native.js";
+} from "../functions/globals.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { createProcessRunner, formatProcessCommand } from "../process/runner.js";
 import type { CapabilityHandler } from "../sandbox/dispatcher.js";
@@ -23,9 +23,7 @@ import {
 import { completeUtf8Length, LIMITS } from "../shared/bounds.js";
 import { handleWorkspace } from "../workspace/capability.js";
 import { createCommandsCapabilityHandler } from "./handlers/commands.js";
-import { prepareGhCommand } from "./handlers/gh.js";
 import { createModelsCapabilityHandler } from "./handlers/models.js";
-import { prepareNpmCommand } from "./handlers/npm.js";
 import { createRuntimeCapabilityHandler } from "./handlers/runtime.js";
 import { createSessionCapabilityHandler } from "./handlers/session.js";
 
@@ -97,12 +95,6 @@ export interface HostCapabilityServices {
 interface ProcessCapabilityHandlers {
   withTrace<T>(sequence: number | undefined, operation: () => T): T;
   shell: Record<NativeMethod<"shell">, CapabilityMethodHandler>;
-  run(
-    program: string,
-    args: string[],
-    options: Record<string, unknown>,
-    signal: AbortSignal,
-  ): Promise<unknown>;
 }
 
 function createProcessCapabilityHandlers(input: {
@@ -144,7 +136,6 @@ function createProcessCapabilityHandlers(input: {
   };
   return {
     withTrace: (sequence, operation) => processTraceContext.run(sequence, operation),
-    run,
     shell: {
       exec: (args, signal) => {
         const command = string(args[0], "command");
@@ -215,7 +206,6 @@ export function createCapabilities({
     cwd: ctx.cwd,
     ...(onShellProgress ? { onShellProgress } : {}),
   });
-  const runArgumentSafeProcess = processHandlers.run;
   const shellHandlers = processHandlers.shell;
 
   const uiHandlers = createUiHandlers(ctx);
@@ -223,19 +213,6 @@ export function createCapabilities({
   const publicHandlers: Record<NativeNamespace, PublicCapabilityHandler> = {
     workspace: (method, args, signal) => handleWorkspace(ctx.cwd, method, args, signal),
     shell: (method, args, signal) => shellHandlers[method as NativeMethod<"shell">](args, signal),
-    git: (method, args, signal) => {
-      const gitArgs = args[0] === undefined ? [] : stringArray(args[0], "args");
-      const options = args[1] === undefined ? {} : object(args[1], "options");
-      return runArgumentSafeProcess("git", [method, ...gitArgs], options, signal);
-    },
-    npm: (method, args, signal) => {
-      const command = prepareNpmCommand(method as Parameters<typeof prepareNpmCommand>[0], args);
-      return runArgumentSafeProcess("npm", command.args, command.options, signal);
-    },
-    gh: (method, args, signal) => {
-      const command = prepareGhCommand(method as Parameters<typeof prepareGhCommand>[0], args);
-      return runArgumentSafeProcess("gh", command.args, command.options, signal);
-    },
     http: async (_method, args, signal) => {
       const url = string(args[0], "url");
       const options = args[1] === undefined ? {} : object(args[1], "options");

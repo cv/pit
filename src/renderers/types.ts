@@ -1,6 +1,6 @@
 import type { CapabilityCall } from "../capabilities/core.js";
 
-export type { ResultRendererKey } from "../functions/native-definition.js";
+export type { ResultRendererKey } from "../functions/global-definition.js";
 
 export interface ResultTheme {
   fg(color: string, text: string): string;

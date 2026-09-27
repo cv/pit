@@ -1,6 +1,6 @@
-import { defineNativeFunction } from "../native-definition.js";
+import { defineNativeFunction } from "../global-definition.js";
 
-export const functionsFunctions = [
+export const functionControlFunctions = [
   defineNativeFunction("functions", "list", {
     summary: "List project functions",
     declaration: "list(): Promise<PitPersistentFunctionMetadata[]>;",

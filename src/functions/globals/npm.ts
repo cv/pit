@@ -1,7 +1,7 @@
-import { defineNativeFunction } from "../native-definition.js";
+import { defineCommandFunction } from "../command-source.js";
 
 export const npmFunctions = [
-  defineNativeFunction("npm", "run", {
+  defineCommandFunction("npm", "run", {
     summary: "Run an npm script",
     resultRenderer: "npm.run",
     declaration:
@@ -10,7 +10,7 @@ export const npmFunctions = [
     minimumArguments: 1,
     maximumArguments: 3,
   }),
-  defineNativeFunction("npm", "test", {
+  defineCommandFunction("npm", "test", {
     summary: "Run npm tests",
     resultRenderer: "npm.test",
     declaration: "test(options?: PitNpmTestOptions): Promise<PitProcessResult>;",
@@ -19,7 +19,7 @@ export const npmFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
-  defineNativeFunction("npm", "install", {
+  defineCommandFunction("npm", "install", {
     summary: "Install npm packages",
     resultRenderer: "npm.install",
     declaration:
@@ -29,7 +29,7 @@ export const npmFunctions = [
     minimumArguments: 0,
     maximumArguments: 2,
   }),
-  defineNativeFunction("npm", "audit", {
+  defineCommandFunction("npm", "audit", {
     summary: "Audit npm dependencies",
     resultRenderer: "npm.audit",
     declaration: "audit(options?: PitNpmAuditOptions): Promise<PitProcessResult>;",
@@ -37,7 +37,7 @@ export const npmFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
-  defineNativeFunction("npm", "outdated", {
+  defineCommandFunction("npm", "outdated", {
     summary: "Inspect outdated npm packages",
     resultRenderer: "npm.outdated",
     declaration: "outdated(options?: PitProcessOptions): Promise<PitProcessResult>;",
@@ -45,7 +45,7 @@ export const npmFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
-  defineNativeFunction("npm", "pack", {
+  defineCommandFunction("npm", "pack", {
     summary: "Inspect npm package contents",
     resultRenderer: "npm.pack",
     declaration: "pack(options?: PitNpmPackOptions): Promise<PitProcessResult>;",

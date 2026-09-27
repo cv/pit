@@ -2,7 +2,7 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { validateNativeCall } from "../../src/functions/native.js";
+import { validateNativeCall } from "../../src/functions/globals.js";
 import {
   branchEntries,
   cleanupHarness,
@@ -33,8 +33,10 @@ describe("pit extension", () => {
 
   it("validates native dispatch names and arity", () => {
     expect(() => validateNativeCall("context", "get", [])).not.toThrow();
-    expect(() => validateNativeCall("git", "status", [])).not.toThrow();
-    expect(() => validateNativeCall("git", "status", [[], {}, 1])).toThrow(/expects 0-2 argument/);
+    expect(() => validateNativeCall("shell", "execFile", ["git", []])).not.toThrow();
+    expect(() => validateNativeCall("shell", "execFile", ["git", [], {}, 1])).toThrow(
+      /expects 2-3 argument/,
+    );
     expect(() => validateNativeCall("context", "get", [1])).toThrow(/expects 0 argument/);
     expect(() => validateNativeCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
     expect(() => validateNativeCall("unknown", "method", [])).toThrow(

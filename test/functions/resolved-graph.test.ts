@@ -32,7 +32,7 @@ describe("unified function graph", () => {
     );
 
     expect(graph.roots.map(({ id }) => id)).toEqual(["workspace.read", "git.status"]);
-    expect(graph.effects).toEqual(["git.status", "workspace.read"]);
+    expect(graph.effects).toEqual(["shell.execFile", "workspace.read"]);
   });
 
   it("resolves virtual dependencies through the active project layer", () => {
@@ -57,7 +57,7 @@ describe("unified function graph", () => {
       { id: "npm.test", localName: "test", targetKey: "project:npm.test" },
     ]);
     expect(projectTest?.nextKey).toBe("global:npm.test");
-    expect(graph.effects).toEqual(["npm.test"]);
+    expect(graph.effects).toEqual(["shell.execFile"]);
   });
 
   it.each<{ name: string; source: string; namespace: string; binding: string }>([

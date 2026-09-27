@@ -1,11 +1,10 @@
-import type { NativeMethod } from "../../functions/native.js";
 import {
   stringArrayValue as list,
   recordValue as object,
   stringValue as text,
 } from "../../shared/argument-values.js";
 
-type GhMethod = NativeMethod<"gh">;
+type GhMethod = keyof PitGhCapability;
 export interface PreparedGhCommand {
   args: string[];
   options: Record<string, unknown>;

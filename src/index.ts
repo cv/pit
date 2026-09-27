@@ -6,7 +6,7 @@ import { createFunctionState, createFunctionStateCommitQueue } from "./functions
 import { configuredFunctionExecutor } from "./sandbox/wasmtime-loader.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
-export { NATIVE_METHODS as CAPABILITY_METHODS } from "./functions/native.js";
+export { GLOBAL_METHODS as CAPABILITY_METHODS } from "./functions/globals.js";
 export { effectiveRegistry } from "./functions/state.js";
 export { reconstructFunctions, validateRegistryCapacity } from "./functions/core.js";
 

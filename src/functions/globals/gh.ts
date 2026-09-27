@@ -1,7 +1,7 @@
-import { defineNativeFunction } from "../native-definition.js";
+import { defineCommandFunction } from "../command-source.js";
 
 export const ghFunctions = [
-  defineNativeFunction("gh", "issueList", {
+  defineCommandFunction("gh", "issueList", {
     summary: "List GitHub issues",
     resultRenderer: "gh",
     declaration: "issueList(options?: PitGhListOptions): Promise<PitProcessResult>;",
@@ -10,7 +10,7 @@ export const ghFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
-  defineNativeFunction("gh", "issueView", {
+  defineCommandFunction("gh", "issueView", {
     summary: "View a GitHub issue",
     resultRenderer: "gh",
     declaration:
@@ -19,7 +19,7 @@ export const ghFunctions = [
     minimumArguments: 1,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "issueCreate", {
+  defineCommandFunction("gh", "issueCreate", {
     summary: "Create a GitHub issue",
     resultRenderer: "gh",
     declaration: "issueCreate(input: PitGhCreateOptions): Promise<PitProcessResult>;",
@@ -27,7 +27,7 @@ export const ghFunctions = [
     minimumArguments: 1,
     maximumArguments: 1,
   }),
-  defineNativeFunction("gh", "issueComment", {
+  defineCommandFunction("gh", "issueComment", {
     summary: "Comment on a GitHub issue",
     resultRenderer: "gh",
     declaration:
@@ -36,7 +36,7 @@ export const ghFunctions = [
     minimumArguments: 2,
     maximumArguments: 3,
   }),
-  defineNativeFunction("gh", "issueClose", {
+  defineCommandFunction("gh", "issueClose", {
     summary: "Close a GitHub issue",
     resultRenderer: "gh",
     declaration: "issueClose(number: number, options?: PitGhOptions): Promise<PitProcessResult>;",
@@ -44,7 +44,7 @@ export const ghFunctions = [
     minimumArguments: 1,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "prList", {
+  defineCommandFunction("gh", "prList", {
     summary: "List GitHub pull requests",
     resultRenderer: "gh",
     declaration: "prList(options?: PitGhPrListOptions): Promise<PitProcessResult>;",
@@ -53,7 +53,7 @@ export const ghFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
-  defineNativeFunction("gh", "prView", {
+  defineCommandFunction("gh", "prView", {
     summary: "View a GitHub pull request",
     resultRenderer: "gh",
     declaration: "prView(number: number, options?: PitGhJsonOptions): Promise<PitProcessResult>;",
@@ -61,7 +61,7 @@ export const ghFunctions = [
     minimumArguments: 1,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "prCreate", {
+  defineCommandFunction("gh", "prCreate", {
     summary: "Create a GitHub pull request",
     resultRenderer: "gh",
     declaration: "prCreate(input: PitGhPrCreateOptions): Promise<PitProcessResult>;",
@@ -70,7 +70,7 @@ export const ghFunctions = [
     minimumArguments: 1,
     maximumArguments: 1,
   }),
-  defineNativeFunction("gh", "prMerge", {
+  defineCommandFunction("gh", "prMerge", {
     summary: "Merge a GitHub pull request",
     resultRenderer: "gh",
     declaration:
@@ -80,7 +80,7 @@ export const ghFunctions = [
     minimumArguments: 2,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "runList", {
+  defineCommandFunction("gh", "runList", {
     summary: "List GitHub Actions runs",
     resultRenderer: "gh",
     declaration: "runList(options?: PitGhRunListOptions): Promise<PitProcessResult>;",
@@ -89,7 +89,7 @@ export const ghFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
-  defineNativeFunction("gh", "runView", {
+  defineCommandFunction("gh", "runView", {
     summary: "View a GitHub Actions run",
     resultRenderer: "gh",
     declaration: "runView(id: number, options?: PitGhJsonOptions): Promise<PitProcessResult>;",
@@ -97,7 +97,7 @@ export const ghFunctions = [
     minimumArguments: 1,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "releaseView", {
+  defineCommandFunction("gh", "releaseView", {
     summary: "View a GitHub release",
     resultRenderer: "gh",
     declaration:
@@ -106,7 +106,7 @@ export const ghFunctions = [
     minimumArguments: 0,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "releaseCreate", {
+  defineCommandFunction("gh", "releaseCreate", {
     summary: "Create a GitHub release",
     resultRenderer: "gh",
     declaration:
@@ -115,7 +115,7 @@ export const ghFunctions = [
     minimumArguments: 2,
     maximumArguments: 2,
   }),
-  defineNativeFunction("gh", "api", {
+  defineCommandFunction("gh", "api", {
     summary: "Call the GitHub API",
     resultRenderer: "gh",
     declaration:

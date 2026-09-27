@@ -6,15 +6,13 @@ import { FunctionInspector } from "../../src/functions/inspection.js";
 afterEach(() => vi.unstubAllEnvs());
 
 describe("layered function inspection", () => {
-  it("lists and inspects real immutable native globals without inventing source", () => {
+  it("lists immutable globals and distinguishes native primitives from inspectable source", () => {
     const inspector = new FunctionInspector({}, "/project");
     const globals = inspector.list({ scope: "global", limit: 200 });
     expect(globals.total).toBe(globalFunctionDefinitions().length);
-    expect(
-      globals.functions.every(
-        (entry) => entry.scope === "global" && entry.readOnly && entry.kind === "native",
-      ),
-    ).toBe(true);
+    expect(globals.functions.every((entry) => entry.scope === "global" && entry.readOnly)).toBe(
+      true,
+    );
     const read = inspector.inspect("workspace.read");
     expect(read).toMatchObject({
       name: "workspace.read",
@@ -33,6 +31,20 @@ describe("layered function inspection", () => {
     expect(read.signature).toContain("file: string");
     expect(read.documentation).toContain("workspace.read");
     expect(read).not.toHaveProperty("source");
+    const command = inspector.inspect("gh.issueView");
+    expect(command).toMatchObject({
+      kind: "source",
+      scope: "global",
+      readOnly: true,
+      available: true,
+      directDependencies: ["shell.execFile"],
+      directEffects: [],
+      effects: ["shell.execFile"],
+      resolvedDependencies: [{ name: "shell.execFile", scope: "global", available: true }],
+      signature:
+        "gh.issueView(number: number, options?: PitGhJsonOptions): Promise<PitProcessResult>",
+    });
+    expect(command.kind === "source" && command.source.length).toBeGreaterThan(0);
     expect(read).not.toHaveProperty("handler");
     expect(inspector.inspect("functions.promote")).toMatchObject({ sealed: true, readOnly: true });
   });

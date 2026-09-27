@@ -276,10 +276,10 @@ describe("host capabilities", () => {
       ];
     }`);
     expect(errors).toEqual([
-      "args must be an array of strings",
-      "args must be an array of strings",
-      "options must be an object",
-      "options.raise must be a boolean",
+      'Function "git.status" failed: args must be an array of strings',
+      'Function "git.diff" failed: args must be an array of strings',
+      'Function "git.log" failed: options must be an object',
+      'Function "git.show" failed: options.raise must be a boolean',
     ]);
     expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
   });
@@ -293,11 +293,16 @@ describe("host capabilities", () => {
     expect(result.details.traces).toEqual([
       expect.objectContaining({
         sequence: 1,
-        capability: "git",
-        method: "status",
+        capability: "shell",
+        method: "execFile",
+        function: expect.objectContaining({ name: "git.status", scope: "global" }),
         status: "succeeded",
         durationMs: expect.any(Number),
-        arguments: [{ type: "array", size: 2 }],
+        arguments: [
+          { type: "string", size: 3 },
+          { type: "array", size: 3 },
+          { type: "object", size: 0 },
+        ],
       }),
     ]);
     expect(JSON.stringify(result.details.traces)).not.toContain("secret-path");

@@ -74,7 +74,7 @@ function renderSourceAssignment(
     const __pit_implementation = (${node.definition.source});
     const __pit_dependencies = (__pit_context) => ${dependencies};
     return (__pit_parent) => async (...__pit_args) => __pit_run_saved(${name}, ${layer}, __pit_parent, async (__pit_context) => {
-      await __pit_capabilities(__pit_context).__pit.savedFunctionRun(${name});
+      ${node.definition.layer === "global" ? "" : `await __pit_capabilities(__pit_context).__pit.savedFunctionRun(${name});`}
       try {
         return await __pit_implementation(__pit_dependencies(__pit_context), ...__pit_args);
       } catch (__pit_error) {
