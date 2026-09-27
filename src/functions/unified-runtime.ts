@@ -53,7 +53,7 @@ function renderNativeAssignment(
   index: number,
   definition: Extract<FunctionDefinition, { kind: "native" }>,
 ): string {
-  return `__pit_function_${index} = (__pit_context) => (...__pit_args) => __pit_capabilities(__pit_context)[${JSON.stringify(definition.capability)}][${JSON.stringify(definition.method)}](...__pit_args);`;
+  return `__pit_function_${index} = (__pit_context) => (...__pit_args) => __pit_hostCalls(__pit_context)[${JSON.stringify(definition.namespace)}][${JSON.stringify(definition.method)}](...__pit_args);`;
 }
 
 function renderSourceAssignment(
@@ -74,7 +74,7 @@ function renderSourceAssignment(
     const __pit_implementation = (${node.definition.source});
     const __pit_dependencies = (__pit_context) => ${dependencies};
     return (__pit_parent) => async (...__pit_args) => __pit_run_saved(${name}, ${layer}, __pit_parent, async (__pit_context) => {
-      ${node.definition.layer === "global" ? "" : `await __pit_capabilities(__pit_context).__pit.savedFunctionRun(${name});`}
+      ${node.definition.layer === "global" ? "" : `await __pit_hostCalls(__pit_context).__pit.savedFunctionRun(${name});`}
       try {
         return await __pit_implementation(__pit_dependencies(__pit_context), ...__pit_args);
       } catch (__pit_error) {
@@ -106,7 +106,7 @@ export function unifiedRuntimeProgram(source: string, graph: ResolvedFunctionGra
     : `(${root})(undefined)`;
   // Invocation context flows through parameters, never shared state, so concurrent saved-function
   // calls keep their own attribution on runtimes without async context tracking.
-  return `async (__pit_capabilities, __pit_input, __pit_run_saved) => {
+  return `async (__pit_hostCalls, __pit_input, __pit_run_saved) => {
     const __pit_dependency_object = (__pit_values) => Object.freeze(Object.assign(Object.create(null), __pit_values));
     ${declarations.join("\n")}
     ${assignments.join("\n")}

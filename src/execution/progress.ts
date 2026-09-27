@@ -1,6 +1,6 @@
 import { LIMITS, sliceText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import { type CapabilityTrace, CapabilityTraceCollector } from "./capability-trace.js";
+import { type HostCallTrace, HostCallTraceCollector } from "./host-call-trace.js";
 import type {
   ExecutionProgressListener,
   ExecutionProgressSnapshot,
@@ -16,7 +16,7 @@ export function retainShellOutputTail(output: string): string {
 }
 
 export class ExecutionProgressController {
-  readonly #traces = new CapabilityTraceCollector();
+  readonly #traces = new HostCallTraceCollector();
   readonly #shell = new Map<number, ShellProgress>();
   readonly #listener: ExecutionProgressListener | undefined;
   #lastEmitAt: number | undefined;
@@ -29,7 +29,7 @@ export class ExecutionProgressController {
     this.#listener = listener;
   }
 
-  recordTrace(trace: CapabilityTrace): void {
+  recordTrace(trace: HostCallTrace): void {
     if (this.#disposed) {
       return;
     }

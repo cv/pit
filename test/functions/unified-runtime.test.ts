@@ -11,7 +11,7 @@ import { unifiedRuntimeProgram } from "../../src/functions/unified-runtime.js";
 async function execute(
   source: string,
   definitions: Parameters<typeof createLayeredFunctionRegistry>[0],
-  capabilities: object,
+  dependencies: object,
   input?: unknown,
 ) {
   const graph = resolveFunctionGraph(source, createLayeredFunctionRegistry(definitions));
@@ -19,7 +19,7 @@ async function execute(
   const compiled = await transform(`(${generated})`, { loader: "ts", target: "es2022" });
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
   const main = (0, eval)(compiled.code) as (
-    capabilities: (context: unknown) => object,
+    dependencies: (context: unknown) => object,
     input: unknown,
     runSaved: (
       name: string,
@@ -29,7 +29,7 @@ async function execute(
     ) => Promise<unknown>,
   ) => Promise<unknown>;
   return main(
-    () => capabilities,
+    () => dependencies,
     input,
     async (name, layer, _parent, callback) => callback({ name, layer }),
   );

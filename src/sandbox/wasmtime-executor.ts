@@ -2,19 +2,19 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { terminationError } from "../shared/termination-errors.js";
-import { CapabilityDispatcher, type CapabilityHandler } from "./dispatcher.js";
+import { HostCallDispatcher, type HostCallHandler } from "./dispatcher.js";
 import {
   parseFunctionExecutionContext,
   type FunctionExecutionOptions,
   type FunctionExecutor,
 } from "./executor.js";
 import { createWasmtimeGuestSource } from "./wasmtime-source.js";
-import type { CapabilityCallMessage, WireMessage } from "./wire.js";
-import { isCapabilityCallMessage } from "./wire.js";
+import type { HostCallMessage, WireMessage } from "./wire.js";
+import { parseHostCallMessage } from "./wire.js";
 
 const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
-const MAX_CAPABILITY_CALLS = 1_024;
-const MAX_CONCURRENT_CAPABILITY_CALLS = 32;
+const MAX_HOST_CALLS = 1_024;
+const MAX_CONCURRENT_HOST_CALLS = 32;
 const DEFAULT_FUEL = Number.MAX_SAFE_INTEGER;
 const EMPTY_RESPONSE = JSON.stringify({ value: null });
 
@@ -69,7 +69,7 @@ function parseGuestRequest(raw: string): Record<string, unknown> {
 }
 
 /**
- * The host side of one execution: answers guest requests, dispatches capability calls, stops the
+ * The host side of one execution: answers guest requests, dispatches host calls, stops the
  * guest at the deadline or on cancellation, and classifies how a failed execution ended.
  */
 class GuestExecution {
@@ -80,7 +80,7 @@ class GuestExecution {
   readonly #waiters = new Map<number, { effect: string; resolve: (response: string) => void }>();
   // Calls a stop answered while they were still running; their effects may have started.
   #stillRunning: string[] = [];
-  readonly #dispatcher: CapabilityDispatcher;
+  readonly #dispatcher: HostCallDispatcher;
   #guestFailure: { name: string; message?: string } | undefined;
   #stopped: "timeout" | "cancelled" | undefined;
   // Whether stopping reached the guest; a guest that failed on its own keeps its error.
@@ -88,20 +88,20 @@ class GuestExecution {
 
   constructor(
     private readonly addon: WasmtimeAddon,
-    handler: CapabilityHandler,
+    handler: HostCallHandler,
     effects: Iterable<string>,
     private readonly options: FunctionExecutionOptions,
   ) {
     this.signal = executionSignal(options);
-    this.#dispatcher = new CapabilityDispatcher({
+    this.#dispatcher = new HostCallDispatcher({
       handler,
       signal: this.signal,
-      maximumCalls: MAX_CAPABILITY_CALLS,
-      maximumConcurrentCalls: MAX_CONCURRENT_CAPABILITY_CALLS,
+      maximumCalls: MAX_HOST_CALLS,
+      maximumConcurrentCalls: MAX_CONCURRENT_HOST_CALLS,
       allowedCalls: new Set(effects),
       parseFunctionContext: parseFunctionExecutionContext,
       send: (message) => this.#reply(message),
-      ...(options.onCapabilityTrace ? { onTrace: options.onCapabilityTrace } : {}),
+      ...(options.onHostCallTrace ? { onTrace: options.onHostCallTrace } : {}),
     });
   }
 
@@ -122,12 +122,13 @@ class GuestExecution {
       this.result = message.value;
       return EMPTY_RESPONSE;
     }
-    if (!isCapabilityCallMessage(message)) throw new Error("Invalid Pit guest request");
-    return this.#call(message);
+    const call = parseHostCallMessage(message);
+    if (!call) throw new Error("Invalid Pit guest request");
+    return this.#call(call);
   };
 
   /**
-   * The deadline holds even when a capability handler ignores its abort signal: answer every
+   * The deadline holds even when a host handler ignores its abort signal: answer every
    * waiting guest call so the guest resumes, then interrupt it natively.
    */
   readonly stop = (): void => {
@@ -168,14 +169,14 @@ class GuestExecution {
     return error;
   }
 
-  #call(message: CapabilityCallMessage): Promise<string> {
+  #call(message: HostCallMessage): Promise<string> {
     // After the deadline or cancellation, answer without dispatching to a handler.
     if (this.#stopped) {
       this.#affected = true;
       return Promise.resolve(this.#stoppedResponse(message.id));
     }
     return new Promise<string>((resolve) => {
-      this.#waiters.set(message.id, { effect: `${message.capability}.${message.method}`, resolve });
+      this.#waiters.set(message.id, { effect: `${message.namespace}.${message.method}`, resolve });
       this.#dispatcher.handle(message);
     });
   }
@@ -184,7 +185,7 @@ class GuestExecution {
     const count = this.#stillRunning.length;
     if (count === 0) return "";
     const calls = count === 1 ? "call was" : "calls were";
-    return ` while ${count} capability ${calls} still running: ${[...new Set(this.#stillRunning)].join(", ")}`;
+    return ` while ${count} host ${calls} still running: ${[...new Set(this.#stillRunning)].join(", ")}`;
   }
 
   async #wait(delayMs: number): Promise<string> {
@@ -235,7 +236,7 @@ export function createWasmtimeFunctionExecutor({
   component,
 }: WasmtimeFunctionExecutorOptions): FunctionExecutor {
   return {
-    async execute(program, handler: CapabilityHandler, options): Promise<unknown> {
+    async execute(program, handler: HostCallHandler, options): Promise<unknown> {
       if (options.signal?.aborted) {
         throw terminationError("cancelled", "TypeScript execution cancelled");
       }

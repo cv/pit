@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { prepareNpmCommand } from "../../src/functions/commands/npm.js";
-import type { CapabilityCall } from "../../src/renderers/capability.js";
+import type { FunctionCall } from "../../src/renderers/function-call.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
@@ -12,7 +12,7 @@ const result = (stdout = "", stderr = "", code = 0, truncated = false) => ({
   truncated,
 });
 function render(method: string, value: unknown) {
-  const call: CapabilityCall = { capability: "npm", method, qualifiedName: `npm.${method}` };
+  const call: FunctionCall = { namespace: "npm", method, qualifiedName: `npm.${method}` };
   const rendered = renderResultValue(value, theme, call);
   if (!rendered) {
     throw new Error("Expected npm result");
@@ -20,7 +20,7 @@ function render(method: string, value: unknown) {
   return rendered;
 }
 
-describe("npm capability", () => {
+describe("npm namespace", () => {
   // A cast call can pass options where args belong; the error names the signature.
   it("explains that npm.run options go after args", () => {
     expect(() => prepareNpmCommand("run", ["check", { maxBytes: 3000 }])).toThrow(
@@ -145,7 +145,7 @@ describe("npm result renderers", () => {
     );
     expect(current.lines.join("\n")).toContain('"latest": "2"');
     expect(render("pack", result(JSON.stringify([{}]))).summary).toBe("pack, complete");
-    const call: CapabilityCall = { capability: "npm", method: "run", qualifiedName: "npm.run" };
+    const call: FunctionCall = { namespace: "npm", method: "run", qualifiedName: "npm.run" };
     expect(renderResultValue({ bad: true }, theme, call)).toBeUndefined();
     expect(renderResultValue(null, theme, call)).toBeUndefined();
     expect(

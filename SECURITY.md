@@ -23,7 +23,7 @@ Include the affected version, reproduction steps, impact, and any suggested miti
 
 Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store and can affect the host only through host-authorized injected functions. The component receives restricted WASI Preview 2 bindings with no inherited filesystem, environment, network, arguments, or stdio. This is an application boundary, not a container, virtual machine, or operating-system sandbox. Wasmtime is loaded as a native addon in Pi's process, so native runtime defects share the host process's crash boundary.
 
-Host capabilities remain powerful. In particular:
+Host functions remain powerful. In particular:
 
 - `shell`, `git`, and `npm` can execute code with the Pi process's permissions.
 - Git hooks and network operations can have external effects.

@@ -1,10 +1,8 @@
 import type { PiControlServices } from "./services.js";
 
-type RuntimeCapabilityHandler = (method: string) => unknown | Promise<unknown>;
+type RuntimeHostHandler = (method: string) => unknown | Promise<unknown>;
 
-export function createRuntimeCapabilityHandler({
-  ctx,
-}: PiControlServices): RuntimeCapabilityHandler {
+export function createRuntimeHostHandler({ ctx }: PiControlServices): RuntimeHostHandler {
   return (method) => {
     if (method === "status") {
       return {

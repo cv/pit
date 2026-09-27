@@ -2,7 +2,7 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
+import type { HostCallTrace } from "../../src/execution/host-call-trace.js";
 import type { ShellProgress } from "../../src/execution/types.js";
 import { renderExecutionDashboard } from "../../src/renderers/execution-dashboard.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
@@ -18,10 +18,10 @@ const read = (file: string, extra = {}) => ({
   ...extra,
 });
 const processResult = (code = 0) => ({ stdout: "31\n", stderr: "", code, truncated: false });
-const trace = (sequence: number, extra: Partial<CapabilityTrace> = {}): CapabilityTrace => ({
+const trace = (sequence: number, extra: Partial<HostCallTrace> = {}): HostCallTrace => ({
   id: sequence,
   sequence,
-  capability: "shell",
+  namespace: "shell",
   method: "execFile",
   arguments: [],
   startedAt: 0,

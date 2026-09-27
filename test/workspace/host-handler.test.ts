@@ -4,8 +4,8 @@ import { basename, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { handleWorkspace } from "../../src/workspace/capability.js";
 import { fileRevision, lineAnchor } from "../../src/workspace/hashline.js";
+import { handleWorkspace } from "../../src/workspace/host-handler.js";
 import { cleanupHarness, cwd, run, setupHarness, value } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);

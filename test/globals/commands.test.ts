@@ -10,7 +10,7 @@ import {
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-describe("commands capability", () => {
+describe("commands namespace", () => {
   it("lists slash commands with canonical provenance", async () => {
     setSlashCommands([
       {

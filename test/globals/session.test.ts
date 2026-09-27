@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createSessionCapabilityHandler } from "../../src/capabilities/handlers/session.js";
+import { createSessionHostHandler } from "../../src/host/handlers/session.js";
 import { cleanupHarness, context, run, setupHarness, value } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-describe("session capability", () => {
+describe("session namespace", () => {
   it("reports bounded session metadata and context usage", async () => {
     expect(
       await value(`async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => ({
@@ -80,7 +80,7 @@ describe("session capability", () => {
     });
     await expect(
       value(
-        `async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => sessionCompact("  Focus on capability work.  ")`,
+        `async ({ session: { compact: sessionCompact, getName: sessionGetName, info: sessionInfo, setName: sessionSetName } }) => sessionCompact("  Focus on namespace work.  ")`,
         ctx,
       ),
     ).resolves.toEqual({
@@ -88,7 +88,7 @@ describe("session capability", () => {
       tokensBefore: 500_000,
       estimatedTokensAfter: 42_000,
     });
-    expect(instructions).toBe("Focus on capability work.");
+    expect(instructions).toBe("Focus on namespace work.");
   });
 
   it("propagates compaction failures", async () => {
@@ -104,7 +104,7 @@ describe("session capability", () => {
   });
 
   it("ignores unknown internal dispatch", async () => {
-    const handler = createSessionCapabilityHandler({ pi: {} as never, ctx: {} as never });
+    const handler = createSessionHostHandler({ pi: {} as never, ctx: {} as never });
     expect(handler("unknown", [])).toBeUndefined();
   });
 });

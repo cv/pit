@@ -1,4 +1,4 @@
-import type { CapabilityTrace } from "./capability-trace.js";
+import type { HostCallTrace } from "./host-call-trace.js";
 import type { ExecutionTimings } from "./timings.js";
 
 export type HostShellProgressEvent =
@@ -14,7 +14,7 @@ export type ShellProgressEvent = HostShellProgressEvent & {
 
 export interface ShellProgress {
   id: number;
-  /** Capability sequence owning this process; absent in legacy sessions. */
+  /** Host-call sequence owning this process; absent in legacy sessions. */
   traceSequence?: number;
   command: string;
   status: "running" | "done";
@@ -31,7 +31,7 @@ export interface ShellProgress {
 export interface ExecutionProgressSnapshot {
   timings?: ExecutionTimings;
   progress?: ShellProgress[];
-  traces?: CapabilityTrace[];
+  traces?: HostCallTrace[];
   progressTruncated?: true;
   tracesTruncated?: true;
 }

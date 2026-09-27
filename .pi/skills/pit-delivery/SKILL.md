@@ -23,7 +23,7 @@ This skill owns workflow policy: sequencing, judgment, acceptance criteria, and 
 2. Inspect current architecture and tests before editing. When writing, changing, or reviewing tests, load [pit-test-audit](../pit-test-audit/SKILL.md) and apply its authoring gate. For renderer, progress, diagnostic, or presentation-data changes, load [pit-terminal-ux](../pit-terminal-ux/SKILL.md) and use its design and acceptance criteria throughout the work.
 3. Use fresh hashed anchors for every mutation. Re-read after edits and formatting.
 4. Use top-level params for multiline patches. Simplify immediately after a malformed submission.
-5. Prefer typed npm, Git, and GitHub capabilities for one-off operations not covered by a project helper. Use raw CLI only for unsupported operations.
+5. Prefer typed npm, Git, and GitHub functions for one-off operations not covered by a project helper. Use raw CLI only for unsupported operations.
 6. Batch independent reads and probes, but serialize mutations and dependent transitions.
 
 ## Choose project helpers
@@ -138,8 +138,8 @@ For TUI, extension, reload, saved-function, sandbox, progress, or renderer behav
 ## Failure recovery
 
 - Gate failure: read the bounded diagnostic tail before rerunning validation.
-- Helper failure: use its structured result and bounded diagnostics before dropping to lower-level capabilities.
+- Helper failure: use its structured result and bounded diagnostics before dropping to lower-level functions.
 - Anchor or revision failure: re-read; do not guess another anchor.
 - TypeScript tool syntax failure: move content to params and reduce nesting.
 - Two failures of one class: stop varying syntax and split the workflow.
-- Truncated machine output: aggregate in the capability or saved function before parsing it.
+- Truncated machine output: aggregate in the function before parsing it.

@@ -1,10 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { createFunctionCapabilityMethods } from "./capability-methods.js";
 import type { FunctionActivity } from "./core.js";
+import { createFunctionHostMethods } from "./host-methods.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
 
-interface FunctionCapabilityServices {
+interface FunctionHostServices {
   pi: ExtensionAPI;
   ctx: ExtensionContext;
   functionState: FunctionState;
@@ -12,15 +12,13 @@ interface FunctionCapabilityServices {
   activity: FunctionActivity[];
 }
 
-type FunctionCapabilityHandler = (
+type FunctionHostHandler = (
   method: string,
   args: unknown[],
   signal: AbortSignal,
 ) => unknown | Promise<unknown>;
 
-export function createFunctionCapabilityHandler(
-  services: FunctionCapabilityServices,
-): FunctionCapabilityHandler {
-  const methods = createFunctionCapabilityMethods(services);
+export function createFunctionHostHandler(services: FunctionHostServices): FunctionHostHandler {
+  const methods = createFunctionHostMethods(services);
   return (method, args, signal) => methods[method as keyof typeof methods]?.(args, signal);
 }

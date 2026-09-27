@@ -4,7 +4,7 @@ import {
   stringValue as text,
 } from "../../shared/argument-values.js";
 
-type GhMethod = keyof PitGhCapability;
+type GhMethod = keyof PitGhFunctions;
 export interface PreparedGhCommand {
   args: string[];
   options: Record<string, unknown>;

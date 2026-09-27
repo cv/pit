@@ -324,7 +324,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     ]);
   });
 
-  it("reloads project functions that invoke the typed npm capability", async () => {
+  it("reloads project functions that invoke the typed npm namespace", async () => {
     const source = `/** Runs project tests. */
 async function projectTests({ npm: { test } }) {
   return test({ raise: true });
@@ -343,7 +343,7 @@ async function projectTests({ npm: { test } }) {
     expect(invoked.details.traces).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          capability: "shell",
+          namespace: "shell",
           method: "execFile",
           status: "succeeded",
           function: expect.objectContaining({
@@ -376,7 +376,7 @@ async function projectTests({ npm: { test } }) {
     expect(await value("async ({ projectGreeting }) => projectGreeting()")).toBe("project");
   });
 
-  it("wires idempotent project removal through the functions capability", async () => {
+  it("wires idempotent project removal through the functions namespace", async () => {
     await writeProjectFunction(
       "removableProject",
       "/** Removable project. */ async function removableProject({}) { return true; }",

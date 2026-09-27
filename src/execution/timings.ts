@@ -7,7 +7,7 @@ export type ExecutionPhase =
   | "commit"
   | "result";
 
-/** Sequential invocation phases. Capability durations overlap execution and are not additive. */
+/** Sequential invocation phases. Host-call durations overlap execution and are not additive. */
 export interface ExecutionTimings {
   totalMs: number;
   phases: Partial<Record<ExecutionPhase, number>>;

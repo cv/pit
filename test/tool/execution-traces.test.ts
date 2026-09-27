@@ -63,29 +63,26 @@ describe("retained execution traces", () => {
       code: "async function pure({}) { return 42; }",
       saveOnly: true,
     },
-  ])(
-    "retains timings for a $name without inventing capability calls",
-    async ({ code, saveOnly }) => {
-      const result = await tool.execute(
-        "timing",
-        { code, saveOnly },
-        undefined,
-        undefined,
-        context(),
-      );
-      expectPartition(result.details.timings);
-      expect(result.details.traces).toBeUndefined();
-      const phases = result.details.timings.phases;
-      expect(phases).toHaveProperty("formatting");
-      expect(phases).toHaveProperty("preparation");
-      expect(phases).toHaveProperty("commit");
-      expect(phases).toHaveProperty("result");
-      expect(Object.hasOwn(phases, "execution")).toBe(!saveOnly);
-      expect(result.details.value).toEqual(
-        saveOnly ? { savedFunction: "pure", executed: false } : 42,
-      );
-    },
-  );
+  ])("retains timings for a $name without inventing host calls", async ({ code, saveOnly }) => {
+    const result = await tool.execute(
+      "timing",
+      { code, saveOnly },
+      undefined,
+      undefined,
+      context(),
+    );
+    expectPartition(result.details.timings);
+    expect(result.details.traces).toBeUndefined();
+    const phases = result.details.timings.phases;
+    expect(phases).toHaveProperty("formatting");
+    expect(phases).toHaveProperty("preparation");
+    expect(phases).toHaveProperty("commit");
+    expect(phases).toHaveProperty("result");
+    expect(Object.hasOwn(phases, "execution")).toBe(!saveOnly);
+    expect(result.details.value).toEqual(
+      saveOnly ? { savedFunction: "pure", executed: false } : 42,
+    );
+  });
 
   // Budgets leave room for runtime startup, so only the timeout row reaches its deadline.
   it.each([
@@ -157,7 +154,7 @@ describe("retained execution traces", () => {
     );
     for (const entry of details.progress ?? []) {
       expect(details.traces?.find((trace) => trace.sequence === entry.traceSequence)).toMatchObject(
-        { capability: "shell", method: "execFile", status: "succeeded" },
+        { namespace: "shell", method: "execFile", status: "succeeded" },
       );
     }
     expect(

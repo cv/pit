@@ -14,7 +14,7 @@ import {
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-describe("host capabilities", () => {
+describe("host dependencies", () => {
   // Ending a call (cancellation, its deadline, a session change) must not leave its dialog open.
   it.each<{ method: "confirm" | "input" | "select"; call: string }>([
     { method: "confirm", call: 'confirm("Title", "Message")' },
@@ -284,7 +284,7 @@ describe("host capabilities", () => {
     expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
   });
 
-  it("persists bounded capability traces without argument values", async () => {
+  it("persists bounded namespace traces without argument values", async () => {
     execMock.mockResolvedValueOnce({ stdout: "## main\n", stderr: "", code: 0 });
     const result = await run(
       `async ({ git: { add: gitAdd, commit: gitCommit, diff: gitDiff, log: gitLog, push: gitPush, show: gitShow, status: gitStatus, tag: gitTag } }) => gitStatus(["--short", "secret-path"])`,
@@ -293,7 +293,7 @@ describe("host capabilities", () => {
     expect(result.details.traces).toEqual([
       expect.objectContaining({
         sequence: 1,
-        capability: "shell",
+        namespace: "shell",
         method: "execFile",
         function: expect.objectContaining({ name: "git.status", scope: "global" }),
         status: "succeeded",
@@ -381,7 +381,7 @@ describe("host capabilities", () => {
     ).rejects.toThrow("options.raise must be a boolean");
   });
 
-  it("validates shell calls and rejects unknown capabilities", async () => {
+  it("validates shell calls and rejects unknown dependencies", async () => {
     expect(
       await value(
         `async ({ shell: { exec: shellExec, execFile: shellExecFile } }) => shellExec("ok")`,
@@ -496,7 +496,7 @@ describe("host capabilities", () => {
     expect(result.slice(1)).toEqual(["url must be a string", "options must be an object"]);
   });
 
-  it("provides UI and context capabilities", async () => {
+  it("provides UI and context dependencies", async () => {
     const ctx = context();
     const result = await value(
       `async ({ ui: { confirm: uiConfirm, input: uiInput, notify: uiNotify, select: uiSelect }, context: { get: contextGet } }) => ({

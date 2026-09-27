@@ -4,6 +4,22 @@ import { describe, expect, it } from "vitest";
 import { formatDiagnostic, validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("validateTypeScript", () => {
+  it.each<{ name: string; type: string }>([
+    { name: "current dependencies", type: "PitDependencies" },
+    { name: "legacy dependency alias", type: "PitCapabilities" },
+  ])("retains virtual saved-function typing with $name", ({ type }) => {
+    const saved = new Map([["answer", "async function answer({}) { return 42; }"]]);
+    expect(() =>
+      validateTypeScript(`async ({ answer }: ${type}) => answer()`, saved),
+    ).not.toThrow();
+    expect(() =>
+      validateTypeScript(
+        `async ({ answer }: ${type}) => { const result: string = await answer(); return result; }`,
+        saved,
+      ),
+    ).toThrow(/number.*string/);
+  });
+
   it("formats global and non-program diagnostics", () => {
     expect(
       formatDiagnostic({
@@ -85,7 +101,7 @@ describe("validateTypeScript", () => {
     ).not.toThrow();
   });
 
-  it("contextually types capabilities without source annotations", () => {
+  it("contextually types dependencies without source annotations", () => {
     expect(() =>
       validateTypeScript(`async ({ workspace }) => {
       const file = await workspace.read("package.json", { format: "raw" });
@@ -94,7 +110,7 @@ describe("validateTypeScript", () => {
     ).not.toThrow();
   });
 
-  it("reports capability, await, argument, and result errors with source locations", () => {
+  it("reports namespace, await, argument, and result errors with source locations", () => {
     expect(() => validateTypeScript(`async ({ workpace }) => workpace.read("x")`)).toThrow(
       /1:.*Property 'workpace' does not exist/,
     );

@@ -7,7 +7,7 @@ import {
   structureTypeScriptFailure,
 } from "../../src/tool/failure-context.js";
 
-type FailureKind = "cancelled" | "timeout" | "capability" | "user";
+type FailureKind = "cancelled" | "timeout" | "host" | "user";
 
 describe("TypeScript failure context", () => {
   it.each<{ name: string; error: Error; kind: FailureKind }>([
@@ -39,7 +39,17 @@ describe("TypeScript failure context", () => {
     {
       name: "command failure",
       error: new Error("Command failed with exit code 1"),
-      kind: "capability",
+      kind: "host",
+    },
+    {
+      name: "current host function error",
+      error: new Error("Unknown host function: unknown.method"),
+      kind: "host",
+    },
+    {
+      name: "legacy host function error",
+      error: new Error("Unknown capability or method: unknown.method"),
+      kind: "host",
     },
     { name: "plain user error", error: new Error("plain user error"), kind: "user" },
   ])("classifies a $name", ({ error, kind }) => {
@@ -69,7 +79,7 @@ describe("TypeScript failure context", () => {
     {
       name: "timeout/cancel words in command arguments and stderr",
       message: "Command failed with exit code 1: node timeout-worker.js\nCould not read cancel.txt",
-      kind: "capability",
+      kind: "host",
     },
     {
       name: "timeout in a stack frame",
@@ -87,12 +97,12 @@ describe("TypeScript failure context", () => {
     {
       name: "a program's own exit code 124",
       message: "Command failed with exit code 124: node cancel.ts",
-      kind: "capability",
+      kind: "host",
     },
     {
       name: "a program's own exit code 130",
       message: "Command failed with exit code 130: node timeout.ts",
-      kind: "capability",
+      kind: "host",
     },
     {
       name: "timeout wording from user code",

@@ -282,7 +282,7 @@ describe("user functions", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("validates user capability options and interactive confirmation", async () => {
+  it("validates user namespace options and interactive confirmation", async () => {
     await writeUserFunction(
       "confirmedUser",
       "/** Confirmed user. */ async function confirmedUser({}) { return true; }",
@@ -435,7 +435,7 @@ it("handles cancelled and absent user manager operations", async () => {
   );
   await writeUserFunction(
     "absentCapabilityFile",
-    "/** Absent capability. */ async function absentCapabilityFile({}) { return true; }",
+    "/** Absent namespace. */ async function absentCapabilityFile({}) { return true; }",
   );
   await writeUserFunction(
     "removalCancelled",

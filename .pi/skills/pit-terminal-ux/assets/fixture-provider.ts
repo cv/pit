@@ -181,7 +181,7 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     timeoutMs: 70000,
   },
   // Registry-backed npm commands return fixed reports without a network request. The never-taken
-  // `npm.<method>()` branch lets result routing identify the capability from source.
+  // `npm.<method>()` branch lets result routing identify the function from source.
   "npm-audit": {
     label: "UX NPM AUDIT: synthetic report",
     code: "async ({ npm: { audit } }, result: { stdout: string; stderr: string; code: number; truncated: boolean }) => { const npm = { audit }; return result.code < 0 ? npm.audit() : result; }",

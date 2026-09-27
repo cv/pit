@@ -14,7 +14,7 @@ describe("TypeScript source formatting", () => {
     expect(await formatTypeScriptSource(formatted)).toBe(formatted);
     const read = vi.fn(async () => ({ content: "file contents" }));
     const status = vi.fn(async () => "clean");
-    const execute = runInNewContext(`(${formatted})`) as (capabilities: object) => Promise<unknown>;
+    const execute = runInNewContext(`(${formatted})`) as (dependencies: object) => Promise<unknown>;
     expect(await execute({ workspace: { read }, git: { status } })).toEqual({
       file: { content: "file contents" },
       status: "clean",

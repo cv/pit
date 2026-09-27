@@ -79,7 +79,7 @@ describe("namespaced session definitions", () => {
     expect(result.details.traces).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          capability: "context",
+          namespace: "context",
           function: expect.objectContaining({ name: "company.check", scope: "session" }),
         }),
       ]),

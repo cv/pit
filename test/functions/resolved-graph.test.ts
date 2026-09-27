@@ -10,14 +10,14 @@ import {
 } from "../../src/functions/resolved-graph.js";
 
 describe("unified function graph", () => {
-  it("registers capability methods as global native functions", () => {
+  it("registers namespace methods as global native functions", () => {
     const definitions = globalFunctionDefinitions();
     expect(definitions).toContainEqual(
       expect.objectContaining({
         id: "workspace.read",
         layer: "global",
         kind: "native",
-        capability: "workspace",
+        namespace: "workspace",
         method: "read",
         effect: "workspace.read",
       }),

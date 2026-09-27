@@ -4,7 +4,7 @@ import {
   stringArrayValue as stringArray,
 } from "../../shared/argument-values.js";
 
-type NpmMethod = keyof PitNpmCapability;
+type NpmMethod = keyof PitNpmFunctions;
 
 export interface PreparedNpmCommand {
   args: string[];

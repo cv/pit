@@ -151,7 +151,7 @@ describe("tool rendering", () => {
     expect(partial).toContain("⠋ Running... (0.0s)");
   });
 
-  it("renders live shell and capability progress", () => {
+  it("renders live shell and namespace progress", () => {
     const streaming = renderToolResult(
       {
         content: [{ type: "text", text: "Running TypeScript…" }],
@@ -172,7 +172,7 @@ describe("tool rendering", () => {
             {
               id: 1,
               sequence: 1,
-              capability: "npm",
+              namespace: "npm",
               method: "test",
               arguments: [],
               startedAt: Date.now(),
@@ -187,7 +187,7 @@ describe("tool rendering", () => {
             {
               id: 2,
               sequence: 2,
-              capability: "git",
+              namespace: "git",
               method: "status",
               arguments: [],
               startedAt: 1,
@@ -213,7 +213,7 @@ describe("tool rendering", () => {
     expect(streaming).toContain("running");
     expect(streaming).toContain("git.status");
     expect(streaming).toContain("completed");
-    expect(streaming).toContain("additional capability traces omitted");
+    expect(streaming).toContain("additional host-call traces omitted");
   });
 
   it("aggregates repeated polling and preserves failures", () => {
@@ -227,7 +227,7 @@ describe("tool rendering", () => {
           traces: Array.from({ length: 30 }, (_, index) => ({
             id: index + 1,
             sequence: index + 1,
-            capability: "gh",
+            namespace: "gh",
             method: "runView",
             arguments: [],
             startedAt: now - (29 - index) * 5000,
@@ -265,7 +265,7 @@ describe("tool rendering", () => {
           traces: [1, 2].map((id) => ({
             id,
             sequence: id,
-            capability: "gh",
+            namespace: "gh",
             method: "runView",
             arguments: [],
             startedAt: id * 1000,
@@ -297,7 +297,7 @@ describe("tool rendering", () => {
           traces: ["failed", "rejected"].map((status, index) => ({
             id: index + 1,
             sequence: index + 1,
-            capability: "gh",
+            namespace: "gh",
             method: "runView",
             arguments: [],
             startedAt: index,
@@ -339,7 +339,7 @@ describe("tool rendering", () => {
             {
               id: 1,
               sequence: 1,
-              capability: "__pit",
+              namespace: "__pit",
               method: "savedFunctionRun",
               arguments: [],
               startedAt: 1,
@@ -355,7 +355,7 @@ describe("tool rendering", () => {
             {
               id: 2,
               sequence: 2,
-              capability: "__pit",
+              namespace: "__pit",
               method: "savedFunctionRun",
               arguments: [],
               startedAt: 2,
@@ -372,7 +372,7 @@ describe("tool rendering", () => {
             {
               id: 3,
               sequence: 3,
-              capability: "context",
+              namespace: "context",
               method: "get",
               arguments: [],
               startedAt: 3,
@@ -382,7 +382,7 @@ describe("tool rendering", () => {
             {
               id: 4,
               sequence: 4,
-              capability: "shell",
+              namespace: "shell",
               method: "execFile",
               arguments: [],
               startedAt: 4,

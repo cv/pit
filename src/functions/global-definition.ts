@@ -37,7 +37,7 @@ export interface FunctionMetadata {
 interface GlobalFunctionBase extends FunctionMetadata {
   readonly id: string;
   readonly layer: "global";
-  readonly capability: string;
+  readonly namespace: string;
   readonly method: string;
   readonly sealed: boolean;
 }
@@ -56,39 +56,39 @@ export type GlobalFunctionDefinition = NativeFunctionDefinition | GlobalSourceFu
 export type GlobalFunctionInput = Omit<FunctionMetadata, "signature">;
 
 function globalDefinition<const Namespace extends string, const Method extends string>(
-  capability: Namespace,
+  namespace: Namespace,
   method: Method,
   metadata: GlobalFunctionInput,
 ) {
   return {
     ...metadata,
-    id: `${capability}.${method}` as const,
+    id: `${namespace}.${method}` as const,
     layer: "global" as const,
-    capability,
+    namespace,
     method,
-    signature: `${capability}.${metadata.declaration.trim().replace(/\s+/g, " ").replace(/;$/, "")}`,
-    sealed: capability === "functions",
+    signature: `${namespace}.${metadata.declaration.trim().replace(/\s+/g, " ").replace(/;$/, "")}`,
+    sealed: namespace === "functions",
   };
 }
 
 export function defineNativeFunction<const Namespace extends string, const Method extends string>(
-  capability: Namespace,
+  namespace: Namespace,
   method: Method,
   metadata: GlobalFunctionInput,
 ) {
   return Object.freeze({
-    ...globalDefinition(capability, method, metadata),
+    ...globalDefinition(namespace, method, metadata),
     kind: "native" as const,
-    effect: `${capability}.${method}`,
+    effect: `${namespace}.${method}`,
   });
 }
 
 export function defineGlobalSourceFunction<
   const Namespace extends string,
   const Method extends string,
->(capability: Namespace, method: Method, metadata: GlobalFunctionInput, source: string) {
+>(namespace: Namespace, method: Method, metadata: GlobalFunctionInput, source: string) {
   return Object.freeze({
-    ...globalDefinition(capability, method, metadata),
+    ...globalDefinition(namespace, method, metadata),
     kind: "source" as const,
     source,
   });

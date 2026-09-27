@@ -1,9 +1,9 @@
-import type { CapabilityTraceStatus } from "../execution/capability-trace.js";
 import {
   buildExecutionDashboardModel,
   type DashboardCall,
   type DashboardEvent,
 } from "../execution/dashboard-model.js";
+import type { HostCallTraceStatus } from "../execution/host-call-trace.js";
 import { formatDuration } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -75,7 +75,7 @@ function callMarker(call: DashboardCall, theme: ExecutionDashboardTheme, settled
   return outcomeMarker(theme, "error");
 }
 
-function statusLabel(status: CapabilityTraceStatus, settled: boolean): string {
+function statusLabel(status: HostCallTraceStatus, settled: boolean): string {
   if (status === "running") {
     return settled ? "unfinished at end" : "running";
   }
@@ -109,7 +109,7 @@ function renderEvent(event: DashboardEvent, depth: number, context: EventRenderi
   const { theme, settled } = context;
   const indent = "  ".repeat(Math.min(depth, 8));
   if (event.kind === "call") {
-    let text = `\n${indent}${callMarker(event, theme, settled)} ${theme.fg("toolTitle", `${event.capability}.${event.method}`)} ${theme.fg("dim", callSummary(event, settled))}`;
+    let text = `\n${indent}${callMarker(event, theme, settled)} ${theme.fg("toolTitle", `${event.namespace}.${event.method}`)} ${theme.fg("dim", callSummary(event, settled))}`;
     for (const sequence of event.sequences) {
       for (const process of context.processes.get(sequence) ?? []) {
         text += context.renderProcess(process, { settled, indent: indent + "  ", compact: true });
@@ -151,7 +151,7 @@ export function renderExecutionDashboard(
     text += renderEvent(event, 0, context);
   }
   if (model.tracesTruncated) {
-    text += `\n${theme.fg("warning", "… additional capability traces omitted")}`;
+    text += `\n${theme.fg("warning", "… additional host-call traces omitted")}`;
   }
   return text;
 }

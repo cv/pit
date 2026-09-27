@@ -33,7 +33,7 @@ Evaluate each design against all six dimensions:
 | Usefulness          | Show what supports the user's next decision: target, changes, findings, diagnostics, or recovery—not internal bookkeeping by default.    |
 | Error clarity       | Make the failed operation, affected target, cause, impact, and supported next step immediately understandable.                           |
 
-Truth, safety, and access to retained information take precedence over compactness. Improve density by removing duplication and using progressive disclosure, not by silently discarding data. Favor shared patterns over a clever format for one capability.
+Truth, safety, and access to retained information take precedence over compactness. Improve density by removing duplication and using progressive disclosure, not by silently discarding data. Favor shared patterns over a clever format for one function.
 
 ## Shared presentation contract
 

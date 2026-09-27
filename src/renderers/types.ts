@@ -1,4 +1,4 @@
-import type { CapabilityCall } from "../capabilities/core.js";
+import type { FunctionCall } from "../functions/call.js";
 
 export type { ResultRendererKey } from "../functions/global-definition.js";
 
@@ -14,8 +14,8 @@ export interface RenderContext {
   syntaxLanguage?: string;
   /** False for summary-only rendering; domain outcomes must still be evaluated. */
   details?: boolean;
-  /** The first statically identifiable capability call in submitted source. */
-  capabilityCall?: CapabilityCall;
+  /** The first statically identifiable host call in submitted source. */
+  functionCall?: FunctionCall;
 }
 
 export interface RenderedResultValue {

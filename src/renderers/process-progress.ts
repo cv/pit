@@ -9,7 +9,7 @@ import type { ResultTheme } from "./types.js";
 export function linkedProcessProgress(details: ExecutionProgressSnapshot | undefined) {
   const sequences = new Set(
     (details?.traces ?? [])
-      .filter((trace) => trace.capability !== "__pit")
+      .filter((trace) => trace.namespace !== "__pit")
       .map((trace) => trace.sequence),
   );
   const linked = new Map<number, ShellProgress[]>();

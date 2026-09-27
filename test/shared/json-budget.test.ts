@@ -10,9 +10,9 @@ const withinBudget = (text: string) => {
 };
 
 describe("fitValue", () => {
-  it("keeps a capability-bounded process result as valid JSON with every field", () => {
+  it("keeps a namespace-bounded process result as valid JSON with every field", () => {
     const output = Array.from({ length: 3_000 }, (_, index) => `line ${index} ${"x".repeat(20)}`);
-    // The capability already kept the 50 KB tail; the result must not collapse to "{".
+    // The namespace already kept the 50 KB tail; the result must not collapse to "{".
     const stdout = sliceText(output.join("\n"), LIMITS.processStream, "tail").text;
     const fitted = fitValue({ stdout, stderr: "boom", code: 3, truncated: true }, budget);
     const parsed = JSON.parse(fitted.text);

@@ -195,7 +195,7 @@ describe("configuredFunctionExecutor", () => {
         runWithFunctionExecutor(
           'async ({}) => "guest-result"',
           async () => {
-            throw new Error("unexpected capability call");
+            throw new Error("unexpected host call");
           },
           options,
           configuredFunctionExecutor(),
@@ -216,7 +216,7 @@ describe("configuredFunctionExecutor", () => {
           return { answer: 42, process: typeof (globalThis as any).process };
         }`,
         async () => {
-          throw new Error("unexpected capability call");
+          throw new Error("unexpected host call");
         },
         options,
         configuredFunctionExecutor({}),

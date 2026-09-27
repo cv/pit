@@ -10,7 +10,7 @@ import type { PiControlServices } from "./services.js";
 type PiModel = NonNullable<PiControlServices["ctx"]["model"]>;
 type ModelRefreshResult = Awaited<ReturnType<PiControlServices["ctx"]["modelRegistry"]["refresh"]>>;
 
-type ModelsCapabilityHandler = (
+type ModelsHostHandler = (
   method: string,
   args: unknown[],
   signal: AbortSignal,
@@ -48,10 +48,7 @@ function refreshFailure(result: ModelRefreshResult): string {
   return `${shown}${diagnostics.refreshErrorsTruncated ? "; … additional provider errors omitted" : ""}`;
 }
 
-export function createModelsCapabilityHandler({
-  pi,
-  ctx,
-}: PiControlServices): ModelsCapabilityHandler {
+export function createModelsHostHandler({ pi, ctx }: PiControlServices): ModelsHostHandler {
   const metadata = (model: PiModel) => {
     const scoped =
       ctx.scopedModels.length === 0 ||

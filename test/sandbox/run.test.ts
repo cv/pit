@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
-import type { CapabilityRequest } from "../../src/sandbox/dispatcher.js";
+import type { HostCallTrace } from "../../src/execution/host-call-trace.js";
+import type { HostCallRequest } from "../../src/sandbox/dispatcher.js";
 import type { FunctionExecutor } from "../../src/sandbox/executor.js";
 import { runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
@@ -38,7 +38,7 @@ describe("runInSandbox", () => {
     const result = await runInSandbox(
       "async ({}): Promise<{ answer: number }> => ({ answer: 6 * 7 })",
       async () => {
-        throw new Error("unexpected capability call");
+        throw new Error("unexpected host call");
       },
     );
     expect(result).toEqual({ answer: 42 });
@@ -81,7 +81,7 @@ describe("runInSandbox", () => {
     );
   });
 
-  it("provides destructured capabilities through RPC", async () => {
+  it("provides destructured dependencies through RPC", async () => {
     const handler = vi.fn(async (): Promise<unknown> => ({
       stdout: "",
       stderr: "",
@@ -95,7 +95,7 @@ describe("runInSandbox", () => {
     expect(result).toEqual({ value: 42 });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({
-        capability: "shell",
+        namespace: "shell",
         method: "exec",
         args: ["sum"],
         signal: expect.any(AbortSignal),
@@ -104,12 +104,12 @@ describe("runInSandbox", () => {
   });
 
   it("runs explicitly injected custom and native functions through RPC", async () => {
-    const handler = vi.fn(async ({ capability, method, args }: CapabilityRequest) => {
-      if (capability === "__pit" && method === "savedFunctionRun") return null;
-      if (capability === "workspace" && method === "read") {
+    const handler = vi.fn(async ({ namespace, method, args }: HostCallRequest) => {
+      if (namespace === "__pit" && method === "savedFunctionRun") return null;
+      if (namespace === "workspace" && method === "read") {
         return { content: `read:${String(args[0])}` };
       }
-      throw new Error(`unexpected function call: ${capability}.${method}`);
+      throw new Error(`unexpected function call: ${namespace}.${method}`);
     });
     const result = await runInSandbox(
       "async ({ inspect }, input: { file: string }) => inspect(input)",
@@ -127,24 +127,24 @@ describe("runInSandbox", () => {
 
     expect(result).toEqual({ content: "read:README.md" });
     expect(handler).toHaveBeenCalledWith(
-      expect.objectContaining({ capability: "workspace", method: "read", args: ["README.md"] }),
+      expect.objectContaining({ namespace: "workspace", method: "read", args: ["README.md"] }),
     );
   });
 
   it("emits bounded runtime traces for concurrent success and failure", async () => {
-    const updates: CapabilityTrace[] = [];
+    const updates: HostCallTrace[] = [];
     const result = await runInSandbox(
       `async ({ shell: { exec }, context: { get } }) => Promise.all([
         exec("secret command"),
         get(),
       ])`,
-      async ({ capability }) => {
-        if (capability === "shell") {
+      async ({ namespace }) => {
+        if (namespace === "shell") {
           return { stdout: "ok", stderr: "", code: 0, truncated: false };
         }
         return { cwd: "/tmp" };
       },
-      { onCapabilityTrace: (trace) => updates.push(trace) },
+      { onHostCallTrace: (trace) => updates.push(trace) },
     );
 
     expect(result).toHaveLength(2);
@@ -152,13 +152,13 @@ describe("runInSandbox", () => {
     expect(completed).toEqual([
       expect.objectContaining({
         sequence: 1,
-        capability: "shell",
+        namespace: "shell",
         method: "exec",
         status: "succeeded",
       }),
       expect.objectContaining({
         sequence: 2,
-        capability: "context",
+        namespace: "context",
         method: "get",
         status: "succeeded",
       }),
@@ -166,36 +166,36 @@ describe("runInSandbox", () => {
     expect(completed[0]?.arguments).toEqual([{ type: "string", size: 14 }]);
     expect(JSON.stringify(updates)).not.toContain("secret command");
 
-    const failed: CapabilityTrace[] = [];
+    const failed: HostCallTrace[] = [];
     await expect(
       runInSandbox(
         "async ({ context: { get } }) => get()",
         async () => {
           throw new Error("host refused");
         },
-        { onCapabilityTrace: (trace) => failed.push(trace) },
+        { onHostCallTrace: (trace) => failed.push(trace) },
       ),
     ).rejects.toThrow("host refused");
     expect(failed.at(-1)).toMatchObject({ status: "failed", durationMs: expect.any(Number) });
 
     await expect(
       runInSandbox("async ({ context: { get } }) => get()", async () => ({ ok: true }), {
-        onCapabilityTrace: () => {
+        onHostCallTrace: () => {
           throw new Error("observer failed");
         },
       }),
     ).resolves.toEqual({ ok: true });
   });
 
-  it("injects saved functions as capability-bound expressions", async () => {
+  it("injects saved functions as namespace-bound expressions", async () => {
     const savedFunctions = new Map([
       ["answer", "async function answer({}, input) { return { answer: input.value }; }"],
     ]);
-    const handler = vi.fn(async ({ capability, method }: CapabilityRequest) => {
-      if (capability === "__pit" && method === "savedFunctionRun") {
+    const handler = vi.fn(async ({ namespace, method }: HostCallRequest) => {
+      if (namespace === "__pit" && method === "savedFunctionRun") {
         return null;
       }
-      throw new Error("unexpected capability call");
+      throw new Error("unexpected host call");
     });
     const result = await runInSandbox("async ({ answer }) => answer({ value: 42 })", handler, {
       sessionFunctions: savedFunctions,
@@ -203,7 +203,7 @@ describe("runInSandbox", () => {
     expect(result).toEqual({ answer: 42 });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({
-        capability: "__pit",
+        namespace: "__pit",
         method: "savedFunctionRun",
         args: ["answer"],
         signal: expect.any(AbortSignal),
@@ -241,36 +241,36 @@ describe("runInSandbox", () => {
     ).rejects.toThrow("Property 'missingScoped' does not exist");
   });
 
-  it("attributes nested and concurrent saved-function capability calls", async () => {
+  it("attributes nested and concurrent saved-function host calls", async () => {
     const savedFunctions = new Map([
       ["outer", "async function outer({ inner }, input) { return inner(input); }"],
       ["inner", "async function inner({ context: { get } }, input) { await get(); return input; }"],
     ]);
-    const traces: CapabilityTrace[] = [];
+    const traces: HostCallTrace[] = [];
     await runInSandbox(
       'async ({ outer, inner }) => Promise.all([outer("nested"), inner("direct")])',
-      async ({ capability, method }) => {
-        if (capability === "__pit" && method === "savedFunctionRun") {
+      async ({ namespace, method }) => {
+        if (namespace === "__pit" && method === "savedFunctionRun") {
           return null;
         }
-        if (capability === "context" && method === "get") {
+        if (namespace === "context" && method === "get") {
           return { cwd: "/tmp" };
         }
-        throw new Error("unexpected capability call");
+        throw new Error("unexpected host call");
       },
       {
         projectFunctions: new Map([["outer", savedFunctions.get("outer") as string]]),
         sessionFunctions: new Map([["inner", savedFunctions.get("inner") as string]]),
-        onCapabilityTrace: (trace) => traces.push(trace),
+        onHostCallTrace: (trace) => traces.push(trace),
       },
     );
 
     const completed = traces.filter((trace) => trace.status === "succeeded");
     const outer = completed.find(
-      (trace) => trace.capability === "__pit" && trace.function?.name === "outer",
+      (trace) => trace.namespace === "__pit" && trace.function?.name === "outer",
     )?.function;
     const innerCalls = completed
-      .filter((trace) => trace.capability === "context")
+      .filter((trace) => trace.namespace === "context")
       .map((trace) => trace.function);
     expect(outer).toMatchObject({ scope: "project", depth: 1 });
     expect(innerCalls).toHaveLength(2);
@@ -356,12 +356,12 @@ describe("runInSandbox", () => {
 
   it.each<{ name: string; source: string }>([
     { name: "bare namespace", source: "saved.list()" },
-    { name: "destructured capability", source: "async ({ saved }) => saved.list()" },
+    { name: "destructured namespace", source: "async ({ saved }) => saved.list()" },
     {
-      name: "capability property",
-      source: "async (capabilities) => capabilities.saved.list()",
+      name: "namespace property",
+      source: "async (dependencies) => dependencies.saved.list()",
     },
-  ])("suggests the functions capability for $name", ({ source }) => {
+  ])("suggests the functions namespace for $name", ({ source }) => {
     expect(() => validateTypeScript(source)).toThrow(
       'There is no "saved" namespace. Use async ({ functions: { listAll } }) => listAll()',
     );
@@ -372,7 +372,7 @@ describe("runInSandbox", () => {
     expect(() => validateTypeScript("async ({ saved }) => saved()", savedFunctions)).not.toThrow();
   });
 
-  it("propagates capability errors", async () => {
+  it("propagates namespace errors", async () => {
     await expect(
       runInSandbox("async ({ context: { get } }) => get()", async () => {
         throw new Error("host refused");
@@ -380,13 +380,13 @@ describe("runInSandbox", () => {
     ).rejects.toThrow("host refused");
   });
 
-  it("gives unvalidated guest code no host globals, modules, or ungranted capabilities", async () => {
+  it("gives unvalidated guest code no host globals, modules, or ungranted dependencies", async () => {
     // Bypasses authoring validation: the runtime and the host's grants are the boundary.
     const result = await runRawProgram(`async () => ({
       globals: [typeof process, typeof require, typeof module, typeof fetch, typeof WebAssembly],
       module: await import("fs").then(() => "loaded", () => "unavailable"),
       direct: JSON.parse(await pitCall(JSON.stringify({
-        type: "call", id: 1, capability: "shell", method: "exec", args: ["id"],
+        type: "call", id: 1, namespace: "shell", method: "exec", args: ["id"],
       }))),
     })`);
 
@@ -400,7 +400,7 @@ describe("runInSandbox", () => {
   it("bounds protocol frames in both directions", async () => {
     await expect(
       runInSandbox("async ({ context: { get } }) => get()", async () => "x".repeat(8_000_001)),
-    ).rejects.toThrow(/Capability response exceeds RPC limit/);
+    ).rejects.toThrow(/Host call response exceeds RPC limit/);
 
     await expect(
       runInSandbox(
@@ -438,7 +438,7 @@ describe("runInSandbox", () => {
     ).rejects.toThrow(/call limit exceeded/);
   });
 
-  it("waits for floating capability calls before reporting success", async () => {
+  it("waits for floating host calls before reporting success", async () => {
     let completed = false;
     const result = await runInSandbox(
       "async ({ context: { get } }) => { get(); return 42; }",
@@ -477,7 +477,7 @@ describe("runInSandbox", () => {
 
   // Budgets exceed the process's one-time guest compilation on small CI runners, so the
   // call is in flight when the deadline passes.
-  it("enforces the deadline when a capability handler never settles", async () => {
+  it("enforces the deadline when a host handler never settles", async () => {
     let invoked = false;
     const started = Date.now();
     await expect(
@@ -491,7 +491,7 @@ describe("runInSandbox", () => {
       ),
     ).rejects.toMatchObject({
       message:
-        "TypeScript execution timed out after 3000ms while 1 capability call was still running: context.get",
+        "TypeScript execution timed out after 3000ms while 1 host call was still running: context.get",
     });
     expect(invoked).toBe(true);
     expect(Date.now() - started).toBeLessThan(10_000);
@@ -504,8 +504,7 @@ describe("runInSandbox", () => {
       program: "async ({ context: { get } }) => Promise.all([get(), get()])",
       calls: 2,
       cancel: true,
-      message:
-        "TypeScript execution cancelled while 2 capability calls were still running: context.get",
+      message: "TypeScript execution cancelled while 2 host calls were still running: context.get",
     },
     {
       name: "does not name a call that finished before the deadline",
@@ -533,7 +532,7 @@ describe("runInSandbox", () => {
     expect(invocations).toBe(row.calls);
   });
 
-  it("aborts cooperative capability handlers on timeout", async () => {
+  it("aborts cooperative host handlers on timeout", async () => {
     let aborted = false;
     await expect(
       runInSandbox(
@@ -555,7 +554,7 @@ describe("runInSandbox", () => {
     await vi.waitFor(() => expect(aborted).toBe(true), { timeout: 5_000 });
   });
 
-  it("handles non-Error capability failures", async () => {
+  it("handles non-Error namespace failures", async () => {
     await expect(
       runInSandbox("async ({ context: { get } }) => get()", async () => {
         throw "string failure";

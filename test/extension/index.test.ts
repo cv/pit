@@ -3,6 +3,7 @@ import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { validateNativeCall } from "../../src/functions/globals.js";
+import { GLOBAL_METHODS, CAPABILITY_METHODS } from "../../src/index.js";
 import {
   branchEntries,
   cleanupHarness,
@@ -31,6 +32,15 @@ describe("pit extension", () => {
     expect((await run("async ({}) => 42")).details.value).toBe(42);
   });
 
+  it.each([
+    { name: "current", methods: GLOBAL_METHODS },
+    { name: "legacy", methods: CAPABILITY_METHODS },
+  ])("exposes the $name public global-method view", ({ methods }) => {
+    expect(methods.shell).toEqual(["execFile", "exec"]);
+    expect(methods.gh).toContain("prView");
+    expect(methods.functions).toContain("getSaved");
+  });
+
   it("validates native dispatch names and arity", () => {
     expect(() => validateNativeCall("context", "get", [])).not.toThrow();
     expect(() => validateNativeCall("shell", "execFile", ["git", []])).not.toThrow();
@@ -39,9 +49,7 @@ describe("pit extension", () => {
     );
     expect(() => validateNativeCall("context", "get", [1])).toThrow(/expects 0 argument/);
     expect(() => validateNativeCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
-    expect(() => validateNativeCall("unknown", "method", [])).toThrow(
-      "Unknown capability or method",
-    );
+    expect(() => validateNativeCall("unknown", "method", [])).toThrow("Unknown host function");
   });
 
   it("suggests project promotion once after repeated session reuse", async () => {

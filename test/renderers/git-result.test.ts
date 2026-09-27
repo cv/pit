@@ -1,7 +1,7 @@
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import type { CapabilityCall } from "../../src/renderers/capability.js";
+import type { FunctionCall } from "../../src/renderers/function-call.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 
 const theme = {
@@ -21,8 +21,8 @@ function processResult(
 }
 
 function renderMaybe(method: string, value: unknown) {
-  const call: CapabilityCall = {
-    capability: "git",
+  const call: FunctionCall = {
+    namespace: "git",
     method,
     qualifiedName: `git.${method}`,
   };
@@ -85,7 +85,7 @@ describe("Git result renderers", () => {
   it("styles compact and full Git history", () => {
     const history = render(
       "log",
-      processResult("403cf0d (HEAD -> main) Prepare release\n9ed7a11 feat: add Git capability\n"),
+      processResult("403cf0d (HEAD -> main) Prepare release\n9ed7a11 feat: add Git namespace\n"),
     );
     expect(history.summary).toBe("log, 2 commits");
     expect(history.lines.join("\n")).toContain("<accent>403cf0d</accent>");

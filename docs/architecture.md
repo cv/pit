@@ -28,7 +28,7 @@ Pi extension host
 │          │
 │          └─ bounded concurrent host callbacks
 │
-└─ trusted capability dispatcher
+└─ trusted host-call dispatcher
    ├─ exact resolved effect grant
    ├─ workspace and process adapters
    ├─ Pi session, command, model, runtime, and UI adapters
@@ -91,7 +91,7 @@ Persistent function source is not copied into the prompt. Session overrides are 
 1. **Canonicalize source.** Pit asks Oxfmt to format the completed submission with a fixed configuration. Formatting is best-effort: formatter failure does not replace the more useful validation path.
 2. **Prepare candidate state.** `SavedFunctionService.prepare()` classifies the source as anonymous or as a named top-level function. A named direct submission is always prepared as a session definition. Project or user persistence requires an explicit promotion path.
 3. **Validate the candidate registry.** The new definition is evaluated against the registry that would exist after a successful commit. This makes the definition available to its own first execution without mutating live state prematurely.
-4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh Wasmtime store, and dispatches capability calls.
+4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh Wasmtime store, and dispatches host calls.
 5. **Commit only after success.** A named direct submission is appended to Pi's session history and installed in memory only after execution succeeds. Failed definitions do not become active. With `saveOnly`, execution is skipped but the same validated commit path is used.
 6. **Build a bounded result.** The model receives the result fitted to Pi's output budget as valid JSON with counted omission markers, followed by saved-function guidance, promotion suggestions, and a compact session catalog. Structured details retain traces, progress, and the same fitted value.
 
@@ -105,7 +105,7 @@ The execution pipeline deliberately separates **prepare**, **run**, and **commit
 
 `src/sandbox/validation.ts` creates an in-memory TypeScript program with three virtual files:
 
-- the generated capability contract and allowed sandbox globals;
+- the generated global function contract and allowed sandbox globals;
 - declarations and source signatures for reachable saved functions; and
 - the submitted program wrapper.
 
@@ -144,23 +144,23 @@ After validation and scope resolution, esbuild transforms the generated TypeScri
 
 `src/sandbox/wasmtime-executor.ts` gives every invocation a random execution ID and creates a bounded dispatcher for the program's resolved effects. It wraps the compiled program as an ES module that exposes a queued `pitCall()` bridge. The custom component retains JavaScript Promise resolvers, exports queued requests to Rust, accepts completions, and pumps pending QuickJS jobs.
 
-The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. It compiles the QuickJS component once per process and loads that compiled code into each engine; engines stay per invocation because deadlines interrupt through the engine epoch. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a capability handler. At most 32 host calls run at once; further calls queue in the addon. When the deadline passes or the call is cancelled, the executor answers every pending guest call and interrupts the guest, so a capability handler that ignores its abort signal cannot extend the execution. The error names the calls that were still running, whose effects may have started. Their signal dismisses dialogs the program opened, and user function promotion and removal ignore a confirmation answered after the call ended.
+The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. It compiles the QuickJS component once per process and loads that compiled code into each engine; engines stay per invocation because deadlines interrupt through the engine epoch. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a host handler. At most 32 host calls run at once; further calls queue in the addon. When the deadline passes or the call is cancelled, the executor answers every pending guest call and interrupts the guest, so a host handler that ignores its abort signal cannot extend the execution. The error names the calls that were still running, whose effects may have started. Their signal dismisses dialogs the program opened, and user function promotion and removal ignore a confirmation answered after the call ended.
 
-Saved-function attribution is passed explicitly: every generated function receives its caller's invocation context, and capability calls carry the context of the function that made them. QuickJS has no async context tracking, so no invocation state is shared between concurrent calls.
+Saved-function attribution is passed explicitly: every generated function receives its caller's invocation context, and host calls carry the context of the function that made them. QuickJS has no async context tracking, so no invocation state is shared between concurrent calls.
 
 Current defensive bounds are:
 
-| Resource                        |  Effective host limit |
-| ------------------------------- | --------------------: |
-| Protocol frame                  |       8,000,000 bytes |
-| Capability calls per invocation |                 1,024 |
-| Concurrent capability calls     |                    32 |
-| Saved-function nesting depth    |                    32 |
-| Default TypeScript wall time    |            30 seconds |
-| Default Wasmtime memory limit   |                128 MB |
-| Default Wasmtime fuel           | 9,007,199,254,740,991 |
+| Resource                      |  Effective host limit |
+| ----------------------------- | --------------------: |
+| Protocol frame                |       8,000,000 bytes |
+| Host calls per invocation     |                 1,024 |
+| Concurrent host calls         |                    32 |
+| Saved-function nesting depth  |                    32 |
+| Default TypeScript wall time  |            30 seconds |
+| Default Wasmtime memory limit |                128 MB |
+| Default Wasmtime fuel         | 9,007,199,254,740,991 |
 
-Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs are registered race-safely: an abort arriving before native registration is queued and interrupts initialization once the epoch timer is installed. The same abort signal reaches cooperative host capability handlers. Each execution registration, epoch timer, store, and QuickJS runtime is discarded when the call settles.
+Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs are registered race-safely: an abort arriving before native registration is queued and interrupts initialization once the epoch timer is installed. The same abort signal reaches cooperative host handlers. Each execution registration, epoch timer, store, and QuickJS runtime is discarded when the call settles.
 
 Wasmtime links the WASI interfaces required by Javy, but `WasiCtx::builder().build()` inherits nothing. The guest cannot directly read files, access environment credentials, open network connections, or launch processes. Wasmtime itself is a native addon inside Pi's process, so a native runtime defect shares the trusted host's crash boundary.
 
@@ -179,7 +179,7 @@ Files such as `src/functions/globals/workspace.ts` and `src/functions/globals/gi
 - optional result-renderer keys; and
 - global-layer, implementation-kind, and sealing metadata; native functions declare a primitive effect, while source functions expose their implementation and derive effects from dependencies.
 
-`src/functions/globals.ts` assembles those definitions. The layered function registry consumes them directly, and native lookup, namespace groupings, and the public `CAPABILITY_METHODS` compatibility view derive from the same catalog. `src/functions/global-contract.ts` generates `src/generated/capability-contract.d.ts`; `src/functions/global-documentation.ts` derives prompt documentation with optional per-namespace summaries. Add or change a built-in in the definition layer rather than editing generated declarations.
+`src/functions/globals.ts` assembles those definitions. The layered function registry consumes them directly, and native lookup, namespace groupings, and the public `GLOBAL_METHODS` namespace view derive from the same catalog. `src/functions/global-contract.ts` generates `src/generated/global-contract.d.ts`; `src/functions/global-documentation.ts` derives prompt documentation with optional per-namespace summaries. Add or change a built-in in the definition layer rather than editing generated declarations.
 
 Native host validation uses the fixed native definition being invoked, never an effective source override. A wider compatible override cannot relax the argument limits on a `$next` call into the host. Function resolution and `$next` continue to use `session > project > user > global`.
 
@@ -193,9 +193,9 @@ Effect grants describe the resolved primitive (normally `shell.execFile`), not a
 
 ### Host layer
 
-`src/capabilities/host.ts` creates a dispatcher for one invocation using Pi's current `ExtensionContext`, current function state, and the invocation's abort signal. It validates capability and method names plus argument counts, then delegates to domain handlers that validate concrete argument shapes.
+`src/host/dispatcher.ts` creates a dispatcher for one invocation using Pi's current `ExtensionContext`, current function state, and the invocation's abort signal. It validates namespace and method names plus argument counts, then delegates to domain handlers that validate concrete argument shapes.
 
-Capabilities fall into three implementation groups:
+Native host functions fall into three implementation groups:
 
 - **Host effects:** workspace, process, and HTTP operations. Git/npm/GitHub command construction is source composition over process execution.
 - **Pi adapters:** UI, session, slash-command, model, runtime, and context operations.
@@ -210,10 +210,24 @@ The internal `__pit.savedFunctionRun` method is generated into wrappers but is n
 Run:
 
 ```sh
-npm run capabilities:generate
+npm run globals:generate
 ```
 
-This writes `src/generated/capability-contract.d.ts`. `npm run capabilities:check` regenerates in memory and fails when the checked-in artifact is stale. Never edit the generated file manually.
+This writes `src/generated/global-contract.d.ts`. `npm run globals:check` regenerates in memory and fails when the checked-in artifact is stale. Never edit the generated file manually.
+
+### Compatibility boundary
+
+Internal names distinguish injected **dependencies**, public **function calls**, and native **host calls**. `src/host/dispatcher.ts` composes native handlers; `HostCallDispatcher` guards the guest protocol. `HostCallTrace` records `namespace` and method identity, and presentation uses `FunctionCall` for both native and source functions.
+
+Only explicit compatibility boundaries retain the old spelling:
+
+- The root module exports `GLOBAL_METHODS`, with deprecated `CAPABILITY_METHODS` as an alias of the same public namespace view.
+- Generated declarations expose `PitDependencies` and namespace types such as `PitShellFunctions`. Deprecated `PitCapabilities` and `Pit*Capability` aliases keep existing saved TypeScript type annotations valid, including virtual dependency typing.
+- `globals:generate` and `globals:check` are the canonical npm scripts; `capabilities:generate` and `capabilities:check` delegate to them for older automation.
+- New wire calls and retained traces emit `namespace`. Guest ingress accepts the historical `capability` field, normalizes it before dispatch, and applies the same effect grants. Conflicting identities are rejected rather than guessing.
+- The tool renderer normalizes historical trace identities in a copy; it never rewrites persisted sessions. Invalid or conflicting trace identities use the lossless diagnostic fallback. Historical failure records still render; new host failures use `kind: host`, and classification also understands legacy diagnostic headlines.
+
+No internal implementation imports the deprecated aliases. The global function IDs, arguments, results, override order, and host authority boundary are unchanged by these naming changes.
 
 ## Saved-function state and persistence
 
@@ -248,7 +262,7 @@ The management API names user operations `listUser`, `getUser`, and `removeUser`
 
 ## Workspace consistency model
 
-Workspace effects execute in the trusted host. Paths are resolved against Pi's current working directory; an absolute path remains absolute. The workspace capability is therefore not a repository-containment sandbox. Its safety model is the restricted Wasm guest plus the explicit host function surface, optimistic edit checks, bounded output, and the agent's operating policy.
+Workspace effects execute in the trusted host. Paths are resolved against Pi's current working directory; an absolute path remains absolute. The workspace API is therefore not a repository-containment sandbox. Its safety model is the restricted Wasm guest plus the explicit host function surface, optimistic edit checks, bounded output, and the agent's operating policy.
 
 Hashed reads return:
 
@@ -273,7 +287,7 @@ Rollback is best-effort because filesystem failures can also affect recovery. Ba
 
 - Calls without progress use Pi's `pi.exec`.
 - Calls with live progress use Pit's streaming child-process host.
-- Typed capabilities construct argument arrays and spawn without a shell.
+- Typed command functions construct argument arrays and spawn without a shell.
 - `shell.exec` is the only general path that intentionally asks a shell to parse a command string.
 
 Process calls default to a 120-second timeout and bounded head or tail output, captured within that window while streaming. `raise: true` converts nonzero exits into bounded exceptions; otherwise exit status is data. On POSIX each command leads its own process group and session, without Pi's controlling terminal, so a program that prompts on `/dev/tty` fails instead of drawing into Pi's screen. Streaming cancellation sends `SIGTERM` to the whole group, so a shell's pipeline and forked workers stop with it, escalates to `SIGKILL` after five seconds for anything left in the group, maps timeout to code 124, and maps abort to code 130. Windows ends the process tree with `taskkill /T /F`. A short post-exit grace handles descendants that inherited output pipes without allowing the tool to hang indefinitely.
@@ -282,10 +296,10 @@ Process calls default to a 120-second timeout and bounded head or tail output, c
 
 Execution observability is structured before it is rendered.
 
-- `CapabilityDispatcher` emits start and finish traces with capability name, method, timing, status, argument types and sizes, and optional saved-function context. It does not retain argument values.
-- `CapabilityTraceCollector` keeps at most 128 traces and marks truncation.
+- `HostCallDispatcher` emits start and finish traces with namespace, method, timing, status, argument types and sizes, and optional saved-function context. It does not retain argument values.
+- `HostCallTraceCollector` keeps at most 128 traces and marks truncation.
 - `ExecutionProgressController` tracks shell output tails and completed status, sanitizes terminal control text, keeps at most 32 completed shell calls, and throttles Pi partial updates to at most one burst update every 200 ms.
-- Capability trace reporting is observational: dispatcher-side listener failures are caught and cannot change capability execution.
+- Host-call trace reporting is observational: dispatcher-side listener failures are caught and cannot change host-call execution.
 
 The TypeScript tool returns two views:
 
@@ -300,13 +314,13 @@ Text budgets and bounding primitives live in `src/shared/bounds.ts`. Data return
 
 Pit is organized around feature boundaries:
 
-- `src/capabilities/` defines the model-facing contract, registry, host composition, command preparation, and Pi control handlers.
-- `src/functions/` owns session, project, and user saved functions, including state, persistence, dependency analysis, promotion, removal, and scoped runtime generation.
+- `src/host/` owns native-function dispatch and Pi control handlers.
+- `src/functions/` owns the global catalog and contracts, source command composition, and session/project/user functions, including state, persistence, dependency analysis, promotion, removal, and scoped runtime generation.
 - `src/sandbox/` owns validation, compilation, wire protocol, process lifecycle, dispatch, and restricted execution.
 - `src/tool/` is the application adapter for TypeScript tool orchestration, rendering, source formatting, timing, metadata, and failure context.
 - `src/process/` owns host-process execution, bounded process results, and process-runner behavior.
 - `src/workspace/` owns workspace paths, hashed reads and edits, search, and regex worker behavior.
-- `src/execution/` owns progress snapshots, capability traces, and dashboard models.
+- `src/execution/` owns progress snapshots, host-call traces, and dashboard models.
 - `src/renderers/` contains TUI and result presentation. Only renderer modules, the tool adapter, and root composition may depend on them.
 - `src/shared/` contains neutral helpers safe for lower-level domains.
 - `src/generated/` contains generated artifacts and must not be edited manually.
@@ -319,24 +333,24 @@ Files directly under `src/` are composition entry points or true cross-domain ad
 - Saved-function primitives may use `src/sandbox/validation.ts`, but must not import sandbox execution or compilation entry points.
 - Sandbox validation may parse saved-function source, but must not depend on saved-function state or persistence.
 - Only `src/tool/`, root composition, and renderer modules may import TUI renderer modules.
-- Capability registry and host modules are expected composition roots with high fan-out.
+- Global catalog and host modules are expected composition roots with high fan-out.
 - Internal source imports must remain acyclic.
 
 `npm run structure:check` enforces an acyclic source graph, limits authored files directly under `src/`, rejects saved-function imports through sandbox execution facades, validates renderer dependency direction, and verifies generated-contract placement. It is part of `npm run check`.
 
 ## Where to make a change
 
-| Change                              | Start here                                        | Usually also inspect                                             |
-| ----------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
-| Add or change a capability          | `src/capabilities/<name>.ts`                      | `registry.ts`, `host.ts`, handlers, generated contract, renderer |
-| Change TypeScript request semantics | `src/tool/typescript.ts`                          | preparation, sandbox run, result renderers                       |
-| Change validation or compilation    | `src/sandbox/validation.ts` or `program.ts`       | generated contract, function graph, scoped runtime               |
-| Change guest isolation or protocol  | `src/sandbox/wasmtime-executor.ts` and `native/`  | guest source, dispatcher, prebuilds, security tests              |
-| Change saved-function scope         | `src/functions/state.ts` and `unified-runtime.ts` | preparation, reconciliation, graph, removal                      |
-| Change persistent storage           | `src/functions/storage/`                          | lifecycle, service, project integration tests                    |
-| Change workspace edits              | `src/workspace/hashline.ts` and `capability.ts`   | read/search, concurrency tests                                   |
-| Change process behavior             | `src/process/`                                    | capability host, progress, process renderer                      |
-| Change partial/final presentation   | `src/execution/` and `src/renderers/`             | tool adapter and extension smoke tests                           |
+| Change                              | Start here                                        | Usually also inspect                                                        |
+| ----------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------- |
+| Add or change a global function     | `src/functions/globals/<name>.ts`                 | global catalog, source or host implementation, generated contract, renderer |
+| Change TypeScript request semantics | `src/tool/typescript.ts`                          | preparation, sandbox run, result renderers                                  |
+| Change validation or compilation    | `src/sandbox/validation.ts` or `program.ts`       | generated contract, function graph, scoped runtime                          |
+| Change guest isolation or protocol  | `src/sandbox/wasmtime-executor.ts` and `native/`  | guest source, dispatcher, prebuilds, security tests                         |
+| Change saved-function scope         | `src/functions/state.ts` and `unified-runtime.ts` | preparation, reconciliation, graph, removal                                 |
+| Change persistent storage           | `src/functions/storage/`                          | lifecycle, service, project integration tests                               |
+| Change workspace edits              | `src/workspace/hashline.ts` and `host-handler.ts` | read/search, concurrency tests                                              |
+| Change process behavior             | `src/process/`                                    | host dispatcher, progress, process renderer                                 |
+| Change partial/final presentation   | `src/execution/` and `src/renderers/`             | tool adapter and extension smoke tests                                      |
 
 ## Tests and architecture gates
 

@@ -5,8 +5,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { createCapabilities } from "../capabilities/host.js";
-import type { CapabilityTrace } from "../execution/capability-trace.js";
+import type { HostCallTrace } from "../execution/host-call-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
 import { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
@@ -15,6 +14,7 @@ import { functionDependencyBinding } from "../functions/identifier.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
+import { createHostDispatcher } from "../host/dispatcher.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
@@ -161,7 +161,7 @@ async function executeSandboxValue({
   const onShellProgress = request.update
     ? (event: ShellProgressEvent) => executionProgress.recordShell(event)
     : undefined;
-  const handler = createCapabilities({
+  const handler = createHostDispatcher({
     pi: request.pi,
     ctx: request.ctx,
     functionState: request.functionState,
@@ -190,7 +190,7 @@ async function executeSandboxValue({
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,
     ...(input === undefined ? {} : { input }),
-    onCapabilityTrace: (trace: CapabilityTrace) => executionProgress.recordTrace(trace),
+    onHostCallTrace: (trace: HostCallTrace) => executionProgress.recordTrace(trace),
   };
   return runWithFunctionExecutor(
     preparedFunction.source,

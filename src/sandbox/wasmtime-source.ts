@@ -30,21 +30,21 @@ const __pit_rpc = async (message) => {
   return response.value;
 };
 
-// Capabilities are bound to the calling saved-function invocation, if any. QuickJS has no async
+// Host calls are bound to the calling saved-function invocation, if any. QuickJS has no async
 // context tracking, so attribution travels explicitly instead of through shared state.
-const __pit_capabilities = (context) => new Proxy(Object.create(null), {
-  get(_target, capability) {
-    if (capability === Symbol.toStringTag) return "PitFunctions";
-    if (typeof capability !== "string") return undefined;
+const __pit_hostCalls = (context) => new Proxy(Object.create(null), {
+  get(_target, namespace) {
+    if (namespace === Symbol.toStringTag) return "PitFunctions";
+    if (typeof namespace !== "string") return undefined;
     return new Proxy(Object.create(null), {
-      get(_capability, method) {
+      get(_namespace, method) {
         if (method === "then") return undefined;
         if (method === Symbol.toStringTag) return "PitFunctionNamespace";
         if (typeof method !== "string") return undefined;
         return (...args) => __pit_rpc({
           type: "call",
           id: __pit_next_id++,
-          capability,
+          namespace,
           method,
           args,
           ...(context ? { functionContext: context } : {}),
@@ -70,7 +70,7 @@ const __pit_main = (0, eval)(${compiled});
 let __pit_value;
 try {
   __pit_value = await __pit_main(
-    __pit_capabilities,
+    __pit_hostCalls,
     ${serializedInput},
     __pit_run_saved,
   );

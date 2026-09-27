@@ -31,11 +31,11 @@ const GLOBAL_FUNCTIONS = [
 
 type PackageFunction = (typeof GLOBAL_FUNCTIONS)[number];
 type Native = Extract<PackageFunction, { kind: "native" }>;
-export type GlobalNamespace = PackageFunction["capability"];
-export type NativeNamespace = Native["capability"];
+export type GlobalNamespace = PackageFunction["namespace"];
+export type NativeNamespace = Native["namespace"];
 export type NativeMethod<Name extends NativeNamespace> = Extract<
   Native,
-  { capability: Name }
+  { namespace: Name }
 >["method"];
 
 const GLOBAL_BY_ID = new Map<string, GlobalFunctionDefinition>(
@@ -55,34 +55,32 @@ export function getNativeFunction(id: string): NativeFunctionDefinition | undefi
 export function globalFunctionGroups(): Map<GlobalNamespace, GlobalFunctionDefinition[]> {
   const groups = new Map<GlobalNamespace, GlobalFunctionDefinition[]>();
   for (const definition of GLOBAL_FUNCTIONS) {
-    const group = groups.get(definition.capability) ?? [];
+    const group = groups.get(definition.namespace) ?? [];
     group.push(definition);
-    groups.set(definition.capability, group);
+    groups.set(definition.namespace, group);
   }
   return groups;
 }
 
-// Compatibility view for the public CAPABILITY_METHODS export, not a second catalog.
+// Public namespace view derived from the global definitions, not a second catalog.
 export const GLOBAL_METHODS = Object.fromEntries(
   [...globalFunctionGroups()].map(([name, definitions]) => [
     name,
     definitions.map(({ method }) => method),
   ]),
-) as { [Name in GlobalNamespace]: Extract<PackageFunction, { capability: Name }>["method"][] };
+) as { [Name in GlobalNamespace]: Extract<PackageFunction, { namespace: Name }>["method"][] };
 
-export function validateNativeCall(capability: string, method: string, args: unknown[]): void {
-  const definition = getNativeFunction(`${capability}.${method}`);
+export function validateNativeCall(namespace: string, method: string, args: unknown[]): void {
+  const definition = getNativeFunction(`${namespace}.${method}`);
   if (!definition) {
-    throw new Error(`Unknown capability or method: ${capability}.${method}`);
+    throw new Error(`Unknown host function: ${namespace}.${method}`);
   }
   if (args.length < definition.minimumArguments || args.length > definition.maximumArguments) {
     const range =
       definition.minimumArguments === definition.maximumArguments
         ? String(definition.minimumArguments)
         : `${definition.minimumArguments}-${definition.maximumArguments}`;
-    throw new Error(
-      `${capability}.${method} expects ${range} argument(s); received ${args.length}`,
-    );
+    throw new Error(`${namespace}.${method} expects ${range} argument(s); received ${args.length}`);
   }
 }
 

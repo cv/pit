@@ -57,7 +57,7 @@ function dependencies(view = rawView, commits: unknown[] = defaultCommits) {
       input: JSON.stringify(view),
       encoding: "utf8",
     });
-    // Simulate the transport cap after projection, as the real capability does.
+    // Simulate the transport cap after projection, as the real namespace does.
     const bytes = Buffer.from(stdout);
     return processResult({
       stdout: bytes.subarray(0, options.maxBytes).toString("utf8"),

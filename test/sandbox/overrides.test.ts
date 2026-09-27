@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
-import { generateCapabilityContract } from "../../src/functions/global-contract.js";
+import { generateGlobalContract } from "../../src/functions/global-contract.js";
 import { sourceFunctionDefinition } from "../../src/functions/resolved-graph.js";
 import { functionTypeModel } from "../../src/sandbox/function-types.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
@@ -101,7 +101,7 @@ describe("layered override contracts", () => {
       'async function get({ $next }) { const context = await $next(); return { ...context, cwd: context.cwd + "/wrapped" }; }';
     const result = await runInSandbox(
       "async ({ context: { get } }) => (await get()).cwd",
-      async ({ capability }) => (capability === "context" ? { cwd: "/base" } : null),
+      async ({ namespace }) => (namespace === "context" ? { cwd: "/base" } : null),
       { userFunctions: new Map([["context.get", source]]) },
     );
     expect(result).toBe("/base/wrapped");
@@ -230,15 +230,15 @@ describe("layered override contracts", () => {
     );
   });
 
-  it("keeps a capability termination name through saved-function wrappers in Wasmtime", async () => {
+  it("keeps a namespace termination name through saved-function wrappers in Wasmtime", async () => {
     const user =
       "async function calculate({ context: { get } }, value: number): Promise<number> { await get(); return value + 1; }";
     const session =
       "async function calculate({ $next }, value: number) { return (await $next(value)) + 3; }";
     const failure = await runWithFunctionExecutor(
       session,
-      async ({ capability }) => {
-        if (capability === "context") throw terminationError("timeout", "deadline reached");
+      async ({ namespace }) => {
+        if (namespace === "context") throw terminationError("timeout", "deadline reached");
         return null;
       },
       {
@@ -290,7 +290,7 @@ describe("layered override contracts", () => {
       checkAll: true,
       checkCompatibility: true,
     });
-    const consumer = `${generateCapabilityContract().replaceAll("PitCapabilities", "PitBuiltinCapabilities")}\n${model.declarations}\n${model.signatures}\nconst root = (${upper}) satisfies PitSourceProgram<${model.rootDependencies}>;`;
+    const consumer = `${generateGlobalContract().replaceAll("PitDependencies", "PitGlobalFunctions")}\n${model.declarations}\n${model.signatures}\nconst root = (${upper}) satisfies PitSourceProgram<${model.rootDependencies}>;`;
     expect(typeDiagnostics(consumer).length === 0).toBe(accepted);
   });
 });

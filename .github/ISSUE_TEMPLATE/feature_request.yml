@@ -25,4 +25,4 @@ body:
     id: risks
     attributes:
       label: Security and compatibility considerations
-      description: Note capability, sandbox, Pi-version, or migration implications.
+      description: Note host-call, sandbox, Pi-version, or migration implications.

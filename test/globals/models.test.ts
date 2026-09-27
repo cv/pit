@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createModelsCapabilityHandler } from "../../src/capabilities/handlers/models.js";
+import { createModelsHostHandler } from "../../src/host/handlers/models.js";
 import {
   cleanupHarness,
   context,
@@ -37,7 +37,7 @@ beforeEach(async () => {
 });
 afterEach(cleanupHarness);
 
-describe("models capability", () => {
+describe("models namespace", () => {
   it("lists available models by default and supports bounded queries", async () => {
     expect(
       await value(`async ({ models: { current: modelsCurrent, list: modelsList, set: modelsSet } }) => ({
@@ -165,7 +165,7 @@ describe("models capability", () => {
   it("rejects cancelled refreshes and provider failures when selecting a model", async () => {
     const signal = new AbortController().signal;
     const base = context();
-    const cancelled = createModelsCapabilityHandler({
+    const cancelled = createModelsHostHandler({
       pi: {} as never,
       ctx: context({
         modelRegistry: {
@@ -180,7 +180,7 @@ describe("models capability", () => {
       aborted: false,
       errors: new Map([["test", new Error("provider offline")]]),
     }));
-    const failed = createModelsCapabilityHandler({
+    const failed = createModelsHostHandler({
       pi: {} as never,
       ctx: context({ modelRegistry: { ...base.modelRegistry, refresh } }) as never,
     });
@@ -191,7 +191,7 @@ describe("models capability", () => {
   });
 
   it("ignores unknown internal dispatch", async () => {
-    const handler = createModelsCapabilityHandler({ pi: {} as never, ctx: {} as never });
+    const handler = createModelsHostHandler({ pi: {} as never, ctx: {} as never });
     await expect(handler("unknown", [], new AbortController().signal)).resolves.toBeUndefined();
   });
 });

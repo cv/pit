@@ -1,13 +1,13 @@
 import {
-  type CapabilityTrace,
+  type HostCallTrace,
   type FunctionExecutionContext,
-  finishCapabilityTrace,
-  startCapabilityTrace,
-} from "../execution/capability-trace.js";
-import type { CapabilityCallMessage, WireMessage } from "./wire.js";
+  finishHostCallTrace,
+  startHostCallTrace,
+} from "../execution/host-call-trace.js";
+import type { HostCallMessage, WireMessage } from "./wire.js";
 
-export interface CapabilityRequest {
-  capability: string;
+export interface HostCallRequest {
+  namespace: string;
   method: string;
   args: unknown[];
   signal: AbortSignal;
@@ -16,38 +16,38 @@ export interface CapabilityRequest {
   traceSequence?: number;
 }
 
-export type CapabilityHandler = (request: CapabilityRequest) => unknown | Promise<unknown>;
+export type HostCallHandler = (request: HostCallRequest) => unknown | Promise<unknown>;
 
-interface CapabilityDispatcherOptions {
-  handler: CapabilityHandler;
+interface HostCallDispatcherOptions {
+  handler: HostCallHandler;
   signal: AbortSignal;
   maximumCalls: number;
   maximumConcurrentCalls: number;
   allowedCalls?: ReadonlySet<string>;
   send(message: WireMessage): boolean;
   parseFunctionContext(value: unknown): FunctionExecutionContext | undefined;
-  onTrace?(trace: CapabilityTrace): void;
+  onTrace?(trace: HostCallTrace): void;
 }
 
-export class CapabilityDispatcher {
+export class HostCallDispatcher {
   readonly #inFlight = new Set<Promise<void>>();
   #callCount = 0;
   #activeCalls = 0;
 
-  constructor(private readonly options: CapabilityDispatcherOptions) {}
+  constructor(private readonly options: HostCallDispatcherOptions) {}
 
   pending(): Promise<void>[] {
     return [...this.#inFlight];
   }
 
-  handle(message: CapabilityCallMessage): void {
-    const { id, capability, method, args } = message;
+  handle(message: HostCallMessage): void {
+    const { id, namespace, method, args } = message;
     this.#callCount++;
     const functionContext = this.options.parseFunctionContext(message.functionContext);
-    const trace = startCapabilityTrace({
+    const trace = startHostCallTrace({
       id,
       sequence: this.#callCount,
-      capability,
+      namespace,
       method,
       args,
       startedAt: Date.now(),
@@ -55,11 +55,11 @@ export class CapabilityDispatcher {
     });
     this.#report(trace);
     const finishTrace = (status: "succeeded" | "failed" | "rejected") =>
-      this.#report(finishCapabilityTrace(trace, status));
+      this.#report(finishHostCallTrace(trace, status));
 
-    const call = `${capability}.${method}`;
+    const call = `${namespace}.${method}`;
     if (
-      capability !== "__pit" &&
+      namespace !== "__pit" &&
       this.options.allowedCalls &&
       !this.options.allowedCalls.has(call)
     ) {
@@ -96,7 +96,7 @@ export class CapabilityDispatcher {
     task = Promise.resolve()
       .then(() =>
         this.options.handler({
-          capability,
+          namespace,
           method,
           args,
           signal: this.options.signal,
@@ -112,7 +112,7 @@ export class CapabilityDispatcher {
             this.options.send({
               type: "response",
               id,
-              error: "Capability response exceeds RPC limit",
+              error: "Host call response exceeds RPC limit",
             });
             finishTrace("failed");
           }
@@ -138,11 +138,11 @@ export class CapabilityDispatcher {
     this.#inFlight.add(task);
   }
 
-  #report(trace: CapabilityTrace): void {
+  #report(trace: HostCallTrace): void {
     try {
       this.options.onTrace?.(trace);
     } catch {
-      // Tracing is observational and must not affect capability execution.
+      // Tracing is observational and must not affect host-call execution.
     }
   }
 }

@@ -1,8 +1,10 @@
-import type { FunctionExecutionContext } from "../execution/capability-trace.js";
+import type { FunctionExecutionContext } from "../execution/host-call-trace.js";
 
 export interface WireMessage {
   type?: string;
   id?: number;
+  namespace?: string;
+  /** Legacy guest protocol spelling; accepted at ingress, never emitted. */
   capability?: string;
   method?: string;
   args?: unknown[];
@@ -14,15 +16,20 @@ export interface WireMessage {
   input?: unknown;
 }
 
-export type CapabilityCallMessage = WireMessage &
-  Required<Pick<WireMessage, "id" | "capability" | "method" | "args">>;
+export type HostCallMessage = Omit<WireMessage, "capability"> &
+  Required<Pick<WireMessage, "id" | "namespace" | "method" | "args">>;
 
-export function isCapabilityCallMessage(message: WireMessage): message is CapabilityCallMessage {
-  return (
-    message.type === "call" &&
-    typeof message.id === "number" &&
-    typeof message.capability === "string" &&
-    typeof message.method === "string" &&
-    Array.isArray(message.args)
-  );
+export function parseHostCallMessage(message: WireMessage): HostCallMessage | undefined {
+  const namespace = message.namespace === undefined ? message.capability : message.namespace;
+  if (
+    message.type !== "call" ||
+    typeof message.id !== "number" ||
+    typeof namespace !== "string" ||
+    (message.capability !== undefined && message.capability !== namespace) ||
+    typeof message.method !== "string" ||
+    !Array.isArray(message.args)
+  )
+    return;
+  const { capability: _legacy, ...canonical } = message;
+  return { ...canonical, namespace, id: message.id, method: message.method, args: message.args };
 }

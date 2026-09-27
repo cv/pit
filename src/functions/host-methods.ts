@@ -17,7 +17,7 @@ import { userFunctionDirectory, userFunctionPath } from "./storage/user.js";
 type FunctionMethod = NativeMethod<"functions">;
 type FunctionMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
-interface FunctionCapabilityServices {
+interface FunctionHostServices {
   pi: ExtensionAPI;
   ctx: ExtensionContext;
   functionState: FunctionState;
@@ -187,13 +187,13 @@ function createPersistentFunctionHandlers({
   };
 }
 
-export function createFunctionCapabilityMethods({
+export function createFunctionHostMethods({
   pi,
   ctx,
   functionState,
   commitFunctionState,
   activity,
-}: FunctionCapabilityServices): Record<FunctionMethod, FunctionMethodHandler> {
+}: FunctionHostServices): Record<FunctionMethod, FunctionMethodHandler> {
   const service = new SavedFunctionService({
     state: functionState,
     commit: commitFunctionState,

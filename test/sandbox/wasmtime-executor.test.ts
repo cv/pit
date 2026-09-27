@@ -59,7 +59,14 @@ describe("createWasmtimeFunctionExecutor", () => {
     ).rejects.toMatchObject(expected);
   });
 
-  it("dispatches granted calls and returns the guest result", async () => {
+  it.each<{ name: string; identity: Record<string, string> }>([
+    { name: "current namespace", identity: { namespace: "context" } },
+    { name: "legacy capability field", identity: { capability: "context" } },
+    {
+      name: "matching transition fields",
+      identity: { namespace: "context", capability: "context" },
+    },
+  ])("dispatches granted calls with $name and returns the guest result", async ({ identity }) => {
     const executeQueuedJavascript = vi.fn<WasmtimeAddon["executeQueuedJavascript"]>(
       async (_component, _source, callback) => {
         const response = JSON.parse(
@@ -67,7 +74,7 @@ describe("createWasmtimeFunctionExecutor", () => {
             JSON.stringify({
               type: "call",
               id: 1,
-              capability: "context",
+              ...identity,
               method: "get",
               args: [],
               functionContext: {
@@ -97,14 +104,14 @@ describe("createWasmtimeFunctionExecutor", () => {
       executor.execute(program(["context.get"]), handler, {
         ...options,
         signal: controller.signal,
-        onCapabilityTrace: traces,
+        onHostCallTrace: traces,
       }),
     ).resolves.toEqual({
       ok: true,
     });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({
-        capability: "context",
+        namespace: "context",
         method: "get",
         functionContext: expect.objectContaining({
           name: "inspect",
@@ -126,7 +133,10 @@ describe("createWasmtimeFunctionExecutor", () => {
     );
   });
 
-  it("returns grant failures to the guest and requires a result", async () => {
+  it.each<{ name: string; identity: Record<string, string> }>([
+    { name: "current namespace", identity: { namespace: "shell" } },
+    { name: "legacy capability field", identity: { capability: "shell" } },
+  ])("enforces grants for $name and requires a result", async ({ identity }) => {
     const addon: WasmtimeAddon = {
       async executeQueuedJavascript(_component, _source, callback) {
         const response = JSON.parse(
@@ -134,7 +144,7 @@ describe("createWasmtimeFunctionExecutor", () => {
             JSON.stringify({
               type: "call",
               id: 2,
-              capability: "shell",
+              ...identity,
               method: "exec",
               args: ["true"],
             }),
@@ -215,21 +225,73 @@ describe("createWasmtimeFunctionExecutor", () => {
     });
   });
 
-  it.each([JSON.stringify({ type: "unknown" }), "null"])(
-    "rejects invalid guest protocol message %s",
-    async (message) => {
-      const addon: WasmtimeAddon = {
-        async executeQueuedJavascript(_component, _source, callback) {
-          await callback(message);
-          return true;
-        },
-      };
-      const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
-      await expect(executor.execute(program([]), async () => null, options)).rejects.toThrow(
-        "Invalid Pit guest request",
-      );
+  it.each<{ name: string; message: string }>([
+    { name: "unknown message kind", message: JSON.stringify({ type: "unknown" }) },
+    { name: "null frame", message: "null" },
+    {
+      name: "conflicting identities",
+      message: JSON.stringify({
+        type: "call",
+        id: 1,
+        namespace: "shell",
+        capability: "context",
+        method: "get",
+        args: [],
+      }),
     },
-  );
+    {
+      name: "invalid canonical identity with valid legacy spelling",
+      message: JSON.stringify({
+        type: "call",
+        id: 1,
+        namespace: 42,
+        capability: "context",
+        method: "get",
+        args: [],
+      }),
+    },
+    {
+      name: "invalid legacy identity",
+      message: JSON.stringify({ type: "call", id: 1, capability: 42, method: "get", args: [] }),
+    },
+    {
+      name: "invalid call id",
+      message: JSON.stringify({
+        type: "call",
+        id: "bad",
+        namespace: "context",
+        method: "get",
+        args: [],
+      }),
+    },
+    {
+      name: "invalid method",
+      message: JSON.stringify({ type: "call", id: 1, namespace: "context", method: 42, args: [] }),
+    },
+    {
+      name: "invalid argument list",
+      message: JSON.stringify({
+        type: "call",
+        id: 1,
+        namespace: "context",
+        method: "get",
+        args: null,
+      }),
+    },
+  ])("rejects a guest frame with $name before dispatch", async ({ message }) => {
+    const addon: WasmtimeAddon = {
+      async executeQueuedJavascript(_component, _source, callback) {
+        await callback(message);
+        return true;
+      },
+    };
+    const executor = createWasmtimeFunctionExecutor({ addon, component: new Uint8Array() });
+    const handler = vi.fn(async () => null);
+    await expect(
+      executor.execute(program(["context.get", "shell.get"]), handler, options),
+    ).rejects.toThrow("Invalid Pit guest request");
+    expect(handler).not.toHaveBeenCalled();
+  });
 
   it("completes bounded guest timers", async () => {
     const addon: WasmtimeAddon = {

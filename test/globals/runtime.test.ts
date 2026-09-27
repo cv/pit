@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createRuntimeCapabilityHandler } from "../../src/capabilities/handlers/runtime.js";
+import { createRuntimeHostHandler } from "../../src/host/handlers/runtime.js";
 import {
   cleanupHarness,
   context,
@@ -12,7 +12,7 @@ import {
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-describe("runtime capability", () => {
+describe("runtime namespace", () => {
   it("reports runtime status", async () => {
     await expect(
       value("async ({ runtime: { status: runtimeStatus } }) => runtimeStatus()"),
@@ -22,7 +22,7 @@ describe("runtime capability", () => {
       pendingMessages: false,
     });
 
-    const handler = createRuntimeCapabilityHandler({
+    const handler = createRuntimeHostHandler({
       pi: {} as never,
       ctx: context() as never,
     });

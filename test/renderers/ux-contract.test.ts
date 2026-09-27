@@ -2,7 +2,7 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
+import type { HostCallTrace } from "../../src/execution/host-call-trace.js";
 import { processOutputLines, sanitizeProcessText } from "../../src/process/results.js";
 import { GIT_RESULT_RENDERERS } from "../../src/renderers/git-result.js";
 import { renderTypeScriptToolCall } from "../../src/renderers/typescript-tool-call.js";
@@ -16,10 +16,10 @@ const processValue = (stdout = "", code = 0, truncated = false) => ({
   code,
   truncated,
 });
-const trace = (capability: string, method: string, id = 1): CapabilityTrace => ({
+const trace = (namespace: string, method: string, id = 1): HostCallTrace => ({
   id,
   sequence: id,
-  capability,
+  namespace,
   method,
   arguments: [],
   startedAt: 1,
@@ -33,7 +33,7 @@ const readValue = {
   revision: "REVISION_SENTINEL",
   lines: 1,
 };
-function render(value: unknown, traces: CapabilityTrace[] = [], expanded = true, width = 80) {
+function render(value: unknown, traces: HostCallTrace[] = [], expanded = true, width = 80) {
   return renderTypeScriptToolResult(
     { content: [], details: { value, truncated: false, traces } },
     { expanded, isPartial: false },
@@ -51,7 +51,7 @@ interface OutcomeCase {
   name: string;
   value: unknown;
   marker: string;
-  capability?: string;
+  namespace?: string;
   method?: string;
 }
 const outcomes: OutcomeCase[] = [
@@ -59,7 +59,7 @@ const outcomes: OutcomeCase[] = [
     name: "Git diff differences",
     value: processValue("", 1),
     marker: "⚠",
-    capability: "git",
+    namespace: "git",
     method: "diff",
   },
   { name: "nonzero shell", value: processValue("failure", 2), marker: "✗" },
@@ -67,7 +67,7 @@ const outcomes: OutcomeCase[] = [
     name: "failed Git",
     value: processValue("fatal", 128),
     marker: "✗",
-    capability: "git",
+    namespace: "git",
     method: "status",
   },
   {
@@ -96,28 +96,28 @@ const outcomes: OutcomeCase[] = [
       1,
     ),
     marker: "⚠",
-    capability: "npm",
+    namespace: "npm",
     method: "audit",
   },
   {
     name: "npm outdated finding",
     value: processValue(JSON.stringify({ pit: { current: "1", latest: "2" } }), 1),
     marker: "⚠",
-    capability: "npm",
+    namespace: "npm",
     method: "outdated",
   },
   {
     name: "npm outdated command failure",
     value: processValue(JSON.stringify({ error: { message: "offline" } }), 1),
     marker: "✗",
-    capability: "npm",
+    namespace: "npm",
     method: "outdated",
   },
   {
     name: "GitHub failed check",
     value: processValue(JSON.stringify({ statusCheckRollup: [{ conclusion: "FAILURE" }] })),
     marker: "⚠",
-    capability: "gh",
+    namespace: "gh",
     method: "prView",
   },
   { name: "empty successful process", value: processValue(), marker: "✓" },
@@ -132,10 +132,10 @@ describe("terminal UX contract", () => {
     ),
   )(
     "$name / $wrapper preserves outcome when collapsed and expanded",
-    ({ value, marker, capability, method, wrapper }) => {
+    ({ value, marker, namespace, method, wrapper }) => {
       const wrapped =
         wrapper === "array" ? [value] : wrapper === "object" ? { result: value } : value;
-      const traces = capability && method ? [trace(capability, method)] : [];
+      const traces = namespace && method ? [trace(namespace, method)] : [];
       for (const expanded of [false, true])
         expect(render(wrapped, traces, expanded).trimStart()[0]).toBe(marker);
     },
@@ -144,13 +144,13 @@ describe("terminal UX contract", () => {
   it.each([
     {
       name: "GitHub arbitrary array",
-      capability: "gh",
+      namespace: "gh",
       method: "api",
       payload: [{ filename: "FILE_SENTINEL", patch: "PATCH_SENTINEL" }],
     },
     {
       name: "GitHub fields beyond eight",
-      capability: "gh",
+      namespace: "gh",
       method: "prView",
       payload: {
         ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`field${i}`, i])),
@@ -159,7 +159,7 @@ describe("terminal UX contract", () => {
     },
     {
       name: "npm audit remediation",
-      capability: "npm",
+      namespace: "npm",
       method: "audit",
       payload: {
         metadata: { vulnerabilities: { total: 1 } },
@@ -168,7 +168,7 @@ describe("terminal UX contract", () => {
     },
     {
       name: "npm pack inventory",
-      capability: "npm",
+      namespace: "npm",
       method: "pack",
       payload: [
         { name: "pit", files: [{ path: "FILE_SENTINEL" }] },
@@ -177,14 +177,14 @@ describe("terminal UX contract", () => {
     },
     {
       name: "npm outdated extra fields",
-      capability: "npm",
+      namespace: "npm",
       method: "outdated",
       payload: { library: { current: "1", wanted: "2", location: "LOCATION_SENTINEL" } },
     },
-  ])("$name retains every sentinel", ({ capability, method, payload }) => {
+  ])("$name retains every sentinel", ({ namespace, method, payload }) => {
     const output = render(
       processValue(JSON.stringify(payload)),
-      [trace(capability, method)],
+      [trace(namespace, method)],
       true,
       120,
     );
