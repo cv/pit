@@ -4,10 +4,7 @@ import { generateGlobalContract } from "../../src/functions/global-contract.js";
 import { typeDiagnostics } from "../helpers/type-contract.js";
 
 describe("generated global function types", () => {
-  it.each<{ name: string; dependencies: string }>([
-    { name: "current dependency types", dependencies: "PitDependencies" },
-    { name: "legacy dependency aliases", dependencies: "PitCapabilities" },
-  ])("accepts supported calls and rejects invalid calls with $name", ({ dependencies }) => {
+  it("accepts supported calls and rejects invalid calls", () => {
     const consumer = `
 async function accepted(c: PitDependencies) {
   const file = await c.workspace.read("a.ts", { format: "raw" });
@@ -28,16 +25,6 @@ async function accepted(c: PitDependencies) {
   const status: number = response.status;
   await c.functions.removeSession("helper", { cascade: true });
   return { text, exitCode, status, readKinds, editKinds };
-}
-async function legacyNamespaces(shell: PitShellCapability, gh: PitGhCapability, workspace: PitWorkspaceCapability) {
-  const process: PitProcessResult = await shell.execFile("node", []);
-  await gh.prView(7);
-  const file: PitReadResult = await workspace.read("a.ts");
-  // @ts-expect-error legacy aliases retain argument types, not any
-  await shell.execFile("node", "wrong");
-  // @ts-expect-error the legacy GitHub namespace still requires a numeric PR identifier
-  await gh.prView("7");
-  return { process, file };
 }
 
 async function rejected(c: PitDependencies) {
@@ -63,10 +50,6 @@ async function rejected(c: PitDependencies) {
   await c.workspace.batch([{ kind: "edit", file: "a.ts", changes: { revision: null, changes: [{ kind: "replaceFile", content: "x" }] } }], { failure: "settled" });
 }
 `;
-    expect(
-      typeDiagnostics(
-        generateGlobalContract() + consumer.replaceAll("PitDependencies", dependencies),
-      ),
-    ).toEqual([]);
+    expect(typeDiagnostics(generateGlobalContract() + consumer)).toEqual([]);
   });
 });

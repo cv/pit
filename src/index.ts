@@ -7,8 +7,6 @@ import { configuredFunctionExecutor } from "./sandbox/wasmtime-loader.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
 export { GLOBAL_METHODS } from "./functions/globals.js";
-/** @deprecated Use GLOBAL_METHODS. */
-export { GLOBAL_METHODS as CAPABILITY_METHODS } from "./functions/globals.js";
 export { effectiveRegistry } from "./functions/state.js";
 export { reconstructFunctions, validateRegistryCapacity } from "./functions/core.js";
 

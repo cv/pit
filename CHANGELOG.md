@@ -4,6 +4,15 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Injected dependencies are typed as `PitDependencies` and namespace types such as `PitShellFunctions`; the `PitCapabilities` and `Pit*Capability` names are gone. The root module exports `GLOBAL_METHODS` instead of `CAPABILITY_METHODS`, and the contract scripts are `globals:check` and `globals:generate`.
+- Guest host calls and retained traces name a `namespace`; the old `capability` field is not accepted. Tool results replayed from older sessions show the raw diagnostic view instead of the structured one.
+
+### Removed
+
+- The 0.16 function-system migration guide. It remains available at the `v0.16.0` tag.
+
 ## [0.19.0] - 2026-09-26
 
 ### Added
@@ -123,7 +132,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Remove legacy user/project path readers and user-global management aliases; user APIs are `listUser`, `getUser`, and `removeUser`, with promotion `{ to: "user" }`.
 - Ignore pre-upgrade `pit-functions` session entries. New definitions use branch-local `pit-function-definitions` entries.
 - Discover documented functions recursively by canonical path, with bounded reads and collision/symlink checks. Invalid definitions block affected calls instead of silently falling back.
-- No automatic migration: old files remain untouched. See [the migration guide](docs/function-system-migration.md).
+- No automatic migration: old files remain untouched. See [the migration guide](https://github.com/cv/pit/blob/v0.16.0/docs/function-system-migration.md).
 
 ### Changed
 

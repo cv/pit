@@ -503,48 +503,6 @@ interface PitDependencies {
   functions: PitFunctionControls;
 }
 
-/** @deprecated Use PitWorkspaceFunctions. */
-type PitWorkspaceCapability = PitWorkspaceFunctions;
-
-/** @deprecated Use PitGitFunctions. */
-type PitGitCapability = PitGitFunctions;
-
-/** @deprecated Use PitNpmFunctions. */
-type PitNpmCapability = PitNpmFunctions;
-
-/** @deprecated Use PitGhFunctions. */
-type PitGhCapability = PitGhFunctions;
-
-/** @deprecated Use PitShellFunctions. */
-type PitShellCapability = PitShellFunctions;
-
-/** @deprecated Use PitHttpFunctions. */
-type PitHttpCapability = PitHttpFunctions;
-
-/** @deprecated Use PitUiFunctions. */
-type PitUiCapability = PitUiFunctions;
-
-/** @deprecated Use PitContextFunctions. */
-type PitContextCapability = PitContextFunctions;
-
-/** @deprecated Use PitSessionFunctions. */
-type PitSessionCapability = PitSessionFunctions;
-
-/** @deprecated Use PitCommandsFunctions. */
-type PitCommandsCapability = PitCommandsFunctions;
-
-/** @deprecated Use PitModelsFunctions. */
-type PitModelsCapability = PitModelsFunctions;
-
-/** @deprecated Use PitRuntimeFunctions. */
-type PitRuntimeCapability = PitRuntimeFunctions;
-
-/** @deprecated Use PitFunctionControls. */
-type PitFunctionsCapability = PitFunctionControls;
-
-/** @deprecated Use PitDependencies. */
-type PitCapabilities = PitDependencies;
-
 type PitSavedInput<T extends (...args: any[]) => any> =
   Parameters<T> extends [any, ...infer Rest] ? Rest[0] : undefined;
 

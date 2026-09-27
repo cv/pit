@@ -46,11 +46,6 @@ describe("TypeScript failure context", () => {
       error: new Error("Unknown host function: unknown.method"),
       kind: "host",
     },
-    {
-      name: "legacy host function error",
-      error: new Error("Unknown capability or method: unknown.method"),
-      kind: "host",
-    },
     { name: "plain user error", error: new Error("plain user error"), kind: "user" },
   ])("classifies a $name", ({ error, kind }) => {
     expect(structureTypeScriptFailure(error, [])).toMatchObject({

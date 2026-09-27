@@ -87,7 +87,6 @@ async function projectGreeting({}, input: { name?: string } = {}) {
       'async ({ functions: { list: functionList, promote, remove: removeProject } }) => promote("projectGreeting", "Greets someone using the project convention.")',
     );
     const stored = await readFile(join(cwd, ".pi/functions/projectGreeting.ts"), "utf8");
-    expect(stored).not.toContain("@pit");
     expect(stored).toContain("Greets someone using the project convention.");
 
     const promptWithResources = beforeAgentStart(
@@ -443,26 +442,6 @@ async function projectTests({ npm: { test } }) {
     ).toEqual([2, 42]);
   });
 
-  it("keeps legacy scope markers session-scoped until explicit promotion", async () => {
-    const saved = await run(`/** Legacy marker. @pit project */
-async function markedSession({}) {
-  return "session";
-}`);
-
-    expect(saved.details.functions).toEqual([
-      { action: "set", name: "markedSession", replaced: false },
-    ]);
-    expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
-      projectFunctions: [],
-      sessionFunctions: ["markedSession"],
-    });
-    await expect(
-      readFile(join(cwd, ".pi/functions/markedSession.ts"), "utf8"),
-    ).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  });
-
   it("serializes parallel capacity validation against the live effective registry", async () => {
     setBranchEntries(
       Array.from({ length: 9 }, (_, index) => ({
@@ -717,11 +696,6 @@ async function brokenProject({}) { throw new Error("project failure"); }`),
       run("/** */ async function undocumented({}) { return null; }"),
     ).resolves.toMatchObject({
       details: { functions: [{ action: "set", name: "undocumented" }] },
-    });
-    await expect(
-      run("/** Summary. @pit user */ async function wrongScope({}) { return null; }"),
-    ).resolves.toMatchObject({
-      details: { functions: [{ action: "set", name: "wrongScope" }] },
     });
 
     const untrusted = context({ isProjectTrusted: () => false });

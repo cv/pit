@@ -11,9 +11,7 @@ const OMITTED_CALLS = "… further calls not retained …";
 const PATH_HEAD = Math.ceil((MAX_FUNCTION_PATH - 1) / 2);
 const PATH_TAIL = MAX_FUNCTION_PATH - 1 - PATH_HEAD;
 const FUNCTION_FAILURE_PREFIX = /^(?:Saved function|Function) "([^"]+)" failed: /;
-// The legacy spelling remains accepted when classifying diagnostics from older sessions.
-const HOST_FAILURE =
-  /^(?:command failed|(?:unknown |missing |invalid )?(?:host (?:function|call)|capability))\b/i;
+const HOST_FAILURE = /^(?:command failed|(?:unknown |missing |invalid )?host (?:function|call))\b/i;
 const ERROR_PREFIX = /^Error:\s*/;
 
 export interface StructuredTypeScriptFailure {

@@ -19,8 +19,6 @@
     "check": "npm run globals:check && npm run structure:check && tsc --noEmit && npm run lint && npm run format:check",
     "globals:check": "tsx scripts/generate-global-contract.ts --check",
     "globals:generate": "tsx scripts/generate-global-contract.ts",
-    "capabilities:check": "npm run globals:check",
-    "capabilities:generate": "npm run globals:generate",
     "structure:check": "node scripts/check-structure.mjs",
     "test": "vitest run",
     "coverage": "vitest run --coverage",

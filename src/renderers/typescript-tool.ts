@@ -1,6 +1,5 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
-import { readHostCallTraces } from "../execution/host-call-trace.js";
 import { formatDuration } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -287,6 +286,16 @@ function assertInvocationTimings(
   }
 }
 
+/** Replayed traces must name their namespace; anything else uses the lossless raw fallback. */
+function assertHostCallTraces(traces: unknown): void {
+  if (
+    Array.isArray(traces) &&
+    !traces.every((trace) => isRecord(trace) && typeof trace.namespace === "string")
+  ) {
+    throw new Error("Invalid host-call trace metadata");
+  }
+}
+
 function renderToolResult(
   result: ToolResultLike,
   options: { expanded: boolean; isPartial: boolean },
@@ -300,14 +309,8 @@ function renderToolResult(
   const rawDetails = isRecord(result.details) ? result.details : undefined;
   const execution = executionTiming(context, !options.isPartial || context.isError === true);
   assertInvocationTimings(rawDetails?.timings);
-  const details = rawDetails
-    ? ({
-        ...rawDetails,
-        ...(Array.isArray(rawDetails.traces)
-          ? { traces: readHostCallTraces(rawDetails.traces) }
-          : {}),
-      } as unknown as TypeScriptDetails)
-    : undefined;
+  assertHostCallTraces(rawDetails?.traces);
+  const details = rawDetails as unknown as TypeScriptDetails | undefined;
   const recordedMs = details?.timings?.totalMs;
   if ((!options.isPartial || context.isError) && recordedMs !== undefined) {
     execution.duration = formatDuration(recordedMs);

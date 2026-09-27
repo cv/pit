@@ -30,12 +30,12 @@ pi -e ./src/index.ts
 
 Read [docs/architecture.md](docs/architecture.md) before changing source boundaries. Keep implementation in the domain that owns the behavior and avoid general-purpose utility modules.
 
-Project-persisted workflow helpers live in `.pi/functions/`. Their location determines scope; do not add `@pit project` or `@pit global` markers.
+Project-persisted workflow helpers live in `.pi/functions/`; their location determines scope.
 
-When changing capability definitions, regenerate the contract:
+When changing global function definitions, regenerate the contract:
 
 ```sh
-npm run capabilities:generate
+npm run globals:generate
 ```
 
 Prefer focused tests during development. Before requesting review, run:
@@ -54,8 +54,8 @@ For TUI, extension loading, saved functions, sandbox execution, partial updates,
 
 - Keep each pull request focused and explain user-visible behavior.
 - Include tests for success, failure, cancellation, and boundary cases where applicable.
-- Update README, architecture, security, or capability documentation when behavior changes.
-- Do not edit `src/generated/capability-contract.d.ts` manually.
+- Update README, architecture, security, or global function documentation when behavior changes.
+- Do not edit `src/generated/global-contract.d.ts` manually.
 - Keep generated files, dependency changes, and lockfile changes intentional.
 - Confirm that no secrets, credentials, private paths, or unsanitized session data are included.
 

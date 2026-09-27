@@ -278,8 +278,6 @@ Use `functions.promote(name, summary, { to: "user" })` or **Save to user scope**
 
 Files have one documented function declaration and canonical path-derived identifiers: `company/check.ts` declares `check` and is injected as `company.check`. Alternate dotted filenames, case-only collisions, and leaf/namespace collisions are rejected. Discovery is bounded; symlinked subdirectories are not followed and symlinked function files are rejected. Invalid definitions reserve their identifier so calls cannot silently fall back to a lower implementation. Fix or explicitly remove the invalid definition, then reload external edits.
 
-Upgrading from a version before 0.16? User functions moved, and the old `globalFunctions` settings and global-management APIs were removed. See the [migration guide](docs/function-system-migration.md).
-
 ### Allow other tools
 
 Pit activates only `typescript` by default. Add explicit exceptions in a trusted project's `.pi/pit.json`:
@@ -323,7 +321,7 @@ If the definition already has a JSDoc block, the summary replaces that block's s
 
 Project functions use the same execution rules as session functions. Pit commits a function after successful execution, or after static validation when `saveOnly` is `true`.
 
-Pit stores project functions as readable TypeScript files in `.pi/functions/`. Legacy `.pi/pit/functions/` files are ignored and left untouched. Scope comes from storage location, not a source marker. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
+Pit stores project functions as readable TypeScript files in `.pi/functions/`; scope comes from storage location. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
 
 Pit loads project source only after explicit opt-in and Pi's project-trust check. The function still runs in the same restricted process as a session function.
 
@@ -377,7 +375,7 @@ The Wasm guest receives no inherited filesystem, environment, network, arguments
 
 Failed TypeScript calls still use Pi's required thrown-error path and remain `isError: true`. Pit enriches the final result through `tool_result` middleware with a bounded root error, saved-function path, function activity, and redacted host-call traces. Expanded TUI failures show the function path and execution dashboard. Non-function failures keep an empty path and concise error text.
 
-The generated global function contract is in [`src/generated/global-contract.d.ts`](src/generated/global-contract.d.ts). Package-owned global definitions live in [`src/functions/globals/`](src/functions/globals/), assembled by [`src/functions/globals.ts`](src/functions/globals.ts). **Scope and implementation are separate:** `git.*`, `npm.*`, and `gh.*` are source functions that inject `shell.execFile`; filesystem, process, network, Pi, and function-store primitives remain native. Overriding `shell.execFile` also affects those command globals, and `$next` can delegate through both layers. Reflection exposes command source, dependencies, and transitive primitive effects. Definitions own public declarations, arity limits, documentation, call summaries, and renderer metadata. Host dispatch accepts only native definitions; generated contracts and namespace views include both kinds. New code uses `PitDependencies`, namespace types such as `PitShellFunctions`, and the public `GLOBAL_METHODS` export. Deprecated `PitCapabilities`, `Pit*Capability`, `CAPABILITY_METHODS`, and `capabilities:*` npm aliases remain available for existing callers; see [the compatibility boundary](docs/architecture.md#compatibility-boundary).
+The generated global function contract is in [`src/generated/global-contract.d.ts`](src/generated/global-contract.d.ts). Package-owned global definitions live in [`src/functions/globals/`](src/functions/globals/), assembled by [`src/functions/globals.ts`](src/functions/globals.ts). **Scope and implementation are separate:** `git.*`, `npm.*`, and `gh.*` are source functions that inject `shell.execFile`; filesystem, process, network, Pi, and function-store primitives remain native. Overriding `shell.execFile` also affects those command globals, and `$next` can delegate through both layers. Reflection exposes command source, dependencies, and transitive primitive effects. Definitions own public declarations, arity limits, documentation, call summaries, and renderer metadata. Host dispatch accepts only native definitions; generated contracts and namespace views include both kinds. Programs use `PitDependencies` and namespace types such as `PitShellFunctions`; the root module exports the public `GLOBAL_METHODS` view.
 
 ## Read results in the TUI
 
