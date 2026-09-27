@@ -57,6 +57,10 @@ describe("Pit skill prompt", () => {
         systemPrompt: "custom prompt\n\n<available_skills>custom</available_skills>",
         systemPromptOptions: { selectedTools: ["typescript"], skills: [skill] },
       },
+      {
+        systemPrompt: "base prompt\n\n<available_skills>bash</available_skills>",
+        systemPromptOptions: { selectedTools: ["typescript", "bash"], skills: [skill] },
+      },
     ]) {
       const { returned, sections } = beforeAgentStart(event);
       expect(returned).toBeUndefined();
@@ -69,6 +73,12 @@ describe("Pit skill prompt", () => {
       name: "an earlier handler replaced the prompt",
       systemPrompt: "earlier replacement",
       options: { forceSystemPrompt: "earlier replacement" },
+    },
+    {
+      // Pi would have listed skills for read, but the replacement it sends has none.
+      name: "an earlier handler replaced the prompt while read was selected",
+      systemPrompt: "earlier replacement",
+      options: { forceSystemPrompt: "earlier replacement", selectedTools: ["typescript", "read"] },
     },
     {
       name: "Pi before 0.86 has no prompt sections",

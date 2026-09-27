@@ -168,9 +168,9 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
     reconcileFunctionState(functionState);
   });
   pi.on("before_agent_start", (event) => {
-    const promptAlreadyHasSkills =
-      event.systemPromptOptions?.selectedTools?.includes("read") ||
-      event.systemPrompt.includes("<available_skills>");
+    // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
+    // can replace the prompt entirely, so the rendered prompt is the reliable record.
+    const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");
     const sections = Object.entries({
       pit_skills: promptAlreadyHasSkills
         ? ""
