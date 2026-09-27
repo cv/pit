@@ -48,6 +48,13 @@ async ({ tests: { runTargeted } }, input: { files: string[]; testNamePattern?: s
 - `delivery.format()` formats only changed supported files and invalidates their anchors. Re-read every written file before another mutation. It cannot see committed files, so run it after the last edit and before `delivery.commit()`.
 - Use `sessions.analyze()` for one session and `sessions.analyzeRecent()` for project-wide workflow trends. These diagnose agent workflow; they do not replace code validation.
 
+When every change in the worktree belongs to one commit, include deletions from the listing instead of adding deleted paths by hand:
+
+```ts pit-example
+async ({ delivery: { listChangedFiles, commit } }, input: { message: string }) =>
+  commit({ files: (await listChangedFiles({ includeDeleted: true })).files, message: input.message })
+```
+
 For pull-request work, inspect bounded metadata first:
 
 ```ts pit-example
@@ -115,6 +122,8 @@ async ({ ci: { inspectTimings } }, input: { repo: string; id: number }) =>
 
 When a run fails, call `ci.inspectFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
 
+A wait that times out with no failed check is not a failure: native prebuild and release runs routinely outlast one 285 s budget. Continue from the timed-out result: call `pr.waitForChecks()` again, or pass the discovered run ID to `ci.waitForRun()` instead of rediscovering. Start each wait only after the merge, push, or discovery result that supplies its SHA or run ID has returned.
+
 ## Finish an issue
 
 For non-interactive changes:
@@ -134,6 +143,10 @@ For TUI, extension, reload, saved-function, sandbox, progress, or renderer behav
 6. Correct observed mismatches and revalidate.
 7. Make the final closing commit only after observed acceptance.
 8. Push, verify the exact CI run, update the epic, and confirm a clean synchronized worktree.
+
+## Release
+
+Follow [releasing.md](../../../docs/releasing.md). `main` is protected, so the version bump lands through a `release-X.Y.Z` pull request like any other change. Tag the resulting `main` commit only after its CI passes.
 
 ## Failure recovery
 
