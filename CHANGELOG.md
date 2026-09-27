@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-27
+
 ### Changed
 
 - Reorganize documentation around reader tasks: a shorter introduction and quickstart, dedicated usage, saved-function, configuration, reference, security, and troubleshooting guides, and a documentation index. Contributor setup and checks live in `CONTRIBUTING.md`; the case study is explicitly historical and the security policy follows the latest tagged release.
@@ -245,7 +247,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/cv/pit/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/cv/pit/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/cv/pit/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/cv/pit/compare/v0.18.1...v0.19.0
