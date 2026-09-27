@@ -121,7 +121,7 @@ Use top-level `params` for large patches, generated file contents, commit messag
 
 Top-level `params` work with a one-time function and with the first execution of a named function.
 
-The tool schema gives `params` an explicit JSON type for every kind of value, so clients send objects and arrays as JSON rather than as encoded strings. If a client still sends a JSON string, Pit decodes a string holding a JSON object or array when the declared input type does not accept strings; a program that declares a string input receives the string unchanged.
+The tool schema gives `params` an explicit JSON type for every kind of value, so clients send objects and arrays as JSON rather than as encoded strings. If a client still sends a JSON string, Pit decodes a string holding a JSON object or array when the declared input type does not accept strings; a program that declares a string input receives the string unchanged. Clients that sample arguments against a strict JSON schema send `null` for options the model left out, so a `null` value for `params`, `label`, `functionId`, `saveOnly`, or `timeoutMs` counts as omitted.
 
 ### Control concurrency
 

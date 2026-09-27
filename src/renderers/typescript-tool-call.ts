@@ -4,6 +4,7 @@ import type { FunctionRegistry } from "../functions/core.js";
 import { resolveSavedFunctionReferences } from "../functions/graph.js";
 import { getNamedFunctionName } from "../functions/source.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import { omitNullArguments } from "../tool/input.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";
@@ -94,6 +95,8 @@ export function renderTypeScriptInputs(
   theme: RenderTheme,
   context: ToolCallContext,
 ): string {
+  // Show what runs: a null option is omitted, as the tool's prepareArguments treats it.
+  args = omitNullArguments(args);
   ensureRendererState(context);
   const lines: string[] = [];
   const functionId = normalizedLabel(args.functionId);
@@ -121,7 +124,7 @@ export function renderTypeScriptToolCall(
   context: ToolCallContext,
   registry: FunctionRegistry,
 ) {
-  args ??= {};
+  args = omitNullArguments(args ?? {});
   ensureRendererState(context);
   const code = typeof args.code === "string" ? args.code : "";
   const callLabel = describeCall(args, code, registry);
