@@ -68,19 +68,21 @@ On session start, `src/functions/lifecycle.ts`:
 6. reconstructs session definitions from the active Pi branch's custom entries;
 7. reconciles scope precedence and dependency closure;
 8. reports a bounded set of loading errors through the UI; and
-9. sets `typescript` as the active tool.
+9. activates `typescript` and any configured `allowedTools` exceptions.
 
 ### `session_tree`
 
-When branch navigation changes the active session tree, Pit reconstructs session functions from that branch's entries, resets usage suggestions, and reconciles the effective registry again. Session functions therefore follow Pi's branch history instead of behaving as process-global mutable state.
+When branch navigation changes the active session tree, Pit reconstructs session functions from that branch's entries, resets usage suggestions, and reconciles the effective registry again. Session functions therefore follow Pi's branch history instead of behaving as process-global mutable state. Pi restores the destination branch's recorded tool set before this event, so Pit then re-applies the tool selection resolved at session start; otherwise navigating into a branch recorded before Pit, or before an `allowedTools` change, would re-enable other tools.
 
 ### `before_agent_start`
 
-Before an agent turn starts, Pit augments the system prompt with:
+Before an agent turn starts, Pit adds named sections to Pi's structured system prompt:
 
-- discovered skills when the incoming Pi prompt does not already contain them;
-- user function signatures, summaries, and parameter descriptions; and
-- project function signatures, summaries, and parameter descriptions.
+- `pit_skills`: discovered skills, when the incoming Pi prompt does not already contain them;
+- `pit_user_functions`: user function signatures, summaries, and parameter descriptions; and
+- `pit_project_functions`: project function signatures, summaries, and parameter descriptions.
+
+Pi records each section in the transcript's system messages. When a catalog changes, the next request carries a patch for that section alone, so the cached prompt prefix survives on providers that support mid-conversation system messages. An empty section is left unset, which Pi records as its removal. Pit does not return a replacement `systemPrompt`, which would make the whole prompt opaque and ignore section changes from later extensions. Pi sends only the replacement text once any handler forces one, so when an earlier extension has already done so, or on Pi versions before 0.86, which lack prompt sections, Pit extends that replacement instead.
 
 Persistent function source is not copied into the prompt. Session overrides are identified as overrides, and the full source closure is injected only during compilation when submitted code references a saved function.
 

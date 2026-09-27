@@ -213,4 +213,22 @@ describe("tool rendering", () => {
     expect(expanded.split("\n")[1]?.trimEnd()).toBe("functionId: company.check");
     expect(expanded).toContain("function check");
   });
+
+  it("renders null optional arguments like omitted ones", () => {
+    const code = 'async ({ workspace: { read } }) => read("README.md")';
+    const strict = {
+      code,
+      label: null,
+      functionId: null,
+      params: null,
+      saveOnly: null,
+      timeoutMs: null,
+    };
+    for (const view of [
+      { expanded: false, argsComplete: true },
+      { expanded: true, argsComplete: true },
+    ]) {
+      expect(renderToolCall(strict, view)).toBe(renderToolCall({ code }, view));
+    }
+  });
 });

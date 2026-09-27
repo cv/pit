@@ -90,7 +90,20 @@ function registerSavedFunctionManager({
   });
 }
 
+/** Activates `typescript` and the registered tools matching the project's exceptions. */
+function activatePitTools(pi: ExtensionAPI, allowedTools: readonly RegExp[]): void {
+  const exceptions = allowedTools.length
+    ? pi
+        .getAllTools()
+        .map(({ name }) => name)
+        .filter((name) => allowedTools.some((pattern) => pattern.test(name)))
+    : [];
+  pi.setActiveTools([...new Set(["typescript", ...exceptions])]);
+}
+
 function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionState): void {
+  // Resolved at session start; configuration edits apply after /reload.
+  let allowedTools: RegExp[] = [];
   pi.on("session_start", async (_event, ctx) => {
     resetFunctionUsage(functionState);
     const projectConfig = await loadProjectFunctionConfig(ctx);
@@ -140,17 +153,11 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
       ctx.ui.notify(`Some saved functions could not be loaded: ${shown}${omitted}`, "warning");
     }
-    const patterns = (projectConfig.allowedTools ?? []).map(
+    allowedTools = (projectConfig.allowedTools ?? []).map(
       (pattern) =>
         new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`),
     );
-    const exceptions = patterns.length
-      ? pi
-          .getAllTools()
-          .map(({ name }) => name)
-          .filter((name) => patterns.some((p) => p.test(name)))
-      : [];
-    pi.setActiveTools([...new Set(["typescript", ...exceptions])]);
+    activatePitTools(pi, allowedTools);
   });
   pi.on("session_tree", (_event, ctx) => {
     resetFunctionUsage(functionState);
@@ -166,20 +173,37 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       },
     );
     reconcileFunctionState(functionState);
+    // Pi restores the destination branch's recorded tools before this event, which can re-enable
+    // tools from before Pit or an earlier configuration. Keep the same selection as session start.
+    activatePitTools(pi, allowedTools);
   });
   pi.on("before_agent_start", (event) => {
-    const promptAlreadyHasSkills =
-      event.systemPromptOptions?.selectedTools?.includes("read") ||
-      event.systemPrompt.includes("<available_skills>");
-    const additions = [
-      promptAlreadyHasSkills
+    // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
+    // can replace the prompt entirely, so the rendered prompt is the reliable record.
+    const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");
+    const sections = Object.entries({
+      pit_skills: promptAlreadyHasSkills
         ? ""
         : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []),
-      userFunctionCatalog(functionState.userMetadata, functionState.project, functionState.session),
-      projectFunctionCatalog(functionState.metadata, functionState.session),
-    ].filter(Boolean);
-    if (additions.length > 0) {
-      return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
+      pit_user_functions: userFunctionCatalog(
+        functionState.userMetadata,
+        functionState.project,
+        functionState.session,
+      ),
+      pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
+    }).filter(([, content]) => content);
+    const options = event.systemPromptOptions;
+    if (options?.sections && options.forceSystemPrompt === undefined) {
+      // Pi records section changes as transcript deltas, so a catalog change patches one section
+      // and keeps the cached prompt prefix. An empty section stays unset, and Pi records its removal.
+      for (const [name, content] of sections) {
+        options.sections[name] = content;
+      }
+    } else if (sections.length > 0) {
+      // An earlier handler replaced the prompt, or Pi predates prompt sections (0.86). Pi then sends
+      // only the replacement text, so Pit's additions must extend it.
+      const additions = sections.map(([, content]) => content).join("\n\n");
+      return { systemPrompt: `${event.systemPrompt}\n\n${additions}` };
     }
   });
 }

@@ -691,7 +691,7 @@ async function brokenProject({}) { throw new Error("project failure"); }`),
   });
 
   it("requires project trust only for explicit persistent operations", async () => {
-    expect(beforeAgentStart({ systemPrompt: "base" }, context())).toBeUndefined();
+    expect(beforeAgentStart({ systemPrompt: "base" }, context()).sections).toEqual({});
     await expect(
       run("/** */ async function undocumented({}) { return null; }"),
     ).resolves.toMatchObject({

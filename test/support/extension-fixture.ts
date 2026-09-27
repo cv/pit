@@ -27,6 +27,7 @@ export interface RegisteredTool {
       timeoutMs: { description?: string };
     };
   };
+  prepareArguments?: (args: unknown) => any;
   renderCall?: (args: any, theme: any, context: any) => RenderedComponent;
   renderResult?: (result: any, options: any, theme: any, context: any) => RenderedComponent;
   execute: (...args: any[]) => Promise<any>;
@@ -36,7 +37,7 @@ export let cwd: string;
 export let tool: RegisteredTool;
 export let sessionStart: (...args: any[]) => void;
 export let sessionTree: (...args: any[]) => void;
-export let beforeAgentStart: (...args: any[]) => any;
+export let beforeAgentStart: (event: PromptEvent, ctx?: unknown) => PromptContribution;
 export let toolResult: (...args: any[]) => any;
 export let branchEntries: any[];
 export let execMock: ReturnType<typeof vi.fn>;
@@ -48,6 +49,52 @@ let slashCommands: any[] = [];
 let configuredModels: any[] = [];
 const registeredCommands = new Map<string, any>();
 export let sentUserMessages: Array<{ content: string; options: unknown }> = [];
+
+interface PromptEvent {
+  systemPrompt: string;
+  systemPromptOptions?: Record<string, unknown>;
+}
+
+/** What a before_agent_start handler contributes, observed the way Pi 0.86+ applies it. */
+export interface PromptContribution {
+  /** The handler's return value. A `systemPrompt` in it forces an opaque replacement prompt. */
+  returned: unknown;
+  /** Prompt sections the handler added or changed in `systemPromptOptions`. */
+  sections: Record<string, string>;
+  /** The forced prompt, or the base prompt followed by each changed section in its tag. */
+  systemPrompt: string;
+}
+
+function runBeforeAgentStart(
+  callback: (...args: any[]) => unknown,
+  event: PromptEvent,
+  ctx: unknown,
+): PromptContribution {
+  // Pi hands handlers normalized, mutable options. Pass `sections: undefined` to model Pi < 0.86.
+  const options: Record<string, unknown> = {
+    selectedTools: [],
+    skills: [],
+    sections: {},
+    ...event.systemPromptOptions,
+  };
+  const initial = { ...(options["sections"] as Record<string, string> | undefined) };
+  const returned = callback(
+    { type: "before_agent_start", prompt: "", ...event, systemPromptOptions: options },
+    ctx,
+  );
+  const current = (options["sections"] as Record<string, string> | undefined) ?? {};
+  const sections = Object.fromEntries(
+    Object.entries(current).filter(([name, content]) => initial[name] !== content),
+  );
+  const forced = (returned as { systemPrompt?: string } | undefined)?.systemPrompt;
+  const systemPrompt =
+    forced ??
+    [
+      event.systemPrompt,
+      ...Object.entries(sections).map(([name, content]) => `<${name}>\n${content}\n</${name}>`),
+    ].join("\n\n");
+  return { returned, sections, systemPrompt };
+}
 
 export function context(overrides: Record<string, unknown> = {}) {
   return {
@@ -173,7 +220,7 @@ export async function setupHarness(): Promise<void> {
         sessionTree = callback;
       }
       if (event === "before_agent_start") {
-        beforeAgentStart = callback;
+        beforeAgentStart = (promptEvent, ctx) => runBeforeAgentStart(callback, promptEvent, ctx);
       }
       if (event === "tool_result") {
         toolResult = callback;

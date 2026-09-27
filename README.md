@@ -121,7 +121,7 @@ Use top-level `params` for large patches, generated file contents, commit messag
 
 Top-level `params` work with a one-time function and with the first execution of a named function.
 
-The tool schema gives `params` an explicit JSON type for every kind of value, so clients send objects and arrays as JSON rather than as encoded strings. If a client still sends a JSON string, Pit decodes a string holding a JSON object or array when the declared input type does not accept strings; a program that declares a string input receives the string unchanged.
+The tool schema gives `params` an explicit JSON type for every kind of value, so clients send objects and arrays as JSON rather than as encoded strings. If a client still sends a JSON string, Pit decodes a string holding a JSON object or array when the declared input type does not accept strings; a program that declares a string input receives the string unchanged. Clients that sample arguments against a strict JSON schema send `null` for options the model left out, so a `null` value for `params`, `label`, `functionId`, `saveOnly`, or `timeoutMs` counts as omitted.
 
 ### Control concurrency
 
@@ -292,7 +292,7 @@ Pit activates only `typescript` by default. Add explicit exceptions in a trusted
 
 Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. Empty or invalid configuration grants no exceptions. Run `/reload` after changes.
 
-This controls startup selection only; other extensions can change active tools afterward.
+Pit applies this selection at session start and again after `/tree` navigation, because Pi restores the tool set recorded on the destination branch. Other extensions can still change active tools afterward.
 
 ### Share trusted project functions
 
