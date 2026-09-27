@@ -7,7 +7,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { display } from "../../src/tool/typescript.js";
+import { display } from "../../src/shared/json-budget.js";
 import { cleanupHarness, setupHarness, tool } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);

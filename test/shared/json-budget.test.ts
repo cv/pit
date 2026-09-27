@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LIMITS, sliceText } from "../../src/shared/bounds.js";
-import { fitValue } from "../../src/shared/json-budget.js";
+import { display, fitValue } from "../../src/shared/json-budget.js";
 
 const budget = LIMITS.result;
 const withinBudget = (text: string) => {
@@ -74,5 +74,13 @@ describe("fitValue", () => {
     withinBudget(fitted.text);
     expect(fitted).toMatchObject({ value: undefined, truncated: true });
     expect(fitted.text).toMatch(/… \d+ lines omitted …/);
+  });
+});
+
+describe("display", () => {
+  it("falls back when a value cannot be stringified", () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(display(circular)).toBe("[object Object]");
   });
 });
