@@ -124,6 +124,13 @@ When a run fails, call `ci.inspectFailure({ repo, id })` and read its excerpts b
 
 A wait that times out with no failed check is not a failure: native prebuild and release runs routinely outlast one 285 s budget. Continue from the timed-out result: call `pr.waitForChecks()` again, or pass the discovered run ID to `ci.waitForRun()` instead of rediscovering. Start each wait only after the merge, push, or discovery result that supplies its SHA or run ID has returned.
 
+Record verified outcomes in the pull request description with `pr.editBody()`. It replaces exact text, ticks `- [ ]` items, and appends sections, but writes nothing when an expected text is missing or ambiguous; a stale checklist is a signal to re-read the description, not to loosen the expectation. Preview with `dryRun: true`:
+
+```ts pit-example
+async ({ pr: { editBody } }, input: { number: number; repo: string; check: string[] }) =>
+  editBody({ ...input, dryRun: true })
+```
+
 ## Finish an issue
 
 For non-interactive changes:
@@ -147,6 +154,14 @@ For TUI, extension, reload, saved-function, sandbox, progress, or renderer behav
 ## Release
 
 Follow [releasing.md](../../../docs/releasing.md). `main` is protected, so the version bump lands through a `release-X.Y.Z` pull request like any other change. Tag the resulting `main` commit only after its CI passes.
+
+After the Release workflow succeeds, verify what it published before declaring delivery complete. `release.verifyPublished()` checks the tag commit, the exact asset set, and a strict installer run from a fresh tag clone, and fails with every problem it found:
+
+```ts pit-example
+async ({ release: { verifyPublished } }, input: { tag: string }) => verifyPublished(input)
+```
+
+It does not replace the tag smoke test in the release guide, which exercises the installed package in Pi.
 
 ## Failure recovery
 

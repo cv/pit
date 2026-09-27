@@ -98,6 +98,12 @@ describe("workflow numeric inputs", () => {
       input: { repo, sha, discoveryIntervalMs: Number.POSITIVE_INFINITY },
       error: "discoveryIntervalMs must be an integer between 1000 and 30000",
     },
+    {
+      name: "pr.editBody number of 0",
+      fn: "pr.editBody",
+      input: { number: 0, check: ["PR checks"] },
+      error: "number must be a positive integer",
+    },
   ])("rejects $name before calling any dependency", async ({ fn, input, error }) => {
     const calls: string[] = [];
     const run = await loadWorkflowFunction(fn);
