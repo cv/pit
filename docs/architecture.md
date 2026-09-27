@@ -292,6 +292,8 @@ Execution observability is structured before it is rendered.
 - `HostCallTraceCollector` keeps at most 128 traces and marks truncation.
 - `ExecutionProgressController` tracks shell output tails and completed status, sanitizes terminal control text, keeps at most 32 completed shell calls, and throttles Pi partial updates to at most one burst update every 200 ms.
 - Host-call trace reporting is observational: dispatcher-side listener failures are caught and cannot change host-call execution.
+- `details.timings` records `totalMs` and a sparse `phases` record (formatting, preparation, validation, compilation, execution, commit, result) from a monotonic clock. A missing phase did not run; an interrupted phase is included on failure. Host-call durations overlap execution and are not added to the total. Replayed results keep their recorded totals, and results without timings are never given invented durations.
+- `ShellProgress.traceSequence` links a process to the host dispatch that started it, not to the guest RPC ID or the process counter. An async-local host scope carries it across concurrent work, so one call can own several processes. Links are never reconstructed from coincidentally equal IDs or source text; unlinked progress stays separately inspectable.
 
 The TypeScript tool returns two views:
 

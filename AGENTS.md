@@ -31,7 +31,7 @@
 - Give table rows descriptive names; keep lifecycle, concurrency, ordering, and heterogeneous workflows as explicit standalone tests.
 - Do not move substantial control flow into table data merely to reduce line count.
 
-- Prefer observable outcomes and effects over implementation tokens, copied prose, private object identity, or incidental call order. Keep exact assertions for meaningful public contracts and safety boundaries; see [the test-contract inventory](docs/test-contract-inventory.md).
+- Prefer observable outcomes and effects over implementation tokens, copied prose, private object identity, or incidental call order. Keep exact assertions for meaningful public contracts and safety boundaries; pit-test-audit's retention bar lists them.
 
 ## Terminal UX
 
