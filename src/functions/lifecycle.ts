@@ -171,15 +171,28 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
     const promptAlreadyHasSkills =
       event.systemPromptOptions?.selectedTools?.includes("read") ||
       event.systemPrompt.includes("<available_skills>");
-    const additions = [
-      promptAlreadyHasSkills
+    const sections = Object.entries({
+      pit_skills: promptAlreadyHasSkills
         ? ""
         : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []),
-      userFunctionCatalog(functionState.userMetadata, functionState.project, functionState.session),
-      projectFunctionCatalog(functionState.metadata, functionState.session),
-    ].filter(Boolean);
-    if (additions.length > 0) {
-      return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
+      pit_user_functions: userFunctionCatalog(
+        functionState.userMetadata,
+        functionState.project,
+        functionState.session,
+      ),
+      pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
+    }).filter(([, content]) => content);
+    const promptSections = event.systemPromptOptions?.sections;
+    if (promptSections) {
+      // Pi records section changes as transcript deltas, so a catalog change patches one section
+      // and keeps the cached prompt prefix. An empty section stays unset, and Pi records its removal.
+      for (const [name, content] of sections) {
+        promptSections[name] = content;
+      }
+    } else if (sections.length > 0) {
+      // Pi before 0.86 has no prompt sections; replacing the prompt is its only extension point.
+      const additions = sections.map(([, content]) => content).join("\n\n");
+      return { systemPrompt: `${event.systemPrompt}\n\n${additions}` };
     }
   });
 }
