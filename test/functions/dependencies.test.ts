@@ -23,11 +23,13 @@ describe("getFunctionDependencies", () => {
     });
   });
 
-  it("accepts an empty dependency declaration on expressions", () => {
-    expect(getFunctionDependencies("async ({}, input: number) => input * 2")).toEqual({
-      dependencies: [],
-      usesNext: false,
-    });
+  it.each<{ name: string; source: string }>([
+    { name: "an empty expression declaration", source: "async ({}, input: number) => input * 2" },
+    { name: "an async arrow without parameters", source: "async () => 42" },
+    { name: "an arrow without parameters", source: "() => 42" },
+    { name: "a declaration without parameters", source: "async function example() {}" },
+  ])("accepts $name as no dependencies", ({ source }) => {
+    expect(getFunctionDependencies(source)).toEqual({ dependencies: [], usesNext: false });
   });
 
   it("rejects duplicate dependency identifiers", () => {
@@ -43,14 +45,15 @@ describe("getFunctionDependencies", () => {
       error: "expected a function",
     },
     {
-      name: "missing dependency parameter",
-      source: "async function example() {}",
-      error: "object first parameter",
-    },
-    {
       name: "captured dependency container",
       source: "async function example(dependencies) {}",
-      error: "object first parameter",
+      error: 'or ({}) when none are needed; found "dependencies"',
+    },
+    {
+      name: "array dependency pattern",
+      source: "async function example([first]) {}",
+      error:
+        "object first parameter, such as ({ workspace: { read } }), or ({}) when none are needed; found an array pattern",
     },
     {
       name: "rest binding",

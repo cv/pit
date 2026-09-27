@@ -101,14 +101,19 @@ function collectDependencies(
 export function getFunctionDependencies(source: string): FunctionDependencies {
   const declaration = functionLikeExpression(source);
   const dependencyParameter = declaration.parameters[0];
-  if (!dependencyParameter) {
-    throw new Error("functions must declare dependencies with an object first parameter");
-  }
+  // A function without parameters receives the same empty dependency object as ({}).
+  if (!dependencyParameter) return { dependencies: [], usesNext: false };
   if (dependencyParameter.dotDotDotToken || dependencyParameter.initializer) {
     throw new Error("the function dependency parameter cannot be optional, rest, or defaulted");
   }
   if (!ts.isObjectBindingPattern(dependencyParameter.name)) {
-    throw new Error("functions must declare dependencies with an object first parameter");
+    const found = ts.isIdentifier(dependencyParameter.name)
+      ? `"${dependencyParameter.name.text}"`
+      : "an array pattern";
+    throw new Error(
+      "functions must declare dependencies with an object first parameter, such as " +
+        `({ workspace: { read } }), or ({}) when none are needed; found ${found}`,
+    );
   }
 
   const dependencies: FunctionDependency[] = [];
