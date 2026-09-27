@@ -47,7 +47,7 @@ export function globalFunctionDefinitions(): GlobalFunctionDefinition[] {
 }
 
 /** Fixed native lookup, deliberately independent of effective source overrides. */
-export function getNativeFunction(id: string): NativeFunctionDefinition | undefined {
+function getNativeFunction(id: string): NativeFunctionDefinition | undefined {
   const definition = getGlobalFunction(id);
   return definition?.kind === "native" ? definition : undefined;
 }

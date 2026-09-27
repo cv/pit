@@ -127,7 +127,7 @@ export function validateEffectiveRegistryCapacity(registry: ReadonlyMap<string, 
   }
 }
 
-export function validateSavedFunctionName(name: string): void {
+function validateSavedFunctionName(name: string): void {
   if (
     !SAVED_FUNCTION_NAME.test(name) ||
     name.startsWith("__pit") ||

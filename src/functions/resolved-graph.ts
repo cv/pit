@@ -1,4 +1,4 @@
-import type { FunctionDefinition, SourceFunctionDefinition } from "./definitions.js";
+import type { FunctionDefinition } from "./definitions.js";
 import { getFunctionDependencies, type FunctionDependency } from "./dependencies.js";
 import type { FunctionDefinitionReference } from "./environment.js";
 import { functionDependencyBinding } from "./identifier.js";
@@ -138,12 +138,4 @@ export function resolveFunctionGraph(
     return { id: dependency.id, localName: dependency.localName, targetKey: visit(target) };
   });
   return { roots, nodes, effects: [...effects].sort((left, right) => left.localeCompare(right)) };
-}
-
-export function sourceFunctionDefinition(
-  id: string,
-  layer: SourceFunctionDefinition["layer"],
-  source: string,
-): SourceFunctionDefinition {
-  return { id, layer, kind: "source", source };
 }

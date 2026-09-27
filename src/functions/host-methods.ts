@@ -93,9 +93,7 @@ function listOptions(value: unknown): FunctionListOptions {
   }
   return {
     ...(scope ? { scope } : {}),
-    ...(options.allDefinitions === undefined
-      ? {}
-      : { allDefinitions: options.allDefinitions as boolean }),
+    ...(options.allDefinitions === undefined ? {} : { allDefinitions: options.allDefinitions }),
     ...(options.offset === undefined ? {} : { offset: options.offset as number }),
     ...(options.limit === undefined ? {} : { limit: options.limit as number }),
   };

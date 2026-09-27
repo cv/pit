@@ -36,7 +36,7 @@ export interface HostCallTraceSnapshot {
   truncated: boolean;
 }
 
-export const MAX_RETAINED_HOST_CALL_TRACES = 128;
+const MAX_RETAINED_HOST_CALL_TRACES = 128;
 
 export class HostCallTraceCollector {
   readonly #limit: number;

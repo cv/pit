@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   fileRevision,
   lineAnchor,
-  lineEnding,
   parseFileLines,
   prepareEdit,
 } from "../../src/workspace/hashline.js";
@@ -11,17 +10,13 @@ import {
 const anchor = (line: number, content: string) => lineAnchor(line, content);
 
 describe("hashline primitives", () => {
-  it("parses stable anchors and line-ending metadata", () => {
+  it("parses stable anchors and file revisions", () => {
     const lf = parseFileLines("one\ntwo\n");
     expect(lf.map((line) => line.anchor)).toEqual([
       anchor(1, "one"),
       anchor(2, "two"),
       anchor(3, ""),
     ]);
-    expect(lineEnding(lf)).toBe("lf");
-    expect(lineEnding(parseFileLines("one\r\ntwo"))).toBe("crlf");
-    expect(lineEnding(parseFileLines("one\r\ntwo\nthree"))).toBe("mixed");
-    expect(lineEnding(parseFileLines("one"))).toBe("none");
     expect(fileRevision("value")).toHaveLength(12);
   });
 

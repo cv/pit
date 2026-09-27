@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
 import { generateGlobalContract } from "../../src/functions/global-contract.js";
-import { sourceFunctionDefinition } from "../../src/functions/resolved-graph.js";
 import { functionTypeModel } from "../../src/sandbox/function-types.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
 import { runWithFunctionExecutor } from "../../src/sandbox/run.js";
@@ -11,6 +10,7 @@ import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js
 import { terminationError } from "../../src/shared/termination-errors.js";
 import { structureTypeScriptFailure } from "../../src/tool/failure-context.js";
 import { typeDiagnostics } from "../helpers/type-contract.js";
+import { sourceFunctionDefinition } from "../support/function-definitions.js";
 import { runInSandbox } from "../support/sandbox.js";
 
 const base = "async function calculate({}, value: number): Promise<number> { return value + 1; }";

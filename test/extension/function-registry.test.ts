@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { reconstructFunctions, validateRegistryCapacity } from "../../src/functions/core.js";
 import { registerFunctionManager } from "../../src/functions/manager.js";
-import {
-  effectiveRegistry,
-  reconstructFunctions,
-  validateRegistryCapacity,
-} from "../../src/index.js";
+import { effectiveRegistry } from "../../src/functions/state.js";
 import {
   promotionSuggestionNotice,
   savedFunctionCatalogNotice,

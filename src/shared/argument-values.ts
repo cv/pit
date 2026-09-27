@@ -22,12 +22,11 @@ export function stringArrayValue(value: unknown, label: string): string[] {
 export function boundedIntegerValue(
   value: unknown,
   label: string,
-  maximum: number,
-  defaultValue: number,
+  { minimum = 1, maximum, fallback }: { minimum?: number; maximum: number; fallback: number },
 ): number {
-  const resolved = Number(value ?? defaultValue);
-  if (!Number.isInteger(resolved) || resolved < 1 || resolved > maximum) {
-    throw new Error(`${label} must be an integer between 1 and ${maximum}`);
+  const resolved = Number(value ?? fallback);
+  if (!Number.isInteger(resolved) || resolved < minimum || resolved > maximum) {
+    throw new Error(`${label} must be an integer between ${minimum} and ${maximum}`);
   }
   return resolved;
 }

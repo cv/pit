@@ -1,6 +1,6 @@
 import { globalFunctionGroups } from "./globals.js";
 
-export const GLOBAL_CONTRACT_PREAMBLE = `type PitJsonPrimitive = null | boolean | number | string;
+const GLOBAL_CONTRACT_PREAMBLE = `type PitJsonPrimitive = null | boolean | number | string;
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
 type PitResult = PitJsonValue | undefined;
 

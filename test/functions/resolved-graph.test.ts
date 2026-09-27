@@ -4,10 +4,8 @@ import {
   createLayeredFunctionRegistry,
   globalFunctionDefinitions,
 } from "../../src/functions/definitions.js";
-import {
-  resolveFunctionGraph,
-  sourceFunctionDefinition,
-} from "../../src/functions/resolved-graph.js";
+import { resolveFunctionGraph } from "../../src/functions/resolved-graph.js";
+import { sourceFunctionDefinition } from "../support/function-definitions.js";
 
 describe("unified function graph", () => {
   it("registers namespace methods as global native functions", () => {

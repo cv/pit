@@ -84,9 +84,7 @@ function jsDocText(value: string | ts.NodeArray<ts.JSDocComment> | undefined): s
     return "";
   }
   return value
-    .map((part) =>
-      part.kind === ts.SyntaxKind.JSDocText ? (part as ts.JSDocText).text : part.getText(),
-    )
+    .map((part) => (part.kind === ts.SyntaxKind.JSDocText ? part.text : part.getText()))
     .join("");
 }
 

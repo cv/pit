@@ -13,6 +13,14 @@ import { getPersistentFunctionMetadata, withPersistentSummary } from "./source.j
 import { assertFunctionsAvailable } from "./storage/validation.js";
 export type { PreparedSavedFunctionExecution } from "./preparation.js";
 import {
+  FUNCTION_ENTRY_TYPE,
+  type FunctionActivity,
+  type FunctionEntry,
+  type FunctionScope,
+  validateRegistryCapacity,
+  validateFunctionRegistryIdentifiers,
+} from "./core.js";
+import {
   effectiveRegistry,
   stateFunctionEnvironment,
   type FunctionState,
@@ -21,15 +29,6 @@ import {
 } from "./state.js";
 import { removeProjectFunction, saveProjectFunction } from "./storage/project.js";
 import { removeUserFunction, saveUserFunction } from "./storage/user.js";
-export type { SavedFunctionRemovalPlan } from "./removal.js";
-import {
-  FUNCTION_ENTRY_TYPE,
-  type FunctionActivity,
-  type FunctionEntry,
-  type FunctionScope,
-  validateRegistryCapacity,
-  validateFunctionRegistryIdentifiers,
-} from "./core.js";
 
 export interface PersistentFunctionPromotionRequest {
   name: string;

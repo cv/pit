@@ -2,11 +2,9 @@ import { transform } from "esbuild";
 import { describe, expect, it } from "vitest";
 
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
-import {
-  resolveFunctionGraph,
-  sourceFunctionDefinition,
-} from "../../src/functions/resolved-graph.js";
+import { resolveFunctionGraph } from "../../src/functions/resolved-graph.js";
 import { unifiedRuntimeProgram } from "../../src/functions/unified-runtime.js";
+import { sourceFunctionDefinition } from "../support/function-definitions.js";
 
 async function execute(
   source: string,
