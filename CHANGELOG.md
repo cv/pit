@@ -6,6 +6,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Changed
 
+- Reorganize documentation around reader tasks: a shorter introduction and quickstart, dedicated usage, saved-function, configuration, reference, security, and troubleshooting guides, and a documentation index. Contributor setup and checks live in `CONTRIBUTING.md`; the case study is explicitly historical and the security policy follows the latest tagged release.
 - Pit adds its skills list and its user and project function catalogs to the system prompt as named sections (`pit_skills`, `pit_user_functions`, `pit_project_functions`) instead of replacing the whole prompt. Pi records sections in the session, so a catalog change patches one section and keeps the cached prompt prefix, and prompt changes from later extensions are no longer overridden. When an earlier extension has already replaced the prompt, or on Pi before 0.86, Pit extends that replacement.
 - **Breaking:** The root module no longer re-exports `effectiveRegistry`, `reconstructFunctions`, and `validateRegistryCapacity`, which only Pit's tests imported. `GLOBAL_METHODS` remains its public export.
 

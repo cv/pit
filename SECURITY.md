@@ -2,14 +2,7 @@
 
 ## Supported versions
 
-Pit provides security fixes for the latest tagged release.
-
-| Version          | Supported |
-| ---------------- | --------- |
-| 0.16.x           | Yes       |
-| Earlier releases | No        |
-
-Pit requires Node.js 22.19 or newer as the Pi extension host. The installer verifies SHA-256 checksums before activating release-built Wasmtime addons for Linux, macOS, and Windows on ARM64 or x64. Missing or unsupported prebuilds disable TypeScript execution with an explanatory error; there is no fallback runtime.
+Pit provides security fixes for the [latest tagged release](https://github.com/cv/pit/releases/latest). Earlier releases are not supported. See the [README](README.md#install-and-update) for current runtime requirements.
 
 ## Reporting a vulnerability
 
@@ -21,14 +14,6 @@ Include the affected version, reproduction steps, impact, and any suggested miti
 
 ## Security model
 
-Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store and can affect the host only through host-authorized injected functions. The component receives restricted WASI Preview 2 bindings with no inherited filesystem, environment, network, arguments, or stdio. This is an application boundary, not a container, virtual machine, or operating-system sandbox. Wasmtime is loaded as a native addon in Pi's process, so native runtime defects share the host process's crash boundary.
+Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime store. Host functions can still change files, execute commands, and reach the network with the Pi process's permissions. Dependency injection is not an approval boundary, and the sandbox does not replace operating-system isolation.
 
-Host functions remain powerful. In particular:
-
-- `shell`, `git`, and `npm` can execute code with the Pi process's permissions.
-- Git hooks and network operations can have external effects.
-- Workspace methods may access absolute paths or paths outside the current project.
-- HTTP requests are not restricted by a destination allowlist.
-- Extensions themselves execute with host permissions.
-
-Use an additional operating-system isolation boundary for hostile models, untrusted extensions, multi-tenant workloads, or sensitive environments.
+Read the [security model](docs/security.md) for the guarantees, limitations, host authority, and runtime supply chain.
