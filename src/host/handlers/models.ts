@@ -80,7 +80,7 @@ export function createModelsHostHandler({ pi, ctx }: PiControlServices): ModelsH
       }
       const query =
         options.query === undefined ? "" : string(options.query, "options.query").toLowerCase();
-      const limit = boundedInteger(options.limit, "options.limit", 200, 100);
+      const limit = boundedInteger(options.limit, "options.limit", { maximum: 200, fallback: 100 });
       const refresh = await ctx.modelRegistry.refresh({ signal });
       ensureRefreshCompleted(refresh, signal);
       const source = availableOnly ? ctx.modelRegistry.getAvailable() : ctx.modelRegistry.getAll();

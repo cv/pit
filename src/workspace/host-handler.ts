@@ -4,7 +4,11 @@ import { dirname } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import fg from "fast-glob";
 
-import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
+import {
+  boundedIntegerValue as boundedInteger,
+  recordValue as object,
+  stringValue as string,
+} from "../shared/argument-values.js";
 import { fileRevision, prepareEdit } from "./hashline.js";
 import { checkAbort, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { readWorkspace } from "./read.js";
@@ -213,10 +217,10 @@ async function globWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
   const patterns =
     typeof args[0] === "string" || Array.isArray(args[0]) ? (args[0] as string | string[]) : "**/*";
   const options = args[1] === undefined ? {} : object(args[1], "options");
-  const limit = Number(options.limit ?? MAX_GLOB_RESULTS);
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_GLOB_RESULTS) {
-    throw new Error(`limit must be an integer between 1 and ${MAX_GLOB_RESULTS}`);
-  }
+  const limit = boundedInteger(options.limit, "limit", {
+    maximum: MAX_GLOB_RESULTS,
+    fallback: MAX_GLOB_RESULTS,
+  });
 
   const entries: string[] = [];
   let truncated = false;

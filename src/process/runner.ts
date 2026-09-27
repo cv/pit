@@ -51,18 +51,14 @@ export async function executeHostProcess({
   }
   const cwd =
     options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
-  const maxBytes = boundedIntegerValue(
-    options.maxBytes,
-    "options.maxBytes",
-    LIMITS.processStream.maxBytes,
-    LIMITS.processStream.maxBytes,
-  );
-  const maxLines = boundedIntegerValue(
-    options.maxLines,
-    "options.maxLines",
-    LIMITS.processStream.maxLines,
-    LIMITS.processStream.maxLines,
-  );
+  const maxBytes = boundedIntegerValue(options.maxBytes, "options.maxBytes", {
+    maximum: LIMITS.processStream.maxBytes,
+    fallback: LIMITS.processStream.maxBytes,
+  });
+  const maxLines = boundedIntegerValue(options.maxLines, "options.maxLines", {
+    maximum: LIMITS.processStream.maxLines,
+    fallback: LIMITS.processStream.maxLines,
+  });
   const truncate = options.truncate ?? "tail";
   if (truncate !== "head" && truncate !== "tail") {
     throw new Error('options.truncate must be "head" or "tail"');

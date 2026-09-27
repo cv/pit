@@ -214,12 +214,10 @@ export function createHostDispatcher({
     http: async (_method, args, signal) => {
       const url = string(args[0], "url");
       const options = args[1] === undefined ? {} : object(args[1], "options");
-      const maxBytes = boundedInteger(
-        options.maxBytes,
-        "options.maxBytes",
-        LIMITS.httpBody.maxBytes,
-        LIMITS.httpBody.maxBytes,
-      );
+      const maxBytes = boundedInteger(options.maxBytes, "options.maxBytes", {
+        maximum: LIMITS.httpBody.maxBytes,
+        fallback: LIMITS.httpBody.maxBytes,
+      });
       const response = await fetch(url, {
         ...(options.method === undefined ? {} : { method: string(options.method, "method") }),
         ...(options.headers === undefined

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { compileSandboxSource } from "../../src/sandbox/program.js";
+import { prepareSandboxProgram } from "../../src/sandbox/program.js";
 
 async function compiledProgram(source: string, projectFunctions: ReadonlyMap<string, string>) {
-  const compiled = await compileSandboxSource(source, { projectFunctions });
+  const { compiled } = await prepareSandboxProgram(source, { projectFunctions });
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
   return (0, eval)(compiled) as (
     dependencies: (context: unknown) => object,
@@ -17,7 +17,7 @@ async function compiledProgram(source: string, projectFunctions: ReadonlyMap<str
   ) => Promise<unknown>;
 }
 
-describe("compileSandboxSource", () => {
+describe("prepareSandboxProgram", () => {
   it("compiles typed explicit custom and native dependencies", async () => {
     const source = `async ({ inspect }, input: { file: string }) => inspect(input)`;
     const inspect = `async function inspect(
@@ -54,13 +54,13 @@ describe("compileSandboxSource", () => {
     },
     { name: "commands", source: "async ({ commands }) => commands.list()", namespace: "commands" },
   ])("explains namespace capture before compilation: $name", async ({ source, namespace }) => {
-    await expect(compileSandboxSource(source, {})).rejects.toThrow(
+    await expect(prepareSandboxProgram(source, {})).rejects.toThrow(
       `cannot inject namespace "${namespace}" as a function`,
     );
   });
 
   it("lets a caller recover by injecting the individual function", async () => {
-    await expect(compileSandboxSource("async ({ context }) => context.get()", {})).rejects.toThrow(
+    await expect(prepareSandboxProgram("async ({ context }) => context.get()", {})).rejects.toThrow(
       "{ context: { get } }",
     );
     const main = await compiledProgram("async ({ context: { get } }) => get()", new Map());
@@ -76,7 +76,7 @@ describe("compileSandboxSource", () => {
   });
 
   it("rejects missing explicit functions before compilation", async () => {
-    await expect(compileSandboxSource("async ({ missing }) => missing()", {})).rejects.toThrow(
+    await expect(prepareSandboxProgram("async ({ missing }) => missing()", {})).rejects.toThrow(
       /Property 'missing' does not exist|unavailable function "missing"/,
     );
   });

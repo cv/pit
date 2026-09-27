@@ -2,7 +2,11 @@ import { readFile, stat } from "node:fs/promises";
 
 import fg from "fast-glob";
 
-import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
+import {
+  boundedIntegerValue as boundedInteger,
+  recordValue as object,
+  stringValue as string,
+} from "../shared/argument-values.js";
 import { fileRevision, lineAnchor } from "./hashline.js";
 import { checkAbort, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { InterruptibleRegexMatcher } from "./regex-worker.js";
@@ -44,14 +48,15 @@ function parseSearchRequest(cwd: string, args: unknown[]): SearchRequest {
   const searchPath = options.path === undefined ? cwd : resolveWorkspacePath(cwd, options.path);
   const regex = options.regex === undefined ? false : Boolean(options.regex);
   const caseSensitive = options.caseSensitive === undefined ? true : Boolean(options.caseSensitive);
-  const contextLines = Number(options.contextLines ?? 0);
-  const limit = Number(options.limit ?? 100);
-  if (!Number.isInteger(contextLines) || contextLines < 0 || contextLines > 10) {
-    throw new Error("contextLines must be an integer between 0 and 10");
-  }
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_RESULTS) {
-    throw new Error(`limit must be an integer between 1 and ${MAX_SEARCH_RESULTS}`);
-  }
+  const contextLines = boundedInteger(options.contextLines, "contextLines", {
+    minimum: 0,
+    maximum: 10,
+    fallback: 0,
+  });
+  const limit = boundedInteger(options.limit, "limit", {
+    maximum: MAX_SEARCH_RESULTS,
+    fallback: 100,
+  });
   if (regex) {
     try {
       RegExp(query, caseSensitive ? "g" : "gi");

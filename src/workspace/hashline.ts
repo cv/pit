@@ -46,7 +46,7 @@ function digest(value: string | Buffer, length: number): string {
   return createHash("sha256").update(value).digest("base64url").slice(0, length);
 }
 
-export function lineHash(content: string): string {
+function lineHash(content: string): string {
   return digest(content, LINE_HASH_LENGTH);
 }
 
@@ -92,29 +92,6 @@ export function parseFileLines(contents: string): FileLine[] {
     anchor: lineAnchor(number, content),
   });
   return lines;
-}
-
-export function lineEnding(lines: readonly FileLine[]): "lf" | "crlf" | "mixed" | "none" {
-  let lf = false;
-  let crlf = false;
-  for (const line of lines) {
-    if (line.separator === "\n") {
-      lf = true;
-    }
-    if (line.separator === "\r\n") {
-      crlf = true;
-    }
-  }
-  if (lf && crlf) {
-    return "mixed";
-  }
-  if (crlf) {
-    return "crlf";
-  }
-  if (lf) {
-    return "lf";
-  }
-  return "none";
 }
 
 function dominantSeparator(lines: readonly FileLine[]): "\n" | "\r\n" {

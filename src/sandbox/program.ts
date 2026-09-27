@@ -94,10 +94,3 @@ export async function prepareSandboxProgram(
     effects: graph.effects,
   };
 }
-
-export async function compileSandboxSource(
-  source: string,
-  options: SandboxProgramOptions,
-): Promise<string> {
-  return (await prepareSandboxProgram(source, options)).compiled;
-}

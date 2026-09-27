@@ -55,7 +55,7 @@ export class HangingIndentText implements Component {
       const plain = stripTerminalSequences(line);
       const leading = plain.slice(0, plain.length - plain.trimStart().length);
       const hangingIndent = explicitIndent ?? visibleWidth(leading);
-      if (hangingIndent !== undefined && hangingIndent > 0 && hangingIndent < width) {
+      if (hangingIndent > 0 && hangingIndent < width) {
         const lineWidth = visibleWidth(line);
         const prefix = sliceByColumn(line, 0, hangingIndent);
         const sliced = sliceByColumn(line, hangingIndent, Math.max(0, lineWidth - hangingIndent));

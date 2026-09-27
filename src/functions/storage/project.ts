@@ -24,7 +24,7 @@ export interface ProjectFunctionConfig {
   error?: string;
 }
 
-export function projectFunctionDirectory(cwd: string): string {
+function projectFunctionDirectory(cwd: string): string {
   return join(cwd, CONFIG_DIR_NAME, "functions");
 }
 

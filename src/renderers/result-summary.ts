@@ -57,7 +57,7 @@ export function describeResult(
   if (Array.isArray(value)) {
     return `Returned ${plural(value.length, "item")}`;
   }
-  if (value !== null && typeof value === "object") {
+  if (typeof value === "object") {
     const keys = Object.keys(value);
     const names = keys.slice(0, 3).join(", ");
     return `Returned ${plural(keys.length, "field")}${names ? `: ${names}` : ""}`;

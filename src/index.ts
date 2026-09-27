@@ -7,8 +7,6 @@ import { configuredFunctionExecutor } from "./sandbox/wasmtime-loader.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
 export { GLOBAL_METHODS } from "./functions/globals.js";
-export { effectiveRegistry } from "./functions/state.js";
-export { reconstructFunctions, validateRegistryCapacity } from "./functions/core.js";
 
 export default function pit(pi: ExtensionAPI) {
   const functionState = createFunctionState();

@@ -64,7 +64,7 @@ function errorDetail(error: unknown): string {
  * An executor for a host without a usable runtime. The extension still loads and the tool still
  * registers; each execution explains the cause and the recovery instead of failing at startup.
  */
-export function unavailableFunctionExecutor(reason: string): FunctionExecutor {
+function unavailableFunctionExecutor(reason: string): FunctionExecutor {
   return {
     execute: () => Promise.reject(new Error(`${reason}. ${RECOVERY}`)),
   };

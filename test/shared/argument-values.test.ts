@@ -15,7 +15,9 @@ describe("argument values", () => {
     expect(() => stringValue(1, "program")).toThrow("must be a string");
     expect(stringArrayValue(["status"], "args")).toEqual(["status"]);
     expect(() => stringArrayValue([1], "args")).toThrow("array of strings");
-    expect(boundedIntegerValue(undefined, "limit", 10, 5)).toBe(5);
-    expect(() => boundedIntegerValue(11, "limit", 10, 5)).toThrow("between 1 and 10");
+    expect(boundedIntegerValue(undefined, "limit", { maximum: 10, fallback: 5 })).toBe(5);
+    expect(() => boundedIntegerValue(11, "limit", { maximum: 10, fallback: 5 })).toThrow(
+      "between 1 and 10",
+    );
   });
 });
