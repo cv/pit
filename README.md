@@ -292,7 +292,7 @@ Pit activates only `typescript` by default. Add explicit exceptions in a trusted
 
 Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. Empty or invalid configuration grants no exceptions. Run `/reload` after changes.
 
-This controls startup selection only; other extensions can change active tools afterward.
+Pit applies this selection at session start and again after `/tree` navigation, because Pi restores the tool set recorded on the destination branch. Other extensions can still change active tools afterward.
 
 ### Share trusted project functions
 
