@@ -64,17 +64,27 @@ describe("Pit skill prompt", () => {
     }
   });
 
-  it("replaces the whole prompt only on Pi versions without prompt sections", () => {
-    const result = beforeAgentStart({
+  it.each<{ name: string; systemPrompt: string; options: Record<string, unknown> }>([
+    {
+      name: "an earlier handler replaced the prompt",
+      systemPrompt: "earlier replacement",
+      options: { forceSystemPrompt: "earlier replacement" },
+    },
+    {
+      name: "Pi before 0.86 has no prompt sections",
       systemPrompt: "base prompt",
-      systemPromptOptions: {
-        skills: [{ name: "delivery", description: "Deliver", filePath: "/skills/delivery.md" }],
-        sections: undefined,
-      },
+      options: { sections: undefined },
+    },
+  ])("extends the replacement prompt when Pi would ignore sections: $name", (row) => {
+    const skills = [{ name: "delivery", description: "Deliver", filePath: "/skills/delivery.md" }];
+    const result = beforeAgentStart({
+      systemPrompt: row.systemPrompt,
+      systemPromptOptions: { skills, ...row.options },
     });
 
     expect(result.returned).toEqual({ systemPrompt: result.systemPrompt });
-    expect(result.systemPrompt).toMatch(/^base prompt\n\n[^]*<name>delivery<\/name>/);
+    expect(result.systemPrompt.startsWith(`${row.systemPrompt}\n\n`)).toBe(true);
+    expect(result.systemPrompt).toContain("<name>delivery</name>");
   });
 
   it("uses the current loaded catalog after a resource refresh", () => {
