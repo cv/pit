@@ -182,15 +182,16 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       ),
       pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
     }).filter(([, content]) => content);
-    const promptSections = event.systemPromptOptions?.sections;
-    if (promptSections) {
+    const options = event.systemPromptOptions;
+    if (options?.sections && options.forceSystemPrompt === undefined) {
       // Pi records section changes as transcript deltas, so a catalog change patches one section
       // and keeps the cached prompt prefix. An empty section stays unset, and Pi records its removal.
       for (const [name, content] of sections) {
-        promptSections[name] = content;
+        options.sections[name] = content;
       }
     } else if (sections.length > 0) {
-      // Pi before 0.86 has no prompt sections; replacing the prompt is its only extension point.
+      // An earlier handler replaced the prompt, or Pi predates prompt sections (0.86). Pi then sends
+      // only the replacement text, so Pit's additions must extend it.
       const additions = sections.map(([, content]) => content).join("\n\n");
       return { systemPrompt: `${event.systemPrompt}\n\n${additions}` };
     }

@@ -82,7 +82,7 @@ Before an agent turn starts, Pit adds named sections to Pi's structured system p
 - `pit_user_functions`: user function signatures, summaries, and parameter descriptions; and
 - `pit_project_functions`: project function signatures, summaries, and parameter descriptions.
 
-Pi records each section in the transcript's system messages. When a catalog changes, the next request carries a patch for that section alone, so the cached prompt prefix survives on providers that support mid-conversation system messages. An empty section is left unset, which Pi records as its removal. Pit does not return a replacement `systemPrompt`, which would make the whole prompt opaque and ignore section changes from later extensions; it does so only on Pi versions before 0.86, which lack prompt sections.
+Pi records each section in the transcript's system messages. When a catalog changes, the next request carries a patch for that section alone, so the cached prompt prefix survives on providers that support mid-conversation system messages. An empty section is left unset, which Pi records as its removal. Pit does not return a replacement `systemPrompt`, which would make the whole prompt opaque and ignore section changes from later extensions. Pi sends only the replacement text once any handler forces one, so when an earlier extension has already done so, or on Pi versions before 0.86, which lack prompt sections, Pit extends that replacement instead.
 
 Persistent function source is not copied into the prompt. Session overrides are identified as overrides, and the full source closure is injected only during compilation when submitted code references a saved function.
 
