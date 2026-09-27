@@ -68,11 +68,11 @@ On session start, `src/functions/lifecycle.ts`:
 6. reconstructs session definitions from the active Pi branch's custom entries;
 7. reconciles scope precedence and dependency closure;
 8. reports a bounded set of loading errors through the UI; and
-9. sets `typescript` as the active tool.
+9. activates `typescript` and any configured `allowedTools` exceptions.
 
 ### `session_tree`
 
-When branch navigation changes the active session tree, Pit reconstructs session functions from that branch's entries, resets usage suggestions, and reconciles the effective registry again. Session functions therefore follow Pi's branch history instead of behaving as process-global mutable state.
+When branch navigation changes the active session tree, Pit reconstructs session functions from that branch's entries, resets usage suggestions, and reconciles the effective registry again. Session functions therefore follow Pi's branch history instead of behaving as process-global mutable state. Pi restores the destination branch's recorded tool set before this event, so Pit then re-applies the tool selection resolved at session start; otherwise navigating into a branch recorded before Pit, or before an `allowedTools` change, would re-enable other tools.
 
 ### `before_agent_start`
 

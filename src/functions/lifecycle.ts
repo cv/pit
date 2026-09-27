@@ -90,7 +90,20 @@ function registerSavedFunctionManager({
   });
 }
 
+/** Activates `typescript` and the registered tools matching the project's exceptions. */
+function activatePitTools(pi: ExtensionAPI, allowedTools: readonly RegExp[]): void {
+  const exceptions = allowedTools.length
+    ? pi
+        .getAllTools()
+        .map(({ name }) => name)
+        .filter((name) => allowedTools.some((pattern) => pattern.test(name)))
+    : [];
+  pi.setActiveTools([...new Set(["typescript", ...exceptions])]);
+}
+
 function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionState): void {
+  // Resolved at session start; configuration edits apply after /reload.
+  let allowedTools: RegExp[] = [];
   pi.on("session_start", async (_event, ctx) => {
     resetFunctionUsage(functionState);
     const projectConfig = await loadProjectFunctionConfig(ctx);
@@ -140,17 +153,11 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
       ctx.ui.notify(`Some saved functions could not be loaded: ${shown}${omitted}`, "warning");
     }
-    const patterns = (projectConfig.allowedTools ?? []).map(
+    allowedTools = (projectConfig.allowedTools ?? []).map(
       (pattern) =>
         new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`),
     );
-    const exceptions = patterns.length
-      ? pi
-          .getAllTools()
-          .map(({ name }) => name)
-          .filter((name) => patterns.some((p) => p.test(name)))
-      : [];
-    pi.setActiveTools([...new Set(["typescript", ...exceptions])]);
+    activatePitTools(pi, allowedTools);
   });
   pi.on("session_tree", (_event, ctx) => {
     resetFunctionUsage(functionState);
@@ -166,6 +173,9 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       },
     );
     reconcileFunctionState(functionState);
+    // Pi restores the destination branch's recorded tools before this event, which can re-enable
+    // tools from before Pit or an earlier configuration. Keep the same selection as session start.
+    activatePitTools(pi, allowedTools);
   });
   pi.on("before_agent_start", (event) => {
     // Pi renders its own list only while a file-reading tool is selected, and an earlier handler

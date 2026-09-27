@@ -9,6 +9,7 @@ import {
   cwd,
   getAllTools,
   sessionStart,
+  sessionTree,
   setActiveTools,
   setupHarness,
 } from "../support/extension-fixture.js";
@@ -114,5 +115,21 @@ describe("allowed tool exceptions", () => {
     await configure({ allowedTools: [] });
     await sessionStart({}, context());
     expect(setActiveTools).toHaveBeenLastCalledWith(["typescript"]);
+  });
+
+  it("re-applies the startup selection after tree navigation restores another tool set", async () => {
+    await configure({ allowedTools: ["goal_*"] });
+    await sessionStart({}, context());
+    // Pi restores the destination branch's recorded tools before session_tree. The selection
+    // resolved at startup still applies; configuration edits wait for /reload.
+    setActiveTools.mockClear();
+    await configure({ allowedTools: [] });
+    sessionTree({}, context());
+    expect(setActiveTools).toHaveBeenCalledExactlyOnceWith([
+      "typescript",
+      "goal_complete",
+      "goal_blocked",
+      "goal_wait",
+    ]);
   });
 });
