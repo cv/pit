@@ -13,7 +13,7 @@ Optimize confidence per maintenance cost, not test count, deleted lines, or cove
 - **Focused audit:** scan read-only, then deeply review a few high-confidence candidates. Report findings before editing tests or production owners. An audit request alone does not require a cleanup.
 - **Subsystem campaign:** agree on one owner and enumerate all its tests, support files, and overlapping boundary proof. Track reviewed, retained, changed, and deferred cases. Deliver coherent batches; refresh from current main before the next batch. Do not turn a campaign into a deletion quota.
 
-Read root and scoped `AGENTS.md` first. Consult the [existing contract inventory](../../../docs/test-contract-inventory.md) so a previously reviewed false positive is not mistaken for new evidence. Use [pit-delivery](../pit-delivery/SKILL.md) for execution and delivery, and [pit-terminal-ux](../pit-terminal-ux/SKILL.md) for renderer or presentation-contract work.
+Read root and scoped `AGENTS.md` first. Use [pit-delivery](../pit-delivery/SKILL.md) for execution and delivery, and [pit-terminal-ux](../pit-terminal-ux/SKILL.md) for renderer or presentation-contract work.
 
 ## Four-question authoring gate
 
@@ -56,6 +56,8 @@ Retain independent protection for:
 - package layout, native platform support, generated contract drift, architecture rules, defaults, and usable documentation examples.
 
 Keep call ordering when it changes observable effects. Exact assertions are appropriate when the bytes, key, path, or public name are the contract. Source inspection can be the cheapest independent guard if it survives an identifier-only refactor and detects a genuine contract break. Dedicated check/package gates own their contracts; do not weaken them or coverage thresholds to make pruning pass.
+
+Reviewed false positives: source-like strings in function metadata and inspection, source parsing, storage and promotion, layered registries, command argv preparation, sandbox dispatch and wire handling, renderer sentinels, and formatter fallback fidelity are inputs or public outputs, not inspections of implementation text.
 
 Treat a valuable test that fails on the baseline as a possible product defect: reproduce it and investigate the owner, rather than deleting the test.
 

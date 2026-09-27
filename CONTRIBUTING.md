@@ -32,6 +32,8 @@ Read [docs/architecture.md](docs/architecture.md) before changing source boundar
 
 Project-persisted workflow helpers live in `.pi/functions/`; their location determines scope.
 
+Pit is 0.x. A breaking change removes the old name, field, path, or behavior outright: do not add deprecated aliases, compatibility shims, dual readers, or migration code. Record the break in `CHANGELOG.md`.
+
 When changing global function definitions, regenerate the contract:
 
 ```sh

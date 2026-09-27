@@ -11,7 +11,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Removed
 
-- The 0.16 function-system migration guide. It remains available at the `v0.16.0` tag.
+- Historical documents from `docs/`: the 0.16 function-system spec and migration guide, and past design, review, and test-audit records. `docs/` now holds the architecture guide, release procedure, and case study. The removed records remain in Git history; the 0.16 guides are at the `v0.16.0` tag.
 
 ## [0.19.0] - 2026-09-26
 
