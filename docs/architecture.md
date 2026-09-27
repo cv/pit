@@ -342,7 +342,7 @@ Files directly under `src/` are composition entry points or true cross-domain ad
 
 Tests are grouped by behavior under `test/`, mirroring source domains where useful:
 
-- `test/capabilities/`
+- `test/globals/`
 - `test/execution/`
 - `test/extension/`
 - `test/functions/`
