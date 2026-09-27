@@ -27,6 +27,7 @@ export interface RegisteredTool {
       timeoutMs: { description?: string };
     };
   };
+  prepareArguments?: (args: unknown) => any;
   renderCall?: (args: any, theme: any, context: any) => RenderedComponent;
   renderResult?: (result: any, options: any, theme: any, context: any) => RenderedComponent;
   execute: (...args: any[]) => Promise<any>;

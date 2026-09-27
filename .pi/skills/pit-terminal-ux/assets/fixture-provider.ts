@@ -135,6 +135,15 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
       return { commands: results.map(result => result.stdout), definitions: definitions.map(definition => ({ name: definition.name, scope: definition.scope, kind: definition.kind, sourceAvailable: definition.kind === "source" && definition.source.length > 0, dependencies: definition.directDependencies, effects: definition.effects })) };
     }`,
   },
+  // Strict JSON-schema sampling sends every property, with null for omitted options.
+  "strict-nulls": {
+    label: null,
+    code: "async function strictProbe({}) { return 1; }",
+    functionId: null,
+    params: null,
+    saveOnly: true,
+    timeoutMs: null,
+  },
   "save-probe": {
     label: "UX SAVE PROBE: session function",
     code: "async function probeSaved({}) { return 1; }",

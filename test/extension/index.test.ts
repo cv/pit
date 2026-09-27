@@ -225,6 +225,37 @@ describe("pit extension", () => {
     expect(branchEntries).toHaveLength(entriesBefore);
   });
 
+  it("treats null optional arguments as omitted, as strict schema sampling sends them", async () => {
+    // Pi applies prepareArguments to the raw provider arguments before validation and execution.
+    const strict = (args: Record<string, unknown>) => ({
+      label: null,
+      functionId: null,
+      params: null,
+      saveOnly: null,
+      timeoutMs: null,
+      ...args,
+    });
+    const execute = (args: Record<string, unknown>) =>
+      tool.execute(
+        "call-id",
+        tool.prepareArguments?.(args) ?? args,
+        undefined,
+        undefined,
+        context(),
+      );
+
+    const saved = await execute(
+      strict({ code: "async function strictSaved({}) { return 1; }", saveOnly: true }),
+    );
+    expect(saved.content[0].text).toContain("Saved function");
+    expect(branchEntries.some((entry) => entry.data?.name === "strictSaved")).toBe(true);
+
+    const anonymous = await execute(
+      strict({ code: "async ({}, input?: unknown) => ({ omitted: input === undefined })" }),
+    );
+    expect(anonymous.details.value).toEqual({ omitted: true });
+  });
+
   it("passes and validates top-level params as initial function input", async () => {
     const source =
       "async function inspect({}, input: { path: string }) { return { path: input.path }; }";

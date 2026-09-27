@@ -3,7 +3,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { type Static, Type } from "typebox";
 
 import type { HostCallTrace } from "../execution/host-call-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
@@ -26,7 +26,7 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
-import { resolveToolInput } from "./input.js";
+import { omitNullArguments, resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
   FUNCTION_ID_DESCRIPTION,
@@ -302,6 +302,35 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   }
 }
 
+const TOOL_PARAMETERS = Type.Object({
+  label: Type.Optional(Type.String({ description: LABEL_DESCRIPTION })),
+  code: Type.String({ description: CODE_DESCRIPTION }),
+  functionId: Type.Optional(Type.String({ description: FUNCTION_ID_DESCRIPTION })),
+  // Each branch declares a JSON type. With an untyped schema, some models send every value
+  // as a JSON-encoded string.
+  params: Type.Optional(
+    Type.Union(
+      [
+        Type.Object({}, { additionalProperties: true }),
+        Type.Array(Type.Unknown()),
+        Type.String(),
+        Type.Number(),
+        Type.Boolean(),
+        Type.Null(),
+      ],
+      { description: PARAMS_DESCRIPTION },
+    ),
+  ),
+  saveOnly: Type.Optional(Type.Boolean({ description: SAVE_ONLY_DESCRIPTION })),
+  timeoutMs: Type.Optional(
+    Type.Integer({
+      minimum: 1,
+      maximum: 300_000,
+      description: "Invocation timeout in ms: 1–300000; default 30000.",
+    }),
+  ),
+});
+
 export function registerTypeScriptTool(services: TypeScriptToolServices): void {
   const { pi, functionState } = services;
   const pendingFailures = new Map<string, TypeScriptFailureDetails>();
@@ -311,34 +340,9 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     description: createToolDescription(LIMITS.result.maxBytes),
     promptSnippet: PROMPT_SNIPPET,
     promptGuidelines: [...PROMPT_GUIDELINES],
-    parameters: Type.Object({
-      label: Type.Optional(Type.String({ description: LABEL_DESCRIPTION })),
-      code: Type.String({ description: CODE_DESCRIPTION }),
-      functionId: Type.Optional(Type.String({ description: FUNCTION_ID_DESCRIPTION })),
-      // Each branch declares a JSON type. With an untyped schema, some models send every value
-      // as a JSON-encoded string.
-      params: Type.Optional(
-        Type.Union(
-          [
-            Type.Object({}, { additionalProperties: true }),
-            Type.Array(Type.Unknown()),
-            Type.String(),
-            Type.Number(),
-            Type.Boolean(),
-            Type.Null(),
-          ],
-          { description: PARAMS_DESCRIPTION },
-        ),
-      ),
-      saveOnly: Type.Optional(Type.Boolean({ description: SAVE_ONLY_DESCRIPTION })),
-      timeoutMs: Type.Optional(
-        Type.Integer({
-          minimum: 1,
-          maximum: 300_000,
-          description: "Invocation timeout in ms: 1–300000; default 30000.",
-        }),
-      ),
-    }),
+    parameters: TOOL_PARAMETERS,
+    // Pi validates the prepared arguments against TOOL_PARAMETERS afterwards.
+    prepareArguments: (args) => omitNullArguments(args) as Static<typeof TOOL_PARAMETERS>,
     renderCall(args, theme, context) {
       return renderTypeScriptToolCall(args, theme, context, functionState.effective);
     },
