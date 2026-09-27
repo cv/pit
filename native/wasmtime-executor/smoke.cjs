@@ -162,8 +162,8 @@ async function main() {
   });
   const queuedPreparedResult = await functionExecutor.execute(
     prepared.program,
-    async ({ capability, method }) => {
-      const effect = `${capability}.${method}`;
+    async ({ namespace, method }) => {
+      const effect = `${namespace}.${method}`;
       if (effect === "context.get") {
         return { cwd: "/queued", backend: "rquickjs" };
       }
