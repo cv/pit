@@ -74,7 +74,11 @@ describe("function registry handler", () => {
     const source = `async function active({}) { return "saved"; }`;
     reconstructFunctions(functions, [
       null,
-      { type: "custom", customType: "other", data: {} },
+      {
+        type: "custom",
+        customType: "other-extension",
+        data: { name: "foreign", source: source.replace("active", "foreign") },
+      },
       { type: "custom", customType: "pit-function-definitions", data: null },
       {
         type: "custom",

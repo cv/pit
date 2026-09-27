@@ -12,7 +12,6 @@ import {
   run,
   sessionStart,
   setupHarness,
-  setBranchEntries,
   value,
 } from "../support/extension-fixture.js";
 
@@ -101,19 +100,10 @@ describe("user functions", () => {
     expect(user).toMatchObject({ scope: "user", overridesUser: false });
   });
 
-  it("loads user functions automatically regardless of obsolete opt-outs", async () => {
+  it("loads user functions in untrusted projects", async () => {
     await writeUserFunction(
       "portable",
       "/** Portable. */ async function portable({}) { return true; }",
-    );
-    await writeFile(
-      join(agentDir(), "pit.json"),
-      JSON.stringify({ globalFunctions: { enabled: false } }),
-    );
-    await mkdir(join(cwd, ".pi"), { recursive: true });
-    await writeFile(
-      join(cwd, ".pi/pit.json"),
-      JSON.stringify({ globalFunctions: { enabled: false } }),
     );
     await sessionStart({}, context({ isProjectTrusted: () => false }));
     await expect(value("async ({ portable }) => portable()")).resolves.toBe(true);
@@ -501,14 +491,18 @@ it("handles cancelled and absent user manager operations", async () => {
   );
 });
 
-it("keeps invalid user configuration quiet without a UI", async () => {
-  await mkdir(agentDir(), { recursive: true });
-  await writeFile(join(agentDir(), "pit.json"), "[]");
+it("shows saved-function load errors only when a UI is available", async () => {
+  await mkdir(join(agentDir(), "functions"), { recursive: true });
+  await writeFile(join(agentDir(), "functions", "broken.ts"), "broken function");
   const headless = context({ hasUI: false });
   await sessionStart({}, headless);
   expect(headless.ui.notify).not.toHaveBeenCalled();
-  const info = await value("async ({ context: { get } }) => get()", headless);
-  expect(info.userFunctions).toEqual([]);
+  const interactive = context();
+  await sessionStart({}, interactive);
+  expect(interactive.ui.notify).toHaveBeenCalledWith(
+    expect.stringContaining("Some saved functions could not be loaded"),
+    "warning",
+  );
 });
 
 it("executes namespaced user dependencies after reload", async () => {
@@ -564,25 +558,4 @@ it("does not bypass invalid overrides through transitive user dependencies", asy
   await expect(value("async ({ inspect }) => inspect()")).rejects.toThrow(
     'Function "workspace.read" is unavailable',
   );
-});
-
-it("rejects old global APIs and ignores old session entries", async () => {
-  setBranchEntries([
-    {
-      type: "custom",
-      customType: "pit-functions",
-      data: { name: "old", source: "async function old({}) { return 1; }" },
-    },
-  ]);
-  await sessionStart({}, context());
-  await expect(value("async ({ old }) => old()")).rejects.toThrow("does not exist");
-  await expect(value("async ({ functions: { listGlobal } }) => listGlobal()")).rejects.toThrow(
-    "does not exist",
-  );
-  await run("async function portable({}) { return 1; }");
-  await expect(
-    value(
-      'async ({ functions: { promote } }) => (promote as any)("portable", "Portable", { to: "global" })',
-    ),
-  ).rejects.toThrow('must be "user" or "project"');
 });
