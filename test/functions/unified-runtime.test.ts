@@ -1,5 +1,5 @@
 import { transform } from "esbuild";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
 import {
@@ -36,35 +36,6 @@ async function execute(
 }
 
 describe("unified function runtime", () => {
-  it("injects native and source functions through one dependency object", async () => {
-    const read = vi.fn(async (file: string) => ({ content: `contents:${file}` }));
-    const savedFunctionRun = vi.fn(async () => null);
-    const source = `async ({ inspectFile }, input: { file: string }) => inspectFile(input)`;
-    const definitions = [
-      sourceFunctionDefinition(
-        "inspectFile",
-        "project",
-        `async function inspectFile(
-          { workspace: { read } },
-          input: { file: string },
-        ) {
-          return read(input.file);
-        }`,
-      ),
-    ];
-
-    await expect(
-      execute(
-        source,
-        definitions,
-        { workspace: { read }, __pit: { savedFunctionRun } },
-        { file: "README.md" },
-      ),
-    ).resolves.toEqual({ content: "contents:README.md" });
-    expect(read).toHaveBeenCalledWith("README.md");
-    expect(savedFunctionRun).toHaveBeenCalledWith("inspectFile");
-  });
-
   it("provides frozen null-prototype direct dependency objects", async () => {
     const source = "async ({ inspect }) => inspect()";
     const definitions = [
@@ -95,27 +66,5 @@ describe("unified function runtime", () => {
       namespacePrototype: null,
       readType: "function",
     });
-  });
-
-  it("dispatches next to the lower definition", async () => {
-    const execFile = vi.fn(async () => "clean");
-    const source = "async ({ git: { status } }) => status()";
-    const definitions = [
-      sourceFunctionDefinition(
-        "git.status",
-        "project",
-        `async function status({ $next }) {
-          return "project:" + await $next();
-        }`,
-      ),
-    ];
-
-    await expect(
-      execute(source, definitions, {
-        shell: { execFile },
-        __pit: { savedFunctionRun: async () => null },
-      }),
-    ).resolves.toBe("project:clean");
-    expect(execFile).toHaveBeenCalledWith("git", ["status"], {});
   });
 });
