@@ -215,19 +215,11 @@ npm run globals:generate
 
 This writes `src/generated/global-contract.d.ts`. `npm run globals:check` regenerates in memory and fails when the checked-in artifact is stale. Never edit the generated file manually.
 
-### Compatibility boundary
+### Naming
 
 Internal names distinguish injected **dependencies**, public **function calls**, and native **host calls**. `src/host/dispatcher.ts` composes native handlers; `HostCallDispatcher` guards the guest protocol. `HostCallTrace` records `namespace` and method identity, and presentation uses `FunctionCall` for both native and source functions.
 
-Only explicit compatibility boundaries retain the old spelling:
-
-- The root module exports `GLOBAL_METHODS`, with deprecated `CAPABILITY_METHODS` as an alias of the same public namespace view.
-- Generated declarations expose `PitDependencies` and namespace types such as `PitShellFunctions`. Deprecated `PitCapabilities` and `Pit*Capability` aliases keep existing saved TypeScript type annotations valid, including virtual dependency typing.
-- `globals:generate` and `globals:check` are the canonical npm scripts; `capabilities:generate` and `capabilities:check` delegate to them for older automation.
-- New wire calls and retained traces emit `namespace`. Guest ingress accepts the historical `capability` field, normalizes it before dispatch, and applies the same effect grants. Conflicting identities are rejected rather than guessing.
-- The tool renderer normalizes historical trace identities in a copy; it never rewrites persisted sessions. Invalid or conflicting trace identities use the lossless diagnostic fallback. Historical failure records still render; new host failures use `kind: host`, and classification also understands legacy diagnostic headlines.
-
-No internal implementation imports the deprecated aliases. The global function IDs, arguments, results, override order, and host authority boundary are unchanged by these naming changes.
+The earlier `capability` vocabulary has no aliases: no deprecated export, type, npm script, guest-protocol field, or trace spelling is accepted. Replayed tool results whose traces lack a string `namespace` use the lossless diagnostic fallback rather than a guessed call identity.
 
 ## Saved-function state and persistence
 
@@ -246,7 +238,7 @@ Invalid user and project definitions are retained separately by identifier. Prep
 | Project | `.pi/functions/`                             | Trusted project and `projectFunctions.enabled` opt-in |
 | Session | Pi `pit-function-definitions` branch entries | Active branch                                         |
 
-The default user directory is `~/.pi/agent/functions/`; Pi's `getAgentDir()` determines it. The old user `pit.json` enablement configuration is no longer read. Legacy user/project function directories and `pit-functions` session entries are ignored, never migrated or deleted.
+The default user directory is `~/.pi/agent/functions/`; Pi's `getAgentDir()` determines it.
 
 Persistent identifiers come from canonical relative file paths: `company/check.ts` declares `check` and defines `company.check`. Each file contains one documented top-level function declaration. Dotted filenames, case-only collisions, reserved filesystem names, namespace collisions, and declaration mismatches are rejected. Discovery visits at most 2,048 entries and reads at most 100,000 bytes per file, with a 4 MB aggregate source budget. Symlinked directories are not traversed; symlinked definition files are invalid. An absent directory is empty and is not created by loading.
 
@@ -256,9 +248,9 @@ Writes use a per-path mutation queue, a sibling temporary file, and rename. User
 
 New definitions begin in the session layer. Promotion targets only `project` or `user`; `global` is not a writable alias. User promotion requires confirmation and rejects project/session-only dependencies. Dependencies resolve virtually during invocation, including compatible higher-layer replacements of a portable dependency.
 
-Persistence succeeds before session tombstones and live registry changes are committed. Atomic file replacement is not a transaction across filesystem storage and Pi's session journal. Removal is dependency-aware and targets only canonical files. Removing an invalid user definition also clears its unavailable-identifier diagnostic. Project access retains its trust and enablement checks; user access has no old global-enablement gate.
+Persistence succeeds before session tombstones and live registry changes are committed. Atomic file replacement is not a transaction across filesystem storage and Pi's session journal. Removal is dependency-aware and targets only canonical files. Removing an invalid user definition also clears its unavailable-identifier diagnostic. Project access retains its trust and enablement checks.
 
-The management API names user operations `listUser`, `getUser`, and `removeUser`; the old `*Global` user-storage aliases are removed. `/functions` labels user-owned source as user scope. The `typescript` tool accepts `functionId` for named definitions; the leaf must match the declaration name. Session records, removal tombstones, catalogs, traces, and promotion use that full identifier. Preparation, replay, and commit reject namespace conflicts and overrides of sealed global functions. The type checker retains every concrete layer needed for the selected signatures, checks adjacent overrides after removing the implementation-only dependency parameter, and contextually types `$next` against the next lower definition. It checks argument assignability, required arity, and resolved return compatibility; generic signatures retain their declared type parameters. Named root execution receives the same next binding and attribution context as saved invocations. Promotion validates both the destination stack and the resulting active stack before writing. Removal checks affected definitions against the proposed fallback chain. Invalid persisted overrides stay unavailable, never silently exposing a lower implementation. `FunctionInspector` provides one snapshot for the API and manager: native primitives, source globals, and authored definitions share provenance, signatures, resolved dependencies, override chains, next targets, and effects. Listing is paginated and scope-filterable; invalid persisted entries remain inspectable as diagnostics. Native implementation handles are never exposed, and no source is fabricated for native definitions. Globals are read-only in both API mutation planning and UI actions. All `functions.*` global definitions are sealed; rejected override attempts remain visible without disabling those management functions.
+The management API names user operations `listUser`, `getUser`, and `removeUser`. `/functions` labels user-owned source as user scope. The `typescript` tool accepts `functionId` for named definitions; the leaf must match the declaration name. Session records, removal tombstones, catalogs, traces, and promotion use that full identifier. Preparation, replay, and commit reject namespace conflicts and overrides of sealed global functions. The type checker retains every concrete layer needed for the selected signatures, checks adjacent overrides after removing the implementation-only dependency parameter, and contextually types `$next` against the next lower definition. It checks argument assignability, required arity, and resolved return compatibility; generic signatures retain their declared type parameters. Named root execution receives the same next binding and attribution context as saved invocations. Promotion validates both the destination stack and the resulting active stack before writing. Removal checks affected definitions against the proposed fallback chain. Invalid persisted overrides stay unavailable, never silently exposing a lower implementation. `FunctionInspector` provides one snapshot for the API and manager: native primitives, source globals, and authored definitions share provenance, signatures, resolved dependencies, override chains, next targets, and effects. Listing is paginated and scope-filterable; invalid persisted entries remain inspectable as diagnostics. Native implementation handles are never exposed, and no source is fabricated for native definitions. Globals are read-only in both API mutation planning and UI actions. All `functions.*` global definitions are sealed; rejected override attempts remain visible without disabling those management functions.
 
 ## Workspace consistency model
 

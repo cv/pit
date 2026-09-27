@@ -4,17 +4,14 @@ import { describe, expect, it } from "vitest";
 import { formatDiagnostic, validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("validateTypeScript", () => {
-  it.each<{ name: string; type: string }>([
-    { name: "current dependencies", type: "PitDependencies" },
-    { name: "legacy dependency alias", type: "PitCapabilities" },
-  ])("retains virtual saved-function typing with $name", ({ type }) => {
+  it("retains virtual saved-function typing for annotated dependencies", () => {
     const saved = new Map([["answer", "async function answer({}) { return 42; }"]]);
     expect(() =>
-      validateTypeScript(`async ({ answer }: ${type}) => answer()`, saved),
+      validateTypeScript("async ({ answer }: PitDependencies) => answer()", saved),
     ).not.toThrow();
     expect(() =>
       validateTypeScript(
-        `async ({ answer }: ${type}) => { const result: string = await answer(); return result; }`,
+        "async ({ answer }: PitDependencies) => { const result: string = await answer(); return result; }",
         saved,
       ),
     ).toThrow(/number.*string/);

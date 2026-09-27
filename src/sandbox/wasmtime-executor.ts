@@ -10,7 +10,7 @@ import {
 } from "./executor.js";
 import { createWasmtimeGuestSource } from "./wasmtime-source.js";
 import type { HostCallMessage, WireMessage } from "./wire.js";
-import { parseHostCallMessage } from "./wire.js";
+import { isHostCallMessage } from "./wire.js";
 
 const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
 const MAX_HOST_CALLS = 1_024;
@@ -122,9 +122,8 @@ class GuestExecution {
       this.result = message.value;
       return EMPTY_RESPONSE;
     }
-    const call = parseHostCallMessage(message);
-    if (!call) throw new Error("Invalid Pit guest request");
-    return this.#call(call);
+    if (!isHostCallMessage(message)) throw new Error("Invalid Pit guest request");
+    return this.#call(message);
   };
 
   /**

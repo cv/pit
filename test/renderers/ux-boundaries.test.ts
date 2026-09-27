@@ -115,6 +115,39 @@ describe("renderer inspection boundaries", () => {
     expect(output).toContain("INPUT_SENTINEL");
   });
 
+  const recordedTrace = {
+    id: 1,
+    sequence: 1,
+    method: "outdated",
+    arguments: [],
+    startedAt: 100,
+    durationMs: 10,
+    status: "succeeded",
+  };
+  it.each<{ name: string; trace: unknown }>([
+    { name: "null trace", trace: null },
+    { name: "array trace", trace: [] },
+    { name: "string trace", trace: "not a trace" },
+    { name: "trace without a namespace", trace: recordedTrace },
+    { name: "trace with a non-string namespace", trace: { ...recordedTrace, namespace: 42 } },
+  ])("keeps retained output raw rather than guessing the call for a $name", ({ trace }) => {
+    const value = {
+      stdout: '{"pit":{"field":"KEEP_SENTINEL"}}',
+      stderr: "",
+      code: 1,
+      truncated: false,
+    };
+    const result = {
+      content: [{ type: "text", text: JSON.stringify(value) }],
+      details: { value, truncated: false, traces: [trace] },
+    };
+    const original = structuredClone(result);
+    const output = plain(renderTypeScriptToolResult(result, options, theme, {}));
+    expect(output).toContain("Structured view unavailable");
+    expect(output.replace(/\s/g, "")).toContain("KEEP_SENTINEL");
+    expect(result).toEqual(original);
+  });
+
   it("labels save-only input without interpreting input objects as operation results", () => {
     const output = stripTerminalSequences(
       renderTypeScriptInputs(

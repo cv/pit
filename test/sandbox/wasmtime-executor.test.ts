@@ -59,14 +59,7 @@ describe("createWasmtimeFunctionExecutor", () => {
     ).rejects.toMatchObject(expected);
   });
 
-  it.each<{ name: string; identity: Record<string, string> }>([
-    { name: "current namespace", identity: { namespace: "context" } },
-    { name: "legacy capability field", identity: { capability: "context" } },
-    {
-      name: "matching transition fields",
-      identity: { namespace: "context", capability: "context" },
-    },
-  ])("dispatches granted calls with $name and returns the guest result", async ({ identity }) => {
+  it("dispatches granted calls and returns the guest result", async () => {
     const executeQueuedJavascript = vi.fn<WasmtimeAddon["executeQueuedJavascript"]>(
       async (_component, _source, callback) => {
         const response = JSON.parse(
@@ -74,7 +67,7 @@ describe("createWasmtimeFunctionExecutor", () => {
             JSON.stringify({
               type: "call",
               id: 1,
-              ...identity,
+              namespace: "context",
               method: "get",
               args: [],
               functionContext: {
@@ -133,10 +126,7 @@ describe("createWasmtimeFunctionExecutor", () => {
     );
   });
 
-  it.each<{ name: string; identity: Record<string, string> }>([
-    { name: "current namespace", identity: { namespace: "shell" } },
-    { name: "legacy capability field", identity: { capability: "shell" } },
-  ])("enforces grants for $name and requires a result", async ({ identity }) => {
+  it("enforces grants and requires a result", async () => {
     const addon: WasmtimeAddon = {
       async executeQueuedJavascript(_component, _source, callback) {
         const response = JSON.parse(
@@ -144,7 +134,7 @@ describe("createWasmtimeFunctionExecutor", () => {
             JSON.stringify({
               type: "call",
               id: 2,
-              ...identity,
+              namespace: "shell",
               method: "exec",
               args: ["true"],
             }),
@@ -229,30 +219,12 @@ describe("createWasmtimeFunctionExecutor", () => {
     { name: "unknown message kind", message: JSON.stringify({ type: "unknown" }) },
     { name: "null frame", message: "null" },
     {
-      name: "conflicting identities",
-      message: JSON.stringify({
-        type: "call",
-        id: 1,
-        namespace: "shell",
-        capability: "context",
-        method: "get",
-        args: [],
-      }),
+      name: "missing namespace",
+      message: JSON.stringify({ type: "call", id: 1, method: "get", args: [] }),
     },
     {
-      name: "invalid canonical identity with valid legacy spelling",
-      message: JSON.stringify({
-        type: "call",
-        id: 1,
-        namespace: 42,
-        capability: "context",
-        method: "get",
-        args: [],
-      }),
-    },
-    {
-      name: "invalid legacy identity",
-      message: JSON.stringify({ type: "call", id: 1, capability: 42, method: "get", args: [] }),
+      name: "invalid namespace",
+      message: JSON.stringify({ type: "call", id: 1, namespace: 42, method: "get", args: [] }),
     },
     {
       name: "invalid call id",

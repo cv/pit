@@ -3,7 +3,7 @@ import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { validateNativeCall } from "../../src/functions/globals.js";
-import { GLOBAL_METHODS, CAPABILITY_METHODS } from "../../src/index.js";
+import { GLOBAL_METHODS } from "../../src/index.js";
 import {
   branchEntries,
   cleanupHarness,
@@ -32,13 +32,10 @@ describe("pit extension", () => {
     expect((await run("async ({}) => 42")).details.value).toBe(42);
   });
 
-  it.each([
-    { name: "current", methods: GLOBAL_METHODS },
-    { name: "legacy", methods: CAPABILITY_METHODS },
-  ])("exposes the $name public global-method view", ({ methods }) => {
-    expect(methods.shell).toEqual(["execFile", "exec"]);
-    expect(methods.gh).toContain("prView");
-    expect(methods.functions).toContain("getSaved");
+  it("exposes the public global-method view", () => {
+    expect(GLOBAL_METHODS.shell).toEqual(["execFile", "exec"]);
+    expect(GLOBAL_METHODS.gh).toContain("prView");
+    expect(GLOBAL_METHODS.functions).toContain("getSaved");
   });
 
   it("validates native dispatch names and arity", () => {

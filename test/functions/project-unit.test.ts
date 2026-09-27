@@ -155,23 +155,6 @@ describe("project function storage", () => {
     expect(await removeProjectFunction(cwd, "saved")).toBe(false);
   });
 
-  it("ignores legacy project files and leaves them untouched on mutation", async () => {
-    const legacyDirectory = join(cwd, ".pi/pit/functions");
-    await mkdir(legacyDirectory, { recursive: true });
-    const legacySource = "/** Legacy helper. */ async function shared({}) { return 'legacy'; }";
-    await writeFile(join(legacyDirectory, "shared.ts"), legacySource);
-    await writeFile(join(legacyDirectory, "malformed.ts"), "invalid source");
-    const functions = registry();
-    expect(await loadProjectFunctions(ctx(), functions, metadata())).toEqual([]);
-    expect(functions.size).toBe(0);
-    const source = "/** Canonical helper. */ async function shared({}) { return 'current'; }";
-    await saveProjectFunction(cwd, "shared", source, functions);
-    expect(await loadProjectFunctions(ctx(), functions, metadata())).toEqual([]);
-    expect(functions.get("shared")).toBe(source + "\n");
-    expect(await removeProjectFunction(cwd, "shared")).toBe(true);
-    expect(await readFile(join(legacyDirectory, "shared.ts"), "utf8")).toBe(legacySource);
-  });
-
   it("does not impose an aggregate quota on project storage alone", async () => {
     const functions = new Map(
       Array.from({ length: 10 }, (_, index) => {

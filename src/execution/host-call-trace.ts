@@ -141,22 +141,3 @@ export function finishHostCallTrace(
     status,
   };
 }
-
-/** Normalize historical tool details without changing the persisted transcript. */
-export function readHostCallTraces(traces: readonly unknown[]): HostCallTrace[] {
-  return traces.map((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error("Invalid host-call trace");
-    }
-    const trace = value as Record<string, unknown>;
-    const namespace = trace.namespace === undefined ? trace.capability : trace.namespace;
-    if (
-      typeof namespace !== "string" ||
-      (trace.capability !== undefined && trace.capability !== namespace)
-    ) {
-      throw new Error("Invalid host-call trace identity");
-    }
-    const { capability: _legacy, ...canonical } = trace;
-    return { ...canonical, namespace } as unknown as HostCallTrace;
-  });
-}

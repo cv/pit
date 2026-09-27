@@ -500,7 +500,7 @@ Pit 0.16.0 makes a clean break. The implementation must not include compatibilit
 
 Old files are left untouched and ignored. Old session entries are not rewritten. Existing legacy support and migration branches must be removed rather than carried into the new architecture.
 
-The release must include [the migration guide](function-system-migration.md) and prominent release notes.
+The release must include [the migration guide](https://github.com/cv/pit/blob/v0.16.0/docs/function-system-migration.md) and prominent release notes.
 
 ## Implementation outline
 
@@ -532,4 +532,4 @@ The release must include [the migration guide](function-system-migration.md) and
 - Project functions remain trust-gated and branch-local session behavior is preserved.
 - Promotion targets only project or user scopes.
 - Legacy paths, lexical runtime support, aliases, and migration code are removed.
-- Documentation includes the migration guide and the effective override/effect model.
+- Documentation describes the effective override/effect model; the 0.16.0 release included the migration guide.

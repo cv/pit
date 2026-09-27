@@ -117,19 +117,10 @@ describe("user function storage", () => {
     );
   });
 
-  it("uses only the active agent directory and leaves legacy files untouched", async () => {
-    const legacy = join(root, "pit", "functions");
-    await mkdir(legacy, { recursive: true });
-    await writeFile(join(legacy, "old.ts"), "legacy content");
-    const registry = new Map<string, string>();
+  it("resolves the user directory from the active agent directory without creating it", async () => {
     expect(userFunctionDirectory()).toBe(join(root, "functions"));
-    expect(await loadUserFunctions(registry, new Map())).toEqual([]);
-    expect(registry.size).toBe(0);
+    expect(await loadUserFunctions(new Map(), new Map())).toEqual([]);
     await expect(readFile(join(root, "functions"))).rejects.toMatchObject({ code: "ENOENT" });
-    const source = "/** Current. */ async function old({}) { return 1; }";
-    await saveUserFunction("old", source, registry);
-    await removeUserFunction("old");
-    expect(await readFile(join(legacy, "old.ts"), "utf8")).toBe("legacy content");
     vi.stubEnv("PI_CODING_AGENT_DIR", join(root, "another-agent"));
     expect(userFunctionDirectory()).toBe(join(root, "another-agent", "functions"));
   });
