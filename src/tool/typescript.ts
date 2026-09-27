@@ -39,8 +39,6 @@ import {
 } from "./metadata.js";
 import { formatTypeScriptSource } from "./source-formatter.js";
 
-export { display } from "../shared/json-budget.js";
-
 const TRUNCATION_NOTICE =
   '\n[Result truncated to fit the output budget; omissions are marked "… N omitted …".]';
 
