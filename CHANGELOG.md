@@ -4,10 +4,16 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-26
+
 ### Changed
 
 - **Breaking:** Injected dependencies are typed as `PitDependencies` and namespace types such as `PitShellFunctions`; the `PitCapabilities` and `Pit*Capability` names are gone. The root module exports `GLOBAL_METHODS` instead of `CAPABILITY_METHODS`, and the contract scripts are `globals:check` and `globals:generate`.
 - Guest host calls and retained traces name a `namespace`; the old `capability` field is not accepted. Tool results replayed from older sessions show the raw diagnostic view instead of the structured one.
+- Built-in functions come from one catalog of global definitions: 35 native primitives and 28 source globals. `git.*`, `npm.*`, and `gh.*` are now inspectable TypeScript that injects `shell.execFile`, so an override of `shell.execFile` also applies to them and `$next` composes through both layers. Their signatures, argv, validation, and output bounds are unchanged.
+- Reflection reports those command globals as `kind: source`, with their source, their `shell.execFile` dependency, and the primitive effects they reach, instead of Git, npm, or GitHub host effects. Errors and traces attribute calls to the global source function, and global source calls no longer create saved-function journals or promotion suggestions.
+- The invocation timing summary is one muted line that ranks phases by cost, such as `23ms total: 18ms execution, 4ms validation, 1ms rest`. Malformed retained timing metadata shows the inspectable raw view.
+- Test with Pi 0.87.1.
 
 ### Removed
 
@@ -214,7 +220,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/cv/pit/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/cv/pit/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/cv/pit/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/cv/pit/compare/v0.17.0...v0.18.0
