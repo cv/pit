@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes Pit 0.20.1's runtime. It is a maintainer's map, not a promise that every internal interface is stable. User-facing behavior belongs in the [README](../README.md); release procedure belongs in [releasing.md](releasing.md).
+This document describes the runtime at this source revision. It is a maintainer's map, not a promise that every internal interface is stable. User-facing behavior belongs in the [usage guide](usage.md), [saved-functions guide](saved-functions.md), and [reference](reference.md). Start with [contributing](../CONTRIBUTING.md) for local development; release procedure belongs in [releasing.md](releasing.md).
 
 Pit presents one `typescript` tool to the model. Submitted TypeScript is formatted and type-checked in the trusted extension host, compiled into a self-contained program, and evaluated by QuickJS inside a fresh bounded Wasmtime store. The Wasm component has no useful ambient authority. It requests effects from the host through explicitly injected functions such as `workspace.read`, `git.status`, and `http.request`.
 
