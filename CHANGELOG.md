@@ -4,10 +4,17 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- Pit adds its skills list and its user and project function catalogs to the system prompt as named sections (`pit_skills`, `pit_user_functions`, `pit_project_functions`) instead of replacing the whole prompt. Pi records sections in the session, so a catalog change patches one section and keeps the cached prompt prefix, and prompt changes from later extensions are no longer overridden. When an earlier extension has already replaced the prompt, or on Pi before 0.86, Pit extends that replacement.
+
 ### Fixed
 
 - Declare the tool's `params` argument as any JSON value with an explicit type for each kind (object, array, string, number, boolean, or null) instead of an untyped schema. Some models, such as Claude through an OpenAI Responses gateway, sent every `params` value as a JSON-encoded string, escaping quote-heavy data twice; they now send objects and arrays. Pit still decodes a JSON string for inputs that cannot accept one.
 - Accept a function without parameters, such as `async () => 42`, as one that uses no functions; previously Pit rejected it and required `async ({}) => 42`. A first parameter that is not destructured, such as `(_deps, input)`, is still rejected, and the error now names it and suggests `({})`.
+- Re-apply Pit's active tools, `typescript` plus any `allowedTools` exceptions, after `/tree` navigation. Pi restores the tool set recorded on the destination branch, which could re-enable other tools or leave `typescript` unavailable.
+- Detect an existing skills list from the rendered prompt instead of the selected tools. Pi also lists skills when only `bash` is selected, and when an earlier extension replaced the prompt while `read` was selected, Pit omitted its list and the model received none.
+- Treat a `null` optional tool argument (`params`, `label`, `functionId`, `saveOnly`, or `timeoutMs`) as omitted. Clients that sample arguments against a strict JSON schema send `null` for options the model left out; a save-only call then failed with "saveOnly does not accept top-level params", and the call view listed the null options.
 
 ## [0.20.1] - 2026-09-27
 
