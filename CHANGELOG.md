@@ -4,6 +4,17 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-09-27
+
+### Added
+
+- Repository maintainer functions: `pr.editBody` edits a pull request description through literal replacements, checklist ticks, and an appended section, and writes nothing when an expected text is missing or ambiguous. `release.verifyPublished` checks a published release's tag commit and exact asset set, and runs the strict installer from a fresh tag clone.
+
+### Changed
+
+- Repository maintainer functions: `delivery.listChangedFiles({ includeDeleted: true })` also lists tracked deletions and staged rename sources, so its result can be passed straight to `delivery.commit`.
+- The release guide lands the version bump through a `release-X.Y.Z` pull request, as `main` requires, and gives the exact strict-installer and isolated tag-install commands.
+
 ## [0.20.0] - 2026-09-26
 
 ### Changed
@@ -220,7 +231,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/cv/pit/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/cv/pit/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/cv/pit/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/cv/pit/compare/v0.18.0...v0.18.1
