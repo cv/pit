@@ -48,18 +48,33 @@ describe("Pit skill prompt", () => {
       filePath: "/skills/delivery/SKILL.md",
     };
 
-    expect(
-      beforeAgentStart({
+    for (const event of [
+      {
         systemPrompt: "base prompt\n\n<available_skills>native</available_skills>",
         systemPromptOptions: { selectedTools: ["typescript", "read"], skills: [skill] },
-      }),
-    ).toBeUndefined();
-    expect(
-      beforeAgentStart({
+      },
+      {
         systemPrompt: "custom prompt\n\n<available_skills>custom</available_skills>",
         systemPromptOptions: { selectedTools: ["typescript"], skills: [skill] },
-      }),
-    ).toBeUndefined();
+      },
+    ]) {
+      const { returned, sections } = beforeAgentStart(event);
+      expect(returned).toBeUndefined();
+      expect(sections).toEqual({});
+    }
+  });
+
+  it("replaces the whole prompt only on Pi versions without prompt sections", () => {
+    const result = beforeAgentStart({
+      systemPrompt: "base prompt",
+      systemPromptOptions: {
+        skills: [{ name: "delivery", description: "Deliver", filePath: "/skills/delivery.md" }],
+        sections: undefined,
+      },
+    });
+
+    expect(result.returned).toEqual({ systemPrompt: result.systemPrompt });
+    expect(result.systemPrompt).toMatch(/^base prompt\n\n[^]*<name>delivery<\/name>/);
   });
 
   it("uses the current loaded catalog after a resource refresh", () => {
@@ -94,6 +109,9 @@ describe("Pit skill prompt", () => {
       },
     });
 
+    // A section lets Pi record a transcript delta instead of forcing an opaque prompt.
+    expect(result.returned).toBeUndefined();
+    expect(Object.keys(result.sections)).toEqual(["pit_skills"]);
     expect(result.systemPrompt).toContain("base prompt");
     expect(result.systemPrompt).toContain("<available_skills>");
     expect(result.systemPrompt).toContain("<name>delivery</name>");
