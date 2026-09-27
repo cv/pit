@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Fixed
+
+- Declare the tool's `params` argument as any JSON value with an explicit type for each kind (object, array, string, number, boolean, or null) instead of an untyped schema. Some models, such as Claude through an OpenAI Responses gateway, sent every `params` value as a JSON-encoded string, escaping quote-heavy data twice; they now send objects and arrays. Pit still decodes a JSON string for inputs that cannot accept one.
+
 ## [0.20.1] - 2026-09-27
 
 ### Added
