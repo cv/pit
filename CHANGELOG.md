@@ -7,6 +7,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 ### Fixed
 
 - Declare the tool's `params` argument as any JSON value with an explicit type for each kind (object, array, string, number, boolean, or null) instead of an untyped schema. Some models, such as Claude through an OpenAI Responses gateway, sent every `params` value as a JSON-encoded string, escaping quote-heavy data twice; they now send objects and arrays. Pit still decodes a JSON string for inputs that cannot accept one.
+- Accept a function without parameters, such as `async () => 42`, as one that uses no functions; previously Pit rejected it and required `async ({}) => 42`. A first parameter that is not destructured, such as `(_deps, input)`, is still rejected, and the error now names it and suggests `({})`.
 
 ## [0.20.1] - 2026-09-27
 

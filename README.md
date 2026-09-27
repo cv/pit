@@ -103,6 +103,8 @@ async ({ context: { get } }) => {
 
 Pit contextually types destructured dependencies. Dependency annotations are not necessary. Validation detects unknown functions, unknown methods, invalid arguments, missing awaits, and incompatible result values. Diagnostics include source locations.
 
+Destructure every function the code uses in the first parameter. A function that uses none can omit its parameters, as in `async () => 42`, or write `({})` when it also takes `params` input.
+
 ### Pass large data in `params`
 
 Use top-level `params` for large patches, generated file contents, commit messages, and other quote-heavy data. The second function parameter must have a type annotation:

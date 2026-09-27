@@ -32,6 +32,16 @@ describe("pit extension", () => {
     expect((await run("async ({}) => 42")).details.value).toBe(42);
   });
 
+  it("runs functions that declare no parameters", async () => {
+    expect((await run("async () => 42")).details.value).toBe(42);
+    await run("async function answer() { return 42; }");
+    expect(await value("async ({ answer }) => answer()")).toBe(42);
+    // Without an input parameter, params would be dropped, so validation rejects them.
+    await expect(runWithParams("async () => 42", { value: 1 })).rejects.toThrow(
+      "Expected 0 arguments, but got 2",
+    );
+  });
+
   it("exposes the public global-method view", () => {
     expect(GLOBAL_METHODS.shell).toEqual(["execFile", "exec"]);
     expect(GLOBAL_METHODS.gh).toContain("prView");
