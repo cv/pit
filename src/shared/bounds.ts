@@ -14,7 +14,7 @@ const PI_TOOL_OUTPUT = { maxBytes: 50 * 1024, maxLines: 2000 } as const;
 
 /**
  * Text budgets shared by producers and presenters. Item caps such as search results, glob
- * entries, and capability traces are domain limits and stay with their owners.
+ * entries, and host-call traces are domain limits and stay with their owners.
  */
 export const LIMITS = {
   /** Model-visible text of one invocation result: Pi's tool-output budget. */

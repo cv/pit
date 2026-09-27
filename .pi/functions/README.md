@@ -21,7 +21,7 @@ these namespaces.
 
 A directory is a namespace: `ci/inspectFailure.ts` declares `inspectFailure`, and
 programs call it as `ci.inspectFailure` after injecting `{ ci: { inspectFailure } }`. A
-whole namespace cannot be captured. Namespaces avoid Pit's capability names (`gh`, `git`,
+whole namespace cannot be captured. Namespaces avoid Pit's global namespaces (`gh`, `git`,
 `session`, and the rest), so a project function is never mistaken for a native one.
 
 ## Abstraction boundaries

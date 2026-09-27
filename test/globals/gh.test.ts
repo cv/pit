@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { prepareGhCommand } from "../../src/functions/commands/gh.js";
-import type { CapabilityCall } from "../../src/renderers/capability.js";
+import type { FunctionCall } from "../../src/renderers/function-call.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 
 const theme = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
@@ -12,8 +12,8 @@ const result = (stdout = "", stderr = "", code = 0, truncated = false) => ({
   truncated,
 });
 function render(value: unknown) {
-  const call: CapabilityCall = {
-    capability: "gh",
+  const call: FunctionCall = {
+    namespace: "gh",
     method: "issueList",
     qualifiedName: "gh.issueList",
   };
@@ -23,7 +23,7 @@ function render(value: unknown) {
   }
   return r;
 }
-describe("gh capability", () => {
+describe("gh namespace", () => {
   it("prepares filtered issue and pull request lists with selected fields", () => {
     expect(
       prepareGhCommand("issueList", [
@@ -296,8 +296,8 @@ describe("gh renderer", () => {
     expect(render(result("created https://example")).summary).toBe("exit 0");
     expect(render(result("", "failed", 1, true)).summary).toBe("exit 1, truncated");
     expect(render(result()).lines).toContain("(no output)");
-    const call: CapabilityCall = {
-      capability: "gh",
+    const call: FunctionCall = {
+      namespace: "gh",
       method: "issueList",
       qualifiedName: "gh.issueList",
     };
@@ -349,8 +349,8 @@ describe("gh renderer", () => {
         render(result(JSON.stringify({ name: "run", jobs: [{ name: "test" }] }))).lines.join("\n"),
       ).toContain('"jobs":');
       expect(render(result("plain", "warning", 1, true)).summary).toBe("exit 1, truncated");
-      const call: CapabilityCall = {
-        capability: "gh",
+      const call: FunctionCall = {
+        namespace: "gh",
         method: "issueList",
         qualifiedName: "gh.issueList",
       };

@@ -13,17 +13,17 @@ import { isProgramExpression } from "../functions/source.js";
 import { SANDBOX_GLOBALS } from "./contract.js";
 import { functionTypeModel } from "./function-types.js";
 
-const CAPABILITY_CONTRACT = readFileSync(
-  fileURLToPath(new URL("../generated/capability-contract.d.ts", import.meta.url)),
+const GLOBAL_CONTRACT = readFileSync(
+  fileURLToPath(new URL("../generated/global-contract.d.ts", import.meta.url)),
   "utf8",
 );
-const CONTRACT_FILE = "/pit/capability-contract.d.ts";
+const CONTRACT_FILE = "/pit/global-contract.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
 const SIGNATURES_FILE = "/pit/saved-signatures.ts";
-const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_capabilities) => await (\n";
+const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_hostCalls) => await (\n";
 const IGNORED_DIAGNOSTIC_CODES = new Set([7005, 7006, 7019, 7022, 7023, 7031, 7034, 7044]);
 const MAX_DIAGNOSTICS = 8;
-const SAVED_CAPABILITY_HINT =
+const SAVED_FUNCTION_HINT =
   'There is no "saved" namespace. Use async ({ functions: { listAll } }) => listAll() to inspect functions; inject a callable by name in the first parameter.';
 // A non-JSON result fails as a long PitResult or PitProgram assignability chain that never says
 // how to fix it.
@@ -103,14 +103,14 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
   const displayed = unique.slice(0, MAX_DIAGNOSTICS);
   const messages = displayed.map(formatDiagnostic);
   const omitted = unique.length - displayed.length;
-  const savedCapabilityHint = diagnostics.some((diagnostic) => {
+  const savedFunctionHint = diagnostics.some((diagnostic) => {
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
     return (
       (diagnostic.code === 2304 && message === "Cannot find name 'saved'.") ||
       (diagnostic.code === 2339 && message.startsWith("Property 'saved' does not exist on type "))
     );
   })
-    ? `\n${SAVED_CAPABILITY_HINT}`
+    ? `\n${SAVED_FUNCTION_HINT}`
     : "";
   const jsonResultHint = diagnostics.some((diagnostic) => {
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
@@ -128,7 +128,7 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
   return (
     `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
     (omitted > 0 ? `\n… ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
-    savedCapabilityHint +
+    savedFunctionHint +
     jsonResultHint +
     savedHint
   );
@@ -235,7 +235,7 @@ function validateSource(
   const sources = new Map([
     [
       CONTRACT_FILE,
-      `${CAPABILITY_CONTRACT.replaceAll("PitCapabilities", "PitBuiltinCapabilities").replace("capabilities: PitBuiltinCapabilities", "capabilities: PitCapabilities") + SANDBOX_GLOBALS}
+      `${GLOBAL_CONTRACT.replace("interface PitDependencies {", "interface PitGlobalFunctions {") + SANDBOX_GLOBALS}
 ${model.declarations}`,
     ],
     [PROGRAM_FILE, wrapped],

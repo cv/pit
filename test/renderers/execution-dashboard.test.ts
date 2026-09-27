@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
+import type { HostCallTrace } from "../../src/execution/host-call-trace.js";
 import { renderExecutionDashboard } from "../../src/renderers/execution-dashboard.js";
 
 const theme = { fg: (_color: string, text: string) => text };
@@ -9,14 +9,14 @@ const NOW = 20_000;
 function trace(
   sequence: number,
   method: string,
-  status: CapabilityTrace["status"],
+  status: HostCallTrace["status"],
   startedAt: number,
   durationMs?: number,
-): CapabilityTrace {
+): HostCallTrace {
   return {
     id: sequence,
     sequence,
-    capability: "shell",
+    namespace: "shell",
     method,
     arguments: [],
     startedAt,
@@ -25,7 +25,7 @@ function trace(
   };
 }
 
-function interleaved(groups: number, firstSequence: number): CapabilityTrace[] {
+function interleaved(groups: number, firstSequence: number): HostCallTrace[] {
   return Array.from({ length: groups }, (_, index) =>
     trace(
       firstSequence + index,
@@ -37,7 +37,7 @@ function interleaved(groups: number, firstSequence: number): CapabilityTrace[] {
   );
 }
 
-function inFunction(entry: CapabilityTrace, invocationId: number, name: string): CapabilityTrace {
+function inFunction(entry: HostCallTrace, invocationId: number, name: string): HostCallTrace {
   return { ...entry, function: { invocationId, name, scope: "project", depth: 1 } };
 }
 
@@ -54,7 +54,7 @@ describe("execution dashboard rendering", () => {
     vi.useRealTimers();
   });
 
-  it.each<{ name: string; traces: CapabilityTrace[]; settled: boolean; line: string }>([
+  it.each<{ name: string; traces: HostCallTrace[]; settled: boolean; line: string }>([
     {
       name: "a completed call",
       traces: [trace(1, "exec", "succeeded", 0, 1_500)],
@@ -154,7 +154,7 @@ describe("execution dashboard rendering", () => {
       inFunction(trace(1, "exec", "succeeded", 0, 10), 1, "early"),
       {
         ...inFunction(trace(2, "savedFunctionRun", "succeeded", 20, 1), 2, "pure"),
-        capability: "__pit",
+        namespace: "__pit",
       },
       ...interleaved(14, 3),
       inFunction(trace(17, "spawn", "succeeded", 2_000, 10), 3, "late"),

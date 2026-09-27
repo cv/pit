@@ -1,5 +1,5 @@
-import type { CapabilityTrace, FunctionExecutionContext } from "../execution/capability-trace.js";
-import type { CapabilityHandler } from "./dispatcher.js";
+import type { HostCallTrace, FunctionExecutionContext } from "../execution/host-call-trace.js";
+import type { HostCallHandler } from "./dispatcher.js";
 import type { PreparedSandboxProgram } from "./program.js";
 
 export interface FunctionExecutionOptions {
@@ -7,13 +7,13 @@ export interface FunctionExecutionOptions {
   timeoutMs: number;
   input?: unknown;
   signal?: AbortSignal;
-  onCapabilityTrace?: (trace: CapabilityTrace) => void;
+  onHostCallTrace?: (trace: HostCallTrace) => void;
 }
 
 export interface FunctionExecutor {
   execute(
     program: PreparedSandboxProgram,
-    handler: CapabilityHandler,
+    handler: HostCallHandler,
     options: FunctionExecutionOptions,
   ): Promise<unknown>;
 }

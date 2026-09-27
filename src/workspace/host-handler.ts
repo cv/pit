@@ -94,7 +94,7 @@ async function batchReads(
           kind: "read" as const,
           index,
           ok: false as const,
-          /* v8 ignore next -- workspace capability failures are normalized to Error instances. */
+          /* v8 ignore next -- workspace namespace failures are normalized to Error instances. */
           error: (error instanceof Error ? error.message : String(error)).slice(0, 4000),
         })),
       ),
@@ -276,6 +276,6 @@ export async function handleWorkspace(
     }
     /* v8 ignore next -- registry validation rejects unknown workspace methods before dispatch. */
     default:
-      throw new Error(`Capability registry and workspace dispatcher disagree: ${method}`);
+      throw new Error(`Global definitions and workspace host handler disagree: ${method}`);
   }
 }

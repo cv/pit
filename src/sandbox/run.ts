@@ -1,7 +1,7 @@
-import type { CapabilityTrace } from "../execution/capability-trace.js";
+import type { HostCallTrace } from "../execution/host-call-trace.js";
 import type { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { FunctionEnvironment, FunctionDefinitionReference } from "../functions/environment.js";
-import type { CapabilityHandler } from "./dispatcher.js";
+import type { HostCallHandler } from "./dispatcher.js";
 import type { FunctionExecutionOptions, FunctionExecutor } from "./executor.js";
 import { prepareSandboxProgram } from "./program.js";
 
@@ -12,7 +12,7 @@ export interface SandboxOptions extends FunctionEnvironment {
   timeoutMs?: number;
   signal?: AbortSignal;
   input?: unknown;
-  onCapabilityTrace?: (trace: CapabilityTrace) => void;
+  onHostCallTrace?: (trace: HostCallTrace) => void;
 }
 
 function executionOptions(options: SandboxOptions): FunctionExecutionOptions {
@@ -29,13 +29,13 @@ function executionOptions(options: SandboxOptions): FunctionExecutionOptions {
     timeoutMs,
     ...(options.input === undefined ? {} : { input: options.input }),
     ...(options.signal ? { signal: options.signal } : {}),
-    ...(options.onCapabilityTrace ? { onCapabilityTrace: options.onCapabilityTrace } : {}),
+    ...(options.onHostCallTrace ? { onHostCallTrace: options.onHostCallTrace } : {}),
   };
 }
 
 export async function runWithFunctionExecutor(
   source: string,
-  handler: CapabilityHandler,
+  handler: HostCallHandler,
   options: SandboxOptions,
   executor: FunctionExecutor,
 ): Promise<unknown> {

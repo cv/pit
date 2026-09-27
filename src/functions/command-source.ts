@@ -40,7 +40,7 @@ export function defineCommandFunction<
   const diagnostic = JSON.stringify(
     `${namespace}.${method} expects ${range} argument(s); received `,
   );
-  const source = `async function ${method}({ shell: { execFile } }, ...args: Parameters<Pit${title}Capability[${JSON.stringify(method)}]>): Promise<PitProcessResult> {
+  const source = `async function ${method}({ shell: { execFile } }, ...args: Parameters<Pit${title}Functions[${JSON.stringify(method)}]>): Promise<PitProcessResult> {
     if (args.length < ${metadata.minimumArguments} || args.length > ${metadata.maximumArguments}) {
       throw new Error(${diagnostic} + args.length);
     }

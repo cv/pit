@@ -23,7 +23,7 @@ mod queued {
 }
 
 const MAX_MESSAGE_BYTES: usize = 8_000_000;
-const MAX_CAPABILITY_CALLS: usize = 1_024;
+const MAX_HOST_CALLS: usize = 1_024;
 const MAX_CONCURRENT_CALLS: usize = 32;
 const DEFAULT_QUEUED_FUEL: f64 = 9_007_199_254_740_991.0;
 const MAX_SAFE_JAVASCRIPT_INTEGER: f64 = 9_007_199_254_740_991.0;
@@ -267,7 +267,7 @@ pub async fn execute_queued_javascript(
             ));
         }
         call_count += requests.len();
-        if call_count > MAX_CAPABILITY_CALLS {
+        if call_count > MAX_HOST_CALLS {
             return Err(Error::from_reason("Pit host call limit exceeded"));
         }
         for requests in requests.chunks(MAX_CONCURRENT_CALLS) {

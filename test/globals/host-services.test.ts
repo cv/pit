@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { createCapabilities } from "../../src/capabilities/host.js";
 import { createFunctionState, createFunctionStateCommitQueue } from "../../src/functions/state.js";
+import { createHostDispatcher } from "../../src/host/dispatcher.js";
 
-describe("host capability router", () => {
+describe("host namespace router", () => {
   it("serves runtime context from explicit services", async () => {
     const functionState = createFunctionState();
     functionState.projectEnabled = true;
     functionState.project.set("projectFn", "source");
     functionState.session.set("sessionFn", "source");
     functionState.effective = new Map([...functionState.project, ...functionState.session]);
-    const handler = createCapabilities({
+    const handler = createHostDispatcher({
       pi: {} as any,
       ctx: {
         cwd: "/project",
@@ -26,7 +26,7 @@ describe("host capability router", () => {
     });
     expect(
       await handler({
-        capability: "context",
+        namespace: "context",
         method: "get",
         args: [],
         signal: new AbortController().signal,
@@ -40,13 +40,13 @@ describe("host capability router", () => {
     });
   });
 
-  it.each<{ name: string; capability: string; method: string }>([
-    { name: "unknown function", capability: "missing", method: "method" },
-    { name: "Git source wrapper", capability: "git", method: "status" },
-    { name: "npm source wrapper", capability: "npm", method: "test" },
-    { name: "GitHub source wrapper", capability: "gh", method: "api" },
-  ])("rejects direct host dispatch to $name", ({ capability, method }) => {
-    const handler = createCapabilities({
+  it.each<{ name: string; namespace: string; method: string }>([
+    { name: "unknown function", namespace: "missing", method: "method" },
+    { name: "Git source wrapper", namespace: "git", method: "status" },
+    { name: "npm source wrapper", namespace: "npm", method: "test" },
+    { name: "GitHub source wrapper", namespace: "gh", method: "api" },
+  ])("rejects direct host dispatch to $name", ({ namespace, method }) => {
+    const handler = createHostDispatcher({
       pi: {} as any,
       ctx: {} as any,
       functionState: createFunctionState(),
@@ -56,12 +56,12 @@ describe("host capability router", () => {
     });
     expect(() =>
       handler({
-        capability,
+        namespace,
         method,
         args: [],
         signal: new AbortController().signal,
       }),
-    ).toThrow("Unknown capability or method");
+    ).toThrow("Unknown host function");
   });
 
   it("suggests promotion once for durable session reuse", async () => {
@@ -79,7 +79,7 @@ describe("host capability router", () => {
     );
     functionState.effective = new Map([...functionState.project, ...functionState.session]);
     const promotionSuggestions: string[] = [];
-    const handler = createCapabilities({
+    const handler = createHostDispatcher({
       pi: {} as any,
       ctx: {} as any,
       functionState,
@@ -89,7 +89,7 @@ describe("host capability router", () => {
     });
     const run = (name: string) =>
       handler({
-        capability: "__pit",
+        namespace: "__pit",
         method: "savedFunctionRun",
         args: [name],
         signal: new AbortController().signal,

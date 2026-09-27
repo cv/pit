@@ -1,23 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  startCapabilityTrace as createCapabilityTrace,
-  finishCapabilityTrace,
-} from "../../src/execution/capability-trace.js";
+  startHostCallTrace as createHostCallTrace,
+  finishHostCallTrace,
+} from "../../src/execution/host-call-trace.js";
 import { ExecutionProgressController } from "../../src/execution/progress.js";
 
-function startCapabilityTrace(
+function startHostCallTrace(
   id: number,
   sequence: number,
-  capability: string,
+  namespace: string,
   method: string,
   args: unknown[],
   startedAt?: number,
 ) {
-  return createCapabilityTrace({
+  return createHostCallTrace({
     id,
     sequence,
-    capability,
+    namespace,
     method,
     args,
     ...(startedAt === undefined ? {} : { startedAt }),
@@ -68,12 +68,12 @@ describe("ExecutionProgressController", () => {
     vi.setSystemTime(1000);
     const listener = vi.fn();
     const c = new ExecutionProgressController(listener);
-    const start = startCapabilityTrace(1, 1, "git", "status", [], 10);
+    const start = startHostCallTrace(1, 1, "git", "status", [], 10);
 
     c.recordTrace(start);
     vi.advanceTimersByTime(20);
-    c.recordTrace(finishCapabilityTrace(start, "succeeded", 15));
-    c.recordTrace(startCapabilityTrace(2, 2, "context", "get", []));
+    c.recordTrace(finishHostCallTrace(start, "succeeded", 15));
+    c.recordTrace(startHostCallTrace(2, 2, "context", "get", []));
     expect(listener).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(179);
@@ -85,7 +85,7 @@ describe("ExecutionProgressController", () => {
       durationMs: 5,
     });
     vi.advanceTimersByTime(201);
-    c.recordTrace(startCapabilityTrace(3, 3, "git", "diff", []));
+    c.recordTrace(startHostCallTrace(3, 3, "git", "diff", []));
     expect(listener).toHaveBeenCalledTimes(3);
   });
 
@@ -94,9 +94,9 @@ describe("ExecutionProgressController", () => {
     vi.setSystemTime(1000);
     const listener = vi.fn();
     const c = new ExecutionProgressController(listener);
-    const start = startCapabilityTrace(1, 1, "npm", "test", []);
+    const start = startHostCallTrace(1, 1, "npm", "test", []);
     c.recordTrace(start);
-    c.recordTrace(finishCapabilityTrace(start, "failed"));
+    c.recordTrace(finishHostCallTrace(start, "failed"));
     c.flush();
     expect(listener).toHaveBeenCalledTimes(2);
     expect(listener.mock.calls[1]?.[0].traces?.[0]?.status).toBe("failed");
@@ -109,11 +109,11 @@ describe("ExecutionProgressController", () => {
     vi.setSystemTime(1000);
     const listener = vi.fn();
     const c = new ExecutionProgressController(listener);
-    c.recordTrace(startCapabilityTrace(1, 1, "git", "status", []));
-    c.recordTrace(startCapabilityTrace(2, 2, "npm", "test", []));
+    c.recordTrace(startHostCallTrace(1, 1, "git", "status", []));
+    c.recordTrace(startHostCallTrace(2, 2, "npm", "test", []));
     c.dispose();
     c.flush();
-    c.recordTrace(startCapabilityTrace(3, 3, "context", "get", []));
+    c.recordTrace(startHostCallTrace(3, 3, "context", "get", []));
     c.recordShell({ id: 1, command: "late", phase: "start" });
     vi.runAllTimers();
     expect(listener).toHaveBeenCalledTimes(1);
@@ -166,7 +166,7 @@ describe("ExecutionProgressController", () => {
 
   it("records snapshots without a listener", () => {
     const c = new ExecutionProgressController();
-    c.recordTrace(startCapabilityTrace(1, 1, "context", "get", []));
+    c.recordTrace(startHostCallTrace(1, 1, "context", "get", []));
     c.flush();
     expect(c.snapshot().traces).toHaveLength(1);
   });

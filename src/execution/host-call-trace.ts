@@ -1,9 +1,9 @@
 import type { FunctionScope } from "../functions/core.js";
 import { clipText } from "../shared/bounds.js";
 
-export type CapabilityTraceStatus = "running" | "succeeded" | "failed" | "rejected";
+export type HostCallTraceStatus = "running" | "succeeded" | "failed" | "rejected";
 
-export interface CapabilityArgumentSummary {
+export interface HostCallArgumentSummary {
   type: "null" | "string" | "number" | "boolean" | "array" | "object" | "other";
   size?: number;
 }
@@ -18,36 +18,36 @@ export interface FunctionExecutionContext {
   depth: number;
 }
 
-export interface CapabilityTrace {
+export interface HostCallTrace {
   id: number;
   sequence: number;
-  capability: string;
+  namespace: string;
   method: string;
-  arguments: CapabilityArgumentSummary[];
+  arguments: HostCallArgumentSummary[];
   argumentsTruncated?: true;
   startedAt: number;
   durationMs?: number;
-  status: CapabilityTraceStatus;
+  status: HostCallTraceStatus;
   function?: FunctionExecutionContext;
 }
 
-export interface CapabilityTraceSnapshot {
-  traces: CapabilityTrace[];
+export interface HostCallTraceSnapshot {
+  traces: HostCallTrace[];
   truncated: boolean;
 }
 
-export const MAX_RETAINED_CAPABILITY_TRACES = 128;
+export const MAX_RETAINED_HOST_CALL_TRACES = 128;
 
-export class CapabilityTraceCollector {
+export class HostCallTraceCollector {
   readonly #limit: number;
-  readonly #traces = new Map<number, CapabilityTrace>();
+  readonly #traces = new Map<number, HostCallTrace>();
   #truncated = false;
 
-  constructor(limit = MAX_RETAINED_CAPABILITY_TRACES) {
+  constructor(limit = MAX_RETAINED_HOST_CALL_TRACES) {
     this.#limit = Math.max(1, limit);
   }
 
-  record(trace: CapabilityTrace): void {
+  record(trace: HostCallTrace): void {
     if (this.#traces.has(trace.sequence)) {
       this.#traces.set(trace.sequence, trace);
       return;
@@ -59,7 +59,7 @@ export class CapabilityTraceCollector {
     this.#traces.set(trace.sequence, trace);
   }
 
-  snapshot(): CapabilityTraceSnapshot {
+  snapshot(): HostCallTraceSnapshot {
     return {
       traces: [...this.#traces.values()].sort((left, right) => left.sequence - right.sequence),
       truncated: this.#truncated,
@@ -74,7 +74,7 @@ function boundedName(value: string): string {
   return clipText(value, MAX_TRACE_NAME_CHARS);
 }
 
-function argumentSummary(value: unknown): CapabilityArgumentSummary {
+function argumentSummary(value: unknown): HostCallArgumentSummary {
   if (value === null) {
     return { type: "null" };
   }
@@ -96,29 +96,29 @@ function argumentSummary(value: unknown): CapabilityArgumentSummary {
   return { type: "other" };
 }
 
-export interface StartCapabilityTraceInput {
+export interface StartHostCallTraceInput {
   id: number;
   sequence: number;
-  capability: string;
+  namespace: string;
   method: string;
   args: unknown[];
   startedAt?: number;
   functionContext?: FunctionExecutionContext;
 }
 
-export function startCapabilityTrace({
+export function startHostCallTrace({
   id,
   sequence,
-  capability,
+  namespace,
   method,
   args,
   startedAt = Date.now(),
   functionContext,
-}: StartCapabilityTraceInput): CapabilityTrace {
+}: StartHostCallTraceInput): HostCallTrace {
   return {
     id,
     sequence,
-    capability: boundedName(capability),
+    namespace: boundedName(namespace),
     method: boundedName(method),
     arguments: args.slice(0, MAX_TRACE_ARGUMENTS).map(argumentSummary),
     ...(args.length > MAX_TRACE_ARGUMENTS ? { argumentsTruncated: true as const } : {}),
@@ -130,14 +130,33 @@ export function startCapabilityTrace({
   };
 }
 
-export function finishCapabilityTrace(
-  trace: CapabilityTrace,
-  status: Exclude<CapabilityTraceStatus, "running">,
+export function finishHostCallTrace(
+  trace: HostCallTrace,
+  status: Exclude<HostCallTraceStatus, "running">,
   finishedAt = Date.now(),
-): CapabilityTrace {
+): HostCallTrace {
   return {
     ...trace,
     durationMs: Math.max(0, finishedAt - trace.startedAt),
     status,
   };
+}
+
+/** Normalize historical tool details without changing the persisted transcript. */
+export function readHostCallTraces(traces: readonly unknown[]): HostCallTrace[] {
+  return traces.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Invalid host-call trace");
+    }
+    const trace = value as Record<string, unknown>;
+    const namespace = trace.namespace === undefined ? trace.capability : trace.namespace;
+    if (
+      typeof namespace !== "string" ||
+      (trace.capability !== undefined && trace.capability !== namespace)
+    ) {
+      throw new Error("Invalid host-call trace identity");
+    }
+    const { capability: _legacy, ...canonical } = trace;
+    return { ...canonical, namespace } as unknown as HostCallTrace;
+  });
 }

@@ -48,7 +48,7 @@ Searches and AST counts only select candidates. Do not label every substring che
 
 Retain independent protection for:
 
-- injected capability signatures, argument-safe process argv, correct repository/run targets, public source/data representations, and reflection;
+- injected function signatures, argument-safe process argv, correct repository/run targets, public source/data representations, and reflection;
 - project trust, scope resolution and `$next`, promotion validation, rollback, and persistence;
 - sandbox isolation, grants, cancellation, time/memory/protocol bounds, and absence of forbidden effects;
 - hashed revisions/anchors, conflict rejection, atomic edits, and preservation of unrelated files;

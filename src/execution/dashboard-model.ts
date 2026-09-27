@@ -1,18 +1,18 @@
 import type { FunctionActivity, FunctionScope } from "../functions/core.js";
 import type {
-  CapabilityTrace,
-  CapabilityTraceStatus,
+  HostCallTrace,
+  HostCallTraceStatus,
   FunctionExecutionScope,
-} from "./capability-trace.js";
+} from "./host-call-trace.js";
 import type { ExecutionProgressSnapshot } from "./types.js";
 
 interface ExecutionDashboardDetails extends ExecutionProgressSnapshot {
   functions?: FunctionActivity[];
 }
 
-interface CapabilityTraceGroup {
+interface HostCallTraceGroup {
   sequence: number;
-  traces: [CapabilityTrace, ...CapabilityTrace[]];
+  traces: [HostCallTrace, ...HostCallTrace[]];
 }
 
 export interface DashboardActivity {
@@ -21,17 +21,17 @@ export interface DashboardActivity {
 }
 
 export interface DashboardStatusCount {
-  status: CapabilityTraceStatus;
+  status: HostCallTraceStatus;
   count: number;
 }
 
 export interface DashboardCall {
   kind: "call";
   sequences: number[];
-  capability: string;
+  namespace: string;
   method: string;
   /** Aggregate status, prioritizing failed, rejected, then running calls. */
-  status: CapabilityTraceStatus;
+  status: HostCallTraceStatus;
   /** Calls in this group. */
   count: number;
   /** Calls per status in first-seen order. */
@@ -58,24 +58,21 @@ export interface ExecutionDashboardModel {
   tracesTruncated: boolean;
 }
 
-function failedTrace(trace: CapabilityTrace): boolean {
+function failedTrace(trace: HostCallTrace): boolean {
   return trace.status === "failed" || trace.status === "rejected";
 }
 
-function sameTraceGroup(left: CapabilityTrace, right: CapabilityTrace): boolean {
+function sameTraceGroup(left: HostCallTrace, right: HostCallTrace): boolean {
   return (
     !(failedTrace(left) || failedTrace(right)) &&
-    left.capability === right.capability &&
+    left.namespace === right.namespace &&
     left.method === right.method &&
     left.function?.invocationId === right.function?.invocationId
   );
 }
 
-function groupAdjacentTraces(
-  traces: CapabilityTrace[],
-  linked: Set<number>,
-): CapabilityTraceGroup[] {
-  const groups: CapabilityTraceGroup[] = [];
+function groupAdjacentTraces(traces: HostCallTrace[], linked: Set<number>): HostCallTraceGroup[] {
+  const groups: HostCallTraceGroup[] = [];
   for (const trace of traces) {
     const previous = groups.at(-1);
     const previousTrace = previous?.traces.at(-1);
@@ -94,7 +91,7 @@ function groupAdjacentTraces(
   return groups;
 }
 
-function traceGroupStatus(group: CapabilityTraceGroup): CapabilityTraceStatus {
+function traceGroupStatus(group: HostCallTraceGroup): HostCallTraceStatus {
   const statuses = new Set(group.traces.map((trace) => trace.status));
   if (statuses.has("failed")) {
     return "failed";
@@ -108,15 +105,15 @@ function traceGroupStatus(group: CapabilityTraceGroup): CapabilityTraceStatus {
   return "succeeded";
 }
 
-function traceGroupStatuses(group: CapabilityTraceGroup): DashboardStatusCount[] {
-  const counts = new Map<CapabilityTraceStatus, number>();
+function traceGroupStatuses(group: HostCallTraceGroup): DashboardStatusCount[] {
+  const counts = new Map<HostCallTraceStatus, number>();
   for (const trace of group.traces) {
     counts.set(trace.status, (counts.get(trace.status) ?? 0) + 1);
   }
   return [...counts].map(([status, count]) => ({ status, count }));
 }
 
-function traceGroupDurationMs(group: CapabilityTraceGroup, now: number): number {
+function traceGroupDurationMs(group: HostCallTraceGroup, now: number): number {
   const startedAt = group.traces[0].startedAt;
   const finishedAt = Math.max(
     ...group.traces.map((trace) => trace.startedAt + (trace.durationMs ?? now - trace.startedAt)),
@@ -124,12 +121,12 @@ function traceGroupDurationMs(group: CapabilityTraceGroup, now: number): number 
   return Math.max(0, finishedAt - startedAt);
 }
 
-function callModel(group: CapabilityTraceGroup, now: number): DashboardCall {
-  const trace = group.traces.at(-1) as CapabilityTrace;
+function callModel(group: HostCallTraceGroup, now: number): DashboardCall {
+  const trace = group.traces.at(-1) as HostCallTrace;
   return {
     kind: "call",
     sequences: group.traces.map((entry) => entry.sequence),
-    capability: trace.capability,
+    namespace: trace.namespace,
     method: trace.method,
     status: traceGroupStatus(group),
     count: group.traces.length,
@@ -139,7 +136,7 @@ function callModel(group: CapabilityTraceGroup, now: number): DashboardCall {
   };
 }
 
-type FunctionTraceContext = NonNullable<CapabilityTrace["function"]>;
+type FunctionTraceContext = NonNullable<HostCallTrace["function"]>;
 
 interface TraceFunctionIndex {
   contexts: Map<number, FunctionTraceContext>;
@@ -147,8 +144,8 @@ interface TraceFunctionIndex {
 }
 
 interface GroupedDashboardCalls {
-  byInvocation: Map<number, CapabilityTraceGroup[]>;
-  root: CapabilityTraceGroup[];
+  byInvocation: Map<number, HostCallTraceGroup[]>;
+  root: HostCallTraceGroup[];
 }
 
 interface InvocationTree {
@@ -158,7 +155,7 @@ interface InvocationTree {
 
 interface OrderedCall {
   sequence: number;
-  group: CapabilityTraceGroup;
+  group: HostCallTraceGroup;
 }
 
 interface OrderedInvocation {
@@ -177,7 +174,7 @@ interface DashboardEventBuilder {
   now: number;
 }
 
-function indexTraceFunctions(traces: CapabilityTrace[]): TraceFunctionIndex {
+function indexTraceFunctions(traces: HostCallTrace[]): TraceFunctionIndex {
   const contexts = new Map<number, FunctionTraceContext>();
   const firstSequence = new Map<number, number>();
   for (const trace of traces) {
@@ -193,7 +190,7 @@ function indexTraceFunctions(traces: CapabilityTrace[]): TraceFunctionIndex {
 }
 
 function findInvolvedInvocations(
-  groups: CapabilityTraceGroup[],
+  groups: HostCallTraceGroup[],
   contexts: Map<number, FunctionTraceContext>,
 ): Set<number> {
   const involved = new Set<number>();
@@ -220,12 +217,12 @@ function findUnattributedActivities(
     .map((entry) => ({ scope: entry.scope ?? "session", name: entry.name }));
 }
 
-function groupDashboardCalls(groups: CapabilityTraceGroup[]): GroupedDashboardCalls {
-  const byInvocation = new Map<number, CapabilityTraceGroup[]>();
-  const root: CapabilityTraceGroup[] = [];
+function groupDashboardCalls(groups: HostCallTraceGroup[]): GroupedDashboardCalls {
+  const byInvocation = new Map<number, HostCallTraceGroup[]>();
+  const root: HostCallTraceGroup[] = [];
   for (const group of groups) {
     const trace = group.traces.at(-1);
-    if (!trace || trace.capability === "__pit") {
+    if (!trace || trace.namespace === "__pit") {
       continue;
     }
     if (!trace.function) {

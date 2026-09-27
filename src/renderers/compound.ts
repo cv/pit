@@ -20,7 +20,7 @@ type NestedRenderer = (value: unknown, context: RenderContext) => RenderedResult
 /** Theme and optional syntax hint for structured display; recursion state always starts fresh. */
 export type StructuredDataOptions = Pick<RenderContext, "theme" | "syntaxLanguage">;
 
-/** Display parsed JSON/inputs without pretending nested data are capability results. */
+/** Display parsed JSON/inputs without pretending nested data are namespace results. */
 export function renderStructuredData(
   value: unknown,
   { theme, syntaxLanguage }: StructuredDataOptions,

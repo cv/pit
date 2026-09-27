@@ -2,7 +2,7 @@
 
 **One typed tool for Pi, instead of a toolbox.**
 
-Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It swaps Pi's built-in tools for a single `typescript` tool. Rather than reading a file, running a command, and making an edit in three separate turns, the model writes one small TypeScript function that uses the capabilities it needs, and only that function's return value comes back.
+Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It swaps Pi's built-in tools for a single `typescript` tool. Rather than reading a file, running a command, and making an edit in three separate turns, the model writes one small TypeScript function that uses the dependencies it needs, and only that function's return value comes back.
 
 ```ts
 async ({ workspace: { read }, git: { status: gitStatus } }) => {
@@ -29,7 +29,7 @@ That call reads a file and checks Git status in parallel, then returns a three-f
 - **Earlier feedback.** Each call is type-checked before it runs, so a misspelled method or bad argument is reported with its line and column before anything happens.
 - **Reusable workflows.** A call that works can be saved as a typed function and reused later in the session, across a project, or in all your projects.
 
-Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It can affect the host only through the capabilities it asks for, and results are bounded so the context and TUI stay compact.
+Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It can affect the host only through the functions it requests, and results are bounded so the context and TUI stay compact.
 
 It's a different way of working, and it won't suit every setup. When a session starts, Pit makes `typescript` the only active coding tool, even if Pi's `defaultTools` setting lists others (you can [allow specific tools](#allow-other-tools)). Everything the model does goes through TypeScript.
 
@@ -65,13 +65,13 @@ See [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG
 Pit runs TypeScript in a QuickJS guest on a prebuilt Wasmtime addon for Linux, macOS, or Windows on ARM64 or x64. The installer downloads the addon for the current platform from the matching release, or from the latest release for an unreleased version. Without a usable runtime, Pit still loads, and each TypeScript run explains what is missing and how to install it.
 
 > [!IMPORTANT]
-> Pi extensions run with your user's permissions, so review the source before installing. Pit sandboxes the code the model writes, but the capabilities it exposes can still change files, run commands, and reach the network.
+> Pi extensions run with your user's permissions, so review the source before installing. Pit sandboxes the code the model writes, but the functions it exposes can still change files, run commands, and reach the network.
 
 ## What Pit can do
 
-Pit injects only the capabilities that submitted code requests.
+Pit injects only the functions that submitted code requests.
 
-| Capability  | Purpose                                                                                      |
+| Namespace   | Purpose                                                                                      |
 | ----------- | -------------------------------------------------------------------------------------------- |
 | `workspace` | Read, search, list, create, edit, and delete files with bounded results and revision checks. |
 | `git`       | Run common Git operations without shell interpolation.                                       |
@@ -87,7 +87,7 @@ Pit injects only the capabilities that submitted code requests.
 | `runtime`   | Inspect runtime state and request confirmed reload or shutdown.                              |
 | `functions` | Inspect and remove trusted project functions.                                                |
 
-See [Capability reference](#capability-reference) for method details.
+See [Global function reference](#global-function-reference) for method details.
 
 ## Build a call
 
@@ -101,7 +101,7 @@ async ({ context: { get } }) => {
 }
 ```
 
-Pit contextually types destructured capabilities. Capability annotations are not necessary. Validation detects unknown capabilities, unknown methods, invalid arguments, missing awaits, and incompatible result values. Diagnostics include source locations.
+Pit contextually types destructured dependencies. Dependency annotations are not necessary. Validation detects unknown functions, unknown methods, invalid arguments, missing awaits, and incompatible result values. Diagnostics include source locations.
 
 ### Pass large data in `params`
 
@@ -123,7 +123,7 @@ Some clients send `params` as a JSON string. Pit decodes a string holding a JSON
 
 ### Control concurrency
 
-Capability calls are asynchronous. A call starts when the function invokes the capability method. Pit waits for outstanding calls before it accepts a successful result.
+Host calls are asynchronous. A call starts when the function invokes the function. Pit waits for outstanding calls before it accepts a successful result.
 
 Use `Promise.all` when all independent operations must succeed. Use `Promise.allSettled` or a local `catch` when an operation is optional. Sequence dependent operations. Do not run conflicting mutations in parallel.
 
@@ -141,7 +141,7 @@ async ({ workspace: { read }, git: { status: gitStatus } }) => {
 }
 ```
 
-Unknown capabilities and methods fail closed at run time.
+Unknown functions and methods fail closed at run time.
 
 ## Edit files safely
 
@@ -375,9 +375,9 @@ Pit completes these steps for each call:
 
 The Wasm guest receives no inherited filesystem, environment, network, arguments, or stdio. It must use an injected function for host effects.
 
-Failed TypeScript calls still use Pi's required thrown-error path and remain `isError: true`. Pit enriches the final result through `tool_result` middleware with a bounded root error, saved-function path, function activity, and redacted capability traces. Expanded TUI failures show the function path and execution dashboard. Non-function failures keep an empty path and concise error text.
+Failed TypeScript calls still use Pi's required thrown-error path and remain `isError: true`. Pit enriches the final result through `tool_result` middleware with a bounded root error, saved-function path, function activity, and redacted host-call traces. Expanded TUI failures show the function path and execution dashboard. Non-function failures keep an empty path and concise error text.
 
-The generated capability contract is in [`src/generated/capability-contract.d.ts`](src/generated/capability-contract.d.ts). Package-owned global definitions live in [`src/functions/globals/`](src/functions/globals/), assembled by [`src/functions/globals.ts`](src/functions/globals.ts). **Scope and implementation are separate:** `git.*`, `npm.*`, and `gh.*` are source functions that inject `shell.execFile`; filesystem, process, network, Pi, and function-store primitives remain native. Overriding `shell.execFile` also affects those command globals, and `$next` can delegate through both layers. Reflection exposes command source, dependencies, and transitive primitive effects. Definitions own public declarations, arity limits, documentation, call summaries, and renderer metadata. Host dispatch accepts only native definitions; generated contracts and namespace views include both kinds.
+The generated global function contract is in [`src/generated/global-contract.d.ts`](src/generated/global-contract.d.ts). Package-owned global definitions live in [`src/functions/globals/`](src/functions/globals/), assembled by [`src/functions/globals.ts`](src/functions/globals.ts). **Scope and implementation are separate:** `git.*`, `npm.*`, and `gh.*` are source functions that inject `shell.execFile`; filesystem, process, network, Pi, and function-store primitives remain native. Overriding `shell.execFile` also affects those command globals, and `$next` can delegate through both layers. Reflection exposes command source, dependencies, and transitive primitive effects. Definitions own public declarations, arity limits, documentation, call summaries, and renderer metadata. Host dispatch accepts only native definitions; generated contracts and namespace views include both kinds. New code uses `PitDependencies`, namespace types such as `PitShellFunctions`, and the public `GLOBAL_METHODS` export. Deprecated `PitCapabilities`, `Pit*Capability`, `CAPABILITY_METHODS`, and `capabilities:*` npm aliases remain available for existing callers; see [the compatibility boundary](docs/architecture.md#compatibility-boundary).
 
 ## Read results in the TUI
 
@@ -385,11 +385,11 @@ The Pi TUI shows a compact call description during generation and execution. A s
 
 Press `Ctrl+O` to expand a tool row. The expanded row shows submitted source and the retained result. Pit does not show injected saved-function source in tool output.
 
-Pit uses compact structured renderers for common capability results. Compound objects can show recognized values as named sections. Unknown values use syntax-highlighted JSON. Git results use Git-aware summaries and styling while they preserve the serialized result.
+Pit uses compact structured renderers for common function results. Compound objects can show recognized values as named sections. Unknown values use syntax-highlighted JSON. Git results use Git-aware summaries and styling while they preserve the serialized result.
 
-Expanded running rows show a live capability dashboard in source order. Each entry shows the capability, method, state, and duration. Project and session functions include their scope. While running, the dashboard keeps running, failed, and rejected calls plus the 12 most recent call groups, and a counted notice replaces older completed calls; the finished expanded view lists every retained call. Long-running shell calls show a sanitized, bounded tail of standard output and standard error. Partial updates do not enter the final model context.
+Expanded running rows show a live host-call dashboard in source order. Each entry shows the namespace, method, state, and duration. Project and session functions include their scope. While running, the dashboard keeps running, failed, and rejected calls plus the 12 most recent call groups, and a counted notice replaces older completed calls; the finished expanded view lists every retained call. Long-running shell calls show a sanitized, bounded tail of standard output and standard error. Partial updates do not enter the final model context.
 
-Each invocation retains at most 128 runtime capability traces for TUI attribution. A trace records names, source order, timing, duration, and outcome. Argument metadata contains bounded type-and-size summaries, not argument values. Additional calls set a truncation flag. Traces let saved-function results use the same renderers as direct calls. Ambiguous multi-call results use generic rendering.
+Each invocation retains at most 128 runtime host-call traces for TUI attribution. A trace records names, source order, timing, duration, and outcome. Argument metadata contains bounded type-and-size summaries, not argument values. Additional calls set a truncation flag. Traces let saved-function results use the same renderers as direct calls. Ambiguous multi-call results use generic rendering.
 
 Display formatting changes only the TUI. It does not change the serialized tool result.
 
@@ -407,15 +407,17 @@ Submitted TypeScript runs in a fresh QuickJS runtime inside a bounded Wasmtime s
 
 Filesystem, command, HTTP, and UI effects are available only through host-authorized injected functions. Calls and protocol frames have size and concurrency limits. Timeout and cancellation signals propagate to both Wasmtime and cooperative host operations.
 
-The sandbox restricts direct access. It does not make host capabilities harmless. The `git` and `shell` capabilities run commands with the permissions of the Pi process. Git hooks and Git network operations can have external effects. Workspace methods accept absolute paths and paths outside the working directory. The `http` capability can request any destination that the host can reach.
+The sandbox restricts direct access. It does not make host functions harmless. The `git` and `shell` functions run commands with the permissions of the Pi process. Git hooks and Git network operations can have external effects. Workspace methods accept absolute paths and paths outside the working directory. The `http` function can request any destination that the host can reach.
 
-Capability destructuring makes intent visible. It is not an approval boundary. Review generated calls before execution when an operation can affect sensitive data or systems.
+Dependency destructuring makes intent visible. It is not an approval boundary. Review generated calls before execution when an operation can affect sensitive data or systems.
 
 This isolation is stronger than `node:vm`, which is not a security boundary. Wasmtime runs through a native addon in Pi's process, so a native runtime defect can still crash the host. It does not replace a container, virtual machine, or operating-system sandbox. If you use a hostile model or a multi-tenant workload, use an additional operating-system boundary.
 
 Report suspected vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
-## Capability reference
+<a id="capability-reference"></a>
+
+## Global function reference
 
 ### `workspace`
 
@@ -538,7 +540,7 @@ Output is bounded. Read metadata uses sparse defaults:
 - User functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
 - Workspace paths are not restricted to the current project.
 - Shell commands are not restricted by an allowlist.
-- The `git` capability allows specific subcommands, but it does not restrict their arguments, hooks, remotes, or network destinations.
+- The `git` namespace allows specific subcommands, but it does not restrict their arguments, hooks, remotes, or network destinations.
 - HTTP requests are not restricted by a host allowlist.
 - Multi-file edit rollback is best effort and is not atomic.
 - Returned content, shell output, HTTP bodies, glob results, and search results have limits.
@@ -565,7 +567,7 @@ Oversized results stay valid JSON within the output budget. Omitted parts are ma
 
 ### A UI method fails
 
-Run Pi in a mode that provides a UI. Do not use a UI capability in a non-UI mode.
+Run Pi in a mode that provides a UI. Do not use a UI function in a non-UI mode.
 
 ### A saved function is unavailable
 
@@ -579,7 +581,7 @@ Do not report suspected vulnerabilities in public issues. Follow [SECURITY.md](S
 
 ## Development
 
-See [`docs/architecture.md`](docs/architecture.md) for the runtime request flow, trust boundaries, saved-function model, capability composition, source boundaries, and implementation invariants.
+See [`docs/architecture.md`](docs/architecture.md) for the runtime request flow, trust boundaries, saved-function model, function composition, source boundaries, and implementation invariants.
 
 Use the local source:
 
@@ -597,10 +599,10 @@ npm run coverage
 npm run package:check
 ```
 
-Regenerate the capability contract after a registry change:
+Regenerate the global function contract after a registry change:
 
 ```sh
-npm run capabilities:generate
+npm run globals:generate
 ```
 
 Apply safe lint fixes and format the repository with Oxlint and Oxfmt:
@@ -610,7 +612,7 @@ npm run lint:fix
 npm run format
 ```
 
-`npm run check` verifies the generated capability contract and structural boundaries, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The structure check limits root-level source files and rejects internal import cycles. The custom quality audit retains Pit's file, function, and complexity limits.
+`npm run check` verifies the generated global function contract and structural boundaries, runs TypeScript, runs Oxlint with warnings denied, and checks Oxfmt output. The structure check limits root-level source files and rejects internal import cycles. The custom quality audit retains Pit's file, function, and complexity limits.
 
 Pull requests and pushes to `main` run the tests on each supported Node.js version, and package verification, static checks, dependency auditing, and coverage once. Public branch protection requires those checks before merge. See [the release guide](docs/releasing.md) for tagged GitHub releases.
 

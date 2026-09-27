@@ -50,7 +50,7 @@ describe("generated Wasmtime guest behavior", () => {
       pitCall,
     );
     expect(requests).toEqual([
-      { type: "call", id: expect.any(Number), capability: "context", method: "get", args: [] },
+      { type: "call", id: expect.any(Number), namespace: "context", method: "get", args: [] },
       { type: "result", value: { cwd: "/virtual-project", input: { value: 42 } } },
     ]);
   });
@@ -90,7 +90,7 @@ describe("generated Wasmtime guest behavior", () => {
       {
         type: "call",
         id: expect.any(Number),
-        capability: "workspace",
+        namespace: "workspace",
         method: "read",
         args: ["restricted.txt"],
       },

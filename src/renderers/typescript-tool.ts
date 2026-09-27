@@ -1,5 +1,6 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
+import { readHostCallTraces } from "../execution/host-call-trace.js";
 import { formatDuration } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -7,8 +8,8 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { executionTiming } from "../tool/timing.js";
-import { inferCapabilityCall, runtimeCapabilityCall } from "./capability.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
+import { inferFunctionCall, runtimeFunctionCall } from "./function-call.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import { describeResult } from "./result-summary.js";
@@ -134,10 +135,8 @@ function renderStructuredToolValue(input: {
     };
   }
   const source = typeof context.args?.code === "string" ? context.args.code : "";
-  const capabilityCall = details.traces
-    ? runtimeCapabilityCall(details)
-    : inferCapabilityCall(source);
-  const structuredResult = renderResultValue(details.value, theme, capabilityCall, input.expanded);
+  const functionCall = details.traces ? runtimeFunctionCall(details) : inferFunctionCall(source);
+  const structuredResult = renderResultValue(details.value, theme, functionCall, input.expanded);
   if (structuredResult) {
     return {
       lines: structuredResult.detailLines ?? structuredResult.lines,
@@ -301,7 +300,14 @@ function renderToolResult(
   const rawDetails = isRecord(result.details) ? result.details : undefined;
   const execution = executionTiming(context, !options.isPartial || context.isError === true);
   assertInvocationTimings(rawDetails?.timings);
-  const details = rawDetails as unknown as TypeScriptDetails | undefined;
+  const details = rawDetails
+    ? ({
+        ...rawDetails,
+        ...(Array.isArray(rawDetails.traces)
+          ? { traces: readHostCallTraces(rawDetails.traces) }
+          : {}),
+      } as unknown as TypeScriptDetails)
+    : undefined;
   const recordedMs = details?.timings?.totalMs;
   if ((!options.isPartial || context.isError) && recordedMs !== undefined) {
     execution.duration = formatDuration(recordedMs);

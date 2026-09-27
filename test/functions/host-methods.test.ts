@@ -30,7 +30,7 @@ async function writeProjectFunction(name: string, source: string): Promise<void>
   await writeFile(join(directory, `${name}.ts`), source);
 }
 
-describe("functions capability", () => {
+describe("functions namespace", () => {
   it("lists and gets sorted project definitions", async () => {
     await Promise.all([
       writeProjectFunction(
@@ -111,12 +111,12 @@ describe("functions capability", () => {
 
     await expect(
       value(
-        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => promote("capabilitySession", "Promoted through the capability.")`,
+        `async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => promote("capabilitySession", "Promoted through the namespace.")`,
       ),
     ).resolves.toEqual({ name: "capabilitySession", promoted: true, scope: "project" });
     await expect(
       readFile(join(cwd, ".pi/functions/capabilitySession.ts"), "utf8"),
-    ).resolves.toContain("Promoted through the capability.");
+    ).resolves.toContain("Promoted through the namespace.");
 
     expect(
       await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => ({

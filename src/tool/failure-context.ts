@@ -11,13 +11,15 @@ const OMITTED_CALLS = "… further calls not retained …";
 const PATH_HEAD = Math.ceil((MAX_FUNCTION_PATH - 1) / 2);
 const PATH_TAIL = MAX_FUNCTION_PATH - 1 - PATH_HEAD;
 const FUNCTION_FAILURE_PREFIX = /^(?:Saved function|Function) "([^"]+)" failed: /;
-const CAPABILITY_FAILURE = /^(?:command failed|(?:unknown |missing |invalid )?capability)\b/i;
+// The legacy spelling remains accepted when classifying diagnostics from older sessions.
+const HOST_FAILURE =
+  /^(?:command failed|(?:unknown |missing |invalid )?(?:host (?:function|call)|capability))\b/i;
 const ERROR_PREFIX = /^Error:\s*/;
 
 export interface StructuredTypeScriptFailure {
   functionPath: string[];
   rootError: string;
-  kind: "cancelled" | "timeout" | "capability" | "user";
+  kind: "cancelled" | "timeout" | "host" | "user";
 }
 
 export interface TypeScriptFailureDetails extends ExecutionProgressSnapshot {
@@ -37,7 +39,7 @@ function failureKind(message: string, name?: string): StructuredTypeScriptFailur
   if (termination) return termination;
   // Classify the diagnostic headline, never source excerpts, paths, or stack frames.
   const headline = (message.split("\n", 1)[0] ?? "").trim();
-  if (CAPABILITY_FAILURE.test(headline)) return "capability";
+  if (HOST_FAILURE.test(headline)) return "host";
   return "user";
 }
 

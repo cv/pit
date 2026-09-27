@@ -210,7 +210,7 @@ describe("terminal UX lifecycle and fallback", () => {
             {
               id: 1,
               sequence: 1,
-              capability: "shell",
+              namespace: "shell",
               method: "execFile",
               arguments: [],
               startedAt: Date.now(),
@@ -279,7 +279,7 @@ describe("terminal UX lifecycle and fallback", () => {
               {
                 id: 1,
                 sequence: 1,
-                capability: "git",
+                namespace: "git",
                 method: "status",
                 arguments: [],
                 startedAt: 1,
@@ -298,7 +298,7 @@ describe("terminal UX lifecycle and fallback", () => {
     expect(output).toContain("Command exit 0");
     expect(output).not.toContain("Git status");
     expect(output).toContain("VALUE_SENTINEL");
-    expect(output).toContain("additional capability traces omitted");
+    expect(output).toContain("additional host-call traces omitted");
   });
 
   it.each(

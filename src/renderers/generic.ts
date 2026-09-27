@@ -1,5 +1,5 @@
-import { type CapabilityCall, capabilityResultRenderer } from "./capability.js";
 import { renderArrayCompound, renderCompound, renderMultilineText } from "./compound.js";
+import { type FunctionCall, functionResultRenderer } from "./function-call.js";
 import { renderGhResult } from "./gh-result.js";
 import { GIT_RESULT_RENDERERS } from "./git-result.js";
 import { renderHttp } from "./http.js";
@@ -34,8 +34,8 @@ import {
 
 export type { RenderedResultValue } from "./types.js";
 
-/** Direct capability results route here before shape-based fallback rendering. */
-const CAPABILITY_RESULT_RENDERERS = {
+/** Direct namespace results route here before shape-based fallback rendering. */
+const FUNCTION_RESULT_RENDERERS = {
   read: renderRead,
   edit: renderEdit,
   batch: renderBatch,
@@ -155,9 +155,9 @@ const VALUE_RENDERERS: ValueRenderer[] = [
 ];
 
 function renderKnownValue(value: unknown, context: RenderContext): RenderedResultValue | undefined {
-  if (context.capabilityCall) {
-    const rendererName = capabilityResultRenderer(context.capabilityCall);
-    const renderer = rendererName ? CAPABILITY_RESULT_RENDERERS[rendererName] : undefined;
+  if (context.functionCall) {
+    const rendererName = functionResultRenderer(context.functionCall);
+    const renderer = rendererName ? FUNCTION_RESULT_RENDERERS[rendererName] : undefined;
     const rendered = renderer?.(value, context);
     if (rendered) {
       return rendered;
@@ -188,7 +188,7 @@ function renderValueWithFallback(value: unknown, context: RenderContext): Render
 export function renderResultValue(
   value: unknown,
   theme: ResultTheme,
-  capabilityCall?: CapabilityCall,
+  functionCall?: FunctionCall,
   details = true,
 ): RenderedResultValue | undefined {
   return renderKnownValue(value, {
@@ -196,6 +196,6 @@ export function renderResultValue(
     seen: new WeakSet(),
     depth: 0,
     details,
-    ...(capabilityCall ? { capabilityCall } : {}),
+    ...(functionCall ? { functionCall } : {}),
   });
 }

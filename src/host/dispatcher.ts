@@ -3,7 +3,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
-import { createFunctionCapabilityHandler } from "../functions/capability-handler.js";
 import { type FunctionActivity, functionRunScope } from "../functions/core.js";
 import {
   globalFunctionDefinitions,
@@ -11,9 +10,10 @@ import {
   type NativeNamespace,
   validateNativeCall,
 } from "../functions/globals.js";
+import { createFunctionHostHandler } from "../functions/host-handler.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { createProcessRunner, formatProcessCommand } from "../process/runner.js";
-import type { CapabilityHandler } from "../sandbox/dispatcher.js";
+import type { HostCallHandler } from "../sandbox/dispatcher.js";
 import {
   boundedIntegerValue as boundedInteger,
   recordValue as object,
@@ -21,22 +21,22 @@ import {
   stringArrayValue as stringArray,
 } from "../shared/argument-values.js";
 import { completeUtf8Length, LIMITS } from "../shared/bounds.js";
-import { handleWorkspace } from "../workspace/capability.js";
-import { createCommandsCapabilityHandler } from "./handlers/commands.js";
-import { createModelsCapabilityHandler } from "./handlers/models.js";
-import { createRuntimeCapabilityHandler } from "./handlers/runtime.js";
-import { createSessionCapabilityHandler } from "./handlers/session.js";
+import { handleWorkspace } from "../workspace/host-handler.js";
+import { createCommandsHostHandler } from "./handlers/commands.js";
+import { createModelsHostHandler } from "./handlers/models.js";
+import { createRuntimeHostHandler } from "./handlers/runtime.js";
+import { createSessionHostHandler } from "./handlers/session.js";
 
 // One storage instance; each host dispatch owns its async scope, including overlapping tools.
 const processTraceContext = new AsyncLocalStorage<number | undefined>();
 
-type PublicCapabilityHandler = (
+type NativeFunctionHandler = (
   method: string,
   args: unknown[],
   signal: AbortSignal,
 ) => unknown | Promise<unknown>;
 
-type CapabilityMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
+type HostMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
 async function readHttpBody(
   response: Response,
@@ -82,7 +82,7 @@ async function readHttpBody(
 const PROMOTION_SUGGESTION_RUNS = 5;
 const TEMPORARY_FUNCTION_NAME = /(?:smoke|scratch|temp|tmp|debug|test)/i;
 
-export interface HostCapabilityServices {
+export interface HostServices {
   pi: ExtensionAPI;
   ctx: ExtensionContext;
   functionState: FunctionState;
@@ -92,16 +92,16 @@ export interface HostCapabilityServices {
   promotionSuggestions: string[];
 }
 
-interface ProcessCapabilityHandlers {
+interface ProcessHostHandlers {
   withTrace<T>(sequence: number | undefined, operation: () => T): T;
-  shell: Record<NativeMethod<"shell">, CapabilityMethodHandler>;
+  shell: Record<NativeMethod<"shell">, HostMethodHandler>;
 }
 
-function createProcessCapabilityHandlers(input: {
+function createProcessHostHandlers(input: {
   pi: ExtensionAPI;
   cwd: string;
   onShellProgress?: (event: ShellProgressEvent) => void;
-}): ProcessCapabilityHandlers {
+}): ProcessHostHandlers {
   const processRunner = createProcessRunner(input.pi, input.cwd);
   let nextShellProgressId = 1;
   const progressFor = (command: string) => {
@@ -164,9 +164,7 @@ function createProcessCapabilityHandlers(input: {
  * A program's dialogs end with its call: the call's signal dismisses them on cancellation, at the
  * deadline, or on a session change.
  */
-function createUiHandlers(
-  ctx: ExtensionContext,
-): Record<NativeMethod<"ui">, CapabilityMethodHandler> {
+function createUiHandlers(ctx: ExtensionContext): Record<NativeMethod<"ui">, HostMethodHandler> {
   return {
     confirm: (args, signal) =>
       ctx.ui.confirm(string(args[0], "title"), string(args[1], "message"), { signal }),
@@ -192,7 +190,7 @@ function createUiHandlers(
   };
 }
 
-export function createCapabilities({
+export function createHostDispatcher({
   pi,
   ctx,
   functionState,
@@ -200,8 +198,8 @@ export function createCapabilities({
   activity,
   promotionSuggestions,
   onShellProgress,
-}: HostCapabilityServices): CapabilityHandler {
-  const processHandlers = createProcessCapabilityHandlers({
+}: HostServices): HostCallHandler {
+  const processHandlers = createProcessHostHandlers({
     pi,
     cwd: ctx.cwd,
     ...(onShellProgress ? { onShellProgress } : {}),
@@ -210,7 +208,7 @@ export function createCapabilities({
 
   const uiHandlers = createUiHandlers(ctx);
 
-  const publicHandlers: Record<NativeNamespace, PublicCapabilityHandler> = {
+  const publicHandlers: Record<NativeNamespace, NativeFunctionHandler> = {
     workspace: (method, args, signal) => handleWorkspace(ctx.cwd, method, args, signal),
     shell: (method, args, signal) => shellHandlers[method as NativeMethod<"shell">](args, signal),
     http: async (_method, args, signal) => {
@@ -260,22 +258,22 @@ export function createCapabilities({
       sessionFunctions: [...functionState.session.keys()].sort(),
       projectFunctionsEnabled: functionState.projectEnabled,
     }),
-    functions: createFunctionCapabilityHandler({
+    functions: createFunctionHostHandler({
       pi,
       ctx,
       functionState,
       commitFunctionState,
       activity,
     }),
-    session: createSessionCapabilityHandler({ pi, ctx }),
-    commands: createCommandsCapabilityHandler({ pi }),
-    models: createModelsCapabilityHandler({ pi, ctx }),
-    runtime: createRuntimeCapabilityHandler({ pi, ctx }),
+    session: createSessionHostHandler({ pi, ctx }),
+    commands: createCommandsHostHandler({ pi }),
+    models: createModelsHostHandler({ pi, ctx }),
+    runtime: createRuntimeHostHandler({ pi, ctx }),
   };
 
-  return ({ capability, method, args, signal, functionContext, traceSequence }) =>
+  return ({ namespace, method, args, signal, functionContext, traceSequence }) =>
     processHandlers.withTrace(traceSequence, () => {
-      if (capability === "__pit" && method === "savedFunctionRun") {
+      if (namespace === "__pit" && method === "savedFunctionRun") {
         const name = string(args[0], "saved function name");
         if (!functionState.effective.has(name)) {
           throw new Error(`Saved function "${name}" is unavailable`);
@@ -306,7 +304,7 @@ export function createCapabilities({
         return null;
       }
 
-      validateNativeCall(capability, method, args);
-      return publicHandlers[capability as NativeNamespace](method, args, signal);
+      validateNativeCall(namespace, method, args);
+      return publicHandlers[namespace as NativeNamespace](method, args, signal);
     });
 }

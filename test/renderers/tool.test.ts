@@ -137,7 +137,7 @@ describe("tool rendering", () => {
         details: {
           value: undefined,
           truncated: false,
-          failure: { functionPath: [], rootError: commandFailure, kind: "capability" },
+          failure: { functionPath: [], rootError: commandFailure, kind: "host" },
         },
       },
       { expanded: false, isPartial: false },
@@ -193,10 +193,10 @@ describe("tool rendering", () => {
 
   it("uses runtime traces for saved-function results and falls back when attribution is ambiguous", () => {
     const value = { stdout: "## main\n", stderr: "", code: 0, truncated: false };
-    const trace = (sequence: number, capability: string, method: string) => ({
+    const trace = (sequence: number, namespace: string, method: string) => ({
       id: sequence,
       sequence,
-      capability,
+      namespace,
       method,
       arguments: [],
       startedAt: 1,

@@ -277,7 +277,7 @@ describe("source-backed command globals", () => {
     ]);
     expect(
       result.details.traces
-        .filter((trace: any) => trace.capability === "shell")
+        .filter((trace: any) => trace.namespace === "shell")
         .map((trace: any) => trace.function),
     ).toEqual([
       expect.objectContaining({ name: "git.status", scope: "global" }),

@@ -11,7 +11,7 @@ const requiredRuntimeFiles = [
   "src/sandbox/run.ts",
   "src/sandbox/wasmtime-loader.ts",
   "scripts/install-wasmtime.mjs",
-  "src/generated/capability-contract.d.ts",
+  "src/generated/global-contract.d.ts",
   "prompts/pit-reflect.md",
   "docs/architecture.md",
   "docs/releasing.md",

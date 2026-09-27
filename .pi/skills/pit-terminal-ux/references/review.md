@@ -33,7 +33,7 @@ A simple labelled hierarchy is preferable to a new widget unless the widget mate
 
 ## Representative fixture matrix
 
-Cover the affected families and their shared composition paths. Include regression cases from this table when changing shared rendering, not just the leaf capability that motivated the work.
+Cover the affected families and their shared composition paths. Include regression cases from this table when changing shared rendering, not just the leaf function that motivated the work.
 
 | Family            | Representative values                                                                                                      | What must be demonstrable                                                                                                                                               |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

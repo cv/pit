@@ -22,8 +22,8 @@ export function formatPitSkillsForPrompt(skills: readonly PitPromptSkill[]): str
 
   const lines = [
     "The following skills provide specialized instructions for specific tasks.",
-    "Use the typescript tool's workspace.read capability to load the complete skill file when the task matches its description. Always read skill files in full.",
-    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and pass that absolute path to workspace.read or the relevant Pit capability.",
+    "Use the typescript tool's workspace.read namespace to load the complete skill file when the task matches its description. Always read skill files in full.",
+    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and pass that absolute path to workspace.read or the relevant Pit namespace.",
     "",
     "<available_skills>",
   ];

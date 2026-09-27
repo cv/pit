@@ -2,14 +2,14 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { CapabilityTrace } from "../../src/execution/capability-trace.js";
+import type { HostCallTrace } from "../../src/execution/host-call-trace.js";
 import { renderTypeScriptToolResult } from "../../src/renderers/typescript-tool.js";
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
-const trace = (method: string): CapabilityTrace => ({
+const trace = (method: string): HostCallTrace => ({
   id: 1,
   sequence: 1,
-  capability: "npm",
+  namespace: "npm",
   method,
   arguments: [],
   startedAt: 1,

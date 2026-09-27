@@ -10,10 +10,7 @@ interface DependencyTypeNode {
   children: Map<string, DependencyTypeNode>;
 }
 
-function dependencyType(
-  entries: Array<[string, string]>,
-  baseType = "PitBuiltinCapabilities",
-): string {
+function dependencyType(entries: Array<[string, string]>, baseType = "PitGlobalFunctions"): string {
   const root: DependencyTypeNode = { children: new Map() };
   for (const [id, type] of entries) {
     let node = root;
@@ -101,7 +98,7 @@ export function functionTypeModel(
   );
   const publicType = (definition: FunctionDefinition): string => {
     if (definition.kind === "native")
-      return `PitBuiltinCapabilities[${JSON.stringify(definition.capability)}][${JSON.stringify(definition.method)}]`;
+      return `PitGlobalFunctions[${JSON.stringify(definition.namespace)}][${JSON.stringify(definition.method)}]`;
     const parameters = getFunctionTypeParameters(definition.source);
     const signature = `typeof __pit_signature_${indexes.get(definitionKey(definition))}${parameters.arguments}`;
     return `(${parameters.declaration}(...args: PitInjectedArguments<${signature}>) => Promise<Awaited<ReturnType<${signature}>>>)`;
@@ -127,7 +124,7 @@ export function functionTypeModel(
 type PitRequiredArguments<T extends any[]> = T extends [any, ...infer Rest] ? [unknown, ...PitRequiredArguments<Rest>] : [];
 type PitProperty<T, K extends PropertyKey> = K extends keyof T ? T[K] : {};
 type PitSourceProgram<D> = (dependencies: D, ...args: any[]) => PitResult | void | Promise<PitResult | void>;
-type PitCapabilities = ${dependencyType(entries)};`;
+type PitDependencies = ${dependencyType(entries)};`;
   const signatures = definitions
     .map((definition, index) => {
       const lines = [
@@ -148,6 +145,6 @@ type PitCapabilities = ${dependencyType(entries)};`;
   const root = options.definition
     ? registry.get(options.definition.layer, options.definition.id)
     : undefined;
-  const rootDependencies = root?.kind === "source" ? dependenciesType(root) : "PitCapabilities";
+  const rootDependencies = root?.kind === "source" ? dependenciesType(root) : "PitDependencies";
   return { declarations, signatures: signatures || "void 0;", rootDependencies };
 }

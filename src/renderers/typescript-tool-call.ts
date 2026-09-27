@@ -7,8 +7,8 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";
-import { describeCapabilityCall, inferCapabilityCall } from "./capability.js";
 import { renderStructuredData } from "./compound.js";
+import { describeFunctionCall, inferFunctionCall } from "./function-call.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 
 interface RenderTheme {
@@ -86,7 +86,7 @@ function describeCall(args: ToolCallArgs, code: string, registry: FunctionRegist
   if (direct) {
     return `Run ${direct.name}`;
   }
-  return describeCapabilityCall(inferCapabilityCall(code)) ?? "Run workspace task";
+  return describeFunctionCall(inferFunctionCall(code)) ?? "Run workspace task";
 }
 
 export function renderTypeScriptInputs(

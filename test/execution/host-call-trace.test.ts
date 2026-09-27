@@ -1,25 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CapabilityTraceCollector,
-  startCapabilityTrace as createCapabilityTrace,
+  HostCallTraceCollector,
+  startHostCallTrace as createHostCallTrace,
   type FunctionExecutionContext,
-  finishCapabilityTrace,
-} from "../../src/execution/capability-trace.js";
+  finishHostCallTrace,
+} from "../../src/execution/host-call-trace.js";
 
-function startCapabilityTrace(
+function startHostCallTrace(
   id: number,
   sequence: number,
-  capability: string,
+  namespace: string,
   method: string,
   args: unknown[],
   startedAt?: number,
   functionContext?: FunctionExecutionContext,
 ) {
-  return createCapabilityTrace({
+  return createHostCallTrace({
     id,
     sequence,
-    capability,
+    namespace,
     method,
     args,
     ...(startedAt === undefined ? {} : { startedAt }),
@@ -27,12 +27,12 @@ function startCapabilityTrace(
   });
 }
 
-describe("capability traces", () => {
+describe("host-call traces", () => {
   it("summarizes arguments without retaining values", () => {
-    const trace = startCapabilityTrace(
+    const trace = startHostCallTrace(
       7,
       3,
-      "capability".repeat(20),
+      "namespace".repeat(20),
       "method".repeat(20),
       [
         null,
@@ -72,7 +72,7 @@ describe("capability traces", () => {
         { type: "boolean" },
       ],
     });
-    expect(trace.capability).toHaveLength(80);
+    expect(trace.namespace).toHaveLength(80);
     expect(trace.method).toHaveLength(80);
     expect(trace.function).toMatchObject({
       invocationId: 11,
@@ -86,25 +86,25 @@ describe("capability traces", () => {
   });
 
   it("finishes traces with nonnegative durations and outcomes", () => {
-    const started = startCapabilityTrace(1, 1, "git", "status", [], 200);
-    expect(finishCapabilityTrace(started, "succeeded", 250)).toMatchObject({
+    const started = startHostCallTrace(1, 1, "git", "status", [], 200);
+    expect(finishHostCallTrace(started, "succeeded", 250)).toMatchObject({
       durationMs: 50,
       status: "succeeded",
     });
-    expect(finishCapabilityTrace(started, "failed", 150)).toMatchObject({
+    expect(finishHostCallTrace(started, "failed", 150)).toMatchObject({
       durationMs: 0,
       status: "failed",
     });
   });
 
   it("updates retained traces, preserves sequence order, and reports truncation", () => {
-    const collector = new CapabilityTraceCollector(2);
-    const second = startCapabilityTrace(2, 2, "git", "diff", [], 20);
-    const first = startCapabilityTrace(1, 1, "git", "status", [], 10);
+    const collector = new HostCallTraceCollector(2);
+    const second = startHostCallTrace(2, 2, "git", "diff", [], 20);
+    const first = startHostCallTrace(1, 1, "git", "status", [], 10);
     collector.record(second);
     collector.record(first);
-    collector.record(finishCapabilityTrace(first, "succeeded", 15));
-    collector.record(startCapabilityTrace(3, 3, "git", "log", [], 30));
+    collector.record(finishHostCallTrace(first, "succeeded", 15));
+    collector.record(startHostCallTrace(3, 3, "git", "log", [], 30));
 
     expect(collector.snapshot()).toMatchObject({
       truncated: true,

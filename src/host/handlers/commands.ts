@@ -2,11 +2,11 @@ import type { PiControlServices } from "./services.js";
 
 const MAX_COMMANDS = 200;
 
-type CommandsCapabilityHandler = () => unknown;
+type CommandsHostHandler = () => unknown;
 
-export function createCommandsCapabilityHandler({
+export function createCommandsHostHandler({
   pi,
-}: Pick<PiControlServices, "pi">): CommandsCapabilityHandler {
+}: Pick<PiControlServices, "pi">): CommandsHostHandler {
   return () => {
     const available = pi.getCommands();
     const metadata = (command: (typeof available)[number]) => ({

@@ -29,7 +29,7 @@ describe("execution dashboard model", () => {
           {
             id: 1,
             sequence: 1,
-            capability: "__pit",
+            namespace: "__pit",
             method: "savedFunctionRun",
             arguments: [],
             startedAt: 0,
@@ -40,7 +40,7 @@ describe("execution dashboard model", () => {
           ...[2, 3].map((sequence) => ({
             id: sequence,
             sequence,
-            capability: "gh",
+            namespace: "gh",
             method: "runView",
             arguments: [],
             startedAt: sequence === 2 ? 1_000 : 6_000,
@@ -51,7 +51,7 @@ describe("execution dashboard model", () => {
           {
             id: 4,
             sequence: 4,
-            capability: "gh",
+            namespace: "gh",
             method: "runView",
             arguments: [],
             startedAt: 11_000,
@@ -75,7 +75,7 @@ describe("execution dashboard model", () => {
           {
             kind: "call",
             sequences: [2, 3, 4],
-            capability: "gh",
+            namespace: "gh",
             method: "runView",
             status: "running",
             count: 3,
@@ -105,7 +105,7 @@ describe("execution dashboard model", () => {
           {
             id: 1,
             sequence: 1,
-            capability: "context",
+            namespace: "context",
             method: "get",
             arguments: [],
             startedAt: 0,
@@ -116,7 +116,7 @@ describe("execution dashboard model", () => {
           {
             id: 2,
             sequence: 2,
-            capability: "__pit",
+            namespace: "__pit",
             method: "savedFunctionRun",
             arguments: [],
             startedAt: 20,
@@ -127,7 +127,7 @@ describe("execution dashboard model", () => {
           {
             id: 3,
             sequence: 3,
-            capability: "shell",
+            namespace: "shell",
             method: "execFile",
             arguments: [],
             startedAt: 30,

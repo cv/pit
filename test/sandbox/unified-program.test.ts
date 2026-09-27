@@ -6,7 +6,7 @@ async function compiledProgram(source: string, projectFunctions: ReadonlyMap<str
   const compiled = await compileSandboxSource(source, { projectFunctions });
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
   return (0, eval)(compiled) as (
-    capabilities: (context: unknown) => object,
+    dependencies: (context: unknown) => object,
     input: unknown,
     runSaved: (
       name: string,
