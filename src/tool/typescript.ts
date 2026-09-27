@@ -315,7 +315,21 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
       label: Type.Optional(Type.String({ description: LABEL_DESCRIPTION })),
       code: Type.String({ description: CODE_DESCRIPTION }),
       functionId: Type.Optional(Type.String({ description: FUNCTION_ID_DESCRIPTION })),
-      params: Type.Optional(Type.Unknown({ description: PARAMS_DESCRIPTION })),
+      // Each branch declares a JSON type. With an untyped schema, some models send every value
+      // as a JSON-encoded string.
+      params: Type.Optional(
+        Type.Union(
+          [
+            Type.Object({}, { additionalProperties: true }),
+            Type.Array(Type.Unknown()),
+            Type.String(),
+            Type.Number(),
+            Type.Boolean(),
+            Type.Null(),
+          ],
+          { description: PARAMS_DESCRIPTION },
+        ),
+      ),
       saveOnly: Type.Optional(Type.Boolean({ description: SAVE_ONLY_DESCRIPTION })),
       timeoutMs: Type.Optional(
         Type.Integer({

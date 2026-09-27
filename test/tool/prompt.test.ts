@@ -1,3 +1,4 @@
+import { Value } from "typebox/value";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { getNamedFunctionName } from "../../src/functions/source.js";
@@ -14,6 +15,35 @@ describe("emitted Pit prompt", () => {
       required: ["code"],
       properties: { timeoutMs: { minimum: 1, maximum: 300_000 } },
     });
+  });
+
+  it("declares a JSON type for every kind of params value", () => {
+    const params = (tool.parameters as { properties: { params: { anyOf?: { type?: unknown }[] } } })
+      .properties.params;
+    expect(params.anyOf?.map((branch) => branch.type).sort()).toEqual([
+      "array",
+      "boolean",
+      "null",
+      "number",
+      "object",
+      "string",
+    ]);
+  });
+
+  it.each<{ name: string; params: unknown }>([
+    { name: "an object", params: { file: "a.ts", nested: { text: 'say "hi"' } } },
+    { name: "an array", params: ['a "b".txt', 1, null] },
+    { name: "a JSON string", params: '{"kept":"as text"}' },
+    { name: "a number", params: 42 },
+    { name: "a boolean", params: false },
+    { name: "null", params: null },
+  ])("accepts $name as params without conversion", ({ params }) => {
+    const args = Value.Convert(tool.parameters, {
+      code: "async () => 1",
+      params: structuredClone(params),
+    });
+    expect(Value.Check(tool.parameters, args)).toBe(true);
+    expect(args).toEqual({ code: "async () => 1", params });
   });
 
   it("budgets all fixed prose without adding the schema twice", () => {
