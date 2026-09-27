@@ -49,6 +49,8 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
 
    It must report the new version for this platform, and `native/prebuilds/<platform>-<arch>/pit-release.json` must name it.
 
+In Pit, `release.verifyPublished({ tag: "vX.Y.Z" })` performs steps 5 and 6 and reports every problem it finds.
+
 ## Install and smoke-test the tag
 
 Install the exact tag into a throwaway agent directory so the check does not change your own configuration. Call the Pi binary you intend to test by path: an older `pi` earlier on `PATH` may not support `install` and instead starts a session.

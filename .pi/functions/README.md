@@ -13,7 +13,8 @@ these namespaces.
 | ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------- |
 | `delivery`  | Validate, format, review, and commit local changes | `validate`, `format`, `listChangedFiles`, `review`, `prepare`, `commit`, `auditCodeQuality`, `inspectDependencies` | pit-delivery    |
 | `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`, `inspectTimings`                                       | pit-delivery    |
-| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `manageWorktree`                                                                       | pit-delivery    |
+| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `manageWorktree`, `editBody`                                                           | pit-delivery    |
+| `release`   | Published releases                                 | `verifyPublished`                                                                                                  | pit-delivery    |
 | `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                              | pit-test-audit  |
 | `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                       | pit-terminal-ux |
 | `sessions`  | Audit Pi session transcripts                       | `analyze`, `analyzeRecent`, `readEvents`                                                                           | none            |
