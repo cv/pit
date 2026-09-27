@@ -70,7 +70,7 @@ describe("functions capability", () => {
 
     expect(
       await value(`async ({ functions: { get: functionGet, getSaved, list: functionList, listAll, planRemoval, promote, remove: removeProject, removeSession } }) => {
-          const listed = (await listAll({ limit: 200 })).functions.filter(entry => entry.kind === "source");
+          const listed = (await listAll({ limit: 200 })).functions.filter(entry => entry.scope !== "global" && entry.kind === "source");
           const session = await getSaved("capabilitySession");
           const project = await getSaved("capabilityProject");
           return { listed, session, project };

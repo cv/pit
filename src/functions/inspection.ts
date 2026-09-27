@@ -204,7 +204,7 @@ export class FunctionInspector {
       (candidate) => rank(candidate.layer) < rank(entry.layer),
     );
     let summary = "";
-    if (entry.kind === "native") summary = entry.summary;
+    if (entry.kind !== "invalid" && entry.summary !== undefined) summary = entry.summary;
     else if (entry.kind === "source") {
       try {
         summary = getPersistentFunctionMetadata(entry.source)?.summary ?? "";
@@ -220,7 +220,7 @@ export class FunctionInspector {
       readOnly: entry.layer === "global" || entry.kind === "invalid",
       sealed: entry.sealed === true,
       signature:
-        entry.kind === "native"
+        entry.kind !== "invalid" && entry.signature !== undefined
           ? entry.signature
           : entry.kind === "source"
             ? (getSavedFunctionCallSignature(entry.source, entry.id) ?? `${entry.id}(…)`)
@@ -312,7 +312,8 @@ export class FunctionInspector {
       ...(next ? { next: this.#reference(next) } : {}),
       directEffects: entry.kind === "native" ? [entry.effect] : [],
       effects,
-      documentation: entry.kind === "native" ? entry.documentation : summary.summary,
+      documentation:
+        entry.kind !== "invalid" ? (entry.documentation ?? summary.summary) : summary.summary,
       ...(error ? { error } : {}),
     };
     return entry.kind === "source"

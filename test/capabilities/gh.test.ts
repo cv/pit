@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { prepareGhCommand } from "../../src/capabilities/handlers/gh.js";
+import { prepareGhCommand } from "../../src/functions/commands/gh.js";
 import type { CapabilityCall } from "../../src/renderers/capability.js";
 import { renderResultValue } from "../../src/renderers/generic.js";
 

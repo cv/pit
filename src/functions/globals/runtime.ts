@@ -1,4 +1,4 @@
-import { defineNativeFunction } from "../native-definition.js";
+import { defineNativeFunction } from "../global-definition.js";
 
 export const runtimeFunctions = [
   defineNativeFunction("runtime", "status", {

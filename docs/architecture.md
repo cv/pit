@@ -164,24 +164,32 @@ Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs
 
 Wasmtime links the WASI interfaces required by Javy, but `WasiCtx::builder().build()` inherits nothing. The guest cannot directly read files, access environment credentials, open network connections, or launch processes. Wasmtime itself is a native addon inside Pi's process, so a native runtime defect shares the trusted host's crash boundary.
 
-## Native function architecture
+## Global functions and native primitives
 
-Built-ins are package-owned global native functions. `global` describes their resolution layer; `native` describes their implementation through the sandbox/host boundary. There is no separate capability-definition catalog.
+Package-owned functions use the `global` resolution layer, independently of their implementation kind. There are 35 native primitives and 28 source-backed command functions. Native functions cross the sandbox/host boundary; source functions execute inside the same sandbox as user-authored functions. There is no separate capability-definition catalog.
 
 ### Definition layer
 
-Files such as `src/functions/builtins/workspace.ts` and `src/functions/builtins/git.ts` define native functions with:
+Files such as `src/functions/globals/workspace.ts` and `src/functions/globals/git.ts` define global functions with:
 
-- a public identifier and native dispatch identity;
+- a public identifier and namespace/method identity;
 - the TypeScript method declaration and reflection signature;
 - documentation and call summaries;
 - minimum and maximum argument counts;
 - optional result-renderer keys; and
-- global-layer, native-kind, effect, and sealing metadata.
+- global-layer, implementation-kind, and sealing metadata; native functions declare a primitive effect, while source functions expose their implementation and derive effects from dependencies.
 
-`src/functions/native.ts` assembles those definitions. The layered function registry consumes them directly, and native lookup, namespace groupings, and the public `CAPABILITY_METHODS` compatibility view derive from the same catalog. `src/functions/native-contract.ts` generates `src/generated/capability-contract.d.ts`; `src/functions/native-documentation.ts` derives prompt documentation with optional per-namespace summaries. Add or change a built-in in the definition layer rather than editing generated declarations.
+`src/functions/globals.ts` assembles those definitions. The layered function registry consumes them directly, and native lookup, namespace groupings, and the public `CAPABILITY_METHODS` compatibility view derive from the same catalog. `src/functions/global-contract.ts` generates `src/generated/capability-contract.d.ts`; `src/functions/global-documentation.ts` derives prompt documentation with optional per-namespace summaries. Add or change a built-in in the definition layer rather than editing generated declarations.
 
 Native host validation uses the fixed native definition being invoked, never an effective source override. A wider compatible override cannot relax the argument limits on a `$next` call into the host. Function resolution and `$next` continue to use `session > project > user > global`.
+
+### Source-backed command globals
+
+`git.*`, `npm.*`, and `gh.*` are read-only source definitions injecting `shell.execFile`. `src/functions/command-source.ts` assembles self-contained TypeScript from package-owned pure argument-preparation modules and shared validators. The host reads these files during package loading but does not execute the command-preparation code. Reflection returns the actual assembled source, not a native placeholder. Public declarations remain unchanged.
+
+Command source enforces public arity and domain input validation before invoking the primitive; `shell.execFile` still owns process execution, option validation, output limits, cancellation, and deadlines. Its dependency resolves virtually: a session/project/user override of `shell.execFile` affects every command global. A command override's `$next` can reach the source global, whose process dependency can itself use `$next` to reach the native primitive. Cycles and invalid overrides retain normal rejection semantics.
+
+Effect grants describe the resolved primitive (normally `shell.execFile`), not a fictitious `git.status` host operation. Traces retain the real primitive call and its global source caller. Global source calls do not create saved-function journal entries or promotion suggestions. Result routing can use the package caller's declared renderer while keeping primitive effects visible; it does not borrow that metadata for same-named non-global overrides. Reachable package sources are type-checked with each program; unrelated immutable package sources need not be rechecked.
 
 ### Host layer
 
@@ -189,7 +197,7 @@ Native host validation uses the fixed native definition being invoked, never an 
 
 Capabilities fall into three implementation groups:
 
-- **Host effects:** workspace, process, Git, npm, GitHub CLI, and HTTP operations.
+- **Host effects:** workspace, process, and HTTP operations. Git/npm/GitHub command construction is source composition over process execution.
 - **Pi adapters:** UI, session, slash-command, model, runtime, and context operations.
 - **Function control:** listing, inspection, promotion, removal, and internal saved-function run attribution.
 
@@ -211,9 +219,9 @@ This writes `src/generated/capability-contract.d.ts`. `npm run capabilities:chec
 
 ### Registries and precedence
 
-`FunctionState` holds user source, trusted project candidates, active project source, branch-local session source, and the effective source view. Pit's native-backed globals come from `globalFunctionDefinitions()` and are not user-owned storage. Compilation resolves `session > project > user > global`.
+`FunctionState` holds user source, trusted project candidates, active project source, branch-local session source, and the effective source view. Pit's native and source globals come from `globalFunctionDefinitions()` and are not user-owned storage. Compilation resolves `session > project > user > global`.
 
-Invalid user and project definitions are retained separately by identifier. Preparation checks reachable explicit dependencies against these diagnostics, preventing silent fallback through an invalid persisted override. Unrelated functions remain usable. Source quotas apply to authored functions, not native built-ins.
+Invalid user and project definitions are retained separately by identifier. Preparation checks reachable explicit dependencies against these diagnostics, preventing silent fallback through an invalid persisted override. Unrelated functions remain usable. Source quotas apply to user-authored functions, not package-owned globals.
 
 ### Storage and enablement
 
@@ -236,7 +244,7 @@ New definitions begin in the session layer. Promotion targets only `project` or 
 
 Persistence succeeds before session tombstones and live registry changes are committed. Atomic file replacement is not a transaction across filesystem storage and Pi's session journal. Removal is dependency-aware and targets only canonical files. Removing an invalid user definition also clears its unavailable-identifier diagnostic. Project access retains its trust and enablement checks; user access has no old global-enablement gate.
 
-The management API names user operations `listUser`, `getUser`, and `removeUser`; the old `*Global` user-storage aliases are removed. `/functions` labels user-owned source as user scope. The `typescript` tool accepts `functionId` for named definitions; the leaf must match the declaration name. Session records, removal tombstones, catalogs, traces, and promotion use that full identifier. Preparation, replay, and commit reject namespace conflicts and overrides of sealed global functions. The type checker retains every concrete layer needed for the selected signatures, checks adjacent overrides after removing the implementation-only dependency parameter, and contextually types `$next` against the next lower definition. It checks argument assignability, required arity, and resolved return compatibility; generic signatures retain their declared type parameters. Named root execution receives the same next binding and attribution context as saved invocations. Promotion validates both the destination stack and the resulting active stack before writing. Removal checks affected definitions against the proposed fallback chain. Invalid persisted overrides stay unavailable, never silently exposing a lower implementation. `FunctionInspector` provides one snapshot for the API and manager: native globals and authored definitions share provenance, signatures, resolved dependencies, override chains, next targets, and effects. Listing is paginated and scope-filterable; invalid persisted entries remain inspectable as diagnostics. Native implementation handles are never exposed, and no source is fabricated for native definitions. Globals are read-only in both API mutation planning and UI actions. All `functions.*` global definitions are sealed; rejected override attempts remain visible without disabling those management functions.
+The management API names user operations `listUser`, `getUser`, and `removeUser`; the old `*Global` user-storage aliases are removed. `/functions` labels user-owned source as user scope. The `typescript` tool accepts `functionId` for named definitions; the leaf must match the declaration name. Session records, removal tombstones, catalogs, traces, and promotion use that full identifier. Preparation, replay, and commit reject namespace conflicts and overrides of sealed global functions. The type checker retains every concrete layer needed for the selected signatures, checks adjacent overrides after removing the implementation-only dependency parameter, and contextually types `$next` against the next lower definition. It checks argument assignability, required arity, and resolved return compatibility; generic signatures retain their declared type parameters. Named root execution receives the same next binding and attribution context as saved invocations. Promotion validates both the destination stack and the resulting active stack before writing. Removal checks affected definitions against the proposed fallback chain. Invalid persisted overrides stay unavailable, never silently exposing a lower implementation. `FunctionInspector` provides one snapshot for the API and manager: native primitives, source globals, and authored definitions share provenance, signatures, resolved dependencies, override chains, next targets, and effects. Listing is paginated and scope-filterable; invalid persisted entries remain inspectable as diagnostics. Native implementation handles are never exposed, and no source is fabricated for native definitions. Globals are read-only in both API mutation planning and UI actions. All `functions.*` global definitions are sealed; rejected override attempts remain visible without disabling those management functions.
 
 ## Workspace consistency model
 

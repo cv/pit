@@ -1,15 +1,16 @@
+import type { NativeFunctionDefinition, FunctionMetadata } from "./global-definition.js";
+import { globalFunctionDefinitions, getGlobalFunction } from "./globals.js";
 import {
   type FunctionLayer,
   type LayeredFunctionDefinition,
   LayeredFunctionRegistry,
 } from "./layered-registry.js";
-import type { NativeFunctionDefinition } from "./native-definition.js";
-import { globalFunctionDefinitions, getNativeFunction } from "./native.js";
 
-export type { NativeFunctionDefinition } from "./native-definition.js";
-export { globalFunctionDefinitions } from "./native.js";
+export type { NativeFunctionDefinition } from "./global-definition.js";
+export { globalFunctionDefinitions } from "./globals.js";
 
-export interface SourceFunctionDefinition extends LayeredFunctionDefinition {
+export interface SourceFunctionDefinition
+  extends LayeredFunctionDefinition, Partial<FunctionMetadata> {
   kind: "source";
   layer: FunctionLayer;
   source: string;
@@ -31,5 +32,5 @@ export function createLayeredFunctionRegistry(
 }
 
 export function isSealedGlobalFunction(id: string): boolean {
-  return getNativeFunction(id)?.sealed ?? false;
+  return getGlobalFunction(id)?.sealed ?? false;
 }

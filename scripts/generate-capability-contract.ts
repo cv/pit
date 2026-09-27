@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { generateCapabilityContract } from "../src/functions/native-contract.js";
+import { generateCapabilityContract } from "../src/functions/global-contract.js";
 
 const target = fileURLToPath(new URL("../src/generated/capability-contract.d.ts", import.meta.url));
 const generated = generateCapabilityContract();

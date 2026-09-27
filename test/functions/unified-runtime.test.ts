@@ -98,7 +98,7 @@ describe("unified function runtime", () => {
   });
 
   it("dispatches next to the lower definition", async () => {
-    const status = vi.fn(async () => "clean");
+    const execFile = vi.fn(async () => "clean");
     const source = "async ({ git: { status } }) => status()";
     const definitions = [
       sourceFunctionDefinition(
@@ -112,9 +112,10 @@ describe("unified function runtime", () => {
 
     await expect(
       execute(source, definitions, {
-        git: { status },
+        shell: { execFile },
         __pit: { savedFunctionRun: async () => null },
       }),
     ).resolves.toBe("project:clean");
+    expect(execFile).toHaveBeenCalledWith("git", ["status"], {});
   });
 });

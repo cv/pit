@@ -1,6 +1,6 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
 
-import { nativeFunctionDocumentation } from "../functions/native-documentation.js";
+import { globalFunctionDocumentation } from "../functions/global-documentation.js";
 
 export const PROMPT_SNIPPET = "Execute TypeScript with explicit function dependencies";
 
@@ -68,7 +68,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "Create: revision: null with replaceFile. Parse raw reads. Absent metadata: offset=1, totalLines=lines, hasMore/truncated=false. Edit batches require unique files.",
     "",
     "GLOBAL FUNCTIONS",
-    ...nativeFunctionDocumentation(),
+    ...globalFunctionDocumentation(),
     "",
     `Paths are relative to Pi cwd unless absolute. Output limit: ${formatSize(maxOutputBytes)}.`,
   ].join("\n");

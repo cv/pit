@@ -1,4 +1,4 @@
-import { nativeFunctionGroups } from "./native.js";
+import { globalFunctionGroups } from "./globals.js";
 
 export const CAPABILITY_CONTRACT_PREAMBLE = `type PitJsonPrimitive = null | boolean | number | string;
 type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
@@ -234,7 +234,7 @@ function indentDeclaration(declaration: string): string {
 }
 
 export function generateCapabilityContract(): string {
-  const groups = [...nativeFunctionGroups()];
+  const groups = [...globalFunctionGroups()];
   const interfaces = groups
     .map(([name, definitions]) => {
       const methods = definitions

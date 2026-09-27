@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateCapabilityContract } from "../../src/functions/native-contract.js";
+import { generateCapabilityContract } from "../../src/functions/global-contract.js";
 import { typeDiagnostics } from "../helpers/type-contract.js";
 
 describe("generated capability types", () => {

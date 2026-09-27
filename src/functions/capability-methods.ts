@@ -7,9 +7,9 @@ import {
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import { terminationError } from "../shared/termination-errors.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
+import type { NativeMethod } from "./globals.js";
 import { validateFunctionId as validateSavedFunctionName } from "./identifier.js";
 import { FunctionInspector, type FunctionListOptions } from "./inspection.js";
-import type { NativeMethod } from "./native.js";
 import { removeProjectFunctionFromState, SavedFunctionService } from "./service.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
 import { userFunctionDirectory, userFunctionPath } from "./storage/user.js";

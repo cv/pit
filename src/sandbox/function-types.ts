@@ -66,12 +66,22 @@ function selectedDefinitions(
     }
   };
   if (options.checkAll) {
-    for (const definition of registry.definitions()) add(definition);
-  } else if (options.definition) {
+    // Package sources are immutable; validate the reachable ones, not every command wrapper.
+    for (const definition of registry.definitions())
+      if (definition.layer !== "global") add(definition);
+  }
+  if (options.definition) {
     add(registry.get(options.definition.layer, options.definition.id));
   } else {
-    for (const dependency of getFunctionDependencies(source).dependencies)
-      add(registry.resolve(dependency.id));
+    let dependencies: ReturnType<typeof getFunctionDependencies>["dependencies"] = [];
+    try {
+      dependencies = getFunctionDependencies(source).dependencies;
+    } catch (failure) {
+      // Full validation historically reports compiler diagnostics before dependency grammar.
+      // Malformed roots cannot select package source; strict graph preparation still rejects them.
+      if (!options.checkAll) throw failure;
+    }
+    for (const dependency of dependencies) add(registry.resolve(dependency.id));
   }
   return [...selected.values()].sort((a, b) => definitionKey(a).localeCompare(definitionKey(b)));
 }

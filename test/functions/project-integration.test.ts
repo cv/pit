@@ -342,7 +342,16 @@ async function projectTests({ npm: { test } }) {
     );
     expect(invoked.details.traces).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ capability: "npm", method: "test", status: "succeeded" }),
+        expect.objectContaining({
+          capability: "shell",
+          method: "execFile",
+          status: "succeeded",
+          function: expect.objectContaining({
+            name: "npm.test",
+            scope: "global",
+            parentInvocationId: expect.any(Number),
+          }),
+        }),
       ]),
     );
   });

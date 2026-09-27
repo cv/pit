@@ -1,11 +1,10 @@
-import type { NativeMethod } from "../../functions/native.js";
 import {
   recordValue as object,
   stringValue as string,
   stringArrayValue as stringArray,
 } from "../../shared/argument-values.js";
 
-type NpmMethod = NativeMethod<"npm">;
+type NpmMethod = keyof PitNpmCapability;
 
 export interface PreparedNpmCommand {
   args: string[];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { globalFunctionDefinitions } from "../../src/functions/native.js";
+import { globalFunctionDefinitions } from "../../src/functions/globals.js";
 import {
   capabilityResultRenderer,
   describeCapabilityCall,

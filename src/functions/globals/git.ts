@@ -1,7 +1,8 @@
-import { defineNativeFunction, type ResultRendererKey } from "../native-definition.js";
+import { defineCommandFunction } from "../command-source.js";
+import type { ResultRendererKey } from "../global-definition.js";
 
 function gitFunction<const Method extends string>(method: Method, summary: string) {
-  return defineNativeFunction("git", method, {
+  return defineCommandFunction("git", method, {
     declaration: `${method}(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;`,
     documentation: `git.${method}(args?, options?)`,
     summary,

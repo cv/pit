@@ -120,6 +120,21 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     label: "UX JSON HINT: result that is not JSON-typed",
     code: "async ({}) => ({ items: [] as unknown[] })",
   },
+  "global-override-save": {
+    label: "GLOBAL SOURCE: override process primitive",
+    functionId: "shell.execFile",
+    saveOnly: true,
+    code: 'async function execFile({}, program: string, args: string[], options?: PitProcessOptions): Promise<PitProcessResult> { return { stdout: "GLOBAL_SOURCE_SENTINEL " + program + " " + args.join(" "), stderr: "", code: 0, truncated: false }; }',
+  },
+  "global-override-run": {
+    label: "GLOBAL SOURCE: command composition and inspection",
+    code: `async ({ git: { status }, npm: { pack }, gh: { api }, functions: { getSaved } }) => {
+      if ((await getSaved("shell.execFile")).scope !== "session") throw new Error("Run global-override-save first in this isolated session");
+      const results = await Promise.all([status(["--short"]), pack(), api("user")]);
+      const definitions = await Promise.all(["git.status", "npm.pack", "gh.api"].map(name => getSaved(name, "global")));
+      return { commands: results.map(result => result.stdout), definitions: definitions.map(definition => ({ name: definition.name, scope: definition.scope, kind: definition.kind, sourceAvailable: definition.kind === "source" && definition.source.length > 0, dependencies: definition.directDependencies, effects: definition.effects })) };
+    }`,
+  },
   "save-probe": {
     label: "UX SAVE PROBE: session function",
     code: "async function probeSaved({}) { return 1; }",

@@ -7,7 +7,7 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { executionTiming } from "../tool/timing.js";
-import { type CapabilityCall, inferCapabilityCall } from "./capability.js";
+import { inferCapabilityCall, runtimeCapabilityCall } from "./capability.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
@@ -35,22 +35,6 @@ function retainsValue(details: TypeScriptDetails | undefined): details is TypeSc
     Object.hasOwn(details, "value") &&
     !(details.truncated && details.value === undefined)
   );
-}
-
-function runtimeCapabilityCall(details: TypeScriptDetails): CapabilityCall | undefined {
-  if (!details.traces || details.tracesTruncated) {
-    return;
-  }
-  const publicTraces = details.traces.filter((entry) => entry.capability !== "__pit");
-  if (publicTraces.length !== 1) {
-    return;
-  }
-  const trace = publicTraces[0] as (typeof publicTraces)[number];
-  return {
-    capability: trace.capability,
-    method: trace.method,
-    qualifiedName: `${trace.capability}.${trace.method}`,
-  };
 }
 
 interface RenderTheme {

@@ -40,7 +40,12 @@ describe("host capability router", () => {
     });
   });
 
-  it("rejects unknown calls before routing", () => {
+  it.each<{ name: string; capability: string; method: string }>([
+    { name: "unknown function", capability: "missing", method: "method" },
+    { name: "Git source wrapper", capability: "git", method: "status" },
+    { name: "npm source wrapper", capability: "npm", method: "test" },
+    { name: "GitHub source wrapper", capability: "gh", method: "api" },
+  ])("rejects direct host dispatch to $name", ({ capability, method }) => {
     const handler = createCapabilities({
       pi: {} as any,
       ctx: {} as any,
@@ -51,8 +56,8 @@ describe("host capability router", () => {
     });
     expect(() =>
       handler({
-        capability: "missing",
-        method: "method",
+        capability,
+        method,
         args: [],
         signal: new AbortController().signal,
       }),
