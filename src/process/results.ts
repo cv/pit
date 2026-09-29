@@ -1,11 +1,16 @@
+import { type Static, Type } from "typebox";
+
+import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 
-export interface ProcessResult {
-  stdout: string;
-  stderr: string;
-  code: number;
-  truncated: boolean;
-}
+const ProcessResultSchema = Type.Object(
+  { stdout: Type.String(), stderr: Type.String(), code: Type.Number(), truncated: Type.Boolean() },
+  CLOSED,
+);
+
+export type ProcessResult = Static<typeof ProcessResultSchema>;
+
+const isProcessResult = shapeGuard(ProcessResultSchema);
 
 export type SemanticOutcome = "success" | "warning" | "error";
 
@@ -25,26 +30,12 @@ export function sanitizeProcessText(value: string): SanitizedText {
 }
 
 export function parseProcessResult(value: unknown): DisplayProcessResult | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return;
-  }
-  const result = value as Record<string, unknown>;
-  if (Object.keys(result).length !== 4) {
-    return;
-  }
-  if (
-    typeof result.stdout !== "string" ||
-    typeof result.stderr !== "string" ||
-    typeof result.code !== "number" ||
-    typeof result.truncated !== "boolean"
-  ) {
-    return;
-  }
+  if (!isProcessResult(value)) return;
   return {
-    stdout: sanitizeProcessText(result.stdout),
-    stderr: sanitizeProcessText(result.stderr),
-    code: result.code,
-    truncated: result.truncated,
+    stdout: sanitizeProcessText(value.stdout),
+    stderr: sanitizeProcessText(value.stderr),
+    code: value.code,
+    truncated: value.truncated,
   };
 }
 

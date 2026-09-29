@@ -5,8 +5,9 @@ import {
   type SemanticOutcome,
   semanticOutcome,
 } from "../process/results.js";
+import { isRecord, type JsonRecord } from "../shared/records.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import { isRecord, offsetHangingIndents, parseCompleteJson, plural, renderJson } from "./shared.js";
+import { offsetHangingIndents, parseCompleteJson, plural, renderJson } from "./shared.js";
 import type { RenderedResultValue, ResultTheme, ValueRenderer } from "./types.js";
 
 // oxlint-disable-next-line no-control-regex
@@ -197,7 +198,7 @@ const audit = renderer("audit", (result, theme) => {
       : {}),
   };
 });
-function outdatedRow(name: string, item: Record<string, unknown>): string {
+function outdatedRow(name: string, item: JsonRecord): string {
   const current = text(item.current);
   const targets = (["wanted", "latest"] as const).flatMap((key) => {
     const version = text(item[key]);
@@ -232,14 +233,14 @@ const outdated = renderer("outdated", (result, theme) => {
     ...(findings ? { outcome: "warning" as const, acceptedExitCodes: [1] } : {}),
   };
 });
-function packIdentity(item: Record<string, unknown>): string | undefined {
+function packIdentity(item: JsonRecord): string | undefined {
   return [text(item.name), text(item.version)].filter(Boolean).join("@") || undefined;
 }
-function packFileCount(item: Record<string, unknown>): number | undefined {
+function packFileCount(item: JsonRecord): number | undefined {
   if (typeof item.entryCount === "number") return item.entryCount;
   return Array.isArray(item.files) ? item.files.length : undefined;
 }
-function packRow(item: Record<string, unknown>): string {
+function packRow(item: JsonRecord): string {
   const identity = packIdentity(item);
   const filename = text(item.filename);
   const files = packFileCount(item);

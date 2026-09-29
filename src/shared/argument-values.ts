@@ -1,3 +1,6 @@
+// Embedded as local declarations in command source functions (see functions/command-source.ts),
+// which drops imports: keep this module self-contained.
+
 export function recordValue(value: unknown, label = "options"): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${label} must be an object`);

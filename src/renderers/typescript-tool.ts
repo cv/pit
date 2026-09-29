@@ -1,8 +1,11 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 import { formatDuration } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
+import { isRecord } from "../shared/records.js";
+import { shapeGuard } from "../shared/shape-guard.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
@@ -12,7 +15,7 @@ import { inferFunctionCall, runtimeFunctionCall } from "./function-call.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import { describeResult } from "./result-summary.js";
-import { isRecord, offsetHangingIndents, outcomeMarker, renderJson } from "./shared.js";
+import { offsetHangingIndents, outcomeMarker, renderJson } from "./shared.js";
 import type { RenderedResultValue } from "./types.js";
 import { displayedFailure, displayedFunctionPath } from "./typescript-failure.js";
 import { renderPartialToolResult, renderRetainedShellOutput } from "./typescript-progress.js";
@@ -270,31 +273,22 @@ function renderCompletedToolResult(input: {
   return new HangingIndentText(text, displayedHangingIndents);
 }
 
-/** Pi supplies unknown details, including replayed entries. Validate once before rendering. */
-function assertInvocationTimings(
-  timings: unknown,
-): asserts timings is ExecutionProgressSnapshot["timings"] {
-  if (timings === undefined) return;
-  if (
-    !isRecord(timings) ||
-    !isRecord(timings.phases) ||
-    ![timings.totalMs, ...Object.values(timings.phases)].every(
-      (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
-    )
-  ) {
-    throw new Error("Invalid invocation timing metadata");
-  }
-}
+const Duration = Type.Number({ minimum: 0 });
 
-/** Replayed traces must name their namespace; anything else uses the lossless raw fallback. */
-function assertHostCallTraces(traces: unknown): void {
-  if (
-    Array.isArray(traces) &&
-    !traces.every((trace) => isRecord(trace) && typeof trace.namespace === "string")
-  ) {
-    throw new Error("Invalid host-call trace metadata");
-  }
-}
+/**
+ * The execution metadata the renderer reads before trusting details. Pi supplies unknown details,
+ * including replayed entries from older sessions; any other shape uses the lossless raw fallback.
+ */
+const hasRenderableMetadata = shapeGuard(
+  Type.Object({
+    timings: Type.Optional(
+      Type.Object({ totalMs: Duration, phases: Type.Record(Type.String(), Duration) }),
+    ),
+    traces: Type.Optional(Type.Array(Type.Object({ namespace: Type.String() }))),
+    progress: Type.Optional(Type.Array(Type.Unknown())),
+    functions: Type.Optional(Type.Array(Type.Unknown())),
+  }),
+);
 
 function renderToolResult(
   result: ToolResultLike,
@@ -308,16 +302,13 @@ function renderToolResult(
     .join("\n");
   const rawDetails = isRecord(result.details) ? result.details : undefined;
   const execution = executionTiming(context, !options.isPartial || context.isError === true);
-  assertInvocationTimings(rawDetails?.timings);
-  assertHostCallTraces(rawDetails?.traces);
-  const details = rawDetails as unknown as TypeScriptDetails | undefined;
+  if (rawDetails && !hasRenderableMetadata(rawDetails)) {
+    throw new Error("Invalid execution metadata");
+  }
+  const details = rawDetails as TypeScriptDetails | undefined;
   const recordedMs = details?.timings?.totalMs;
   if ((!options.isPartial || context.isError) && recordedMs !== undefined) {
     execution.duration = formatDuration(recordedMs);
-  }
-  for (const key of ["traces", "progress", "functions"] as const) {
-    if (details?.[key] !== undefined && !Array.isArray(details[key]))
-      throw new Error("Invalid execution metadata");
   }
   if (options.isPartial && !context.isError) {
     return renderPartialToolResult({

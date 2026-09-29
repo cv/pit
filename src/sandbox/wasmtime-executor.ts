@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { isRecord } from "../shared/records.js";
 import { terminationError } from "../shared/termination-errors.js";
 import { HostCallDispatcher, type HostCallHandler } from "./dispatcher.js";
 import {
@@ -62,10 +63,10 @@ function parseGuestRequest(raw: string): Record<string, unknown> {
     throw new Error("Pit guest request exceeds bounds");
   }
   const value = JSON.parse(raw) as unknown;
-  if (!(value && typeof value === "object" && !Array.isArray(value))) {
+  if (!isRecord(value)) {
     throw new Error("Invalid Pit guest request");
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 /**

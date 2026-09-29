@@ -1,11 +1,10 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
 
+import { isRecord, type JsonRecord } from "../shared/records.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import {
   combinedOutcome,
   indent,
-  isRecord,
-  type JsonRecord,
   languageForFile,
   MAX_RECURSIVE_DEPTH,
   offsetHangingIndents,

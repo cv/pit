@@ -1,6 +1,7 @@
 import { processOutputLines, parseProcessResult, semanticOutcome } from "../process/results.js";
+import { isRecord } from "../shared/records.js";
 import { renderStructuredData } from "./compound.js";
-import { isRecord, parseCompleteJson, plural } from "./shared.js";
+import { parseCompleteJson, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue, ValueRenderer } from "./types.js";
 
 const FAILED_STATES = new Set(["failure", "failed", "cancelled", "timed_out", "action_required"]);

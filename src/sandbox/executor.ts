@@ -1,4 +1,5 @@
 import type { HostCallTrace, FunctionExecutionContext } from "../execution/host-call-trace.js";
+import { isRecord } from "../shared/records.js";
 import type { HostCallHandler } from "./dispatcher.js";
 import type { PreparedSandboxProgram } from "./program.js";
 
@@ -23,8 +24,9 @@ const FUNCTION_EXECUTION_SCOPES = new Set(["global", "user", "project", "session
 export function parseFunctionExecutionContext(
   value: unknown,
 ): FunctionExecutionContext | undefined {
-  if (!(value && typeof value === "object" && !Array.isArray(value))) return;
-  const context = value as Record<string, unknown>;
+  // The native smoke test bundles this module standalone, so it avoids a TypeBox schema.
+  if (!isRecord(value)) return;
+  const context = value;
   if (
     !(
       Number.isSafeInteger(context.invocationId) &&

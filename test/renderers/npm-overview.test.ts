@@ -101,6 +101,36 @@ describe("npm result overviews", () => {
       retained: "URL_SENTINEL",
     },
     {
+      name: "audit findings from unexpected entries, known severities first",
+      method: "audit",
+      payload: {
+        vulnerabilities: {
+          "legacy-pkg": {
+            severity: "unrated",
+            via: [],
+            range: "*",
+            fixAvailable: { name: "legacy-pkg", version: "2.0.0" },
+          },
+          lodash: {
+            severity: "high",
+            via: [{ title: "Prototype pollution" }],
+            range: "<4.17.21",
+            fixAvailable: true,
+          },
+          MALFORMED_SENTINEL: "not an entry",
+        },
+        metadata: { vulnerabilities: { high: 1, total: 2 } },
+      },
+      code: 1,
+      summary: "⚠ npm audit, 2 vulnerabilities (1 high)",
+      label: "vulnerabilities",
+      rows: [
+        "high lodash <4.17.21: Prototype pollution; fix available",
+        "unrated legacy-pkg *: fix: legacy-pkg@2.0.0",
+      ],
+      retained: "MALFORMED_SENTINEL",
+    },
+    {
       name: "outdated packages, including one not installed",
       method: "outdated",
       payload: {
