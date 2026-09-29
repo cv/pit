@@ -1,6 +1,7 @@
 /** Test-only offline provider for isolated Pi/tmux acceptance. Never load in a normal session. */
 import {
   createAssistantMessageEventStream,
+  getCurrentTools,
   type AssistantMessage,
   type ToolCall,
 } from "@earendil-works/pi-ai";
@@ -359,7 +360,15 @@ export default function (pi: ExtensionAPI) {
                   .join("")
             : "";
         const name = text.trim();
-        const fixture = Object.hasOwn(fixtures, name) ? fixtures[name] : undefined;
+        // `codemode-pit` asks Pi's codemode tool to call Pit, which must not be callable from it.
+        const codemodeCall =
+          name === "codemode-pit"
+            ? {
+                code: 'let result;\ntry { result = await tools.typescript({ code: "async () => 1" }); } catch (error) { result = String(error); }\nreturn { typescript: result };',
+              }
+            : undefined;
+        const fixture =
+          codemodeCall ?? (Object.hasOwn(fixtures, name) ? fixtures[name] : undefined);
         if (name === "transport") {
           output.content.push({
             type: "toolCall",
@@ -379,7 +388,7 @@ export default function (pi: ExtensionAPI) {
           const block: ToolCall = {
             type: "toolCall",
             id: `ux-${++sequence}`,
-            name: "typescript",
+            name: codemodeCall ? "codemode" : "typescript",
             arguments: {},
           };
           output.content.push(block);
@@ -395,9 +404,16 @@ export default function (pi: ExtensionAPI) {
           output.stopReason = "toolUse";
         } else {
           const content =
-            last?.role === "toolResult"
-              ? "Fixture completed."
-              : `Available fixtures: ${Object.keys(fixtures).join(", ")}`;
+            name === "loadout"
+              ? // The tools declared in this request, after every prepareLoadout() hook.
+                `Declared tools: ${
+                  getCurrentTools(context.messages)
+                    .map((tool) => tool.name)
+                    .join(", ") || "(none)"
+                }\nFixture completed.`
+              : last?.role === "toolResult"
+                ? "Fixture completed."
+                : `Available fixtures: ${Object.keys(fixtures).join(", ")}, loadout, codemode-pit`;
           output.content.push({ type: "text", text: content });
           stream.push({ type: "text_start", contentIndex: 0, partial: output });
           stream.push({ type: "text_delta", contentIndex: 0, delta: content, partial: output });
