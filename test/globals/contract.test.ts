@@ -10,6 +10,9 @@ async function accepted(c: PitDependencies) {
   const file = await c.workspace.read("a.ts", { format: "raw" });
   const text: string = file.content;
   await c.workspace.edit("new.ts", { revision: null, changes: [{ kind: "replaceFile", content: text }] });
+  const image = await c.workspace.viewImage("chart.png");
+  const mimeType: string = image.mimeType;
+
   const reads = await c.workspace.batch([{ kind: "read", file: "a.ts" }], { failure: "settled" });
   const readKinds: "read"[] = reads.results.map((result) => result.kind);
   const edits = await c.workspace.batch([
@@ -48,6 +51,11 @@ async function rejected(c: PitDependencies) {
   await c.functions.removeSession("helper", { cascade: "yes" });
   // @ts-expect-error failure handling applies only to read batches
   await c.workspace.batch([{ kind: "edit", file: "a.ts", changes: { revision: null, changes: [{ kind: "replaceFile", content: "x" }] } }], { failure: "settled" });
+  // @ts-expect-error workspace images require a file path
+  await c.workspace.viewImage();
+  // @ts-expect-error workspace image paths are strings
+  await c.workspace.viewImage(42);
+
 }
 `;
     expect(typeDiagnostics(generateGlobalContract() + consumer)).toEqual([]);

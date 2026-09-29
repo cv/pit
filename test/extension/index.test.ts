@@ -1,10 +1,15 @@
+import { writeFile } from "node:fs/promises";
+
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { validateNativeCall } from "../../src/functions/globals.js";
+import { SavedFunctionService } from "../../src/functions/service.js";
 import { GLOBAL_METHODS } from "../../src/index.js";
+import { LIMITS } from "../../src/shared/bounds.js";
 import {
+  cwd,
   branchEntries,
   cleanupHarness,
   context,
@@ -21,9 +26,32 @@ import {
   toolResult,
   value,
 } from "../support/extension-fixture.js";
+import { png as makePng } from "../support/png-fixture.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
+
+function imageDimensions(image: { data: string }) {
+  const bytes = Buffer.from(image.data, "base64");
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+
+function hasSuccessfulViewImageTrace(result: any): boolean {
+  return (
+    result.details?.traces?.some(
+      (trace: any) =>
+        trace.namespace === "workspace" &&
+        trace.method === "viewImage" &&
+        trace.status === "succeeded",
+    ) ?? false
+  );
+}
+
+function expectNoImagePayload(value: unknown) {
+  const serialized = JSON.stringify(value);
+  expect(serialized).not.toMatch(/"type"\s*:\s*"image"/);
+  expect(serialized).not.toMatch(/"data"\s*:\s*"[A-Za-z0-9+/=]{64,}"/);
+}
 
 describe("pit extension", () => {
   it("registers the TypeScript tool and activates it", async () => {
@@ -56,7 +84,250 @@ describe("pit extension", () => {
     );
     expect(() => validateNativeCall("context", "get", [1])).toThrow(/expects 0 argument/);
     expect(() => validateNativeCall("workspace", "read", [])).toThrow(/expects 1-2 argument/);
+    expect(() => validateNativeCall("workspace", "viewImage", [])).toThrow(/expects 1 argument/);
+    expect(() => validateNativeCall("workspace", "viewImage", ["chart.png", {}])).toThrow(
+      /expects 1 argument/,
+    );
+
     expect(() => validateNativeCall("unknown", "method", [])).toThrow("Unknown host function");
+  });
+
+  it("attaches one processed image per invocation without returning bytes in metadata", async () => {
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const result = await run(
+      `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); }`,
+    );
+    const images = result.content.filter((item: any) => item.type === "image");
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ type: "image", mimeType: "image/png" });
+    expect(result.details.imageAttachments).toEqual([
+      expect.objectContaining({ file: "pixel.png", mimeType: "image/png" }),
+    ]);
+    expect(JSON.stringify(result.details)).not.toContain(images[0].data);
+    expect(result.content[0].text).toContain("pixel.png");
+    await expect(
+      run(
+        `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); await viewImage("pixel.png"); }`,
+      ),
+    ).rejects.toThrow(/Only one successful viewImage/);
+  });
+
+  it("allows retry after failed image read and retains text-only model warning", async () => {
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const result = await run(
+      `async ({ workspace: { viewImage } }) => { try { await viewImage("missing.png"); } catch {} await viewImage("pixel.png"); }`,
+      context({ model: { provider: "test", id: "text-only", input: ["text"] } }),
+    );
+    expect(result.content.some((item: any) => item.type === "image")).toBe(true);
+    expect(result.content[0].text).toContain("does not support images");
+  });
+
+  it("attaches images after a saved helper call and leaves saveOnly side-effect free", async () => {
+    const definition = await tool.execute(
+      "save-image-helper",
+      {
+        code: `async function imageHelper({ workspace: { viewImage } }) { await viewImage("pixel.png"); }`,
+        saveOnly: true,
+      },
+      undefined,
+      undefined,
+      context(),
+    );
+    expect(definition.details.imageAttachments).toBeUndefined();
+    expect(definition.content.some((item: any) => item.type === "image")).toBe(false);
+
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const result = await run(`async ({ imageHelper }) => imageHelper()`);
+    expect(result.content.some((item: any) => item.type === "image")).toBe(true);
+    expect(result.content[0].text).toContain("pixel.png");
+  });
+
+  it.each<{ name: string; returned: string; maxLines: number }>([
+    {
+      name: "large structured JSON across the byte cap",
+      returned: `{ payload: "x".repeat(120000) }`,
+      maxLines: LIMITS.result.maxLines,
+    },
+    {
+      name: "many text lines across the line cap",
+      returned: `Array.from({ length: 4000 }, (_, i) => String(i)).join(String.fromCharCode(10))`,
+      maxLines: 4000,
+    },
+  ])("fits returned $name together with image notes", async ({ returned, maxLines }) => {
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const result = await run(
+      `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); return ${returned}; }`,
+    );
+    const text = result.content
+      .filter((item: any) => item.type === "text")
+      .map((item: any) => item.text)
+      .join("\n");
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(LIMITS.result.maxBytes);
+    expect(text.split("\n").length).toBeLessThanOrEqual(Math.min(maxLines, LIMITS.result.maxLines));
+    expect(text).toContain("Image: pixel.png");
+    expect(text).toContain("Result truncated to fit");
+    expect(result.content.some((item: any) => item.type === "image")).toBe(true);
+  });
+
+  it("does not leak queued images after a post-image failure", async () => {
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const updates: any[] = [];
+    const callId = "post-image-failure";
+    await expect(
+      tool.execute(
+        callId,
+        {
+          code: `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); throw new Error("after image"); }`,
+        },
+        undefined,
+        (update: any) => updates.push(update),
+        context(),
+      ),
+    ).rejects.toThrow("after image");
+    expect(updates.some(hasSuccessfulViewImageTrace)).toBe(true);
+    expect(
+      updates.every((update) => update.content.every((block: any) => block.type !== "image")),
+    ).toBe(true);
+    expectNoImagePayload(updates);
+    const enriched = await toolResult({
+      toolName: "typescript",
+      toolCallId: callId,
+      isError: true,
+    });
+    expect(enriched.content.every((block: any) => block.type === "text")).toBe(true);
+    expect(enriched.details.imageAttachments).toBeUndefined();
+    expectNoImagePayload(enriched);
+
+    const ordinary = await run(`async ({}) => "ordinary after failure"`);
+    expect(ordinary.details.imageAttachments).toBeUndefined();
+    expect(ordinary.content.some((block: any) => block.type === "image")).toBe(false);
+  });
+
+  it("times out only after a successful image host trace and publishes no blocks", async () => {
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const updates: any[] = [];
+    let sawImageTrace = false;
+    let signalImageTrace!: () => void;
+    const imageTrace = new Promise<void>((resolve) => {
+      signalImageTrace = resolve;
+    });
+    const callId = "image-timeout";
+    const execution = tool.execute(
+      callId,
+      {
+        code: `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); while (true) {} }`,
+        timeoutMs: 750,
+      },
+      undefined,
+      (update: any) => {
+        updates.push(update);
+        if (hasSuccessfulViewImageTrace(update) && !sawImageTrace) {
+          sawImageTrace = true;
+          signalImageTrace();
+        }
+      },
+      context(),
+    );
+    const outcome = execution.then(
+      () => "unexpected-success",
+      () => "execution-failed",
+    );
+    expect(await Promise.race([imageTrace.then(() => "image-trace"), outcome])).toBe("image-trace");
+    await expect(execution).rejects.toThrow();
+    expect(sawImageTrace).toBe(true);
+    expect(
+      updates.every((update) => update.content.every((block: any) => block.type !== "image")),
+    ).toBe(true);
+    expectNoImagePayload(updates);
+    const enriched = await toolResult({
+      toolName: "typescript",
+      toolCallId: callId,
+      isError: true,
+    });
+    expect(enriched.details.failure.kind).toBe("timeout");
+    expect(enriched.details.imageAttachments).toBeUndefined();
+    expect(enriched.content.every((block: any) => block.type === "text")).toBe(true);
+    expectNoImagePayload(enriched);
+  });
+
+  it("queues an image before commit failure without publishing or leaking it", async () => {
+    await writeFile(`${cwd}/pixel.png`, makePng());
+    const callId = "image-commit-failure";
+    const updates: any[] = [];
+    let commitReached = false;
+    const commit = vi
+      .spyOn(SavedFunctionService.prototype, "commit")
+      .mockImplementation(async () => {
+        commitReached = true;
+        throw new Error("forced commit failure");
+      });
+    try {
+      await expect(
+        tool.execute(
+          callId,
+          {
+            code: `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); return null; }`,
+          },
+          undefined,
+          (update: any) => {
+            updates.push(update);
+          },
+          context(),
+        ),
+      ).rejects.toThrow("forced commit failure");
+    } finally {
+      commit.mockRestore();
+    }
+    expect(commitReached).toBe(true);
+    expect(
+      updates.every((update) => update.content.every((block: any) => block.type !== "image")),
+    ).toBe(true);
+    expectNoImagePayload(updates);
+    const enriched = await toolResult({
+      toolName: "typescript",
+      toolCallId: callId,
+      isError: true,
+    });
+    expect(enriched.details.imageAttachments).toBeUndefined();
+    expect(
+      enriched.details.traces.some(
+        (trace: any) =>
+          trace.namespace === "workspace" &&
+          trace.method === "viewImage" &&
+          trace.status === "succeeded",
+      ),
+    ).toBe(true);
+    expect(enriched.content.every((block: any) => block.type === "text")).toBe(true);
+    expectNoImagePayload(enriched);
+
+    const ordinary = await run(`async ({}) => 7`);
+    expect(ordinary.details.imageAttachments).toBeUndefined();
+    expect(ordinary.content.some((block: any) => block.type === "image")).toBe(false);
+  });
+
+  it("keeps overlapping TypeScript invocation image bytes mapped to their source", async () => {
+    await writeFile(`${cwd}/first.png`, makePng(16, 8));
+    await writeFile(`${cwd}/second.png`, makePng(8, 4));
+    const execute = (id: string, file: string) =>
+      tool.execute(
+        id,
+        { code: `async ({ workspace: { viewImage } }) => viewImage("${file}")` },
+        undefined,
+        undefined,
+        context(),
+      );
+    const [first, second] = await Promise.all([
+      execute("first-image", "first.png"),
+      execute("second-image", "second.png"),
+    ]);
+    const firstImage = first.content.find((block: any) => block.type === "image");
+    const secondImage = second.content.find((block: any) => block.type === "image");
+    expect(firstImage).toBeDefined();
+    expect(secondImage).toBeDefined();
+    expect(first.details.imageAttachments[0].file).toBe("first.png");
+    expect(second.details.imageAttachments[0].file).toBe("second.png");
+    expect(imageDimensions(firstImage)).toEqual({ width: 16, height: 8 });
+    expect(imageDimensions(secondImage)).toEqual({ width: 8, height: 4 });
   });
 
   it("suggests project promotion once after repeated session reuse", async () => {

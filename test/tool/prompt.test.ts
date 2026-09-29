@@ -17,6 +17,10 @@ describe("emitted Pit prompt", () => {
     });
   });
 
+  it("documents the workspace image call in the emitted tool description", () => {
+    expect(tool.description).toContain("workspace.viewImage(file)");
+  });
+
   it("declares a JSON type for every kind of params value", () => {
     const params = (tool.parameters as { properties: { params: { anyOf?: { type?: unknown }[] } } })
       .properties.params;

@@ -84,6 +84,17 @@ async ({ runTests }) => runTests({ coverage: true })
 
 Use `/functions` to inspect and manage definitions. Proven functions can be promoted to a trusted project or your user directory; `/pit-reflect` helps identify worthwhile reuse. See [saved functions](docs/saved-functions.md) for scopes, promotion, and overrides.
 
+## View workspace images
+
+`workspace.viewImage(file)` accepts local file paths (relative paths resolve from Pi's cwd; absolute paths are supported; URLs are not). Source size is limited to 10 MiB; after Pi's model-aware processing the encoded image is limited to 5 MiB. The path label is limited to 1,024 UTF-8 bytes. The image is attached separately only to the final TypeScript result after execution and function-state commit succeed; discarded return metadata does not discard the image. One successful image is allowed per invocation; failed attempts can be retried.
+
+```ts
+async ({ workspace: { viewImage } }) => {
+  const image = await viewImage("artifacts/chart.png");
+  return { file: image.file, mimeType: image.mimeType };
+}
+```
+
 ## Documentation
 
 Start at the [documentation index](docs/README.md), or go directly to:

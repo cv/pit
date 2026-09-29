@@ -1,5 +1,5 @@
 import { initTheme } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -164,6 +164,139 @@ describe("retained process output", () => {
     expect(output.split("SENTINEL").length - 1).toBe(occurrences);
     expect(output.includes("(output shown above)")).toBe(alreadyShown);
     expect(output).toContain("[exit 0] smoke fixture");
+  });
+
+  it("shows image identity and a text-only warning in collapsed output", () => {
+    const rawRows = renderTypeScriptToolResult(
+      {
+        content: [{ type: "image" }, { type: "text", text: "value omitted" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          imageAttachments: [
+            {
+              file: "plot.png",
+              mimeType: "image/png",
+              note: "[Current model does not support images. The image will be omitted from this request.]",
+            },
+          ],
+        },
+      },
+      { expanded: false, isPartial: false },
+      theme,
+      {},
+    ).render(32);
+    const output = rawRows.map(stripTerminalSequences).join("\n");
+    const normalized = output.replace(/\s+/g, " ");
+
+    expect(output).toContain("Image attached");
+    expect(output).toContain("plot.png (image/png)");
+    expect(normalized).toContain("text-only model");
+    expect(output).not.toContain("(no result)");
+    expect(rawRows.every((line) => visibleWidth(line) <= 32)).toBe(true);
+  });
+
+  it("sanitizes hostile image labels without rendering image bytes", () => {
+    const imageBlock = { type: "image", data: "SECRET_BASE64", mimeType: "image/png" };
+
+    const rawRows = renderTypeScriptToolResult(
+      {
+        content: [imageBlock, { type: "text", text: "value omitted" }],
+        details: {
+          value: { done: true },
+          truncated: false,
+          imageAttachments: [
+            {
+              file: "plots/βeta\n\u001b[2Jsecret.png",
+              mimeType: "image/png",
+              note: "Resized to model limit; current model does not support images.",
+            },
+          ],
+        },
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      {},
+    ).render(32);
+    const output = rawRows.map(stripTerminalSequences).join("\n");
+    const normalized = output.replace(/\s+/g, " ");
+
+    expect(output).toContain("Images");
+    expect(output).toContain("plots/βeta");
+    expect(output).toContain("secret.png (image/png)");
+    expect(output).toContain("Resized to model limit");
+    expect(normalized).toContain("current model does not support images");
+    expect(rawRows.join("\n")).not.toContain("\u001b[2J");
+    expect(output).not.toContain("SECRET_BASE64");
+    expect(rawRows.every((line) => visibleWidth(line) <= 32)).toBe(true);
+  });
+
+  it("renders attachment identity when processing note is empty", () => {
+    const output = renderTypeScriptToolResult(
+      {
+        content: [{ type: "image" }, { type: "text", text: "done" }],
+        details: {
+          value: { done: true },
+          truncated: false,
+          imageAttachments: [{ file: "plain.png", mimeType: "image/png", note: "" }],
+        },
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      {},
+    )
+      .render(80)
+      .map(stripTerminalSequences)
+      .join("\n");
+    expect(output).toContain("plain.png (image/png)");
+    expect(output).not.toContain("undefined");
+  });
+
+  it("falls back safely for malformed retained image metadata", () => {
+    const output = renderTypeScriptToolResult(
+      {
+        content: [{ type: "text", text: "visible fallback" }],
+        details: { imageAttachments: [{}] } as any,
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      {},
+    )
+      .render(80)
+      .map(stripTerminalSequences)
+      .join("\n");
+    expect(output).toContain("Structured view unavailable");
+    expect(output).toContain("visible fallback");
+
+    const collapsed = renderTypeScriptToolResult(
+      {
+        content: [{ type: "text", text: "visible fallback" }],
+        details: { imageAttachments: [{}] } as any,
+      },
+      { expanded: false, isPartial: false },
+      theme,
+      {},
+    )
+      .render(80)
+      .map(stripTerminalSequences)
+      .join("\n");
+    expect(collapsed).toContain("Expand to inspect retained data.");
+  });
+
+  it("does not render generic structured details while collapsed", () => {
+    const output = renderTypeScriptToolResult(
+      {
+        content: [{ type: "text", text: "summary" }],
+        details: { value: { payload: "uniqueImageDetailMarker" }, truncated: false },
+      },
+      { expanded: false, isPartial: false },
+      theme,
+      {},
+    )
+      .render(80)
+      .map(stripTerminalSequences)
+      .join("\n");
+    expect(output).not.toContain("uniqueImageDetailMarker");
   });
 
   it.each([

@@ -14,17 +14,16 @@ export const PROMPT_GUIDELINES = [
   "Probe unfamiliar APIs before fan-out. After a malformed submission, simplify; after two similar failures, inspect the contract/state instead of varying syntax.",
 ] as const;
 
-export const LABEL_DESCRIPTION =
-  "Short TUI action label; aim for about 15 words, not a hard limit.";
+export const LABEL_DESCRIPTION = "TUI label; aim for ~15 words.";
 
 export const CODE_DESCRIPTION =
   "TypeScript function expression or named definition. Inject dependencies first; no imports; return JSON-compatible data or undefined.";
 
 export const PARAMS_DESCRIPTION =
-  "JSON input after the dependency object; annotate its type. Put large or quote-heavy data here.";
+  "Typed JSON input after dependencies. Put large or quote-heavy data here.";
 
 export const FUNCTION_ID_DESCRIPTION =
-  "Optional dotted ID for a named function, e.g. company.check. Its leaf must match the declaration; not valid for anonymous code.";
+  "Named-function ID, e.g. company.check; leaf must match declaration. Not for anonymous code.";
 
 export const SAVE_ONLY_DESCRIPTION =
   "Validate and save a named function without execution; cannot combine with params.";

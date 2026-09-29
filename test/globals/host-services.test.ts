@@ -17,6 +17,8 @@ describe("host namespace router", () => {
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
       promotionSuggestions: [],
+      imageAttachments: [],
+      imageMetadata: [],
     });
     expect(() =>
       handler({
@@ -50,6 +52,8 @@ describe("host namespace router", () => {
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
       promotionSuggestions,
+      imageAttachments: [],
+      imageMetadata: [],
     });
     const run = (name: string) =>
       handler({
