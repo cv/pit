@@ -92,24 +92,23 @@ describe("pit extension", () => {
     expect(() => validateNativeCall("unknown", "method", [])).toThrow("Unknown host function");
   });
 
-  it("attaches one processed image per invocation without returning bytes in metadata", async () => {
-    await writeFile(`${cwd}/pixel.png`, makePng());
+  it("attaches each processed image in call order without returning bytes in metadata", async () => {
+    await writeFile(`${cwd}/wide.png`, makePng(32, 16));
+    await writeFile(`${cwd}/small.png`, makePng(8, 4));
     const result = await run(
-      `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); }`,
+      `async ({ workspace: { viewImage } }) => { await Promise.all([viewImage("wide.png"), viewImage("small.png")]); }`,
     );
     const images = result.content.filter((item: any) => item.type === "image");
-    expect(images).toHaveLength(1);
-    expect(images[0]).toMatchObject({ type: "image", mimeType: "image/png" });
-    expect(result.details.imageAttachments).toEqual([
-      expect.objectContaining({ file: "pixel.png", mimeType: "image/png", omitted: false }),
+    expect(images.map(imageDimensions)).toEqual([
+      { width: 32, height: 16 },
+      { width: 8, height: 4 },
     ]);
-    expect(JSON.stringify(result.details)).not.toContain(images[0].data);
-    expect(result.content[0].text).toContain("pixel.png");
-    await expect(
-      run(
-        `async ({ workspace: { viewImage } }) => { await viewImage("pixel.png"); await viewImage("pixel.png"); }`,
-      ),
-    ).rejects.toThrow(/Only one successful viewImage/);
+    expect(result.details.imageAttachments).toEqual([
+      expect.objectContaining({ file: "wide.png", mimeType: "image/png", omitted: false }),
+      expect.objectContaining({ file: "small.png", mimeType: "image/png", omitted: false }),
+    ]);
+    for (const image of images) expect(JSON.stringify(result.details)).not.toContain(image.data);
+    expect(result.content[0].text).toMatch(/Image: wide\.png[\s\S]*Image: small\.png/);
   });
 
   it("allows retry after failed image read and retains text-only model warning", async () => {

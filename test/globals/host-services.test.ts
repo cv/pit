@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createFunctionState, createFunctionStateCommitQueue } from "../../src/functions/state.js";
 import { createHostDispatcher } from "../../src/host/dispatcher.js";
+import { createImageCollector } from "../../src/workspace/view-image.js";
 
 describe("host namespace router", () => {
   it.each<{ name: string; namespace: string; method: string }>([
@@ -17,8 +18,7 @@ describe("host namespace router", () => {
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
       promotionSuggestions: [],
-      imageAttachments: [],
-      imageMetadata: [],
+      images: createImageCollector({} as any),
     });
     expect(() =>
       handler({
@@ -52,8 +52,7 @@ describe("host namespace router", () => {
       commitFunctionState: createFunctionStateCommitQueue(),
       activity: [],
       promotionSuggestions,
-      imageAttachments: [],
-      imageMetadata: [],
+      images: createImageCollector({} as any),
     });
     const run = (name: string) =>
       handler({

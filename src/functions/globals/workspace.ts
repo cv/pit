@@ -6,7 +6,7 @@ export const workspaceFunctions = [
     declaration:
       "viewImage(file: string): Promise<{ file: string; mimeType: string; queued: true }>;",
     documentation:
-      "workspace.viewImage(file): one successful image per TypeScript invocation; failed calls can retry.",
+      "workspace.viewImage(file) attaches up to 8 images, in call order, to a successful result",
     minimumArguments: 1,
     maximumArguments: 1,
   }),
