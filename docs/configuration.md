@@ -31,9 +31,16 @@ Run `/reload` after changing configuration.
 
 ### Allow other tools
 
-Pit activates only `typescript` by default. The `allowedTools` list adds explicit exceptions. Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. Empty or invalid configuration grants no exceptions.
+Pit declares only `typescript` to the model by default. Other active tools, including Pi's built-in tools, extension tools, and the `codemode` and `tool_search` tools, stay active but are hidden from the model. Extensions that check for their tools in the active set keep working, and hidden tools remain callable by other tools.
 
-Pit applies this selection at session start and again after `/tree` navigation, because Pi restores the tool set recorded on the destination branch. Other extensions can still change active tools afterward.
+The `allowedTools` list names explicit exceptions that the model sees directly. Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. Empty or invalid configuration grants no exceptions. To use Pi's `codemode` alongside Pit, for example, add `"codemode"`.
+
+Pit also leaves these tools declared, because they reflect explicit choices:
+
+- MCP tools configured with `"exposure": "direct"` in `mcp.json`. MCP tools use `codemode` exposure by default.
+- Tools that `tool_search` loaded, when `tool_search` is allowed.
+
+Pit resolves `allowedTools` at session start. It activates `typescript` and the matching tools, and adds them again after `/tree` navigation, because Pi restores the tool set recorded on the destination branch. It does not deactivate tools that Pi's `defaultTools` setting or other extensions activated.
 
 ### Enable project functions
 

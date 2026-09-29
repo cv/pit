@@ -4,6 +4,16 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Pit requires Pi 0.99 or newer and is tested with Pi 0.99.0. On older Pi versions, which cannot hide tools, Pit warns at startup that other tools stay visible to the model.
+- Pit hides other tools from the model instead of deactivating them. The model still sees only `typescript` and any `allowedTools` exceptions, but Pi's built-in tools, extension tools, `codemode`, and `tool_search` stay active, and Pit no longer overrides Pi's `defaultTools` setting. MCP tools configured with `"exposure": "direct"` and tools loaded by `tool_search` stay declared.
+- `typescript` is registered with `model-only` exposure. Pi's `codemode` scripts and other tools can no longer call it, and codemode's `only` mode no longer hides it from the model.
+
+### Fixed
+
+- Keep tools that MCP, `codemode`, or `tool_search` activated after `/tree` navigation. Pit re-applied an exclusive tool set, which deactivated `codemode` and MCP tools with `direct` exposure.
+
 ## [0.21.1] - 2026-09-28
 
 ### Changed

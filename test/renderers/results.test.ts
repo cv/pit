@@ -132,7 +132,8 @@ describe("result renderers", () => {
     expect(httpOutput).toContain("HTTP 200");
     expect(httpOutput).toContain("headers");
     expect(httpOutput).toContain("content-type: application/json");
-    expect(httpOutput).toContain('"ok": true');
+    // Pi highlights JSON per token, so compare the visible text.
+    expect(stripTerminalSequences(httpOutput)).toContain('"ok": true');
 
     const batchOutput = renderValue({
       results: [
@@ -165,9 +166,11 @@ describe("result renderers", () => {
   it("renders fallback and edge-case result shapes", () => {
     const falsePositive = renderValue({ ...shell, extra: true });
     expect(falsePositive).not.toContain("shell exit 0");
-    expect(falsePositive).toContain('"stdout": "tests passed"');
+    expect(stripTerminalSequences(falsePositive)).toContain('"stdout": "tests passed"');
     expect(
-      renderValue({ results: [{ kind: "unknown", index: 0, ok: true, value: null }] }),
+      stripTerminalSequences(
+        renderValue({ results: [{ kind: "unknown", index: 0, ok: true, value: null }] }),
+      ),
     ).toContain('"kind": "unknown"');
 
     const failedShell = renderValue({
