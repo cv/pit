@@ -13,6 +13,7 @@ import { fileRevision, prepareEdit } from "./hashline.js";
 import { checkAbort, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { readWorkspace } from "./read.js";
 import { searchWorkspace } from "./search.js";
+import type { ImageCollector } from "./view-image.js";
 
 const MAX_GLOB_RESULTS = 10_000;
 
@@ -243,14 +244,22 @@ async function globWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
   return { entries, truncated };
 }
 
+export interface WorkspaceHost {
+  cwd: string;
+  /** Collects the images the current TypeScript invocation attaches to its result. */
+  images: ImageCollector;
+}
+
 export async function handleWorkspace(
-  cwd: string,
+  { cwd, images }: WorkspaceHost,
   method: string,
   args: unknown[],
   signal?: AbortSignal,
 ): Promise<unknown> {
   checkAbort(signal);
   switch (method) {
+    case "viewImage":
+      return images.view(args, signal);
     case "read":
       return readWorkspace(cwd, args, signal);
     case "edit":

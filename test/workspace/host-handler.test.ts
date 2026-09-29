@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { fileRevision, lineAnchor } from "../../src/workspace/hashline.js";
 import { handleWorkspace } from "../../src/workspace/host-handler.js";
+import { createImageCollector } from "../../src/workspace/view-image.js";
 import { cleanupHarness, cwd, run, setupHarness, value } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
@@ -157,7 +158,7 @@ describe("workspace read and edit", () => {
     controller.abort();
     await expect(
       handleWorkspace(
-        cwd,
+        { cwd, images: createImageCollector({ cwd } as any) },
         "edit",
         ["cancelled.txt", { revision: null, changes: [{ kind: "replaceFile", content: "late" }] }],
         controller.signal,

@@ -1,6 +1,16 @@
 import { defineNativeFunction } from "../global-definition.js";
 
 export const workspaceFunctions = [
+  defineNativeFunction("workspace", "viewImage", {
+    summary: "Display a workspace image",
+    declaration:
+      "viewImage(file: string): Promise<{ file: string; mimeType: string; queued: true }>;",
+    documentation:
+      "workspace.viewImage(file) attaches up to 8 images, in call order, to a successful result",
+    minimumArguments: 1,
+    maximumArguments: 1,
+  }),
+
   defineNativeFunction("workspace", "read", {
     summary: "Read workspace files",
     resultRenderer: "read",

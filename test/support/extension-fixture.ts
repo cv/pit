@@ -107,7 +107,7 @@ export function context(overrides: Record<string, unknown> = {}) {
   return {
     cwd,
     mode: "interactive",
-    model: { provider: "test", id: "model" },
+    model: { provider: "test", id: "model", input: ["text", "image"] },
     thinkingLevel: "medium",
     hasUI: true,
     isProjectTrusted: () => true,

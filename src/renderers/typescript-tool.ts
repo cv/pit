@@ -26,7 +26,11 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
   truncated: boolean;
   functions?: FunctionActivity[];
   failure?: StructuredTypeScriptFailure;
+  imageAttachments?: Array<{ file: string; mimeType: string; note: string; omitted?: boolean }>;
 }
+
+// Collapsed results name this many attached images; expanded results list all of them.
+const COLLAPSED_IMAGES = 3;
 
 /**
  * Whether details retain the returned value. Truncated results keep a fitted value; older
@@ -171,6 +175,10 @@ function executionNotices(details: TypeScriptDetails | undefined, outcome: strin
   else if (nonzero && outcome !== "error") notices.push("nonzero exits recorded");
   if (details?.tracesTruncated || details?.progressTruncated)
     notices.push("execution history incomplete");
+  const omittedImages = details?.imageAttachments?.filter(({ omitted }) => omitted).length ?? 0;
+  if (omittedImages > 0)
+    notices.push(`${omittedImages === 1 ? "image" : "images"} omitted for text-only model`);
+
   return notices;
 }
 
@@ -212,6 +220,13 @@ function renderExecutionDetails(
   if (dashboard)
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Execution (call completion)"))}${dashboard}`;
   text += renderInvocationTiming(details?.timings, theme);
+  if (details?.imageAttachments?.length) {
+    const images = details.imageAttachments.map(
+      ({ file, mimeType, note }) => `${file} (${mimeType})${note ? `\n${note}` : ""}`,
+    );
+    text += `\n\n${theme.bold(theme.fg("toolTitle", "Images"))}\n${images.join("\n")}`;
+  }
+
   if (details?.truncated)
     text += `\n${theme.fg("warning", "Result truncated to fit the output budget; omitted parts are not retained.")}`;
   return text;
@@ -235,11 +250,16 @@ function renderCompletedToolResult(input: {
     isRecord(details?.value) &&
     details.value.truncated === true;
   const state = details?.truncated && !reportedByValue ? `truncated, ${duration}` : duration;
-  const resultLabel = describeResult(details?.value, rendering.structuredResult, {
-    unretained: details?.truncated === true && !retainsValue(details),
-    fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
-    expanded,
-  });
+  const resultLabel =
+    details?.imageAttachments?.length && details.value === undefined
+      ? details.imageAttachments.length === 1
+        ? "Image attached"
+        : `${details.imageAttachments.length} images attached`
+      : describeResult(details?.value, rendering.structuredResult, {
+          unretained: details?.truncated === true && !retainsValue(details),
+          fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
+          expanded,
+        });
   const leafOutcome = rendering.structuredResult?.outcome ?? "success";
   const notices = executionNotices(details, leafOutcome);
   const resultOutcome =
@@ -256,6 +276,15 @@ function renderCompletedToolResult(input: {
       theme.fg(resultOutcome === "success" ? "dim" : resultOutcome, ` (${state})`),
   )}`;
   const resultContentStart = text.split("\n").length;
+  if (!expanded && details?.imageAttachments?.length) {
+    const images = details.imageAttachments;
+    for (const { file, mimeType } of images.slice(0, COLLAPSED_IMAGES))
+      text += `\nImage: ${file} (${mimeType})`;
+    const hidden = images.length - COLLAPSED_IMAGES;
+    if (hidden > 0)
+      text += `\n${theme.fg("dim", `… ${hidden} more image${hidden === 1 ? "" : "s"}; expand to list`)}`;
+  }
+
   if (expanded && shown.length > 0) {
     text += `\n${shown.join("\n")}`;
   } else if (expanded) {
@@ -287,6 +316,16 @@ const hasRenderableMetadata = shapeGuard(
     traces: Type.Optional(Type.Array(Type.Object({ namespace: Type.String() }))),
     progress: Type.Optional(Type.Array(Type.Unknown())),
     functions: Type.Optional(Type.Array(Type.Unknown())),
+    imageAttachments: Type.Optional(
+      Type.Array(
+        Type.Object({
+          file: Type.String(),
+          mimeType: Type.String(),
+          note: Type.String(),
+          omitted: Type.Optional(Type.Boolean()),
+        }),
+      ),
+    ),
   }),
 );
 

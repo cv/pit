@@ -1,7 +1,7 @@
 import type {
   AgentToolResult,
   ExtensionAPI,
-  ExtensionContext,
+  ExtensionToolContext,
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
@@ -22,6 +22,11 @@ import type { FunctionExecutor } from "../sandbox/executor.js";
 import { runWithFunctionExecutor } from "../sandbox/run.js";
 import { LIMITS } from "../shared/bounds.js";
 import { fitValue } from "../shared/json-budget.js";
+import {
+  createImageCollector,
+  type ImageAttachmentInfo,
+  type ImageCollector,
+} from "../workspace/view-image.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
@@ -110,7 +115,7 @@ interface TypeScriptToolExecution extends TypeScriptToolServices {
   params: TypeScriptToolParams;
   signal?: AbortSignal;
   update?: TypeScriptToolUpdate;
-  ctx: ExtensionContext;
+  ctx: ExtensionToolContext;
   pendingFailures: Map<string, TypeScriptFailureDetails>;
 }
 
@@ -144,6 +149,7 @@ interface SandboxValueExecution {
   promotionSuggestions: string[];
   executionProgress: ExecutionProgressController;
   timings: ExecutionTimingRecorder;
+  images: ImageCollector;
 }
 
 async function executeSandboxValue({
@@ -154,6 +160,7 @@ async function executeSandboxValue({
   promotionSuggestions,
   executionProgress,
   timings,
+  images,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
     return { savedFunction: preparedFunction.name, executed: false };
@@ -169,6 +176,7 @@ async function executeSandboxValue({
     activity: functionActivity,
     promotionSuggestions,
     ...(onShellProgress ? { onShellProgress } : {}),
+    images,
   });
   const options = {
     timings,
@@ -209,6 +217,7 @@ function buildToolResult(input: {
   functionActivity: FunctionActivity[];
   promotionSuggestions: string[];
   executionProgress: ExecutionProgressController;
+  imageMetadata: ImageAttachmentInfo[];
 }) {
   const savedSignature = input.namedFunction
     ? getSavedFunctionCallSignature(input.functionState.effective.get(input.namedFunction) ?? "")
@@ -226,7 +235,10 @@ function buildToolResult(input: {
     promotionSuggestionNotice(input.promotionSuggestions) +
     savedFunctionCatalogNotice(input.functionState.session);
   // The result gets the budget the notices leave, so the complete text stays within Pi's limit.
-  const reserved = TRUNCATION_NOTICE + notices;
+  const attachmentText = input.imageMetadata
+    .map(({ file, note }) => `\nImage: ${file}\n${note}`)
+    .join("");
+  const reserved = TRUNCATION_NOTICE + notices + attachmentText;
   const output = fitValue(input.value, {
     maxBytes: LIMITS.result.maxBytes - Buffer.byteLength(reserved),
     maxLines: LIMITS.result.maxLines - (reserved.split("\n").length - 1),
@@ -235,12 +247,14 @@ function buildToolResult(input: {
     content: [
       {
         type: "text" as const,
-        text: output.text + (output.truncated ? TRUNCATION_NOTICE : "") + notices,
+        text: output.text + (output.truncated ? TRUNCATION_NOTICE : "") + notices + attachmentText,
       },
     ],
     details: {
       // A truncated result keeps its fitted value, so the TUI shows what the model received.
       value: output.value,
+      ...(input.imageMetadata.length > 0 ? { imageAttachments: input.imageMetadata } : {}),
+
       truncated: output.truncated,
       ...(input.functionActivity.length > 0 ? { functions: input.functionActivity } : {}),
       ...input.executionProgress.snapshot(),
@@ -253,6 +267,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
+  const images = createImageCollector(request.ctx);
   try {
     const source = await formatTypeScriptSource(request.params.code);
     const input = resolveToolInput(source, request.params.params);
@@ -272,10 +287,13 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       promotionSuggestions,
       executionProgress,
       timings,
+      images,
     });
     timings.enter("commit");
     await request.savedFunctionService.commit(preparedFunction, request.ctx, functionActivity);
     timings.enter("result");
+    // One snapshot keeps the image notes in the text aligned with the attached blocks.
+    const attached = images.attached();
     const result = buildToolResult({
       value,
       ...(preparedFunction.name ? { namedFunction: preparedFunction.name } : {}),
@@ -283,10 +301,15 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       saveOnly: request.params.saveOnly === true,
       functionState: request.functionState,
       functionActivity,
+      imageMetadata: attached.map(({ info }) => info),
       promotionSuggestions,
       executionProgress,
     });
-    return { ...result, details: { ...result.details, timings: timings.finish() } };
+    return {
+      ...result,
+      content: [...result.content, ...attached.map(({ image }) => image)],
+      details: { ...result.details, timings: timings.finish() },
+    };
   } catch (error) {
     request.pendingFailures.set(
       request.id,

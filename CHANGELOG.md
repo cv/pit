@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `workspace.viewImage(file)` attaches local images to a successful TypeScript result using Pi's image recognition and model-aware processing. Image bytes stay outside sandbox JSON; one invocation can attach up to 8 images in call order, with bounded source, per-image, and total encoded sizes, visible image identity and text-only-model warnings, and expanded processing notes.
+
 ### Changed
 
 - **Breaking:** Pit requires Pi 0.99 or newer and is tested with Pi 0.99.0. On older Pi versions, which cannot hide tools, Pit warns at startup that other tools stay visible to the model.

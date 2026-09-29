@@ -223,6 +223,8 @@ type PitRemoveOptions = { cascade?: boolean };
 type PitRemoveResult = { name: string; removed: string[] };
 
 interface PitWorkspaceFunctions {
+  viewImage(file: string): Promise<{ file: string; mimeType: string; queued: true }>;
+
   read(
     file: string,
     options?: { format?: PitReadFormat; offset?: number; limit?: number },
