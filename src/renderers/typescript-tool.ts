@@ -26,7 +26,7 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
   truncated: boolean;
   functions?: FunctionActivity[];
   failure?: StructuredTypeScriptFailure;
-  imageAttachments?: Array<{ file: string; mimeType: string; note: string }>;
+  imageAttachments?: Array<{ file: string; mimeType: string; note: string; omitted?: boolean }>;
 }
 
 /**
@@ -172,8 +172,9 @@ function executionNotices(details: TypeScriptDetails | undefined, outcome: strin
   else if (nonzero && outcome !== "error") notices.push("nonzero exits recorded");
   if (details?.tracesTruncated || details?.progressTruncated)
     notices.push("execution history incomplete");
-  if (details?.imageAttachments?.some(({ note }) => /does not support images/i.test(note)))
-    notices.push("text-only model");
+  const omittedImages = details?.imageAttachments?.filter(({ omitted }) => omitted).length ?? 0;
+  if (omittedImages > 0)
+    notices.push(`${omittedImages === 1 ? "image" : "images"} omitted for text-only model`);
 
   return notices;
 }
@@ -308,7 +309,12 @@ const hasRenderableMetadata = shapeGuard(
     functions: Type.Optional(Type.Array(Type.Unknown())),
     imageAttachments: Type.Optional(
       Type.Array(
-        Type.Object({ file: Type.String(), mimeType: Type.String(), note: Type.String() }),
+        Type.Object({
+          file: Type.String(),
+          mimeType: Type.String(),
+          note: Type.String(),
+          omitted: Type.Optional(Type.Boolean()),
+        }),
       ),
     ),
   }),

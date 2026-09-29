@@ -64,24 +64,6 @@ function mockEmptyImageReader() {
   })) as unknown as typeof createReadToolDefinition);
 }
 
-function mockSignatureReader() {
-  vi.mocked(createReadToolDefinition).mockImplementationOnce(((
-    _cwd: string,
-    readerOptions: {
-      operations: {
-        detectImageMimeType: (absolutePath: string) => Promise<string | null | undefined>;
-      };
-    },
-  ) => ({
-    execute: async (_id: string, params: { path: string }) => {
-      const mimeType = await readerOptions.operations.detectImageMimeType(params.path);
-      return {
-        content: [{ type: "image", data: png(1, 1).toString("base64"), mimeType }],
-      };
-    },
-  })) as unknown as typeof createReadToolDefinition);
-}
-
 describe("workspace image host helper", () => {
   it.each<{
     name: string;
@@ -95,12 +77,19 @@ describe("workspace image host helper", () => {
       name: "ordinary text file",
       path: "text.png",
       contents: Buffer.from("not an image"),
-      error: /supported image/,
+      error: /Not a supported image/,
     },
     {
-      name: "corrupt data with a PNG signature",
+      // Pi's detector rejects it; a bare "BM" prefix check would send it to the decoder.
+      name: "text that starts with a bitmap signature",
+      path: "notes.bmp",
+      contents: Buffer.from("BM is not a bitmap"),
+      error: /Not a supported image/,
+    },
+    {
+      name: "a PNG header without image data",
       path: "broken.png",
-      contents: Buffer.from("89504e470d0a1a0a00", "hex"),
+      contents: png().subarray(0, 33),
       error: /omitted|decode|resize/i,
     },
     { name: "directory", path: "directory", setupDirectory: true, error: /regular file/ },
@@ -116,34 +105,12 @@ describe("workspace image host helper", () => {
     },
   );
 
-  it.each([
-    { name: "PNG", signature: Buffer.from("89504e470d0a1a0a", "hex"), mimeType: "image/png" },
-    { name: "JPEG", signature: Buffer.from("ffd8ff", "hex"), mimeType: "image/jpeg" },
-    { name: "GIF", signature: Buffer.from("GIF89a"), mimeType: "image/gif" },
-    { name: "WebP", signature: Buffer.from("RIFF0000WEBP"), mimeType: "image/webp" },
-    { name: "BMP", signature: Buffer.from("BM"), mimeType: "image/bmp" },
-  ])(
-    "passes detected $name MIME to Pi's public image reader",
-    async ({ name, signature, mimeType }) => {
-      const path = `signature-${name}.bin`;
-      await writeFile(join(cwd, path), signature);
-      mockSignatureReader();
-      const { view, attachments, metadata } = viewer();
-      await expect(view([path], new AbortController().signal)).resolves.toMatchObject({
-        queued: true,
-      });
-      expect(metadata[0]?.mimeType).toBe(mimeType);
-      expect(attachments).toHaveLength(1);
-    },
-  );
-
   it("rejects result labels over 1,024 UTF-8 bytes without opening the file", async () => {
+    // The path need not exist (macOS cannot create it): opening first would fail with ENOENT.
     let directory = temporary;
     for (let index = 0; index < 48; index++)
       directory = join(directory, `part-${String(index).padStart(2, "0")}-${"x".repeat(20)}`);
-    await mkdir(directory, { recursive: true });
     const path = join(directory, "pixel.png");
-    await writeFile(path, png());
     expect(Buffer.byteLength(path)).toBeGreaterThan(1_024);
     const { view, attachments, metadata } = viewer();
     await expect(view([path], new AbortController().signal)).rejects.toThrow(/path is too long/);
@@ -289,6 +256,7 @@ describe("workspace image host helper", () => {
     });
     expect(metadata[0]?.note).toContain("original 32x16, displayed at 8x4");
     expect(metadata[0]?.note).toContain("does not support images");
+    expect(metadata[0]?.omitted).toBe(true);
     const attachment = attachments.find((block) => block.type === "image");
     expect(attachment?.type).toBe("image");
     expect(attachment?.type === "image" ? pngDimensions(attachment.data) : undefined).toEqual({

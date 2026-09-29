@@ -101,7 +101,7 @@ describe("pit extension", () => {
     expect(images).toHaveLength(1);
     expect(images[0]).toMatchObject({ type: "image", mimeType: "image/png" });
     expect(result.details.imageAttachments).toEqual([
-      expect.objectContaining({ file: "pixel.png", mimeType: "image/png" }),
+      expect.objectContaining({ file: "pixel.png", mimeType: "image/png", omitted: false }),
     ]);
     expect(JSON.stringify(result.details)).not.toContain(images[0].data);
     expect(result.content[0].text).toContain("pixel.png");

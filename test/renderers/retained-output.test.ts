@@ -177,7 +177,9 @@ describe("retained process output", () => {
             {
               file: "plot.png",
               mimeType: "image/png",
-              note: "[Current model does not support images. The image will be omitted from this request.]",
+              // The flag, not Pi's note wording, identifies a text-only model.
+              note: "",
+              omitted: true,
             },
           ],
         },
@@ -191,7 +193,7 @@ describe("retained process output", () => {
 
     expect(output).toContain("Image attached");
     expect(output).toContain("plot.png (image/png)");
-    expect(normalized).toContain("text-only model");
+    expect(normalized).toContain("image omitted for text-only model");
     expect(output).not.toContain("(no result)");
     expect(rawRows.every((line) => visibleWidth(line) <= 32)).toBe(true);
   });
