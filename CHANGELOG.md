@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-09-28
+
+### Changed
+
+- Result renderers recognize namespace results (workspace reads, searches, edits, lists, globs, stats, and batches; HTTP responses; process results) and execution metadata with compiled TypeBox schemas instead of hand-written type checks. A value that matches the same shapes renders exactly as before, and each schema is now the single description of its shape. Pit's one `isRecord` helper replaces duplicated inline object checks.
+
 ## [0.21.0] - 2026-09-27
 
 ### Changed
