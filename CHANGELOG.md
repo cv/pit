@@ -6,7 +6,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Added
 
-- `workspace.viewImage(file)` attaches a local image to a successful TypeScript result using Pi's model-aware image processing. Image bytes stay outside sandbox JSON; one successful image is allowed per invocation, with bounded source and encoded sizes, visible image identity and warnings, and expanded processing notes.
+- `workspace.viewImage(file)` attaches local images to a successful TypeScript result using Pi's image recognition and model-aware processing. Image bytes stay outside sandbox JSON; one invocation can attach up to 8 images in call order, with bounded source, per-image, and total encoded sizes, visible image identity and text-only-model warnings, and expanded processing notes.
 
 ## [0.21.1] - 2026-09-28
 

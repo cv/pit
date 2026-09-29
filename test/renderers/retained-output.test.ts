@@ -198,6 +198,43 @@ describe("retained process output", () => {
     expect(rawRows.every((line) => visibleWidth(line) <= 32)).toBe(true);
   });
 
+  it.each<{ count: number; hidden: string }>([
+    { count: 4, hidden: "… 1 more image; expand to list" },
+    { count: 5, hidden: "… 2 more images; expand to list" },
+  ])(
+    "names the first of $count images when collapsed and lists all when expanded",
+    ({ count, hidden }) => {
+      const files = Array.from({ length: count }, (_, index) => `shot-${index + 1}.png`);
+      const result = {
+        content: [{ type: "text", text: "undefined" }],
+        details: {
+          value: undefined,
+          truncated: false,
+          imageAttachments: files.map((file) => ({
+            file,
+            mimeType: "image/png",
+            note: "",
+            omitted: true,
+          })),
+        },
+      };
+      const render = (expanded: boolean) =>
+        renderTypeScriptToolResult(result, { expanded, isPartial: false }, theme, {})
+          .render(60)
+          .map(stripTerminalSequences)
+          .join("\n");
+
+      const collapsed = render(false);
+      expect(collapsed).toContain(`${count} images attached`);
+      expect(collapsed.replace(/\s+/g, " ")).toContain("images omitted for text-only model");
+      expect(collapsed).toContain("Image: shot-3.png (image/png)");
+      expect(collapsed).not.toContain("shot-4.png");
+      expect(collapsed).toContain(hidden);
+      const expanded = render(true);
+      for (const file of files) expect(expanded).toContain(`${file} (image/png)`);
+    },
+  );
+
   it("sanitizes hostile image labels without rendering image bytes", () => {
     const imageBlock = { type: "image", data: "SECRET_BASE64", mimeType: "image/png" };
 

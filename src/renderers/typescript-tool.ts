@@ -29,6 +29,9 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
   imageAttachments?: Array<{ file: string; mimeType: string; note: string; omitted?: boolean }>;
 }
 
+// Collapsed results name this many attached images; expanded results list all of them.
+const COLLAPSED_IMAGES = 3;
+
 /**
  * Whether details retain the returned value. Truncated results keep a fitted value; older
  * sessions and unstructured fallbacks kept only the model-visible text.
@@ -249,7 +252,9 @@ function renderCompletedToolResult(input: {
   const state = details?.truncated && !reportedByValue ? `truncated, ${duration}` : duration;
   const resultLabel =
     details?.imageAttachments?.length && details.value === undefined
-      ? "Image attached"
+      ? details.imageAttachments.length === 1
+        ? "Image attached"
+        : `${details.imageAttachments.length} images attached`
       : describeResult(details?.value, rendering.structuredResult, {
           unretained: details?.truncated === true && !retainsValue(details),
           fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
@@ -272,8 +277,12 @@ function renderCompletedToolResult(input: {
   )}`;
   const resultContentStart = text.split("\n").length;
   if (!expanded && details?.imageAttachments?.length) {
-    const first = details.imageAttachments[0];
-    if (first) text += `\nImage: ${first.file} (${first.mimeType})`;
+    const images = details.imageAttachments;
+    for (const { file, mimeType } of images.slice(0, COLLAPSED_IMAGES))
+      text += `\nImage: ${file} (${mimeType})`;
+    const hidden = images.length - COLLAPSED_IMAGES;
+    if (hidden > 0)
+      text += `\n${theme.fg("dim", `… ${hidden} more image${hidden === 1 ? "" : "s"}; expand to list`)}`;
   }
 
   if (expanded && shown.length > 0) {

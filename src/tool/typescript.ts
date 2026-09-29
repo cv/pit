@@ -15,13 +15,17 @@ import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../fu
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { createHostDispatcher } from "../host/dispatcher.js";
-import type { ImageAttachmentInfo, ImageAttachments } from "../host/view-image.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
 import { runWithFunctionExecutor } from "../sandbox/run.js";
 import { LIMITS } from "../shared/bounds.js";
 import { fitValue } from "../shared/json-budget.js";
+import {
+  createImageCollector,
+  type ImageAttachmentInfo,
+  type ImageCollector,
+} from "../workspace/view-image.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
@@ -143,8 +147,7 @@ interface SandboxValueExecution {
   promotionSuggestions: string[];
   executionProgress: ExecutionProgressController;
   timings: ExecutionTimingRecorder;
-  imageAttachments: ImageAttachments;
-  imageMetadata: ImageAttachmentInfo[];
+  images: ImageCollector;
 }
 
 async function executeSandboxValue({
@@ -155,8 +158,7 @@ async function executeSandboxValue({
   promotionSuggestions,
   executionProgress,
   timings,
-  imageAttachments,
-  imageMetadata,
+  images,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
     return { savedFunction: preparedFunction.name, executed: false };
@@ -172,8 +174,7 @@ async function executeSandboxValue({
     activity: functionActivity,
     promotionSuggestions,
     ...(onShellProgress ? { onShellProgress } : {}),
-    imageAttachments,
-    imageMetadata,
+    images,
   });
   const options = {
     timings,
@@ -264,9 +265,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
-  const imageAttachments: ImageAttachments = [];
-  const imageMetadata: ImageAttachmentInfo[] = [];
-
+  const images = createImageCollector(request.ctx);
   try {
     const source = await formatTypeScriptSource(request.params.code);
     const input = resolveToolInput(source, request.params.params);
@@ -286,12 +285,13 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       promotionSuggestions,
       executionProgress,
       timings,
-      imageAttachments,
-      imageMetadata,
+      images,
     });
     timings.enter("commit");
     await request.savedFunctionService.commit(preparedFunction, request.ctx, functionActivity);
     timings.enter("result");
+    // One snapshot keeps the image notes in the text aligned with the attached blocks.
+    const attached = images.attached();
     const result = buildToolResult({
       value,
       ...(preparedFunction.name ? { namedFunction: preparedFunction.name } : {}),
@@ -299,14 +299,13 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       saveOnly: request.params.saveOnly === true,
       functionState: request.functionState,
       functionActivity,
-      imageMetadata,
-
+      imageMetadata: attached.map(({ info }) => info),
       promotionSuggestions,
       executionProgress,
     });
     return {
       ...result,
-      content: [...result.content, ...imageAttachments],
+      content: [...result.content, ...attached.map(({ image }) => image)],
       details: { ...result.details, timings: timings.finish() },
     };
   } catch (error) {

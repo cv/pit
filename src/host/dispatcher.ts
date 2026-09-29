@@ -22,15 +22,11 @@ import {
 } from "../shared/argument-values.js";
 import { completeUtf8Length, LIMITS } from "../shared/bounds.js";
 import { handleWorkspace } from "../workspace/host-handler.js";
+import type { ImageCollector } from "../workspace/view-image.js";
 import { createCommandsHostHandler } from "./handlers/commands.js";
 import { createModelsHostHandler } from "./handlers/models.js";
 import { createRuntimeHostHandler } from "./handlers/runtime.js";
 import { createSessionHostHandler } from "./handlers/session.js";
-import {
-  createImageViewer,
-  type ImageAttachmentInfo,
-  type ImageAttachments,
-} from "./view-image.js";
 
 // One storage instance; each host dispatch owns its async scope, including overlapping tools.
 const processTraceContext = new AsyncLocalStorage<number | undefined>();
@@ -95,8 +91,8 @@ export interface HostServices {
   activity: FunctionActivity[];
   onShellProgress?: (event: ShellProgressEvent) => void;
   promotionSuggestions: string[];
-  imageAttachments: ImageAttachments;
-  imageMetadata: ImageAttachmentInfo[];
+  /** Collects the images this invocation's workspace.viewImage calls attach to its result. */
+  images: ImageCollector;
 }
 
 interface ProcessHostHandlers {
@@ -205,8 +201,7 @@ export function createHostDispatcher({
   activity,
   promotionSuggestions,
   onShellProgress,
-  imageAttachments,
-  imageMetadata,
+  images,
 }: HostServices): HostCallHandler {
   const processHandlers = createProcessHostHandlers({
     pi,
@@ -216,10 +211,10 @@ export function createHostDispatcher({
   const shellHandlers = processHandlers.shell;
 
   const uiHandlers = createUiHandlers(ctx);
-  const viewImage = createImageViewer(ctx, imageAttachments, imageMetadata);
 
   const publicHandlers: Record<NativeNamespace, NativeFunctionHandler> = {
-    workspace: (method, args, signal) => handleWorkspace(ctx.cwd, method, args, signal),
+    workspace: (method, args, signal) =>
+      handleWorkspace({ cwd: ctx.cwd, images }, method, args, signal),
     shell: (method, args, signal) => shellHandlers[method as NativeMethod<"shell">](args, signal),
     http: async (_method, args, signal) => {
       const url = string(args[0], "url");
@@ -313,7 +308,6 @@ export function createHostDispatcher({
       }
 
       validateNativeCall(namespace, method, args);
-      if (namespace === "workspace" && method === "viewImage") return viewImage(args, signal);
       return publicHandlers[namespace as NativeNamespace](method, args, signal);
     });
 }
