@@ -58,6 +58,43 @@ describe("ux.manageSession", () => {
     }
   });
 
+  it("loads requested built-ins and writes offline MCP servers and codemode settings", async () => {
+    const manage = await loadWorkflowFunction("ux.manageSession");
+    const { execFile, calls } = host(["fixture\n"]);
+    const started = manage(
+      { context: { get: vi.fn() }, shell: { execFile } },
+      {
+        action: "start",
+        cwd: "/repo",
+        builtins: ["mcp", "codemode"],
+        mcpServers: { docs: { exposure: "direct" } },
+        codemodeMode: "only",
+      },
+    );
+    await vi.runAllTimersAsync();
+    await started;
+
+    const command = calls.find((call) => call.args.includes("new-session"))?.args.at(-1) ?? "";
+    expect(command).toContain("'-e' 'builtin:mcp' '-e' 'builtin:codemode'");
+    const written = Object.fromEntries(
+      calls
+        .filter((call) => call.program === "/opt/node/bin/node")
+        .map((call) => [call.args[2], JSON.parse(call.args[3] ?? "null")]),
+    );
+    expect(written).toEqual({
+      [`${ROOT}/agent/mcp.json`]: {
+        mcpServers: {
+          docs: {
+            command: "/opt/node/bin/node",
+            args: ["/repo/.pi/skills/pit-terminal-ux/assets/fixture-mcp-server.mjs"],
+            exposure: "direct",
+          },
+        },
+      },
+      [`${ROOT}/agent/settings.json`]: { codemode: { mode: "only" } },
+    });
+  });
+
   it("stops its server and removes the run when Pi never shows the fixture model", async () => {
     const manage = await loadWorkflowFunction("ux.manageSession");
     const { execFile, calls } = host(["Loading"]);
@@ -133,6 +170,21 @@ describe("ux.manageSession", () => {
       name: "an environment name that is not a shell identifier",
       input: { action: "start", cwd: "/repo", extraEnv: { "PATH; rm": "x" } },
       error: "invalid environment variable name",
+    },
+    {
+      name: "an unknown built-in extension",
+      input: { action: "start", cwd: "/repo", builtins: ["llama.cpp"] },
+      error: "unknown built-in extension",
+    },
+    {
+      name: "an MCP server name that is not an identifier",
+      input: { action: "start", cwd: "/repo", builtins: ["mcp"], mcpServers: { "a b": {} } },
+      error: "invalid MCP server name",
+    },
+    {
+      name: "MCP servers without the mcp built-in",
+      input: { action: "start", cwd: "/repo", mcpServers: { docs: {} } },
+      error: "mcpServers needs builtins to include mcp",
     },
     {
       name: "a relative working directory",

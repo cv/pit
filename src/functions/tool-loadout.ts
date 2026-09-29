@@ -1,0 +1,82 @@
+import type {
+  ExtensionAPI,
+  ToolLoadout,
+  ToolLoadoutChanges,
+} from "@earendil-works/pi-coding-agent";
+
+export const PIT_TOOL_NAME = "typescript";
+
+/** Tool selection resolved from a trusted project's `.pi/pit.json` at session start. */
+export interface PitToolSelection {
+  /** Tools declared to the model alongside `typescript` (`allowedTools`). */
+  allowedTools: RegExp[];
+}
+
+export function createPitToolSelection(): PitToolSelection {
+  return { allowedTools: [] };
+}
+
+/** Whole-name, case-sensitive patterns in which `*` matches any sequence. */
+export function compileToolPatterns(patterns: readonly string[]): RegExp[] {
+  return patterns.map(
+    (pattern) =>
+      new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`),
+  );
+}
+
+/**
+ * Whether this Pi version supports tool exposure and loadouts (Pi 0.99+). Older versions omit
+ * `exposure` from tool info and ignore Pit's `prepareLoadout()` hook, so other tools stay visible.
+ */
+export function supportsToolLoadouts(pi: ExtensionAPI): boolean {
+  const tools = pi.getAllTools();
+  return tools.length === 0 || tools.some((tool) => "exposure" in tool);
+}
+
+function isAllowed(selection: PitToolSelection, name: string): boolean {
+  return selection.allowedTools.some((pattern) => pattern.test(name));
+}
+
+/**
+ * Adds `typescript` and the registered `allowedTools` matches to the active tools. Tools other
+ * extensions activated stay active, so MCP tools and orchestrators such as `codemode` remain
+ * callable; {@link pitLoadout} hides their declarations instead.
+ */
+export function activatePitTools(pi: ExtensionAPI, selection: PitToolSelection): void {
+  const exceptions = selection.allowedTools.length
+    ? pi
+        .getAllTools()
+        .map(({ name }) => name)
+        .filter((name) => isAllowed(selection, name))
+    : [];
+  pi.setActiveTools([...new Set([PIT_TOOL_NAME, ...pi.getActiveTools(), ...exceptions])]);
+}
+
+/**
+ * Hides the declarations of tools the model would otherwise see beside `typescript`. They stay
+ * active and callable. Declared: `typescript`, `allowedTools` matches, MCP tools configured with
+ * `direct` exposure, and tools that are declared only because a tool such as `tool_search`
+ * loaded them (`codemode` or `deferred` exposure).
+ */
+export function pitLoadout(loadout: ToolLoadout, selection: PitToolSelection): ToolLoadoutChanges {
+  return {
+    hiddenDeclarations: loadout.declared
+      .map(({ name }) => name)
+      .filter(
+        (name) =>
+          name !== PIT_TOOL_NAME && !isAllowed(selection, name) && hiddenByDefault(loadout, name),
+      ),
+  };
+}
+
+function hiddenByDefault(loadout: ToolLoadout, name: string): boolean {
+  switch (loadout.getExposure(name)) {
+    case "model-only":
+      return true;
+    case "direct":
+      // MCP's default exposure is `codemode`, so a `direct` MCP tool is an explicit user choice.
+      return !loadout.getNamespace(name)?.name.startsWith("mcp__");
+    default:
+      return false;
+  }
+}

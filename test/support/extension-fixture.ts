@@ -2,7 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { initTheme } from "@earendil-works/pi-coding-agent";
+import {
+  initTheme,
+  type ToolLoadout,
+  type ToolLoadoutChanges,
+} from "@earendil-works/pi-coding-agent";
 import { vi } from "vitest";
 
 import pit from "../../src/index.js";
@@ -28,6 +32,8 @@ export interface RegisteredTool {
     };
   };
   prepareArguments?: (args: unknown) => any;
+  exposure?: string;
+  prepareLoadout?: (loadout: ToolLoadout) => ToolLoadoutChanges | undefined;
   renderCall?: (args: any, theme: any, context: any) => RenderedComponent;
   renderResult?: (result: any, options: any, theme: any, context: any) => RenderedComponent;
   execute: (...args: any[]) => Promise<any>;
@@ -43,6 +49,7 @@ export let branchEntries: any[];
 export let execMock: ReturnType<typeof vi.fn>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
 export let getAllTools: ReturnType<typeof vi.fn>;
+export let getActiveTools: ReturnType<typeof vi.fn>;
 export let functionsCommand: { handler: (args: string, ctx: any) => Promise<void> };
 let sessionName: string | undefined;
 let slashCommands: any[] = [];
@@ -202,6 +209,7 @@ export async function setupHarness(): Promise<void> {
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   getAllTools = vi.fn(() => []);
+  getActiveTools = vi.fn((): string[] => []);
   const pi = {
     registerTool: vi.fn((registered: RegisteredTool) => {
       tool = registered;
@@ -240,6 +248,7 @@ export async function setupHarness(): Promise<void> {
     }),
     setActiveTools,
     getAllTools,
+    getActiveTools,
     exec: execMock,
   };
   pit(pi as any);

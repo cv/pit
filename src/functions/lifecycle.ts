@@ -10,6 +10,12 @@ import type { FunctionState } from "./state.js";
 import { reconcileFunctionState, resetFunctionUsage, stateFunctionEnvironment } from "./state.js";
 import { loadProjectFunctionConfig, loadProjectFunctions } from "./storage/project.js";
 import { userFunctionDirectory, userFunctionPath, loadUserFunctions } from "./storage/user.js";
+import {
+  activatePitTools,
+  compileToolPatterns,
+  supportsToolLoadouts,
+  type PitToolSelection,
+} from "./tool-loadout.js";
 
 interface FunctionManagerRegistration {
   pi: ExtensionAPI;
@@ -90,20 +96,11 @@ function registerSavedFunctionManager({
   });
 }
 
-/** Activates `typescript` and the registered tools matching the project's exceptions. */
-function activatePitTools(pi: ExtensionAPI, allowedTools: readonly RegExp[]): void {
-  const exceptions = allowedTools.length
-    ? pi
-        .getAllTools()
-        .map(({ name }) => name)
-        .filter((name) => allowedTools.some((pattern) => pattern.test(name)))
-    : [];
-  pi.setActiveTools([...new Set(["typescript", ...exceptions])]);
-}
-
-function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionState): void {
-  // Resolved at session start; configuration edits apply after /reload.
-  let allowedTools: RegExp[] = [];
+function registerFunctionLifecycle(
+  pi: ExtensionAPI,
+  functionState: FunctionState,
+  selection: PitToolSelection,
+): void {
   pi.on("session_start", async (_event, ctx) => {
     resetFunctionUsage(functionState);
     const projectConfig = await loadProjectFunctionConfig(ctx);
@@ -153,11 +150,15 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
       ctx.ui.notify(`Some saved functions could not be loaded: ${shown}${omitted}`, "warning");
     }
-    allowedTools = (projectConfig.allowedTools ?? []).map(
-      (pattern) =>
-        new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`),
-    );
-    activatePitTools(pi, allowedTools);
+    // Resolved at session start; configuration edits apply after /reload.
+    selection.allowedTools = compileToolPatterns(projectConfig.allowedTools ?? []);
+    activatePitTools(pi, selection);
+    if (ctx.hasUI && !supportsToolLoadouts(pi)) {
+      ctx.ui.notify(
+        "Pit requires Pi 0.99 or newer. This Pi version cannot hide other tools, so the model sees them beside typescript. Update Pi with `pi update`.",
+        "warning",
+      );
+    }
   });
   pi.on("session_tree", (_event, ctx) => {
     resetFunctionUsage(functionState);
@@ -173,9 +174,10 @@ function registerFunctionLifecycle(pi: ExtensionAPI, functionState: FunctionStat
       },
     );
     reconcileFunctionState(functionState);
-    // Pi restores the destination branch's recorded tools before this event, which can re-enable
-    // tools from before Pit or an earlier configuration. Keep the same selection as session start.
-    activatePitTools(pi, allowedTools);
+    // Pi restores the destination branch's recorded tools before this event. A branch recorded
+    // before Pit or an allowedTools change can lack them; add them back without deactivating tools
+    // other extensions activated.
+    activatePitTools(pi, selection);
   });
   pi.on("before_agent_start", (event) => {
     // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
@@ -212,7 +214,8 @@ export function registerSavedFunctionFeatures(
   pi: ExtensionAPI,
   functionState: FunctionState,
   savedFunctionService: SavedFunctionService,
+  toolSelection: PitToolSelection,
 ): void {
   registerSavedFunctionManager({ pi, functionState, savedFunctionService });
-  registerFunctionLifecycle(pi, functionState);
+  registerFunctionLifecycle(pi, functionState, toolSelection);
 }

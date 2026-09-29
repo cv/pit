@@ -1,4 +1,5 @@
 import { initTheme } from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { FunctionCall } from "../../src/renderers/function-call.js";
@@ -122,7 +123,8 @@ describe("Git result renderers", () => {
 
     const json = render("show", processResult('{"name":"pit","version":"0.6.0"}\n'));
     expect(json.summary).toBe("show, 1 line");
-    expect(json.lines.join("\n")).toContain('"version": "0.6.0"');
+    // Pi highlights JSON per token, so compare the visible text.
+    expect(stripTerminalSequences(json.lines.join("\n"))).toContain('"version": "0.6.0"');
 
     const plain = render("show", processResult("[incomplete json\nsecond line\n"));
     expect(plain.summary).toBe("show, 2 lines");

@@ -12,6 +12,11 @@
  * @param input.keepShell - Keep the pane's shell running after Pi exits, as a terminal does. Exit
  *   checks need it: when the pane closes, the hang-up kills Pi's descendants whatever Pit did.
  *   The default is false.
+ * @param input.builtins - Pi built-in extensions to load (`mcp`, `codemode`, `tool-search`).
+ *   `--no-extensions` disables them otherwise. The default is none.
+ * @param input.mcpServers - Offline fixture MCP servers to configure in the isolated agent
+ *   directory, by name, with each server's exposure. Needs `builtins` to include `mcp`.
+ * @param input.codemodeMode - Pi's `codemode.mode` setting for the isolated agent.
  * @param input.root - Run directory returned by start; stop kills its server and removes it.
  */
 async function manageSession(
@@ -26,6 +31,12 @@ async function manageSession(
         height?: number;
         extraEnv?: Record<string, string>;
         keepShell?: boolean;
+        builtins?: Array<"mcp" | "codemode" | "tool-search">;
+        mcpServers?: Record<
+          string,
+          { exposure?: "codemode" | "codemode-deferred" | "deferred" | "direct" | "hidden" }
+        >;
+        codemodeMode?: "on" | "only";
       }
     | { action: "stop"; socket: string; root: string },
 ) {
@@ -68,6 +79,19 @@ async function manageSession(
   }
   const cwd = input.cwd ?? (await get()).cwd;
   if (!cwd.startsWith("/")) throw new Error("cwd must be an absolute path");
+  const builtins = [...new Set(input.builtins ?? [])];
+  for (const name of builtins) {
+    if (!["mcp", "codemode", "tool-search"].includes(name)) {
+      throw new Error(`unknown built-in extension: ${name}`);
+    }
+  }
+  const mcpServers = Object.entries(input.mcpServers ?? {});
+  for (const [name] of mcpServers) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(name)) throw new Error(`invalid MCP server name: ${name}`);
+  }
+  if (mcpServers.length > 0 && !builtins.includes("mcp")) {
+    throw new Error("mcpServers needs builtins to include mcp");
+  }
 
   const [nodeBin, pi] = (
     await execFile("sh", ["-c", 'dirname "$(command -v node)" && command -v pi'], { raise: true })
@@ -83,6 +107,36 @@ async function manageSession(
   await execFile("mkdir", ["-p", `${root}/home`, `${root}/agent`, `${root}/sessions`], {
     raise: true,
   });
+  // Pi reads mcp.json and settings.json from its agent directory.
+  const agentFiles: Array<[string, unknown]> = [];
+  if (mcpServers.length > 0) {
+    const server = `${cwd}/.pi/skills/pit-terminal-ux/assets/fixture-mcp-server.mjs`;
+    agentFiles.push([
+      "mcp.json",
+      {
+        mcpServers: Object.fromEntries(
+          mcpServers.map(([name, config]) => [
+            name,
+            { command: `${nodeBin}/node`, args: [server], ...config },
+          ]),
+        ),
+      },
+    ]);
+  }
+  if (input.codemodeMode)
+    agentFiles.push(["settings.json", { codemode: { mode: input.codemodeMode } }]);
+  for (const [file, contents] of agentFiles) {
+    await execFile(
+      `${nodeBin}/node`,
+      [
+        "-e",
+        "require('node:fs').writeFileSync(process.argv[1], process.argv[2])",
+        `${root}/agent/${file}`,
+        JSON.stringify(contents, null, 2),
+      ],
+      { raise: true },
+    );
+  }
   const command = [
     "env",
     "-i",
@@ -99,6 +153,7 @@ async function manageSession(
     `${cwd}/src/index.ts`,
     "-e",
     `${cwd}/.pi/skills/pit-terminal-ux/assets/fixture-provider.ts`,
+    ...builtins.flatMap((name) => ["-e", `builtin:${name}`]),
     "--no-extensions",
     "--no-skills",
     "--no-context-files",

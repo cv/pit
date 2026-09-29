@@ -5,7 +5,7 @@ import {
   createReadToolDefinition,
   detectSupportedImageMimeTypeFromFile,
   type AgentToolResult,
-  type ExtensionContext,
+  type ExtensionToolContext,
 } from "@earendil-works/pi-coding-agent";
 
 import { boundText } from "../shared/bounds.js";
@@ -31,7 +31,7 @@ const MAX_IMAGES = 8;
 const MAX_TOTAL_ENCODED_BYTES = 16 * 1024 * 1024;
 
 async function loadImage(
-  ctx: ExtensionContext,
+  ctx: ExtensionToolContext,
   rawPath: unknown,
   signal?: AbortSignal,
 ): Promise<AttachedImage> {
@@ -103,7 +103,8 @@ export interface ImageCollector {
   attached(): AttachedImage[];
 }
 
-export function createImageCollector(ctx: ExtensionContext): ImageCollector {
+// Pi runs its read tool with the context of the tool that calls it.
+export function createImageCollector(ctx: ExtensionToolContext): ImageCollector {
   // Each call reserves a slot when it starts, so concurrent calls attach in call order. A failed
   // call releases its slot; pending calls count toward the limit.
   const slots: Array<{ loaded?: AttachedImage }> = [];

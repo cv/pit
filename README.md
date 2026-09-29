@@ -31,13 +31,13 @@ That call reads a file and checks Git status in parallel, then returns a three-f
 
 Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It can affect the host only through the functions it requests, and results are bounded so the context and TUI stay compact.
 
-It's a different way of working, and it won't suit every setup. Pit makes `typescript` the only active coding tool by default, even if Pi's `defaultTools` setting lists others. You can [allow specific tools](docs/configuration.md#allow-other-tools), but otherwise the agent's coding work goes through TypeScript.
+It's a different way of working, and it won't suit every setup. Pit makes `typescript` the only coding tool the model sees by default. Other tools stay active, so extensions and Pi features that depend on them keep working, but their declarations are hidden. You can [declare specific tools directly](docs/configuration.md#allow-other-tools), but otherwise the agent's coding work goes through TypeScript.
 
 For a longer first-hand account, see [I Wasn't Trying to Build an App](docs/case_study/), a case study of growing a music-recommendation system through everyday Pit use.
 
 ## Install and update
 
-Pit needs Node 22.19 or newer and is tested with Pi 0.87.1; other Pi versions may work. Prebuilt runtimes are available for Linux, macOS, and Windows on ARM64 or x64.
+Pit needs Node 22.19 or newer and Pi 0.99 or newer, and is tested with Pi 0.99.0. Prebuilt runtimes are available for Linux, macOS, and Windows on ARM64 or x64.
 
 Install the latest version:
 

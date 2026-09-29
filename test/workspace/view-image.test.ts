@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 
 function collector(model = context().model) {
-  const images = createImageCollector(context({ model }) as unknown as ExtensionContext);
+  const images = createImageCollector(context({ model }) as unknown as ExtensionToolContext);
   const view = (path: string, signal = new AbortController().signal) => images.view([path], signal);
   return { view, attached: () => images.attached() };
 }

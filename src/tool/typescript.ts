@@ -1,7 +1,7 @@
 import type {
   AgentToolResult,
   ExtensionAPI,
-  ExtensionContext,
+  ExtensionToolContext,
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
@@ -14,6 +14,7 @@ import { functionDependencyBinding } from "../functions/identifier.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
+import { pitLoadout, type PitToolSelection } from "../functions/tool-loadout.js";
 import { createHostDispatcher } from "../host/dispatcher.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
@@ -90,6 +91,7 @@ interface TypeScriptToolServices {
   commitFunctionState: FunctionStateCommit;
   savedFunctionService: SavedFunctionService;
   functionExecutor: FunctionExecutor;
+  toolSelection: PitToolSelection;
 }
 
 interface TypeScriptToolParams {
@@ -113,7 +115,7 @@ interface TypeScriptToolExecution extends TypeScriptToolServices {
   params: TypeScriptToolParams;
   signal?: AbortSignal;
   update?: TypeScriptToolUpdate;
-  ctx: ExtensionContext;
+  ctx: ExtensionToolContext;
   pendingFailures: Map<string, TypeScriptFailureDetails>;
 }
 
@@ -364,6 +366,10 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     parameters: TOOL_PARAMETERS,
     // Pi validates the prepared arguments against TOOL_PARAMETERS afterwards.
     prepareArguments: (args) => omitNullArguments(args) as Static<typeof TOOL_PARAMETERS>,
+    // Pit orchestrates the other tools and must not be callable from them, for example from
+    // codemode scripts, which would also hide its declaration in codemode's `only` mode.
+    exposure: "model-only",
+    prepareLoadout: (loadout) => pitLoadout(loadout, services.toolSelection),
     renderCall(args, theme, context) {
       return renderTypeScriptToolCall(args, theme, context, functionState.effective);
     },
