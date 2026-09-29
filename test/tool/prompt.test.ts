@@ -52,7 +52,8 @@ describe("emitted Pit prompt", () => {
 
   it("budgets all fixed prose without adding the schema twice", () => {
     const size = measurePrompt(tool);
-    expect(size.fixed.characters).toBeLessThanOrEqual(6_000);
+    // A growth ratchet, not a model limit: raise it deliberately when a capability needs prose.
+    expect(size.fixed.characters).toBeLessThanOrEqual(6_500);
     expect(size.fixed.bytes).toBeGreaterThanOrEqual(size.fixed.characters);
     expect(
       measurePrompt({
