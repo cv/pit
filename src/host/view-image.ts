@@ -3,6 +3,7 @@ import { open } from "node:fs/promises";
 
 import {
   createReadToolDefinition,
+  detectSupportedImageMimeTypeFromFile,
   type AgentToolResult,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
@@ -15,6 +16,8 @@ export interface ImageAttachmentInfo {
   file: string;
   mimeType: string;
   note: string;
+  /** The model has no image input, so Pi leaves the image out of its requests. */
+  omitted: boolean;
 }
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_ENCODED_BYTES = 5 * 1024 * 1024;
@@ -59,20 +62,9 @@ export function createImageViewer(
         await handle.close();
       }
       signal.throwIfAborted();
-      const hex = buffer.subarray(0, 8).toString("hex");
-      const mimeType =
-        hex === "89504e470d0a1a0a"
-          ? "image/png"
-          : hex.startsWith("ffd8ff")
-            ? "image/jpeg"
-            : ["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString())
-              ? "image/gif"
-              : buffer.subarray(0, 4).toString() === "RIFF" &&
-                  buffer.subarray(8, 12).toString() === "WEBP"
-                ? "image/webp"
-                : hex.startsWith("424d")
-                  ? "image/bmp"
-                  : undefined;
+      // Pi's read tool owns image recognition, so both accept the same formats. Detection reopens
+      // the path; only the bounded bytes read above are decoded and attached.
+      const mimeType = await detectSupportedImageMimeTypeFromFile(path);
       if (!mimeType) throw new Error(`Not a supported image: ${file}`);
       const reader = createReadToolDefinition(ctx.cwd, {
         operations: {
@@ -93,7 +85,12 @@ export function createImageViewer(
       if (Buffer.byteLength(image.data, "utf8") > MAX_ENCODED_BYTES)
         throw new Error("Encoded image exceeds 5 MiB");
       attachments.push(image);
-      metadata.push({ file, mimeType: image.mimeType, note });
+      metadata.push({
+        file,
+        mimeType: image.mimeType,
+        note,
+        omitted: ctx.model !== undefined && !ctx.model.input.includes("image"),
+      });
       attached = true;
       return { file, mimeType: image.mimeType, queued: true };
     } finally {
