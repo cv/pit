@@ -1,3 +1,6 @@
+import { Type } from "typebox";
+
+import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import { renderArrayCompound, renderCompound, renderMultilineText } from "./compound.js";
 import { type FunctionCall, functionResultRenderer } from "./function-call.js";
 import { renderGhResult } from "./gh-result.js";
@@ -7,10 +10,7 @@ import { NPM_RESULT_RENDERERS } from "./npm-result.js";
 import { renderShell } from "./process.js";
 import {
   combinedOutcome,
-  hasOnlyKeys,
   indent,
-  isRecord,
-  type JsonRecord,
   offsetHangingIndents,
   outcomeMarker,
   plural,
@@ -62,38 +62,40 @@ const FUNCTION_RESULT_RENDERERS = {
   "npm.pack": NPM_RESULT_RENDERERS.pack,
 } as const satisfies Record<ResultRendererKey, ValueRenderer>;
 
-function isBatchEntry(value: unknown): value is JsonRecord {
-  if (
-    !isRecord(value) ||
-    typeof value.kind !== "string" ||
-    !["read", "edit"].includes(value.kind) ||
-    typeof value.index !== "number" ||
-    typeof value.ok !== "boolean"
-  ) {
-    return false;
-  }
-  if (value.ok) {
-    return hasOnlyKeys(value, ["kind", "index", "ok", "value"]);
-  }
-  return (
-    value.kind === "read" &&
-    hasOnlyKeys(value, ["kind", "index", "ok", "error"], ["value"]) &&
-    typeof value.error === "string" &&
-    value.value === undefined
-  );
-}
+/** Each entry's value is rendered on its own, so the batch shape leaves it unconstrained. */
+const isBatchResult = shapeGuard(
+  Type.Object(
+    {
+      results: Type.Array(
+        Type.Union([
+          Type.Object(
+            {
+              kind: Type.Union([Type.Literal("read"), Type.Literal("edit")]),
+              index: Type.Number(),
+              ok: Type.Literal(true),
+              value: Type.Unknown(),
+            },
+            CLOSED,
+          ),
+          Type.Object(
+            {
+              kind: Type.Literal("read"),
+              index: Type.Number(),
+              ok: Type.Literal(false),
+              value: Type.Optional(Type.Undefined()),
+              error: Type.String(),
+            },
+            CLOSED,
+          ),
+        ]),
+      ),
+    },
+    CLOSED,
+  ),
+);
 
 function renderBatch(value: unknown, context: RenderContext): RenderedResultValue | undefined {
-  if (
-    !(
-      isRecord(value) &&
-      hasOnlyKeys(value, ["results"]) &&
-      Array.isArray(value.results) &&
-      value.results.every(isBatchEntry)
-    )
-  ) {
-    return;
-  }
+  if (!isBatchResult(value)) return;
 
   const succeeded = value.results.filter((entry) => entry.ok).length;
   const failed = value.results.length - succeeded;
@@ -110,25 +112,21 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
   const hangingIndents: Record<number, number> = {};
   const children: RenderedResultValue[] = [];
   for (const entry of value.results) {
-    const nested = entry.ok
-      ? renderValueWithFallback(entry.value, {
-          ...context,
-          depth: context.depth + 1,
-        })
-      : undefined;
-    const outcome = entry.ok ? (nested?.outcome ?? "success") : "error";
-    const status = outcomeMarker(context.theme, outcome);
-    lines.push(`${status} [${entry.index}] ${entry.kind}`);
-    if (nested) {
-      children.push(nested);
-      Object.assign(
-        hangingIndents,
-        offsetHangingIndents(nested.hangingIndents, { lines: lines.length, columns: 2 }),
-      );
-      lines.push(...indent(nested.lines));
-    } else {
+    if (!entry.ok) {
+      lines.push(`${outcomeMarker(context.theme, "error")} [${entry.index}] ${entry.kind}`);
       lines.push(context.theme.fg("error", `  ${entry.error}`));
+      continue;
     }
+    const nested = renderValueWithFallback(entry.value, { ...context, depth: context.depth + 1 });
+    lines.push(
+      `${outcomeMarker(context.theme, nested.outcome ?? "success")} [${entry.index}] ${entry.kind}`,
+    );
+    children.push(nested);
+    Object.assign(
+      hangingIndents,
+      offsetHangingIndents(nested.hangingIndents, { lines: lines.length, columns: 2 }),
+    );
+    lines.push(...indent(nested.lines));
   }
   return {
     kind: "batch",

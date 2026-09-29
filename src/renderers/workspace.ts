@@ -1,8 +1,8 @@
 import { highlightCode } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
+import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import {
-  hasOnlyKeys,
-  isRecord,
   languageForFile,
   offsetHangingIndents,
   outcomeMarker,
@@ -11,32 +11,109 @@ import {
 } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
+const isReadResult = shapeGuard(
+  Type.Object(
+    {
+      file: Type.String(),
+      format: Type.Union([Type.Literal("hashed"), Type.Literal("raw")]),
+      content: Type.String(),
+      revision: Type.String(),
+      lines: Type.Number(),
+      offset: Type.Optional(Type.Number()),
+      totalLines: Type.Optional(Type.Number()),
+      hasMore: Type.Optional(Type.Literal(true)),
+      truncated: Type.Optional(Type.Literal(true)),
+    },
+    CLOSED,
+  ),
+);
+
+const SearchContextLine = Type.Object(
+  { line: Type.Number(), anchor: Type.String(), text: Type.String() },
+  CLOSED,
+);
+
+const isSearchResult = shapeGuard(
+  Type.Object(
+    {
+      matches: Type.Array(
+        Type.Object(
+          {
+            file: Type.String(),
+            revision: Type.String(),
+            line: Type.Number(),
+            anchor: Type.String(),
+            column: Type.Number(),
+            text: Type.String(),
+            before: Type.Array(SearchContextLine),
+            after: Type.Array(SearchContextLine),
+          },
+          CLOSED,
+        ),
+      ),
+      truncated: Type.Boolean(),
+      filesSearched: Type.Number(),
+      filesSkipped: Type.Number(),
+      hint: Type.Optional(Type.String()),
+    },
+    CLOSED,
+  ),
+);
+
+const isEditResult = shapeGuard(
+  Type.Object(
+    {
+      file: Type.String(),
+      revision: Type.Union([Type.String(), Type.Null()]),
+      applied: Type.Number(),
+      bytes: Type.Number(),
+      deleted: Type.Boolean(),
+    },
+    CLOSED,
+  ),
+);
+
+const isWorkspaceList = shapeGuard(
+  Type.Array(
+    Type.Object(
+      {
+        name: Type.String(),
+        type: Type.Union([
+          Type.Literal("file"),
+          Type.Literal("directory"),
+          Type.Literal("symlink"),
+        ]),
+      },
+      CLOSED,
+    ),
+    { minItems: 1 },
+  ),
+);
+
+const isGlobResult = shapeGuard(
+  Type.Object({ entries: Type.Array(Type.String()), truncated: Type.Boolean() }, CLOSED),
+);
+
+const isStatResult = shapeGuard(
+  Type.Object(
+    {
+      size: Type.Number(),
+      modified: Type.String(),
+      directory: Type.Boolean(),
+      file: Type.Boolean(),
+    },
+    CLOSED,
+  ),
+);
+
 export function renderRead(
   value: unknown,
   { theme, details }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(
-      value,
-      ["file", "format", "content", "revision", "lines"],
-      ["offset", "totalLines", "hasMore", "truncated"],
-    ) ||
-    typeof value.file !== "string" ||
-    (value.format !== "hashed" && value.format !== "raw") ||
-    typeof value.content !== "string" ||
-    typeof value.revision !== "string" ||
-    typeof value.lines !== "number" ||
-    (value.offset !== undefined && typeof value.offset !== "number") ||
-    (value.totalLines !== undefined && typeof value.totalLines !== "number") ||
-    (value.hasMore !== undefined && value.hasMore !== true) ||
-    (value.truncated !== undefined && value.truncated !== true)
-  ) {
-    return undefined;
-  }
+  if (!isReadResult(value)) return undefined;
 
-  const offset = typeof value.offset === "number" ? value.offset : 1;
-  const total = typeof value.totalLines === "number" ? value.totalLines : value.lines;
+  const offset = value.offset ?? 1;
+  const total = value.totalLines ?? value.lines;
   const range = value.lines === 0 ? "empty" : `${offset}-${offset + value.lines - 1} of ${total}`;
   const flags = [
     value.format,
@@ -76,69 +153,11 @@ export function renderRead(
   };
 }
 
-function isSearchContextLine(
-  value: unknown,
-): value is { line: number; anchor: string; text: string } {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, ["line", "anchor", "text"]) &&
-    typeof value.line === "number" &&
-    typeof value.anchor === "string" &&
-    typeof value.text === "string"
-  );
-}
-
-function isSearchMatch(value: unknown): value is {
-  file: string;
-  revision: string;
-  line: number;
-  anchor: string;
-  column: number;
-  text: string;
-  before: Array<{ line: number; anchor: string; text: string }>;
-  after: Array<{ line: number; anchor: string; text: string }>;
-} {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, [
-      "file",
-      "revision",
-      "line",
-      "anchor",
-      "column",
-      "text",
-      "before",
-      "after",
-    ]) &&
-    typeof value.file === "string" &&
-    typeof value.revision === "string" &&
-    typeof value.line === "number" &&
-    typeof value.anchor === "string" &&
-    typeof value.column === "number" &&
-    typeof value.text === "string" &&
-    Array.isArray(value.before) &&
-    value.before.every(isSearchContextLine) &&
-    Array.isArray(value.after) &&
-    value.after.every(isSearchContextLine)
-  );
-}
-
 export function renderSearch(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ["matches", "truncated", "filesSearched", "filesSkipped"], ["hint"]) ||
-    !(value.hint === undefined || typeof value.hint === "string") ||
-    !Array.isArray(value.matches) ||
-    !value.matches.every(isSearchMatch) ||
-    typeof value.truncated !== "boolean" ||
-    typeof value.filesSearched !== "number" ||
-    typeof value.filesSkipped !== "number"
-  ) {
-    return undefined;
-  }
+  if (!isSearchResult(value)) return undefined;
 
   const summary = [
     plural(value.matches.length, "match", "matches"),
@@ -168,7 +187,7 @@ export function renderSearch(
     lines.push(theme.fg("dim", "(no matches)"));
   }
   // A likely misread query is a warning, not a clean empty result.
-  if (typeof value.hint === "string") lines.push(theme.fg("warning", value.hint));
+  if (value.hint !== undefined) lines.push(theme.fg("warning", value.hint));
   return {
     kind: "search",
     outcome:
@@ -183,17 +202,7 @@ export function renderEdit(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ["file", "revision", "applied", "bytes", "deleted"]) ||
-    typeof value.file !== "string" ||
-    (typeof value.revision !== "string" && value.revision !== null) ||
-    typeof value.applied !== "number" ||
-    typeof value.bytes !== "number" ||
-    typeof value.deleted !== "boolean"
-  ) {
-    return undefined;
-  }
+  if (!isEditResult(value)) return undefined;
 
   const action = value.deleted ? "deleted" : "updated";
   const revision = value.revision === null ? "no revision" : `rev ${value.revision}`;
@@ -211,23 +220,11 @@ export function renderWorkspaceList(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !Array.isArray(value) ||
-    value.length === 0 ||
-    !value.every(
-      (entry) =>
-        isRecord(entry) &&
-        hasOnlyKeys(entry, ["name", "type"]) &&
-        typeof entry.name === "string" &&
-        (entry.type === "file" || entry.type === "directory" || entry.type === "symlink"),
-    )
-  ) {
-    return undefined;
-  }
+  if (!isWorkspaceList(value)) return undefined;
 
   const marker = { file: "f", directory: "d", symlink: "l" } as const;
   const entryLines = value.map(
-    (entry) => `${theme.fg("dim", `[${marker[entry.type as keyof typeof marker]}]`)} ${entry.name}`,
+    (entry) => `${theme.fg("dim", `[${marker[entry.type]}]`)} ${entry.name}`,
   );
   return {
     kind: "list",
@@ -244,15 +241,7 @@ export function renderGlob(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ["entries", "truncated"]) ||
-    !Array.isArray(value.entries) ||
-    !value.entries.every((entry) => typeof entry === "string") ||
-    typeof value.truncated !== "boolean"
-  ) {
-    return undefined;
-  }
+  if (!isGlobResult(value)) return undefined;
 
   const state = `${plural(value.entries.length, "entry", "entries")}${value.truncated ? ", truncated" : ""}`;
   const entryLines = value.entries.length > 0 ? value.entries : [theme.fg("dim", "(no entries)")];
@@ -271,16 +260,7 @@ export function renderStat(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ["size", "modified", "directory", "file"]) ||
-    typeof value.size !== "number" ||
-    typeof value.modified !== "string" ||
-    typeof value.directory !== "boolean" ||
-    typeof value.file !== "boolean"
-  ) {
-    return undefined;
-  }
+  if (!isStatResult(value)) return undefined;
   const kind = value.directory ? "directory" : value.file ? "file" : "other";
   return {
     kind: "stat",

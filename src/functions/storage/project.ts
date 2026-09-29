@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import { isRecord } from "../../shared/records.js";
 import { type FunctionRegistry, validateSavedFunctionSource } from "../core.js";
 import { functionRelativePath } from "../identifier.js";
 import {
@@ -49,23 +50,22 @@ export async function loadProjectFunctionConfig(
   }
   try {
     const config = JSON.parse(source) as unknown;
-    if (!(config && typeof config === "object" && !Array.isArray(config))) {
+    if (!isRecord(config)) {
       throw new Error("configuration must be a JSON object");
     }
-    const values = config as Record<string, unknown>;
-    const section = values.projectFunctions;
+    const section = config.projectFunctions;
     let projectEnabled = false;
     if (section !== undefined) {
-      if (!(section && typeof section === "object" && !Array.isArray(section))) {
+      if (!isRecord(section)) {
         throw new Error("projectFunctions must be an object");
       }
-      const enabled = (section as Record<string, unknown>).enabled;
+      const enabled = section.enabled;
       if (enabled !== undefined && typeof enabled !== "boolean") {
         throw new Error("projectFunctions.enabled must be a boolean");
       }
       projectEnabled = enabled ?? false;
     }
-    const allowedTools = values.allowedTools;
+    const allowedTools = config.allowedTools;
     if (
       allowedTools !== undefined &&
       (!Array.isArray(allowedTools) ||

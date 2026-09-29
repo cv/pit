@@ -1,21 +1,28 @@
+import { Type } from "typebox";
+
+import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import { renderStructuredData } from "./compound.js";
-import { hasOnlyKeys, isRecord, isStringRecord, parseCompleteJson } from "./shared.js";
+import { parseCompleteJson } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
+
+const isHttpResponse = shapeGuard(
+  Type.Object(
+    {
+      status: Type.Number(),
+      ok: Type.Boolean(),
+      headers: Type.Record(Type.String(), Type.String()),
+      body: Type.String(),
+      truncated: Type.Boolean(),
+    },
+    CLOSED,
+  ),
+);
 
 export function renderHttp(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
-  if (
-    !(isRecord(value) && hasOnlyKeys(value, ["status", "ok", "headers", "body", "truncated"])) ||
-    typeof value.status !== "number" ||
-    typeof value.ok !== "boolean" ||
-    !isStringRecord(value.headers) ||
-    typeof value.body !== "string" ||
-    typeof value.truncated !== "boolean"
-  ) {
-    return;
-  }
+  if (!isHttpResponse(value)) return;
 
   const state = [`HTTP ${value.status}`, value.truncated ? "truncated" : ""]
     .filter(Boolean)

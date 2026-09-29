@@ -4,30 +4,9 @@ import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { RenderedResultValue, ResultTheme } from "./types.js";
 
-export type JsonRecord = Record<string, unknown>;
-
 export const MAX_RECURSIVE_DEPTH = 4;
 const JSON_CONTAINER_PREFIX = /^\s*[[{]/;
 const HASHED_LINE_PATTERN = /^(\d+:[^|]+\|)(.*)$/;
-
-export function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function hasOnlyKeys(
-  value: JsonRecord,
-  required: string[],
-  optional: string[] = [],
-): boolean {
-  const allowed = new Set([...required, ...optional]);
-  return (
-    required.every((key) => key in value) && Object.keys(value).every((key) => allowed.has(key))
-  );
-}
-
-export function isStringRecord(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
-}
 
 export function indent(lines: string[], prefix = "  "): string[] {
   return lines.map((line) => `${prefix}${line}`);

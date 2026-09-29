@@ -1,6 +1,7 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
 
 import { validateTypeScript } from "../sandbox/validation.js";
+import { isRecord } from "../shared/records.js";
 import { createLayeredFunctionRegistry } from "./definitions.js";
 import { getFunctionDependencies } from "./dependencies.js";
 import type { FunctionEnvironment } from "./environment.js";
@@ -176,15 +177,13 @@ export function reconstructFunctions(
   } = {},
 ): void {
   registry.clear();
-  for (const raw of entries) {
-    if (!raw || typeof raw !== "object") {
-      continue;
-    }
-    const entry = raw as { type?: unknown; customType?: unknown; data?: unknown };
-    if (entry.type !== "custom" || entry.customType !== FUNCTION_ENTRY_TYPE) {
-      continue;
-    }
-    if (!entry.data || typeof entry.data !== "object") {
+  for (const entry of entries) {
+    if (
+      !isRecord(entry) ||
+      entry.type !== "custom" ||
+      entry.customType !== FUNCTION_ENTRY_TYPE ||
+      !isRecord(entry.data)
+    ) {
       continue;
     }
     const definition = entry.data as Partial<FunctionEntry>;

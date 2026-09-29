@@ -1,4 +1,5 @@
 import { boundText, omissionMarker, type TextBudget } from "./bounds.js";
+import { isRecord } from "./records.js";
 
 /** Model-visible text for a returned value: strings verbatim, everything else as indented JSON. */
 export function display(value: unknown): string {
@@ -44,10 +45,6 @@ function lineCount(text: string): number {
 
 function fits(text: string, budget: Required<TextBudget>): boolean {
   return Buffer.byteLength(text) <= budget.maxBytes && lineCount(text) <= budget.maxLines;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /** The largest string (bytes), container (entries), and nesting depth in a value. */
