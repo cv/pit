@@ -2,6 +2,7 @@ import { Type } from "typebox";
 
 import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import { renderArrayCompound, renderCompound, renderMultilineText } from "./compound.js";
+import { renderContextOutline, renderContextReceipt, renderNoteListing } from "./context-result.js";
 import { type FunctionCall, functionResultRenderer } from "./function-call.js";
 import { renderGhResult } from "./gh-result.js";
 import { GIT_RESULT_RENDERERS } from "./git-result.js";
@@ -149,6 +150,9 @@ const VALUE_RENDERERS: ValueRenderer[] = [
   renderBatch,
   renderStat,
   renderWorkspaceList,
+  renderContextReceipt,
+  renderContextOutline,
+  renderNoteListing,
   renderMultilineText,
 ];
 

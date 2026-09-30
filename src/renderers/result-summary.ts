@@ -47,6 +47,8 @@ export function describeResult(
       batch: "Batch",
       stat: "Stat",
       compound: "Returned",
+      staged: "Staged",
+      context: "Context:",
     };
     return `${verbs[structured.kind] ?? "Returned"}${summary}`;
   }
