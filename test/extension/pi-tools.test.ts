@@ -230,14 +230,14 @@ describe("Pi tools injected from tools", () => {
       tool: "mcp__github__list_issues",
       code: `async ({ tools: { mcp__github__list_issues } }) => mcp__github__list_issues({ owner: "acme", repo: "gone" })`,
       outcome: mcpOutcome({ content: text("Not Found: acme/gone"), isError: true }, true),
-      error: /Not Found: acme\/gone/,
+      error: /mcp__github__list_issues failed: Not Found: acme\/gone/,
     },
     {
       name: "a failed Pi tool",
       tool: "goal_complete",
       code: `async ({ tools: { goal_complete } }) => goal_complete({ summary: "done" })`,
       outcome: { result: { content: text("No active goal") }, isError: true },
-      error: /No active goal/,
+      error: /goal_complete failed: No active goal/,
     },
     {
       name: "structured content that contradicts its schema, with the path",
@@ -332,6 +332,8 @@ describe("Pi tools injected from tools", () => {
     const found = await value(
       `async ({ toolIndex: { search, describe } }) => ({
         found: (await search("github issues")).map((entry) => entry.name),
+        summary: (await search("github issues"))[0]?.summary ?? "",
+        mcpText: await describe("mcp__github__list_issues"),
         declaration: await describe("goal_complete"),
         excluded: await describe("read"),
       })`,
@@ -339,6 +341,10 @@ describe("Pi tools injected from tools", () => {
     );
     expect(found).toEqual({
       found: ["mcp__github__list_issues"],
+      summary: "List issues in a GitHub repository.",
+      mcpText: expect.stringContaining(
+        "Supports filtering.\nReturns the server's text, often JSON: parse it with JSON.parse.",
+      ),
       declaration: expect.stringMatching(
         /Mark the current goal complete\.[\s\S]*goal_complete\(args: \{\s*summary: string;?\s*\}\): Promise<string>/,
       ),

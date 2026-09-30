@@ -135,7 +135,7 @@ export async function callPiTool(
   const content = payload?.content ?? result.content;
   const text = textOf(content);
   if (outcome.isError || payload?.isError === true) {
-    throw new Error(text || `${entry.toolName} failed`);
+    throw new Error(text ? `${entry.toolName} failed: ${text}` : `${entry.toolName} failed`);
   }
   for (const image of imagesOf(content)) services.attachImage(image, entry.toolName);
   if (!entry.outputSchema) return text;

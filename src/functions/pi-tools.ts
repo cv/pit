@@ -145,10 +145,7 @@ function binding(tool: PiToolInfo, method: string): PiToolBinding {
   return {
     method,
     toolName: tool.name,
-    summary:
-      mcp && !structured
-        ? `${summary} Returns the server's text, often JSON: parse it with JSON.parse.`.trim()
-        : summary,
+    summary,
     description,
     declaration,
     mcp,
@@ -285,7 +282,11 @@ export function searchPiTools(
     .map(({ entry }) => ({ name: entry.method, summary: entry.summary }));
 }
 
+const MCP_TEXT_NOTE = "Returns the server's text, often JSON: parse it with JSON.parse.";
+
 export function describePiTool(catalog: PiToolCatalog, name: string): string | null {
   const entry = catalog.bindings.get(name) ?? catalog.bindings.get(toCodemodeIdentifier(name));
-  return entry ? `${entry.description}\n\n${entry.declaration}`.trim() : null;
+  if (!entry) return null;
+  const note = entry.mcp && !entry.outputSchema ? `\n${MCP_TEXT_NOTE}` : "";
+  return `${entry.description}${note}\n\n${entry.declaration}`.trim();
 }

@@ -17,6 +17,31 @@ function processFixture(label: string, script: string, timeoutMs = 5000, raise =
 }
 const fixtures: Record<string, ToolCall["arguments"]> = {
   "trace-a": { label: "TRACE A: simple value", code: "async ({}) => 42" },
+  // Pi and MCP tools injected from `tools`; configure the fixture MCP server as `fixture`.
+  "tools-call": {
+    label: "TOOLS: MCP text",
+    code: 'async ({ tools: { mcp__fixture__search } }) => mcp__fixture__search({ query: "pit" })',
+  },
+  "tools-structured": {
+    label: "TOOLS: structured MCP result",
+    code: "async ({ tools: { mcp__fixture__graph } }) => (await mcp__fixture__graph()).entities.map((entity) => `${entity.name} (${entity.role})`)",
+  },
+  "tools-error": {
+    label: "TOOLS: server error",
+    code: 'async ({ tools: { mcp__fixture__fail } }) => mcp__fixture__fail({ reason: "quota exceeded" })',
+  },
+  "tools-types": {
+    label: "TOOLS: argument type",
+    code: "async ({ tools: { mcp__fixture__search } }) => mcp__fixture__search({ query: 42 })",
+  },
+  "tools-parallel": {
+    label: "TOOLS: concurrent calls",
+    code: 'async ({ tools: { mcp__fixture__slow } }) => Promise.all(["a", "b", "c"].map((label, index) => mcp__fixture__slow({ label, delayMs: 1500 * (index + 1) })))',
+  },
+  "tools-index": {
+    label: "TOOLS: search and describe",
+    code: 'async ({ toolIndex: { search, describe } }) => ({ found: await search("fixture graph"), graph: await describe("mcp__fixture__graph") })',
+  },
   "trace-b": {
     label: "TRACE B: one file",
     code: 'async ({ workspace: { read } }) => read(".gitignore")',
@@ -411,9 +436,16 @@ export default function (pi: ExtensionAPI) {
                     .map((tool) => tool.name)
                     .join(", ") || "(none)"
                 }\nFixture completed.`
-              : last?.role === "toolResult"
-                ? "Fixture completed."
-                : `Available fixtures: ${Object.keys(fixtures).join(", ")}, loadout, codemode-pit`;
+              : name === "tools-description"
+                ? // What typescript's description tells the model about injectable tools.
+                  `TOOLS:${
+                    getCurrentTools(context.messages)
+                      .find((tool) => tool.name === "typescript")
+                      ?.description.split("\n\nTOOLS:")[1] ?? " (no tools section)"
+                  }\nFixture completed.`
+                : last?.role === "toolResult"
+                  ? "Fixture completed."
+                  : `Available fixtures: ${Object.keys(fixtures).join(", ")}, loadout, tools-description, codemode-pit`;
           output.content.push({ type: "text", text: content });
           stream.push({ type: "text_start", contentIndex: 0, partial: output });
           stream.push({ type: "text_delta", contentIndex: 0, delta: content, partial: output });
