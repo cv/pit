@@ -269,13 +269,35 @@ describe("ux.runCase", () => {
 });
 
 describe("ux.runFixtures", () => {
-  it("runs each fixture in a new session and reports only its own entry's outcome", async () => {
-    const runFixtures = await loadWorkflowFunction("ux.runFixtures");
-    const order: string[] = [];
-    const execFile = vi.fn(async (_program: string, args: string[]) => {
+  /** tmux that serves `screens` in turn to capture-pane (repeating the last) and records sends. */
+  function tmuxHost(order: string[], screens: string[]) {
+    let shown = 0;
+    return vi.fn(async (_program: string, args: string[]) => {
+      if (args.includes("capture-pane")) {
+        const screen = screens[Math.min(shown++, screens.length - 1)] ?? "";
+        if (screen.includes("New session started") && !screen.includes("Fixture completed.")) {
+          order.push("screen ready");
+        }
+        return processResult({ stdout: screen });
+      }
       order.push(`send ${args.slice(5).join(" ")}`);
       return processResult();
     });
+  }
+
+  it("runs each fixture in a new session once it has started and reports only its own entry's outcome", async () => {
+    const runFixtures = await loadWorkflowFunction("ux.runFixtures");
+    const order: string[] = [];
+    const execFile = tmuxHost(order, [
+      // The first /new is slow: the startup screen shows for several polls.
+      "pi v0.99.1\n[Extensions]",
+      "pi v0.99.1\n[Extensions]",
+      "pi v0.99.1\n[Extensions]",
+      "pi v0.99.1\n✓ New session started",
+      // Before the second /new clears the screen, the first fixture's completion still shows.
+      "✓ New session started\ntrace-a\nFixture completed.",
+      "pi v0.99.1\n✓ New session started",
+    ]);
     const tails: Record<string, string[]> = {
       "trace-a": [
         "trace-a",
@@ -312,11 +334,36 @@ describe("ux.runFixtures", () => {
     expect(order).toEqual([
       "send -l /new",
       "send Enter",
+      "screen ready",
       "case trace-a",
       "send -l /new",
       "send Enter",
+      "screen ready",
       "case error",
     ]);
+  });
+
+  it("reports a fixture whose new session never starts without submitting it", async () => {
+    const runFixtures = await loadWorkflowFunction("ux.runFixtures");
+    const order: string[] = [];
+    const execFile = tmuxHost(order, ["pi v0.99.1\n[Extensions]"]);
+    const runCase = vi.fn();
+    const run = runFixtures(
+      { ux: { runCase }, shell: { execFile } },
+      { socket: SOCKET, target: TARGET, fixtures: ["trace-a"] },
+    );
+    await vi.runAllTimersAsync();
+
+    expect(await run).toEqual({
+      results: [
+        {
+          fixture: "trace-a",
+          settled: false,
+          outcome: ["New session did not start within 15 s; the fixture was not submitted"],
+        },
+      ],
+    });
+    expect(runCase).not.toHaveBeenCalled();
   });
 });
 
