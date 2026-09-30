@@ -1,11 +1,15 @@
 import { stringValue as string } from "../../shared/argument-values.js";
 import { createSessionContextHandlers, type SessionContextServices } from "./session-context.js";
+import { createSessionEditHandlers } from "./session-edits.js";
 
 type SessionHostHandler = (method: string, args: unknown[]) => unknown | Promise<unknown>;
 
 export function createSessionHostHandler(services: SessionContextServices): SessionHostHandler {
   const { pi, ctx } = services;
-  const contextHandlers = createSessionContextHandlers(services);
+  const contextHandlers = {
+    ...createSessionContextHandlers(services),
+    ...createSessionEditHandlers(services),
+  };
   return (method, args) => {
     const contextHandler = contextHandlers[method];
     if (contextHandler) {

@@ -266,6 +266,15 @@ type PitContextEntry = {
   original: { text: string; offset: number; totalChars: number; truncated: boolean };
   visible?: { text: string; totalChars: number; truncated: boolean };
   covers?: string[];
+};
+
+type PitContextEditReceipt = {
+  status: "staged";
+  appliesAt: "turn_end";
+  operation: PitContextOperation;
+  targets: string[];
+  estimatedTokensFreed: number;
+  estimatedReprefillTokens: number;
 };`;
 
 function interfaceName(namespace: string): string {

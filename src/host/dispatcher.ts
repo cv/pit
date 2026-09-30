@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import type { ContextEditQueue } from "../context/queue.js";
 import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
 import { type FunctionActivity, functionRunScope } from "../functions/core.js";
 import {
@@ -99,6 +100,8 @@ export interface HostServices {
   toolCalls?: PiToolCallServices;
   /** The tool call running this program; its turn is protected from context edits. */
   toolCallId?: string;
+  /** Context edits staged by the running turn. */
+  contextEdits?: ContextEditQueue;
 }
 
 interface ProcessHostHandlers {
@@ -210,6 +213,7 @@ export function createHostDispatcher({
   images,
   toolCalls,
   toolCallId,
+  contextEdits,
 }: HostServices): HostCallHandler {
   const processHandlers = createProcessHostHandlers({
     pi,
@@ -280,6 +284,7 @@ export function createHostDispatcher({
       pi,
       ctx,
       ...(toolCallId === undefined ? {} : { toolCallId }),
+      ...(contextEdits ? { contextEdits } : {}),
     }),
     commands: createCommandsHostHandler({ pi }),
     models: createModelsHostHandler({ pi, ctx }),

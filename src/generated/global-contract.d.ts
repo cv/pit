@@ -268,6 +268,15 @@ type PitContextEntry = {
   covers?: string[];
 };
 
+type PitContextEditReceipt = {
+  status: "staged";
+  appliesAt: "turn_end";
+  operation: PitContextOperation;
+  targets: string[];
+  estimatedTokensFreed: number;
+  estimatedReprefillTokens: number;
+};
+
 interface PitWorkspaceFunctions {
   viewImage(file: string): Promise<{ file: string; mimeType: string; queued: true }>;
 
@@ -494,6 +503,10 @@ interface PitSessionFunctions {
   }): Promise<PitContextOutline>;
 
   inspectEntry(id: string, options?: { offset?: number; limit?: number }): Promise<PitContextEntry>;
+
+  elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;
+
+  restore(ids: string[]): Promise<PitContextEditReceipt & { restoredChars: number }>;
 }
 
 interface PitCommandsFunctions {
