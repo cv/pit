@@ -424,6 +424,18 @@ describe("Pi tools injected from tools", () => {
     expect(result.content[0].text).toContain("Image: screenshot");
   });
 
+  it("reports a returned image too large to attach instead of dropping it silently", async () => {
+    const huge = { type: "image", data: "A".repeat(5 * 1024 * 1024 + 4), mimeType: "image/png" };
+    const { ctx } = toolContext({
+      screenshot: { result: { content: [huge] }, isError: false },
+    });
+    const result = await run(`async ({ tools: { screenshot } }) => screenshot()`, ctx);
+    expect(result.content.some((block: { type: string }) => block.type === "image")).toBe(false);
+    expect(result.content[0].text).toContain(
+      "Image from screenshot not attached: the encoded image exceeds 5 MiB",
+    );
+  });
+
   it("reports returned images beyond the invocation's limit instead of dropping them silently", async () => {
     const image = { type: "image", data: "aW1hZ2U=", mimeType: "image/png" };
     const { ctx } = toolContext({
