@@ -1,0 +1,204 @@
+import { Type } from "typebox";
+
+import { formatTokens } from "../context/planning.js";
+import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
+import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import { plural } from "./shared.js";
+import type { RenderContext, RenderedResultValue } from "./types.js";
+
+const isReceipt = shapeGuard(
+  Type.Object(
+    {
+      status: Type.Literal("staged"),
+      appliesAt: Type.Literal("turn_end"),
+      operation: Type.Union([
+        Type.Literal("elide"),
+        Type.Literal("summarize"),
+        Type.Literal("restore"),
+        Type.Literal("note"),
+      ]),
+      targets: Type.Array(Type.String()),
+      estimatedTokensFreed: Type.Number(),
+      estimatedReprefillTokens: Type.Number(),
+      key: Type.Optional(Type.String()),
+      action: Type.Optional(Type.String()),
+      restoredChars: Type.Optional(Type.Number()),
+      summarizedEntries: Type.Optional(Type.Number()),
+      summaryTokens: Type.Optional(Type.Number()),
+    },
+    CLOSED,
+  ),
+);
+
+const isOutline = shapeGuard(
+  Type.Object(
+    {
+      leafId: Type.Union([Type.String(), Type.Null()]),
+      contextTokens: Type.Union([Type.Number(), Type.Null()]),
+      contextWindow: Type.Union([Type.Number(), Type.Null()]),
+      estimatedTokens: Type.Number(),
+      entries: Type.Array(
+        Type.Object(
+          {
+            id: Type.String(),
+            role: Type.String(),
+            tool: Type.Optional(Type.String()),
+            key: Type.Optional(Type.String()),
+            tokens: Type.Number(),
+            reprefillTokens: Type.Number(),
+            state: Type.String(),
+            editable: Type.Boolean(),
+            protectedReason: Type.Optional(Type.String()),
+            pending: Type.Optional(Type.String()),
+            preview: Type.String(),
+          },
+          CLOSED,
+        ),
+      ),
+      nextAfter: Type.Optional(Type.String()),
+      omitted: Type.Number(),
+    },
+    CLOSED,
+  ),
+);
+
+const isNoteListing = shapeGuard(
+  Type.Object(
+    {
+      notes: Type.Array(
+        Type.Object(
+          {
+            key: Type.String(),
+            entryId: Type.String(),
+            tokens: Type.Number(),
+            pending: Type.Optional(Type.Boolean()),
+          },
+          CLOSED,
+        ),
+      ),
+      tokens: Type.Number(),
+      budgetTokens: Type.Number(),
+      maxNotes: Type.Number(),
+    },
+    CLOSED,
+  ),
+);
+
+const clean = (text: string) => sanitizeTerminalText(text);
+
+function effect(tokensFreed: number): string {
+  return tokensFreed >= 0
+    ? `~${formatTokens(tokensFreed)} tokens freed`
+    : `~${formatTokens(-tokensFreed)} tokens added`;
+}
+
+function receiptSubject(receipt: {
+  operation: string;
+  targets: string[];
+  key?: string;
+  action?: string;
+  summarizedEntries?: number;
+}): string {
+  switch (receipt.operation) {
+    case "elide":
+      return `elide of ${plural(receipt.targets.length, "tool result")}`;
+    case "summarize":
+      return `summary of ${plural(receipt.summarizedEntries ?? receipt.targets.length, "entry", "entries")}`;
+    case "restore":
+      return `restore of ${plural(receipt.targets.length, "entry", "entries")}`;
+    default:
+      return `note "${clean(receipt.key ?? "?")}" ${clean(receipt.action ?? "change")}`;
+  }
+}
+
+/** A staged session.* edit: say plainly that it applies later, and only if the call succeeds. */
+export function renderContextReceipt(
+  value: unknown,
+  { theme }: RenderContext,
+): RenderedResultValue | undefined {
+  if (!isReceipt(value)) return undefined;
+  const subject = receiptSubject(value);
+  const tokens = effect(value.estimatedTokensFreed);
+  return {
+    kind: "staged",
+    lines: [
+      `${theme.fg("toolTitle", theme.bold("session"))} staged ${subject} ${theme.fg("dim", `(${tokens} · applies after this turn)`)}`,
+    ],
+    summary: `${subject} · ${tokens} · applies after this turn`,
+    detailLines: [
+      ...(value.targets.length > 0 ? [`targets: ${clean(value.targets.join(", "))}`] : []),
+      `re-prefill: ~${formatTokens(value.estimatedReprefillTokens)} tokens`,
+      ...(value.summaryTokens === undefined
+        ? []
+        : [`summary: ~${formatTokens(value.summaryTokens)} tokens`]),
+      ...(value.restoredChars === undefined ? [] : [`restored: ${value.restoredChars} characters`]),
+    ],
+  };
+}
+
+function usageText(value: { contextTokens: number | null; contextWindow: number | null }): string {
+  if (value.contextTokens === null) return "";
+  const window = value.contextWindow === null ? "" : ` of ${formatTokens(value.contextWindow)}`;
+  return ` · ${formatTokens(value.contextTokens)}${window} in context`;
+}
+
+/** session.outline(): one readable row per entry instead of nested JSON. */
+export function renderContextOutline(
+  value: unknown,
+  { theme }: RenderContext,
+): RenderedResultValue | undefined {
+  if (!isOutline(value)) return undefined;
+  const more = value.omitted > 0 ? ` · ${value.omitted} more` : "";
+  const summary = `${plural(value.entries.length, "entry", "entries")} · ~${formatTokens(value.estimatedTokens)} tokens listed${usageText(value)}${more}`;
+  const detailLines = value.entries.flatMap((entry) => {
+    const facts = [
+      `${formatTokens(entry.tokens)} tokens`,
+      `re-prefill ${formatTokens(entry.reprefillTokens)}`,
+      entry.state,
+      ...(entry.pending ? [`pending ${entry.pending}`] : []),
+      ...(entry.protectedReason ? [`protected: ${entry.protectedReason}`] : []),
+    ];
+    const label = [entry.role, entry.tool, entry.key === undefined ? undefined : `"${entry.key}"`]
+      .filter(Boolean)
+      .join(" ");
+    return [
+      `${theme.fg("accent", entry.id)} ${clean(label)} ${theme.fg("dim", `· ${clean(facts.join(" · "))}`)}`,
+      ...(entry.preview ? [`  ${clean(entry.preview)}`] : []),
+    ];
+  });
+  detailLines.push(theme.fg("dim", `leaf: ${value.leafId ?? "none"}`));
+  if (value.nextAfter) {
+    detailLines.push(theme.fg("dim", `next page: after ${value.nextAfter}`));
+  }
+  return {
+    kind: "context",
+    lines: [
+      `${theme.fg("toolTitle", theme.bold("session outline"))} ${theme.fg("dim", `(${summary})`)}`,
+    ],
+    summary,
+    detailLines,
+  };
+}
+
+/** session.notes(): live notes and how much of the note budget they use. */
+export function renderNoteListing(
+  value: unknown,
+  { theme }: RenderContext,
+): RenderedResultValue | undefined {
+  if (!isNoteListing(value)) return undefined;
+  const summary = `${plural(value.notes.length, "live note")} · ~${formatTokens(value.tokens)} of ~${formatTokens(value.budgetTokens)} note tokens`;
+  return {
+    kind: "context",
+    lines: [
+      `${theme.fg("toolTitle", theme.bold("session notes"))} ${theme.fg("dim", `(${summary})`)}`,
+    ],
+    summary,
+    detailLines: [
+      ...value.notes.map(
+        (note) =>
+          `${clean(note.key)} · ${note.entryId} · ~${formatTokens(note.tokens)} tokens${note.pending ? " · change staged" : ""}`,
+      ),
+      theme.fg("dim", `limit: ${value.maxNotes} notes`),
+    ],
+  };
+}
