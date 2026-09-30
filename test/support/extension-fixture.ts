@@ -45,6 +45,8 @@ export let sessionStart: (...args: any[]) => void;
 export let sessionTree: (...args: any[]) => void;
 export let beforeAgentStart: (event: PromptEvent, ctx?: unknown) => PromptContribution;
 export let toolResult: (...args: any[]) => any;
+/** Message and entry renderers Pit registered, keyed `message:<type>` or `entry:<type>`. */
+export const renderers = new Map<string, any>();
 const eventHandlers = new Map<string, Array<(...args: any[]) => any>>();
 
 /** Runs Pit's handlers for a Pi event in registration order and returns their results. */
@@ -221,6 +223,7 @@ export async function setupHarness(): Promise<void> {
   piSettings = {};
   registeredCommands.clear();
   eventHandlers.clear();
+  renderers.clear();
   sentUserMessages = [];
   sentMessages = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
@@ -261,6 +264,12 @@ export async function setupHarness(): Promise<void> {
     getSessionName: vi.fn(() => sessionName),
     getCommands: vi.fn(() => slashCommands),
     getSettings: vi.fn(() => piSettings),
+    registerMessageRenderer: vi.fn((customType: string, renderer: unknown) => {
+      renderers.set(`message:${customType}`, renderer);
+    }),
+    registerEntryRenderer: vi.fn((customType: string, renderer: unknown) => {
+      renderers.set(`entry:${customType}`, renderer);
+    }),
     setModel: vi.fn(async (model: any) => model.available !== false),
     sendMessage: vi.fn((message: unknown, options: unknown) => {
       sentMessages.push({ message, options });
