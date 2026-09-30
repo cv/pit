@@ -3,7 +3,6 @@ import { getFunctionDependencies, type FunctionDependency } from "./dependencies
 import type { FunctionDefinitionReference } from "./environment.js";
 import { functionDependencyBinding } from "./identifier.js";
 import type { LayeredFunctionRegistry } from "./layered-registry.js";
-import { isPiToolNamespace } from "./pi-tools.js";
 
 export interface ResolvedFunctionDependency extends FunctionDependency {
   targetKey: string;
@@ -42,28 +41,25 @@ function namespaceDependencyHint(
 }
 
 /**
- * Saved functions cannot inject Pi tools yet: they outlive the call whose tools they were checked
- * against. A user, project, or session function deliberately named `tools.x` is still injectable.
+ * Fails when a graph reaches a placeholder for a tool Pi does not offer now. Validation keeps such
+ * saved functions; only running them, or reporting their availability, needs this check. The
+ * error names the saved function whose own dependency is missing.
  */
-export function assertSavedFunctionWithoutPiTools(
-  id: string,
-  source: string,
-  registry: LayeredFunctionRegistry<FunctionDefinition>,
-): void {
-  let dependencies: FunctionDependency[];
-  try {
-    dependencies = getFunctionDependencies(source).dependencies;
-  } catch {
-    // Malformed sources get their own diagnostics.
-    return;
+export function assertGraphAvailable(graph: ResolvedFunctionGraph): void {
+  const reason = (key: string): string | undefined => {
+    const definition = graph.nodes.get(key)?.definition;
+    return definition?.kind === "native" ? definition.unavailable : undefined;
+  };
+  for (const root of graph.roots) {
+    const missing = reason(root.targetKey);
+    if (missing)
+      throw new Error(`Function "${graph.definition?.id ?? root.id}" is unavailable: ${missing}`);
   }
-  for (const dependency of dependencies) {
-    if (!isPiToolNamespace(dependency.id.split(".")[0] as string)) continue;
-    const target = registry.resolve(dependency.id);
-    if (target && target.kind !== "native") continue;
-    throw new Error(
-      `Saved function "${id}" cannot inject ${dependency.id}: saved functions cannot use Pi tools yet. Call the tool from a submitted program instead.`,
-    );
+  for (const node of graph.nodes.values()) {
+    for (const dependency of node.dependencies) {
+      const missing = reason(dependency.targetKey);
+      if (missing) throw new Error(`Function "${node.definition.id}" is unavailable: ${missing}`);
+    }
   }
 }
 
@@ -100,7 +96,6 @@ export function resolveFunctionGraph(
       return key;
     }
 
-    assertSavedFunctionWithoutPiTools(definition.id, definition.source, registry);
     const declared = getFunctionDependencies(definition.source);
     const dependencies = declared.dependencies.map((dependency) => {
       const target = registry.resolve(dependency.id);

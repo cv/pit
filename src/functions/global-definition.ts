@@ -45,6 +45,8 @@ interface GlobalFunctionBase extends FunctionMetadata {
 export interface NativeFunctionDefinition extends GlobalFunctionBase {
   readonly kind: "native";
   readonly effect: string;
+  /** Why the function cannot run now, for example a tool Pi does not currently offer. */
+  readonly unavailable?: string;
 }
 
 export interface GlobalSourceFunctionDefinition extends GlobalFunctionBase {

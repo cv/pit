@@ -5,11 +5,12 @@ import * as ts from "typescript";
 
 import {
   functionRegistry,
+  resolveToolCatalog,
   type FunctionEnvironment,
   type FunctionDefinitionReference,
 } from "../functions/environment.js";
 import {
-  assertSavedFunctionWithoutPiTools,
+  assertGraphAvailable,
   resolveFunctionGraph,
   type ResolvedFunctionGraph,
 } from "../functions/resolved-graph.js";
@@ -162,10 +163,13 @@ export function validateSandboxTypeScript(
   validation: TypeScriptValidationOptions & { environment: FunctionEnvironment },
 ): ResolvedFunctionGraph {
   // A supplied environment always produces a graph; callers never receive the cached graph.
-  return structuredClone(
+  const graph = structuredClone(
     validateSource(source, new Map(), input, { ...validation, requireExpression: true })
       .graph as ResolvedFunctionGraph,
   );
+  // Saved functions that inject a tool Pi does not offer now are kept, but cannot run.
+  assertGraphAvailable(graph);
+  return graph;
 }
 
 function validateSource(
@@ -178,11 +182,10 @@ function validateSource(
   if (validation.requireExpression && !programExpression) {
     throw new Error("TypeScript programs must be function expressions");
   }
-  const registry = functionRegistry(validation.environment ?? { sessionFunctions: savedFunctions });
-  // Before type checking, whose missing-property errors would not say why.
-  if (validation.definition) {
-    assertSavedFunctionWithoutPiTools(validation.definition.id, source, registry);
-  }
+  const environment = validation.environment ?? { sessionFunctions: savedFunctions };
+  // Includes placeholders for tools saved functions inject that Pi does not offer now.
+  const tools = resolveToolCatalog(environment);
+  const registry = functionRegistry(environment, tools);
   const names = [
     ...(validation.availableNames ??
       (validation.environment ? registry.identifiers() : savedFunctions.keys())),
@@ -244,7 +247,7 @@ function validateSource(
     [
       CONTRACT_FILE,
       `${GLOBAL_CONTRACT.replace("interface PitDependencies {", "interface PitGlobalFunctions {") + SANDBOX_GLOBALS}
-${model.declarations}${validation.environment?.toolCatalog?.declarations ?? ""}`,
+${model.declarations}${tools?.declarations ?? ""}`,
     ],
     [PROGRAM_FILE, wrapped],
     [SIGNATURES_FILE, model.signatures],

@@ -15,6 +15,12 @@ type MetadataLine = {
   text: string;
 };
 
+/** Invalid definitions cannot load; unavailable ones wait for something, such as a missing tool. */
+function availability(entry: { kind: string; available: boolean }): string {
+  if (entry.kind === "invalid") return " (invalid)";
+  return entry.available ? "" : " (unavailable)";
+}
+
 export class FunctionViewer {
   private lines: string[] = [];
   private omitted = 0;
@@ -56,7 +62,7 @@ export class FunctionViewer {
       ...(definition.documentation ? [{ text: definition.documentation }] : []),
       { label: "Override chain", text: "" },
       ...definition.overrideChain.map((entry) => ({
-        text: `  ${entry.scope}${entry.effective ? " (effective)" : ""}${entry.available ? "" : " (invalid)"}: ${entry.origin}`,
+        text: `  ${entry.scope}${entry.effective ? " (effective)" : ""}${availability(entry)}: ${entry.origin}`,
       })),
       {
         label: "Dependencies",
@@ -68,7 +74,7 @@ export class FunctionViewer {
       {
         label: "$next",
         text: definition.next
-          ? `${definition.next.name} [${definition.next.scope}]${definition.next.available ? "" : " (invalid)"}`
+          ? `${definition.next.name} [${definition.next.scope}]${availability(definition.next)}`
           : "none",
       },
       { label: "Direct effects", text: definition.directEffects.join(", ") || "none" },

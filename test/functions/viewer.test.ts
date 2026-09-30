@@ -59,6 +59,26 @@ describe("function definition viewer", () => {
     ).toContain("absent [missing]");
   });
 
+  it("labels a function waiting for a tool unavailable, not invalid", () => {
+    const inspector = new FunctionInspector(
+      {
+        session: new Map([
+          [
+            "finish",
+            "async function finish({ tools: { goal_complete } }) { return goal_complete({}); }",
+          ],
+        ]),
+      },
+      "/project",
+    );
+    const text = new FunctionViewer(inspector.inspect("finish"), theme, vi.fn())
+      .render(300)
+      .join("\n");
+    expect(text).toContain("session (effective) (unavailable):");
+    expect(text).not.toContain("(invalid)");
+    expect(text).toMatch(/Unavailable: .*tools\.goal_complete is not a tool Pi can call now/);
+  });
+
   it("keeps primary metadata readable and limits dim styling to secondary hints", () => {
     const calls: Array<{ color: string; text: string }> = [];
     const recordedTheme = {
