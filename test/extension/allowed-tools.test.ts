@@ -189,7 +189,8 @@ describe("allowed tool exceptions", () => {
     async ({ config, hidden }) => {
       await configure(config);
       await sessionStart({}, context());
-      expect(tool.prepareLoadout?.(loadout(declaredTools))).toEqual({ hiddenDeclarations: hidden });
+      // typescript's description is covered by pi-tools.test.ts.
+      expect(tool.prepareLoadout?.(loadout(declaredTools))?.hiddenDeclarations).toEqual(hidden);
     },
   );
 

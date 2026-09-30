@@ -40,9 +40,10 @@
     ]
   },
   "dependencies": {
+    "@earendil-works/pi-codemode": "^0.99.1",
     "esbuild": "^0.28.1",
     "fast-glob": "^3.3.3",
-    "oxfmt": "0.68.0",
+    "oxfmt": "0.70.0",
     "typescript": "^6.0.3"
   },
   "devDependencies": {

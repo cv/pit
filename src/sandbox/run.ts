@@ -47,6 +47,7 @@ export async function runWithFunctionExecutor(
     ...(options.userFunctions ? { userFunctions: options.userFunctions } : {}),
     ...(options.projectFunctions ? { projectFunctions: options.projectFunctions } : {}),
     ...(options.sessionFunctions ? { sessionFunctions: options.sessionFunctions } : {}),
+    ...(options.toolCatalog ? { toolCatalog: options.toolCatalog } : {}),
     ...(options.input === undefined ? {} : { input: options.input }),
   });
   options.timings?.enter("execution");
