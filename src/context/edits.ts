@@ -7,6 +7,7 @@ import {
   type PlannedEdit,
   PlanProblems,
   reprefillAfter,
+  textTokens,
 } from "./planning.js";
 import {
   type AgentMessage,
@@ -107,8 +108,7 @@ function restoreGroup(view: ContextView, id: string): RestoreGroup | string {
 
 function originalTokens(entry: SessionEntry): number {
   if (entry.type === "message") return estimateTokens(entry.message);
-  const text = entryText(entry) ?? "";
-  return estimateTokens({ role: "user", content: text, timestamp: 0 });
+  return textTokens(entryText(entry) as string);
 }
 
 /** Resolves each ID to what restoring it means; a summarized range absorbs its single entries. */
@@ -140,12 +140,14 @@ export function planRestore(
   const added = new Map<string, number>();
   let restoredChars = 0;
   for (const target of new Set(groups.flatMap((group) => group.targets))) {
-    const entry = session.getEntry(target);
-    const content = entry && originalContent(entry);
-    /* v8 ignore next -- covered IDs come from this branch's summarize records. */
-    if (!entry || content === undefined) continue;
-    drafts.push({ type: "context_edit", targetId: target, replacement: { content } });
-    restoredChars += (entryText(entry) ?? "").length;
+    // Restorable IDs are elided results or entries a summarize record on this branch covers.
+    const entry = session.getEntry(target) as SessionEntry;
+    drafts.push({
+      type: "context_edit",
+      targetId: target,
+      replacement: { content: originalContent(entry) },
+    });
+    restoredChars += (entryText(entry) as string).length;
     added.set(target, originalTokens(entry) - (view.byId.get(target)?.tokens ?? 0));
   }
   const targets = [...added.keys()];
@@ -156,7 +158,7 @@ export function planRestore(
     targets,
     drafts,
     records: groups.map((group) => {
-      const tokensFreed = -group.targets.reduce((sum, id) => sum + (added.get(id) ?? 0), 0);
+      const tokensFreed = -group.targets.reduce((sum, id) => sum + (added.get(id) as number), 0);
       const operation = { operation: "restore" as const, targets: group.targets.slice() };
       return group.carrier === undefined
         ? Object.assign(operation, { tokensFreed, reprefillTokens })

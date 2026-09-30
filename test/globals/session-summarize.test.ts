@@ -264,3 +264,36 @@ describe("session.summarize", () => {
     },
   );
 });
+
+describe("summarize edges", () => {
+  it("restores a range once when several of its entries are named", async () => {
+    const { session, first, second } = agentRun();
+    await summarize(session, { from: first.assistant, to: second.result, summary: "Short." });
+    await endTurn(session);
+    session.current();
+
+    const receipt = await call(
+      session,
+      "async ({ session: { restore } }, ids: string[]) => restore(ids)",
+      [second.result, first.assistant, first.result],
+    );
+
+    expect(receipt.targets).toEqual([
+      first.assistant,
+      first.result,
+      second.assistant,
+      second.result,
+    ]);
+  });
+
+  it("uses Pi's default compaction reserve without a model", async () => {
+    const { session, first, third } = agentRun();
+    await expect(
+      summarize(
+        session,
+        { from: first.assistant, to: third.result, summary: "z".repeat(60_000) },
+        { model: undefined },
+      ),
+    ).rejects.toThrow("the limit is ~13.1K, Pi's compaction-summary budget");
+  });
+});

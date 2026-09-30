@@ -260,3 +260,44 @@ describe("notes after compaction", () => {
     ]);
   });
 });
+
+describe("note budget and recovery edges", () => {
+  it.each<{ name: string; ctx: Record<string, unknown>; budget: number }>([
+    {
+      name: "the model's window when usage is unknown",
+      ctx: {
+        getContextUsage: () => undefined,
+        model: { provider: "p", id: "m", contextWindow: 100_000 },
+      },
+      budget: 10_000,
+    },
+    {
+      name: "the 4,096-token floor without any window",
+      ctx: { getContextUsage: () => undefined, model: undefined },
+      budget: 4_096,
+    },
+  ])("budgets notes from $name", async ({ ctx, budget }) => {
+    const session = task();
+    const listing = await value(
+      "async ({ session: { notes } }) => notes()",
+      context({ sessionManager: session.manager, ...ctx }),
+    );
+    expect(listing.budgetTokens).toBe(budget);
+    await expect(setNote(session, "big", "x".repeat(budget * 4 + 100), ctx)).rejects.toThrow(
+      "over the",
+    );
+  });
+
+  it("re-appends nothing for a compaction at the root", async () => {
+    const session = new SessionBuilder();
+    const compaction = session.manager.appendCompaction("summary", "missing", 10);
+
+    await emit(
+      "session_compact",
+      { type: "session_compact", compactionEntry: session.manager.getEntry(compaction) },
+      context({ sessionManager: session.manager }),
+    );
+
+    expect(sentMessages).toEqual([]);
+  });
+});

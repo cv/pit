@@ -311,3 +311,141 @@ describe("session.inspectEntry", () => {
     ).rejects.toThrow(message);
   });
 });
+
+describe("context classification", () => {
+  function mixedSession() {
+    const session = new SessionBuilder();
+    const prompt = session.user("Start");
+    session.turn("bash", "abandoned path");
+    const branchSummary = session.manager.branchWithSummary(prompt, "Explored approach A");
+    const bash = session.manager.appendMessage({
+      role: "bashExecution",
+      command: "ls",
+      output: "a.ts\nb.ts",
+      exitCode: 0,
+      cancelled: false,
+      truncated: false,
+      timestamp: Date.now(),
+    } as never);
+    const extension = session.manager.appendCustomMessageEntry(
+      "other-extension",
+      "status: ok",
+      true,
+    );
+    const system = session.manager.appendMessage({
+      role: "system",
+      content: "",
+      sections: { preamble: "You are helpful." },
+      timestamp: Date.now(),
+    } as never);
+    const work = session.turn("read", "file contents\n".repeat(20));
+    session.current();
+    return { session, prompt, branchSummary, bash, extension, system, work };
+  }
+
+  it("protects what the user, Pi, and other extensions contributed", async () => {
+    const { session, prompt, branchSummary, bash, extension, work } = mixedSession();
+    const result = await outline(session, { limit: 6 });
+
+    expect(
+      result.entries.map((entry: any) => [entry.id, entry.role, entry.protectedReason ?? null]),
+    ).toEqual([
+      [prompt, "user", "user message"],
+      [branchSummary, "summary", "compaction or branch summary"],
+      [bash, "bash", "user shell command"],
+      [extension, "custom", "extension message"],
+      [work.assistant, "assistant", null],
+      [work.result, "toolResult", null],
+    ]);
+    expect(result.entries[2].preview).toBe("$ ls a.ts b.ts");
+  });
+
+  it("reads summaries and extension messages but not prompt state", async () => {
+    const { session, branchSummary, extension, system } = mixedSession();
+    const kept = session.user("Continue");
+    const legacy = session.manager.appendMessage({
+      role: "custom",
+      customType: "legacy",
+      content: "legacy status",
+      display: true,
+      timestamp: Date.now(),
+    } as never);
+    const compaction = session.manager.appendCompaction("Compacted history", kept, 1_000);
+    session.current();
+
+    const listed = (await outline(session)).entries;
+    expect(listed.find((entry: any) => entry.id === compaction)).toMatchObject({
+      role: "summary",
+      preview: expect.stringContaining("Compacted history"),
+    });
+    expect(listed.find((entry: any) => entry.id === legacy)).toMatchObject({
+      role: "custom",
+      protectedReason: "extension message",
+    });
+
+    await expect(inspect(session, branchSummary)).resolves.toMatchObject({
+      role: "summary",
+      state: "compacted",
+      original: { text: "Explored approach A" },
+    });
+    await expect(inspect(session, compaction)).resolves.toMatchObject({
+      role: "summary",
+      state: "original",
+      original: { text: "Compacted history" },
+    });
+    await expect(inspect(session, extension)).resolves.toMatchObject({
+      role: "custom",
+      original: { text: "status: ok" },
+    });
+    await expect(
+      run(
+        `async ({ session: { inspectEntry } }) => inspectEntry(${JSON.stringify(system)})`,
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow(`Entry ${system} (message) contributes no model content`);
+  });
+
+  it("classifies string, image, and malformed-record edits from other extensions", async () => {
+    const session = new SessionBuilder();
+    const prompt = session.user("Investigate");
+    const image = session.turn("bash", "output");
+    session.manager.appendContextEdit(prompt, { content: "Investigate (reworded)" });
+    session.manager.appendContextEdit(image.result, {
+      content: [{ type: "image", data: "AAAA", mimeType: "image/png" }],
+    });
+    session.manager.appendCustomEntry("pit.context-edit", { operations: "not a list" });
+    session.manager.appendCustomEntry("pit.context-edit", {
+      operations: [null, { operation: "summarize", carrier: prompt, covers: "not a list" }],
+    });
+    session.current();
+
+    const result = await outline(session, { roles: ["user", "toolResult"] });
+    expect(result.entries.map((entry: any) => [entry.id, entry.state])).toEqual([
+      [prompt, "replaced"],
+      [image.result, "replaced"],
+    ]);
+  });
+
+  it.each<{ name: string; ctx: Record<string, unknown>; expected: unknown }>([
+    {
+      name: "the model's window when usage is unknown",
+      ctx: {
+        getContextUsage: () => undefined,
+        model: { provider: "p", id: "m", contextWindow: 128_000 },
+      },
+      expected: { contextTokens: null, contextWindow: 128_000 },
+    },
+    {
+      name: "nulls without usage or a model",
+      ctx: { getContextUsage: () => undefined, model: undefined },
+      expected: { contextTokens: null, contextWindow: null },
+    },
+  ])("reports $name", async ({ ctx, expected }) => {
+    const { session } = longTask();
+    const result = await value(
+      "async ({ session: { outline } }) => outline()",
+      context({ sessionManager: session.manager, ...ctx }),
+    );
+    expect(result).toMatchObject(expected as object);
+  });
+});
