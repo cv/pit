@@ -4,6 +4,16 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- Models can manage their own context with branch-local `session.*` globals (#198):
+  - `session.outline()` pages the model-visible entries on the active branch with their tokens, re-prefill cost, edit state, and whether the model may edit them. `session.inspectEntry(id)` pages an entry's original content, including elided, summarized, and compacted entries.
+  - `session.elide(ids)` replaces tool results with stubs that point to `session.inspectEntry`. `session.summarize({ from, to, summary })` replaces a closed range of completed turns with a summary the model writes; the range's first assistant entry keeps its tool calls, so calls stay paired and roles still alternate. `session.restore(ids)` undoes either.
+  - `session.setNote(key, content)` keeps a keyed working note at the end of context, and `session.notes()` lists live notes. Notes share the larger of 4,096 tokens and 10% of the context window, and Pit re-appends notes a compaction summarized away.
+  - Edits are staged and apply at the end of the turn, only when the call that staged them succeeds. Pi records them as `context_edit` entries, so `/tree` to an earlier point shows the originals and raw history, exports, and usage are unchanged. User messages, other extensions' messages, summaries, and the running turn are protected.
+  - The transcript shows notes and a row for each applied edit with its token effect. Tool results summarize staged edits, for example `Staged elide of 1 tool result · ~2K tokens freed · applies after this turn`, and list an outline one entry per row.
+- When context usage first crosses 50% or 75%, Pit appends a short notice pointing the model to these functions, and the prompt gains one context-management guideline.
+
 ## [0.22.1] - 2026-09-30
 
 ### Changed
