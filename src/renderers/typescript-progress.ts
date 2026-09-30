@@ -1,7 +1,7 @@
 import type { ExecutionProgressSnapshot, ShellProgress } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import { renderExecutionDashboard } from "./execution-dashboard.js";
+import { renderActiveCallSummary, renderExecutionDashboard } from "./execution-dashboard.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import {
   linkedProcessProgress,
@@ -100,6 +100,9 @@ export function renderPartialToolResult(input: {
       input.theme.fg("toolTitle", "Running...") +
       input.theme.fg("dim", ` (${input.execution.duration})`),
   );
+  if (!input.expanded) {
+    text += renderActiveCallSummary(input.details, input.theme);
+  }
   if (input.expanded) {
     text += renderExecutionDashboard(input.details, input.theme);
     const progressGroups = groupAdjacentShellProgress(

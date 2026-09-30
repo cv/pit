@@ -20,6 +20,8 @@ interface ExecutionDashboardTheme {
 
 /** Completed call groups older than this many recent rows are hidden while an invocation runs. */
 const LIVE_RECENT_CALL_GROUPS = 12;
+/** Running call groups a collapsed running invocation lists. */
+const COLLAPSED_RUNNING_CALL_GROUPS = 2;
 
 function callsInOrder(events: DashboardEvent[]): DashboardCall[] {
   return events.flatMap((event) => (event.kind === "call" ? [event] : callsInOrder(event.events)));
@@ -120,6 +122,44 @@ function renderEvent(event: DashboardEvent, depth: number, context: EventRenderi
   let text = `\n${indent}${theme.fg("accent", "↳")} ${theme.fg("toolTitle", `${event.scope} function`)} ${event.name} ${theme.fg("dim", `#${event.id}`)}`;
   for (const child of event.events) {
     text += renderEvent(child, depth + 1, context);
+  }
+  return text;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * What a collapsed running invocation is doing: its latest running call groups, how many other
+ * calls are running, and how many calls have failed so far. Empty while no call is running and
+ * none has failed, for example while the program itself computes.
+ */
+export function renderActiveCallSummary(
+  details: ExecutionDashboardDetails | undefined,
+  theme: ExecutionDashboardTheme,
+): string {
+  const calls = callsInOrder(buildExecutionDashboardModel(details).events);
+  const count = (call: DashboardCall, statuses: HostCallTraceStatus[]) =>
+    call.statuses.reduce(
+      (sum, entry) => sum + (statuses.includes(entry.status) ? entry.count : 0),
+      0,
+    );
+  const running = calls.filter((call) => call.status === "running");
+  const shown = running.slice(-COLLAPSED_RUNNING_CALL_GROUPS);
+  const hiddenRunning = running
+    .slice(0, running.length - shown.length)
+    .reduce((sum, call) => sum + count(call, ["running"]), 0);
+  const failed = calls.reduce((sum, call) => sum + count(call, ["failed", "rejected"]), 0);
+  let text = "";
+  if (hiddenRunning > 0) {
+    text += `\n${theme.fg("dim", `… ${plural(hiddenRunning, "more call")} running`)}`;
+  }
+  for (const call of shown) {
+    text += `\n${callMarker(call, theme, false)} ${theme.fg("toolTitle", `${call.namespace}.${call.method}`)} ${theme.fg("dim", callSummary(call, false))}`;
+  }
+  if (failed > 0) {
+    text += `\n${outcomeMarker(theme, "error")} ${theme.fg("error", `${plural(failed, "call")} failed so far`)}`;
   }
   return text;
 }
