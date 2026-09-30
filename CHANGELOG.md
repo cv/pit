@@ -4,18 +4,33 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-09-30
+
 ### Added
 
+- Programs can inject the Pi and MCP tools Pi lets a `typescript` call use, as typed `tools.*` functions, for example `async ({ tools: { mcp__github__list_issues } }) => ...`. Calls run through `ctx.executeTool()`, so Pi's argument preparation, validation, and hooks apply.
+  - Arguments are typed from each tool's schema and checked before the program runs.
+  - MCP results are unwrapped to the server's structured content, validated against its schema after undeclared properties are removed, or to its text. Server errors throw with the tool's name.
+  - Images a tool returns attach to the result.
+  - A nested `terminate` (for example, from pi-goal's `goal_complete`) ends the turn when the program succeeds.
+  - `toolIndex.search` and `toolIndex.describe` find tools and show their declarations. `typescript`'s description lists the injectable tools and steers services they cover away from Pit's `workspace`, `gh`, `http`, and `shell`.
+- Saved session, project, and user functions can inject `tools.*`. When a tool is missing, for example while an MCP server is disconnected or before servers connect on resume, a function that needs it is kept.
+  - Running it, or anything that depends on it, fails before execution with the missing tool.
+  - `functions.getSaved`, `functions.listAll`, and `/functions` report it `(unavailable)` rather than `(invalid)`, with the reason.
+  - It works again when the tool returns. While the tool is callable, saved calls are checked against its real schema.
+- While a call runs, its collapsed view lists the latest running host calls, how many others are running, and how many have failed so far, instead of only `Running...`.
 - `workspace.viewImage(file)` attaches local images to a successful TypeScript result using Pi's image recognition and model-aware processing. Image bytes stay outside sandbox JSON; one invocation can attach up to 8 images in call order, with bounded source, per-image, and total encoded sizes, visible image identity and text-only-model warnings, and expanded processing notes.
 
 ### Changed
 
-- **Breaking:** Pit requires Pi 0.99 or newer and is tested with Pi 0.99.0. On older Pi versions, which cannot hide tools, Pit warns at startup that other tools stay visible to the model.
+- **Breaking:** Pit requires Pi 0.99 or newer and is tested with Pi 0.99.1. On older Pi versions, which cannot hide tools, Pit warns at startup that other tools stay visible to the model.
 - Pit hides other tools from the model instead of deactivating them. The model still sees only `typescript` and any `allowedTools` exceptions, but Pi's built-in tools, extension tools, `codemode`, and `tool_search` stay active, and Pit no longer overrides Pi's `defaultTools` setting. MCP tools configured with `"exposure": "direct"` and tools loaded by `tool_search` stay declared.
 - `typescript` is registered with `model-only` exposure. Pi's `codemode` scripts and other tools can no longer call it, and codemode's `only` mode no longer hides it from the model.
+- Pit depends on `@earendil-works/pi-codemode` for tool declarations, so `tools.*` identifiers and types match what codemode shows for the same tools.
 
 ### Fixed
 
+- Report a saved function's type errors once. Each error also appeared a second time, from Pit's internal `/pit/saved-signatures.ts` copy of the same source.
 - Keep tools that MCP, `codemode`, or `tool_search` activated after `/tree` navigation. Pit re-applied an exclusive tool set, which deactivated `codemode` and MCP tools with `direct` exposure.
 
 ## [0.21.1] - 2026-09-28
@@ -267,7 +282,9 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/cv/pit/compare/v0.21.1...v0.22.0
+[0.21.1]: https://github.com/cv/pit/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/cv/pit/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/cv/pit/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/cv/pit/compare/v0.19.0...v0.20.0
