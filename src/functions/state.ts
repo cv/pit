@@ -1,6 +1,7 @@
 import type { FunctionRegistry } from "./core.js";
 import type { FunctionEnvironment } from "./environment.js";
 import { reconcileProjectFunctionsForSession } from "./persistent-functions.js";
+import type { PiToolCatalog } from "./pi-tools.js";
 import type { PersistentFunctionMetadataRegistry } from "./source.js";
 
 export interface FunctionState {
@@ -17,6 +18,11 @@ export interface FunctionState {
   candidateMetadata: PersistentFunctionMetadataRegistry;
   sessionRunCounts: Map<string, number>;
   promotionSuggested: Set<string>;
+  /**
+   * The Pi tools callable most recently, from the latest loadout or `typescript` call. Saved
+   * functions are checked against it outside a call, for example when a session is resumed.
+   */
+  toolCatalog?: PiToolCatalog;
 }
 
 export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promise<T>;
@@ -99,6 +105,7 @@ export function stateFunctionEnvironment(
     projectFunctions: state.project,
     sessionFunctions: state.session,
     invalidDefinitions: new Map([...state.invalidUser, ...state.invalidProject]),
+    ...(state.toolCatalog ? { toolCatalog: state.toolCatalog } : {}),
     ...overrides,
   };
 }

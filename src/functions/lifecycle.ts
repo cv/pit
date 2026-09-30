@@ -31,6 +31,7 @@ function registerSavedFunctionManager({
   registerFunctionManager(pi, functionState.session, {
     invalidUser: functionState.invalidUser,
     invalidProject: functionState.invalidProject,
+    toolCatalog: () => functionState.toolCatalog,
     userFunctions: functionState.user,
     projectFunctions: functionState.project,
     planSessionRemoval: (name) => savedFunctionService.planRemoval(name, "session"),

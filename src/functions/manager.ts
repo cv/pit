@@ -4,6 +4,7 @@ import { formatSize } from "@earendil-works/pi-coding-agent";
 import type { FunctionRegistry, FunctionScope, SessionFunctionRemovalPlan } from "./core.js";
 import { FunctionInspector, type FunctionSummary, type FunctionListOptions } from "./inspection.js";
 import { FUNCTION_LAYERS } from "./layered-registry.js";
+import type { PiToolCatalog } from "./pi-tools.js";
 import { FunctionViewer } from "./viewer.js";
 
 const COMMAND_ARGUMENTS_PATTERN = /\s+/;
@@ -32,6 +33,8 @@ export interface FunctionManagerOptions {
   projectFunctions?: FunctionRegistry;
   invalidUser?: ReadonlyMap<string, string>;
   invalidProject?: ReadonlyMap<string, string>;
+  /** The Pi tools callable most recently, for availability of saved functions that use them. */
+  toolCatalog?: () => PiToolCatalog | undefined;
   planSessionRemoval(name: string): SessionFunctionRemovalPlan;
   removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
@@ -60,6 +63,7 @@ class SavedFunctionManager {
   }
 
   private inspector(ctx: ExtensionContext): FunctionInspector {
+    const toolCatalog = this.options.toolCatalog?.();
     return new FunctionInspector(
       {
         user: this.#userFunctions,
@@ -67,6 +71,7 @@ class SavedFunctionManager {
         session: this.savedFunctions,
         ...(this.options.invalidUser ? { invalidUser: this.options.invalidUser } : {}),
         ...(this.options.invalidProject ? { invalidProject: this.options.invalidProject } : {}),
+        ...(toolCatalog ? { toolCatalog } : {}),
       },
       ctx.cwd,
     );

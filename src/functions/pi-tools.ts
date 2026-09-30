@@ -67,6 +67,8 @@ export interface PiToolCatalog {
   readonly definitions: readonly NativeFunctionDefinition[];
   /** Type-checking contract that adds `tools` and `toolIndex` to `PitGlobalFunctions`. */
   readonly declarations: string;
+  /** Documented member declarations under `tools`, for extending the contract. */
+  readonly members: readonly string[];
   /** Tools left unbound because an earlier tool maps to the same identifier. */
   readonly collisions: readonly string[];
 }
@@ -174,7 +176,7 @@ function buildCatalog(tools: readonly PiToolInfo[]): PiToolCatalog {
     bindings.set(method, binding(tool, method));
   }
   if (bindings.size === 0) {
-    return { bindings, definitions: [], declarations: "", collisions };
+    return { bindings, definitions: [], declarations: "", members: [], collisions };
   }
   const definitions = [
     ...[...bindings.values()].map((entry) =>
@@ -188,12 +190,93 @@ function buildCatalog(tools: readonly PiToolInfo[]): PiToolCatalog {
     ),
     ...toolIndexDefinitions(),
   ];
-  const members = [...bindings.values()]
-    .map((entry) => `${docComment(entry.summary, "    ")}    ${entry.declaration}`)
-    .join("\n");
-  const index = TOOL_INDEX_MEMBERS.map(([, declaration]) => `    ${declaration}`).join("\n");
-  const declarations = `\ninterface PitGlobalFunctions {\n  ${PI_TOOLS_NAMESPACE}: {\n${members}\n  };\n  ${TOOL_INDEX_NAMESPACE}: {\n${index}\n  };\n}\n`;
-  return { bindings, definitions, declarations, collisions };
+  const members = [...bindings.values()].map(
+    (entry) => `${docComment(entry.summary, "    ")}    ${entry.declaration}`,
+  );
+  return {
+    bindings,
+    definitions,
+    declarations: renderDeclarations(members, true),
+    members,
+    collisions,
+  };
+}
+
+function renderDeclarations(members: readonly string[], toolIndex: boolean): string {
+  const blocks = [
+    ...(members.length ? [`  ${PI_TOOLS_NAMESPACE}: {\n${members.join("\n")}\n  };`] : []),
+    ...(toolIndex
+      ? [
+          `  ${TOOL_INDEX_NAMESPACE}: {\n${TOOL_INDEX_MEMBERS.map(([, declaration]) => `    ${declaration}`).join("\n")}\n  };`,
+        ]
+      : []),
+  ];
+  return blocks.length ? `\ninterface PitGlobalFunctions {\n${blocks.join("\n")}\n}\n` : "";
+}
+
+const EMPTY_CATALOG: PiToolCatalog = {
+  bindings: new Map(),
+  definitions: [],
+  declarations: "",
+  members: [],
+  collisions: [],
+};
+
+/**
+ * Extends a catalog with placeholders for tools that saved functions inject but Pi does not offer
+ * now, for example while an MCP server is disconnected. A placeholder type-checks loosely and
+ * resolves as unavailable, so the saved function is kept and works again when the tool returns.
+ */
+export function withMissingPiTools(
+  catalog: PiToolCatalog | undefined,
+  dependencyIds: Iterable<string>,
+): PiToolCatalog | undefined {
+  const base = catalog ?? EMPTY_CATALOG;
+  const tools = new Set<string>();
+  let toolIndex = false;
+  for (const id of dependencyIds) {
+    const [namespace, method, ...rest] = id.split(".");
+    /* v8 ignore next -- dependency ids under a namespace name one member; others fail validation. */
+    if (!method || rest.length > 0) continue;
+    if (namespace === PI_TOOLS_NAMESPACE && !base.bindings.has(method)) tools.add(method);
+    if (namespace === TOOL_INDEX_NAMESPACE && base.bindings.size === 0) toolIndex = true;
+  }
+  if (tools.size === 0 && !toolIndex) return catalog;
+  const missing = [...tools].sort((left, right) => left.localeCompare(right));
+  const placeholders = missing.map((method) => {
+    const reason = `${PI_TOOLS_NAMESPACE}.${method} is not a tool Pi can call now; the extension or MCP server that provides it may not be loaded`;
+    return {
+      member: `${docComment("Not callable now.", "    ")}    ${method}(args?: { [key: string]: PitJsonValue }): Promise<PitJsonValue>;`,
+      definition: {
+        ...defineNativeFunction(PI_TOOLS_NAMESPACE, method, {
+          declaration: `${method}(args?: { [key: string]: PitJsonValue }): Promise<PitJsonValue>;`,
+          summary: "Not callable now",
+          documentation: reason,
+          minimumArguments: 0,
+          maximumArguments: 1,
+        }),
+        unavailable: reason,
+      },
+    };
+  });
+  const indexPlaceholders = toolIndex
+    ? toolIndexDefinitions().map((definition) =>
+        Object.assign({}, definition, {
+          unavailable: `${definition.id} is unavailable because no other Pi tools are callable now`,
+        }),
+      )
+    : [];
+  const members = [...base.members, ...placeholders.map(({ member }) => member)];
+  return {
+    ...base,
+    definitions: [
+      ...base.definitions,
+      ...placeholders.map(({ definition }) => definition),
+      ...indexPlaceholders,
+    ],
+    declarations: renderDeclarations(members, base.bindings.size > 0 || toolIndex),
+    members,
+  };
 }
 
 /** The catalog for the tools a call may use. Returns the same object for the same tools. */

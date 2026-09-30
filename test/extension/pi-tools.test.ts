@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupHarness,
   context,
+  functionsCommand,
   run,
+  sessionStart,
   setupHarness,
   tool,
   value,
@@ -435,18 +437,191 @@ describe("Pi tools injected from tools", () => {
       "Image from screenshot not attached: at most 8 images attach per invocation",
     );
   });
+});
 
-  it("rejects saved functions that inject tools, naming the reason", async () => {
-    const { ctx, executeTool } = toolContext({});
+describe("saved functions that inject tools", () => {
+  const completed = {
+    goal_complete: { result: { content: text("Goal completed.") }, isError: false },
+  };
+  const finish = `async function finish({ tools: { goal_complete } }) { return goal_complete({ summary: "done" }); }`;
+  const unavailable =
+    'Function "finish" is unavailable: tools.goal_complete is not a tool Pi can call now';
+  const withoutGoal = () =>
+    toolContext(
+      {},
+      TOOLS.filter((entry) => entry.name !== "goal_complete"),
+    );
+
+  /** Pi's loadout before any other tool is callable, as when MCP servers have not connected. */
+  function emptyLoadout(): ToolLoadout {
+    const declared = [
+      { name: "typescript", description: "Run TypeScript." },
+    ] as unknown as ToolLoadout["declared"];
+    return {
+      declared,
+      callable: [],
+      registered: declared,
+      getExposure: () => "model-only",
+      getNamespace: () => undefined,
+    };
+  }
+
+  it("saves and runs them, and keeps them when a session resumes before tools are known", async () => {
+    expect(await value(finish, toolContext(completed).ctx)).toBe("Goal completed.");
+    tool.prepareLoadout?.(emptyLoadout());
+    await sessionStart({}, context());
+    expect(await value(`async ({ finish }) => finish()`, toolContext(completed).ctx)).toBe(
+      "Goal completed.",
+    );
+  });
+
+  it("reports them unavailable while a tool is missing and runs them again when it returns", async () => {
+    await value(finish, toolContext(completed).ctx);
+    const missing = withoutGoal();
+    await expect(run(`async ({ finish }) => finish()`, missing.ctx)).rejects.toThrow(unavailable);
+    expect(missing.executeTool).not.toHaveBeenCalled();
+    const saved = await value(
+      `async ({ functions: { getSaved } }) => getSaved("finish")`,
+      withoutGoal().ctx,
+    );
+    expect(saved).toMatchObject({ available: false });
+    expect(JSON.stringify(saved)).toContain("tools.goal_complete is not a tool Pi can call now");
+    expect(await value(`async ({ finish }) => finish()`, toolContext(completed).ctx)).toBe(
+      "Goal completed.",
+    );
+  });
+
+  it("propagates unavailability to dependent saved functions", async () => {
+    const { ctx } = toolContext(completed);
+    await value(finish, ctx);
+    await value(
+      `async function wrapUp({ finish }) { return "wrapped: " + (await finish()); }`,
+      ctx,
+    );
+    await expect(run(`async ({ wrapUp }) => wrapUp()`, toolContext({}, []).ctx)).rejects.toThrow(
+      'Function "finish" is unavailable',
+    );
+  });
+
+  it("reports them available while the tool is callable", async () => {
+    const { ctx } = toolContext(completed);
+    await value(finish, ctx);
+    expect(
+      await value(`async ({ functions: { getSaved } }) => getSaved("finish")`, ctx),
+    ).toMatchObject({ available: true });
+  });
+
+  it("rejects a wrongly typed save-only definition while the tool is callable", async () => {
+    const { ctx } = toolContext(completed);
     await expect(
-      run(
-        `async function finish({ tools: { goal_complete } }) { return goal_complete({ summary: "done" }); }`,
+      tool.execute(
+        "save-bad",
+        {
+          code: `async function badFinish({ tools: { goal_complete } }) { return goal_complete({ summary: 1 }); }`,
+          saveOnly: true,
+        },
+        undefined,
+        undefined,
         ctx,
       ),
-    ).rejects.toThrow(
-      'Saved function "finish" cannot inject tools.goal_complete: saved functions cannot use Pi tools yet',
+    ).rejects.toThrow("Type 'number' is not assignable to type 'string'");
+  });
+
+  it("follows the loadout in /functions: available with the tool, unavailable without it", async () => {
+    await value(finish, toolContext(completed).ctx);
+    const shown = async (): Promise<string> => {
+      const ctx = context({ mode: "tui" });
+      let rendered = "";
+      ctx.ui.custom = vi.fn(async (factory?: any) => {
+        const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+        rendered =
+          factory?.({}, theme, {}, () => undefined)
+            .render(200)
+            .join("\n") ?? "";
+      });
+      await functionsCommand.handler("show finish", ctx);
+      return rendered;
+    };
+    const declared = [
+      { name: "typescript", description: "Run TypeScript." },
+    ] as unknown as ToolLoadout["declared"];
+    tool.prepareLoadout?.({
+      ...emptyLoadout(),
+      callable: TOOLS.filter(
+        (entry) => entry.name === "goal_complete",
+      ) as unknown as ToolLoadout["callable"],
+      declared,
+    });
+    expect(await shown()).not.toContain("Unavailable:");
+    tool.prepareLoadout?.(emptyLoadout());
+    expect(await shown()).toMatch(
+      /Unavailable: .*tools\.goal_complete is not a tool Pi can call now/,
     );
-    expect(executeTool).not.toHaveBeenCalled();
+  });
+
+  it("type-checks them against the tool's real schema while it is callable", async () => {
+    const { ctx } = toolContext(completed);
+    await expect(
+      run(
+        `async function badFinish({ tools: { goal_complete } }) { return goal_complete({ summary: 1 }); }`,
+        ctx,
+      ),
+    ).rejects.toThrow("Type 'number' is not assignable to type 'string'");
+  });
+
+  it("keeps user functions that inject tools across a reload before tools are known", async () => {
+    const { ctx } = toolContext(completed);
+    await value(finish, ctx);
+    await value(
+      `async ({ functions: { promote } }) => promote("finish", "Complete the goal", { to: "user" })`,
+      ctx,
+    );
+    tool.prepareLoadout?.(emptyLoadout());
+    await sessionStart({}, context());
+    const listed = await value(
+      `async ({ functions: { getSaved } }) => getSaved("finish", "user")`,
+      withoutGoal().ctx,
+    );
+    expect(listed).toMatchObject({ scope: "user", available: false });
+    expect(await value(`async ({ finish }) => finish()`, toolContext(completed).ctx)).toBe(
+      "Goal completed.",
+    );
+  });
+
+  it.each<{ name: string; source: string; call: string; reason: string }>([
+    {
+      name: "toolIndex while no tools are callable",
+      source: `async function findTools({ toolIndex: { search } }) { return search("goal"); }`,
+      call: `async ({ findTools }) => findTools()`,
+      reason:
+        'Function "findTools" is unavailable: toolIndex.search is unavailable because no other Pi tools are callable now',
+    },
+    {
+      name: "several missing tools, naming the first",
+      source: `async function both({ tools: { lookup, goal_complete } }) { await lookup({ id: "core" }); return goal_complete({ summary: "done" }); }`,
+      call: `async ({ both }) => both()`,
+      reason: 'Function "both" is unavailable: tools.',
+    },
+  ])("keeps saved functions using $name", async ({ source, call, reason }) => {
+    await tool.execute(
+      "save",
+      { code: source, saveOnly: true },
+      undefined,
+      undefined,
+      toolContext(completed).ctx,
+    );
+    tool.prepareLoadout?.(emptyLoadout());
+    await sessionStart({}, context());
+    await expect(run(call, toolContext({}, []).ctx)).rejects.toThrow(reason);
+  });
+
+  it("stops submitted programs that call a missing tool before running them", async () => {
+    await value(finish, toolContext(completed).ctx);
+    const missing = withoutGoal();
+    await expect(
+      run(`async ({ tools: { goal_complete } }) => goal_complete({ summary: "x" })`, missing.ctx),
+    ).rejects.toThrow('Function "tools.goal_complete" is unavailable');
+    expect(missing.executeTool).not.toHaveBeenCalled();
   });
 });
 

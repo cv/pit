@@ -7,7 +7,8 @@ import { getFunctionDependencies, type FunctionDependencies } from "./dependenci
 import { functionRegistry } from "./environment.js";
 import { functionRelativePath } from "./identifier.js";
 import { FUNCTION_LAYERS } from "./layered-registry.js";
-import { resolveFunctionGraph } from "./resolved-graph.js";
+import type { PiToolCatalog } from "./pi-tools.js";
+import { assertGraphAvailable, resolveFunctionGraph } from "./resolved-graph.js";
 import { getPersistentFunctionMetadata, getSavedFunctionCallSignature } from "./source.js";
 import { userFunctionDirectory } from "./storage/user.js";
 
@@ -17,6 +18,7 @@ export interface FunctionInspectionState {
   session?: ReadonlyMap<string, string>;
   invalidUser?: ReadonlyMap<string, string>;
   invalidProject?: ReadonlyMap<string, string>;
+  toolCatalog?: PiToolCatalog;
 }
 
 export interface FunctionListOptions {
@@ -87,6 +89,7 @@ export class FunctionInspector {
       userFunctions: state.user ?? new Map(),
       projectFunctions: state.project ?? new Map(),
       sessionFunctions: state.session ?? new Map(),
+      ...(state.toolCatalog ? { toolCatalog: state.toolCatalog } : {}),
     });
     for (const id of this.#registry.identifiers()) this.#chains.set(id, this.#registry.chain(id));
     for (const [layer, invalid] of [
@@ -175,17 +178,21 @@ export class FunctionInspector {
     const cached = this.#analyses.get(key);
     if (cached) return cached;
     let analysis: { effects: string[]; error?: string };
-    if (entry.kind === "native") analysis = { effects: [entry.effect] };
+    if (entry.kind === "native")
+      analysis = {
+        effects: [entry.effect],
+        ...(entry.unavailable ? { error: entry.unavailable } : {}),
+      };
     else if (entry.kind === "invalid")
       analysis = { effects: [], error: clipText(entry.error, 2000) };
     else {
       try {
-        analysis = {
-          effects: resolveFunctionGraph(entry.source, this.#registry, {
-            definition: { id: entry.id, layer: entry.layer },
-            invalidDefinitions: this.#invalid,
-          }).effects,
-        };
+        const graph = resolveFunctionGraph(entry.source, this.#registry, {
+          definition: { id: entry.id, layer: entry.layer },
+          invalidDefinitions: this.#invalid,
+        });
+        assertGraphAvailable(graph);
+        analysis = { effects: graph.effects };
       } catch (failure) {
         analysis = {
           effects: [],

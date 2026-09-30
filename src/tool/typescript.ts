@@ -11,7 +11,7 @@ import { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { functionDependencyBinding } from "../functions/identifier.js";
-import { createPiToolCatalog } from "../functions/pi-tools.js";
+import { createPiToolCatalog, type PiToolCatalog } from "../functions/pi-tools.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
@@ -152,6 +152,8 @@ interface SandboxValueExecution {
   executionProgress: ExecutionProgressController;
   timings: ExecutionTimingRecorder;
   images: ImageCollector;
+  /** The Pi tools Pi lets this call use, possibly none. */
+  toolCatalog: PiToolCatalog;
   /** Pi tools the program may call; absent when Pi lets this call use none. */
   toolCalls: PiToolCallServices | undefined;
 }
@@ -165,6 +167,7 @@ async function executeSandboxValue({
   executionProgress,
   timings,
   images,
+  toolCatalog,
   toolCalls,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
@@ -203,7 +206,7 @@ async function executeSandboxValue({
     userFunctions: preparedFunction.userFunctions,
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,
-    ...(toolCalls ? { toolCatalog: toolCalls.catalog } : {}),
+    toolCatalog,
     ...(input === undefined ? {} : { input }),
     onHostCallTrace: (trace: HostCallTrace) => executionProgress.recordTrace(trace),
   };
@@ -278,6 +281,8 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const images = createImageCollector(request.ctx);
   // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
   const catalog = createPiToolCatalog(request.ctx.tools);
+  // Saving and committing check saved functions against the tools this call can use.
+  request.functionState.toolCatalog = catalog;
   let terminate = false;
   const toolCalls: PiToolCallServices | undefined =
     catalog.bindings.size > 0
@@ -310,6 +315,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       executionProgress,
       timings,
       images,
+      toolCatalog: catalog,
       toolCalls,
     });
     timings.enter("commit");
@@ -396,7 +402,12 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     // Pit orchestrates the other tools and must not be callable from them, for example from
     // codemode scripts, which would also hide its declaration in codemode's `only` mode.
     exposure: "model-only",
-    prepareLoadout: (loadout) => pitLoadout(loadout, services.toolSelection),
+    prepareLoadout: (loadout) => {
+      // Pi reruns this whenever tools register, so the session catalog follows MCP connections.
+      const catalog = createPiToolCatalog(loadout.callable);
+      functionState.toolCatalog = catalog;
+      return pitLoadout(loadout, services.toolSelection, catalog);
+    },
     renderCall(args, theme, context) {
       return renderTypeScriptToolCall(args, theme, context, functionState.effective);
     },

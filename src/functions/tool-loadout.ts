@@ -4,7 +4,7 @@ import type {
   ToolLoadoutChanges,
 } from "@earendil-works/pi-coding-agent";
 
-import { createPiToolCatalog, piToolPrompt } from "./pi-tools.js";
+import { createPiToolCatalog, type PiToolCatalog, piToolPrompt } from "./pi-tools.js";
 
 export const PIT_TOOL_NAME = "typescript";
 
@@ -61,9 +61,13 @@ export function activatePitTools(pi: ExtensionAPI, selection: PitToolSelection):
  * loaded them (`codemode` or `deferred` exposure). `typescript`'s description lists the callable
  * tools a program can inject from `tools`; Pi passes the original description every time.
  */
-export function pitLoadout(loadout: ToolLoadout, selection: PitToolSelection): ToolLoadoutChanges {
+export function pitLoadout(
+  loadout: ToolLoadout,
+  selection: PitToolSelection,
+  catalog: PiToolCatalog = createPiToolCatalog(loadout.callable),
+): ToolLoadoutChanges {
   const own = loadout.declared.find(({ name }) => name === PIT_TOOL_NAME);
-  const prompt = piToolPrompt(createPiToolCatalog(loadout.callable));
+  const prompt = piToolPrompt(catalog);
   return {
     ...(own && prompt ? { descriptions: { [PIT_TOOL_NAME]: own.description + prompt } } : {}),
     hiddenDeclarations: loadout.declared
