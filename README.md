@@ -56,7 +56,7 @@ Run `/reload` in Pi after source-only updates. Restart Pi after a native runtime
 To pin a release instead (package updates won't move a pinned install):
 
 ```sh
-pi install git:github.com/cv/pit@v0.22.0
+pi install git:github.com/cv/pit@v0.22.1
 ```
 
 See [configuration](docs/configuration.md) for one-session and project-only installs, and [troubleshooting](docs/troubleshooting.md) if the runtime cannot load. Pit is distributed from GitHub only; it isn't published to npm. [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) describe what changed.
