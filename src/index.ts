@@ -6,6 +6,7 @@ import { registerSavedFunctionFeatures } from "./functions/lifecycle.js";
 import { SavedFunctionService } from "./functions/service.js";
 import { createFunctionState, createFunctionStateCommitQueue } from "./functions/state.js";
 import { createPitToolSelection } from "./functions/tool-loadout.js";
+import { registerContextRenderers } from "./renderers/context-entries.js";
 import { configuredFunctionExecutor } from "./sandbox/wasmtime-loader.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
@@ -17,6 +18,7 @@ export default function pit(pi: ExtensionAPI) {
   const toolSelection = createPitToolSelection();
   const contextEdits = new ContextEditQueue();
   registerContextBoundary(pi, contextEdits);
+  registerContextRenderers(pi);
   const savedFunctionService = new SavedFunctionService({
     state: functionState,
     commit: commitFunctionState,
