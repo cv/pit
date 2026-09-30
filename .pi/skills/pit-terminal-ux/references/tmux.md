@@ -54,6 +54,23 @@ Use `/new` between cases when independent captures are useful. Expansion state p
 
 Resize to 60, 80, and 120 columns with `resize-window`. Capture both the initially visible expanded viewport and the top of the entry. In fullscreen mode, Home/End navigate the transcript; in regular mode they control the editor, so inspect terminal scrollback with `capture-pane -S` instead. Long expanded entries may extend above the initial viewport because Pi follows the bottom; do not confuse off-screen data with missing data, and do not mistake correct document order for good initial viewport placement.
 
+## Tool loadout and `tools.*` acceptance
+
+Start `ux.manageSession` with `builtins: ["mcp"]` and `mcpServers: { fixture: { exposure: "codemode" } }`. The `tools-*` fixtures call the [fixture MCP server](../assets/fixture-mcp-server.mjs) as `mcp__fixture__*`, so the server must be named `fixture`.
+
+| Fixture             | Exercises                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| `tools-call`        | An MCP text result.                                                                               |
+| `tools-structured`  | A structured MCP result whose extra `type` field the schema forbids; it must return typed values. |
+| `tools-error`       | A server error; the collapsed error must name the failing tool.                                   |
+| `tools-types`       | An argument type error rejected before execution.                                                 |
+| `tools-parallel`    | Three concurrent calls lasting 1.5-4.5 s, for partial and settled traces.                         |
+| `tools-index`       | `toolIndex.search` and `toolIndex.describe`.                                                      |
+| `tools-description` | Prints the tools section of `typescript`'s description, as the model receives it.                 |
+| `loadout`           | Lists the declarations sent to the model after every `prepareLoadout()` hook.                     |
+
+The fixture model cannot pursue goals. For flows that need real reasoning, such as `/goal` with pi-goal's `goal_complete`, run a private tmux Pi with a real model, an isolated agent directory that links only `models.json` and `auth.json`, and `-ne` with explicit `-e` paths for this repository and the other extension.
+
 ## Source-global acceptance
 
 Run `global-override-save` followed by `global-override-run` with `ux.runCase` in the **same isolated session**, without `/new` between them. The first fixture saves a session override of `shell.execFile` that returns a sentinel instead of launching processes. The second refuses to run without that override, invokes Git/npm/GitHub source globals, and returns their reflection metadata. Expect three `GLOBAL_SOURCE_SENTINEL` commands, `kind: source`, `scope: global`, available source, a direct `shell.execFile` dependency, and no native effects because the override is pure source. Use `/new` afterwards to discard the override before process or npm-pack fixtures.

@@ -11,12 +11,13 @@ import { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { functionDependencyBinding } from "../functions/identifier.js";
-import { createPiToolCatalog, type PiToolCatalog } from "../functions/pi-tools.js";
+import { createPiToolCatalog } from "../functions/pi-tools.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { pitLoadout, type PitToolSelection } from "../functions/tool-loadout.js";
-import { createHostDispatcher, type HostServices } from "../host/dispatcher.js";
+import { createHostDispatcher } from "../host/dispatcher.js";
+import type { PiToolCallServices } from "../host/handlers/pi-tools.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
@@ -151,8 +152,8 @@ interface SandboxValueExecution {
   executionProgress: ExecutionProgressController;
   timings: ExecutionTimingRecorder;
   images: ImageCollector;
-  piTools: PiToolCatalog;
-  onTerminate: () => void;
+  /** Pi tools the program may call; absent when Pi lets this call use none. */
+  toolCalls: PiToolCallServices | undefined;
 }
 
 async function executeSandboxValue({
@@ -164,8 +165,7 @@ async function executeSandboxValue({
   executionProgress,
   timings,
   images,
-  piTools,
-  onTerminate,
+  toolCalls,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
     return { savedFunction: preparedFunction.name, executed: false };
@@ -182,16 +182,7 @@ async function executeSandboxValue({
     promotionSuggestions,
     ...(onShellProgress ? { onShellProgress } : {}),
     images,
-    ...(piTools.bindings.size > 0
-      ? {
-          piTools: {
-            ctx: request.ctx,
-            catalog: piTools,
-            onTerminate,
-            attachImage: (image, source) => images.attachBlock(image, source),
-          } satisfies HostServices["piTools"],
-        }
-      : {}),
+    ...(toolCalls ? { toolCalls } : {}),
   });
   const options = {
     timings,
@@ -212,7 +203,7 @@ async function executeSandboxValue({
     userFunctions: preparedFunction.userFunctions,
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,
-    ...(piTools.bindings.size > 0 ? { piTools } : {}),
+    ...(toolCalls ? { toolCatalog: toolCalls.catalog } : {}),
     ...(input === undefined ? {} : { input }),
     onHostCallTrace: (trace: HostCallTrace) => executionProgress.recordTrace(trace),
   };
@@ -281,13 +272,24 @@ function buildToolResult(input: {
 
 async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const functionActivity: FunctionActivity[] = [];
-  // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
-  const piTools = createPiToolCatalog(request.ctx.tools);
-  let terminate = false;
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
   const images = createImageCollector(request.ctx);
+  // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
+  const catalog = createPiToolCatalog(request.ctx.tools);
+  let terminate = false;
+  const toolCalls: PiToolCallServices | undefined =
+    catalog.bindings.size > 0
+      ? {
+          ctx: request.ctx,
+          catalog,
+          onTerminate: () => {
+            terminate = true;
+          },
+          attachImage: (image, source) => images.attachBlock(image, source),
+        }
+      : undefined;
   try {
     const source = await formatTypeScriptSource(request.params.code);
     const input = resolveToolInput(source, request.params.params);
@@ -308,10 +310,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       executionProgress,
       timings,
       images,
-      piTools,
-      onTerminate: () => {
-        terminate = true;
-      },
+      toolCalls,
     });
     timings.enter("commit");
     await request.savedFunctionService.commit(preparedFunction, request.ctx, functionActivity);

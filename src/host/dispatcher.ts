@@ -96,7 +96,7 @@ export interface HostServices {
   /** Collects the images this invocation's workspace.viewImage calls attach to its result. */
   images: ImageCollector;
   /** Pi tools this invocation may call through `tools.*`; absent when none are callable. */
-  piTools?: PiToolCallServices;
+  toolCalls?: PiToolCallServices;
 }
 
 interface ProcessHostHandlers {
@@ -206,7 +206,7 @@ export function createHostDispatcher({
   promotionSuggestions,
   onShellProgress,
   images,
-  piTools,
+  toolCalls,
 }: HostServices): HostCallHandler {
   const processHandlers = createProcessHostHandlers({
     pi,
@@ -314,8 +314,8 @@ export function createHostDispatcher({
 
       if (isPiToolNamespace(namespace)) {
         /* v8 ignore next -- validation rejects tools.* when the call has no callable tools. */
-        if (!piTools) throw new Error(`Unknown host function: ${namespace}.${method}`);
-        return callPiTool(piTools, { namespace, method, args, signal });
+        if (!toolCalls) throw new Error(`Unknown host function: ${namespace}.${method}`);
+        return callPiTool(toolCalls, { namespace, method, args, signal });
       }
       validateNativeCall(namespace, method, args);
       return publicHandlers[namespace as NativeNamespace](method, args, signal);

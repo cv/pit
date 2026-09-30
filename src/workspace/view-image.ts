@@ -116,13 +116,12 @@ export function createImageCollector(ctx: ExtensionToolContext): ImageCollector 
   // call releases its slot; pending calls count toward the limit.
   const slots: Array<{ loaded?: AttachedImage }> = [];
   const attached = () => slots.flatMap(({ loaded }) => (loaded ? [loaded] : []));
+  const attachedBytes = () =>
+    attached().reduce((sum, { image }) => sum + Buffer.byteLength(image.data, "utf8"), 0);
   const omitted: string[] = [];
   const attachBlock = (image: ImageBlock, source: string) => {
     const bytes = Buffer.byteLength(image.data, "utf8");
-    const total = attached().reduce(
-      (sum, { image: attachedImage }) => sum + Buffer.byteLength(attachedImage.data, "utf8"),
-      bytes,
-    );
+    const total = attachedBytes() + bytes;
     const reason =
       slots.length >= MAX_IMAGES
         ? `at most ${MAX_IMAGES} images attach per invocation`
@@ -155,10 +154,7 @@ export function createImageCollector(ctx: ExtensionToolContext): ImageCollector 
     slots.push(slot);
     try {
       const loaded = await loadImage(ctx, args[0], signal);
-      const total = attached().reduce(
-        (bytes, { image }) => bytes + Buffer.byteLength(image.data, "utf8"),
-        Buffer.byteLength(loaded.image.data, "utf8"),
-      );
+      const total = attachedBytes() + Buffer.byteLength(loaded.image.data, "utf8");
       if (total > MAX_TOTAL_ENCODED_BYTES)
         throw new Error("Images attached by one invocation exceed 16 MiB encoded");
       slot.loaded = loaded;

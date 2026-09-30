@@ -37,6 +37,7 @@ const TEXT_OUTPUT = { type: "string" };
 const MAX_SUMMARY_CHARS = 160;
 const MAX_LISTED_NAME_CHARS = 6000;
 const MAX_CACHED_CATALOGS = 8;
+const MCP_TEXT_NOTE = "Returns the server's text, often JSON: parse it with JSON.parse.";
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -120,15 +121,11 @@ function isParameterless(schema: unknown): boolean {
 }
 
 function binding(tool: PiToolInfo, method: string): PiToolBinding {
+  // MCP tools declare a CallToolResult wrapper; the call returns what it wraps.
   const wrapped = mcpStructuredContentSchema(tool.outputSchema as never);
   const mcp = wrapped !== undefined;
-  const structured = mcp
-    ? isRecord(wrapped)
-      ? (wrapped as JsonSchema)
-      : undefined
-    : isRecord(tool.outputSchema)
-      ? (tool.outputSchema as JsonSchema)
-      : undefined;
+  const output = mcp ? wrapped : tool.outputSchema;
+  const structured = isRecord(output) ? (output as JsonSchema) : undefined;
   let declaration = jsonTyped(
     renderToolSignature({
       name: tool.name,
@@ -281,8 +278,6 @@ export function searchPiTools(
     .slice(0, bounded)
     .map(({ entry }) => ({ name: entry.method, summary: entry.summary }));
 }
-
-const MCP_TEXT_NOTE = "Returns the server's text, often JSON: parse it with JSON.parse.";
 
 export function describePiTool(catalog: PiToolCatalog, name: string): string | null {
   const entry = catalog.bindings.get(name) ?? catalog.bindings.get(toCodemodeIdentifier(name));

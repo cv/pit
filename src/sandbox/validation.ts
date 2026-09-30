@@ -244,7 +244,7 @@ function validateSource(
     [
       CONTRACT_FILE,
       `${GLOBAL_CONTRACT.replace("interface PitDependencies {", "interface PitGlobalFunctions {") + SANDBOX_GLOBALS}
-${model.declarations}${validation.environment?.piTools?.declarations ?? ""}`,
+${model.declarations}${validation.environment?.toolCatalog?.declarations ?? ""}`,
     ],
     [PROGRAM_FILE, wrapped],
     [SIGNATURES_FILE, model.signatures],

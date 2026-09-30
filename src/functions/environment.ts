@@ -13,7 +13,7 @@ export interface FunctionEnvironment {
   sessionFunctions?: ReadonlyMap<string, string>;
   invalidDefinitions?: ReadonlyMap<string, string>;
   /** Pi tools the current call may run, bound under `tools`. Saved functions never receive them. */
-  piTools?: PiToolCatalog;
+  toolCatalog?: PiToolCatalog;
 }
 
 export function functionRegistry(
@@ -27,5 +27,5 @@ export function functionRegistry(
   add("user", environment.userFunctions);
   add("project", environment.projectFunctions);
   add("session", environment.sessionFunctions);
-  return createLayeredFunctionRegistry(definitions, environment.piTools?.definitions);
+  return createLayeredFunctionRegistry(definitions, environment.toolCatalog?.definitions);
 }
