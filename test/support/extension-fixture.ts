@@ -64,6 +64,7 @@ let slashCommands: any[] = [];
 let configuredModels: any[] = [];
 const registeredCommands = new Map<string, any>();
 export let sentUserMessages: Array<{ content: string; options: unknown }> = [];
+export let sentMessages: Array<{ message: any; options: unknown }> = [];
 
 interface PromptEvent {
   systemPrompt: string;
@@ -215,6 +216,7 @@ export async function setupHarness(): Promise<void> {
   registeredCommands.clear();
   eventHandlers.clear();
   sentUserMessages = [];
+  sentMessages = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   getAllTools = vi.fn(() => []);
@@ -253,6 +255,9 @@ export async function setupHarness(): Promise<void> {
     getSessionName: vi.fn(() => sessionName),
     getCommands: vi.fn(() => slashCommands),
     setModel: vi.fn(async (model: any) => model.available !== false),
+    sendMessage: vi.fn((message: unknown, options: unknown) => {
+      sentMessages.push({ message, options });
+    }),
     sendUserMessage: vi.fn((content: string, options: unknown) => {
       sentUserMessages.push({ content, options });
     }),

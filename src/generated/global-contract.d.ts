@@ -277,6 +277,18 @@ type PitContextEditReceipt = {
   estimatedReprefillTokens: number;
 };
 
+type PitContextNoteReceipt = PitContextEditReceipt & {
+  key: string;
+  action: "created" | "replaced" | "removed";
+};
+
+type PitContextNotes = {
+  notes: Array<{ key: string; entryId: string; tokens: number; pending?: boolean }>;
+  tokens: number;
+  budgetTokens: number;
+  maxNotes: number;
+};
+
 interface PitWorkspaceFunctions {
   viewImage(file: string): Promise<{ file: string; mimeType: string; queued: true }>;
 
@@ -507,6 +519,10 @@ interface PitSessionFunctions {
   elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;
 
   restore(ids: string[]): Promise<PitContextEditReceipt & { restoredChars: number }>;
+
+  setNote(key: string, content: string | null): Promise<PitContextNoteReceipt>;
+
+  notes(): Promise<PitContextNotes>;
 }
 
 interface PitCommandsFunctions {

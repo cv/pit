@@ -1,4 +1,5 @@
 import { MAX_REASON_CHARS, planElide, planRestore } from "../../context/edits.js";
+import { planNote } from "../../context/notes.js";
 import { MAX_EDIT_TARGETS, type PlannedEdit } from "../../context/planning.js";
 import { buildContextView } from "../../context/view.js";
 import {
@@ -63,5 +64,13 @@ export function createSessionEditHandlers({
       return stage(planElide(view(), entryIds(args[0]), reason(options.reason)));
     },
     restore: (args) => stage(planRestore(view(), ctx.sessionManager, entryIds(args[0]))),
+    setNote: (args) =>
+      stage(
+        planNote(view(), {
+          key: string(args[0], "note key"),
+          content: args[1] === null ? null : string(args[1], "note content"),
+          contextWindow: ctx.getContextUsage()?.contextWindow ?? ctx.model?.contextWindow,
+        }),
+      ),
   };
 }

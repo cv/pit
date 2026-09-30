@@ -31,7 +31,10 @@ export class ContextEditQueue {
     const pending = this.pending();
     const conflicts = edit.targets.filter((target) => pending.has(target));
     if (conflicts.length > 0) {
-      const shown = conflicts.slice(0, 5).join(", ");
+      const shown = conflicts
+        .slice(0, 5)
+        .map((target) => (target.startsWith("note:") ? `Note "${target.slice(5)}"` : target))
+        .join(", ");
       const more = conflicts.length > 5 ? ` and ${conflicts.length - 5} more` : "";
       throw new Error(
         `${shown}${more} already ${conflicts.length === 1 ? "has" : "have"} a staged ${pending.get(conflicts[0] as string)} in this turn`,

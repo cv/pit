@@ -4,6 +4,7 @@ import {
   OUTLINE_LIMITS,
   outlineContext,
 } from "../../context/inspect.js";
+import { listNotes } from "../../context/notes.js";
 import type { ContextEditQueue } from "../../context/queue.js";
 import { buildContextView, CONTEXT_ROLES, type ContextRole } from "../../context/view.js";
 import {
@@ -69,6 +70,11 @@ export function createSessionContextHandlers({
           : { usage: { tokens: usage?.tokens ?? null, contextWindow } }),
       });
     },
+    notes: () =>
+      listNotes(view(), {
+        contextWindow: ctx.getContextUsage()?.contextWindow ?? ctx.model?.contextWindow,
+        pending: contextEdits?.pending() ?? new Map(),
+      }),
     inspectEntry: (args) => {
       const options = args[1] === undefined ? {} : record(args[1], "options");
       return inspectContextEntry(view(), ctx.sessionManager, {

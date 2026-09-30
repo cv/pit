@@ -7,6 +7,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 export type SessionReader = ExtensionContext["sessionManager"];
+/** The session reads a context view needs, so a view can describe an earlier leaf. */
+export type ContextSource = Pick<
+  SessionReader,
+  "getBranch" | "buildSessionProjection" | "getLeafId"
+>;
 export type AgentMessage = ProjectedSessionEntry["messages"][number];
 export type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
 export type EditableContent = NonNullable<ContextEditEntry["replacement"]>["content"];
@@ -260,7 +265,7 @@ export interface ContextViewOptions {
 }
 
 export function buildContextView(
-  session: SessionReader,
+  session: ContextSource,
   options: ContextViewOptions = {},
 ): ContextView {
   const branch = session.getBranch();
