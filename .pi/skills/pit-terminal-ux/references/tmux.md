@@ -49,6 +49,13 @@ Submit one fixture name as ordinary prompt text:
 | `npm-pack`          | Real JSON dry run: tarball identity, sizes, and file count lead the complete JSON inventory.                           |
 | `npm-audit`         | Synthetic report (no registry request): severity counts and findings lead the complete JSON report.                    |
 | `npm-outdated`      | Synthetic report (no registry request): per-package versions lead the complete JSON report.                            |
+| `context-setup`     | A 200-line build log to edit; run it before the other `context-*` fixtures.                                            |
+| `context-outline`   | `session.outline()`: collapsed entry and token counts, one row per entry when expanded.                                |
+| `context-elide`     | Elides the largest unedited tool result; the receipt says staged, and a provenance row appears when the turn ends.     |
+| `context-note`      | `session.setNote("progress", …)`: a labelled note box and a provenance row follow the turn.                            |
+| `context-summarize` | Summarizes the first completed turn; its carrier keeps the tool call and the result becomes a stub.                    |
+| `context-restore`   | Restores every elided or summarized entry the outline lists.                                                           |
+| `context-view`      | No tool call: the provider reports the stubs, summaries, notes, and notices it actually received.                      |
 
 Use `/new` between cases when independent captures are useful. Expansion state persists across new sessions: track it rather than blindly toggling twice. Use the configured expand action (the isolated default is Ctrl+O).
 
