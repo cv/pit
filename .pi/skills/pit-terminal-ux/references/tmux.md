@@ -66,6 +66,8 @@ Start `ux.manageSession` with `builtins: ["mcp"]` and `mcpServers: { fixture: { 
 | `tools-types`       | An argument type error rejected before execution.                                                 |
 | `tools-parallel`    | Three concurrent calls lasting 1.5-4.5 s, for partial and settled traces.                         |
 | `tools-index`       | `toolIndex.search` and `toolIndex.describe`.                                                      |
+| `tools-save`        | Saves `fixtureSearch`, a session function that injects `mcp__fixture__search`.                    |
+| `tools-saved-run`   | Runs `fixtureSearch`; run it after `/reload` to check saved functions survive tool reconnection.  |
 | `tools-description` | Prints the tools section of `typescript`'s description, as the model receives it.                 |
 | `loadout`           | Lists the declarations sent to the model after every `prepareLoadout()` hook.                     |
 

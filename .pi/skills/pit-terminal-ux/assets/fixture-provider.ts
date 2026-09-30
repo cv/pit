@@ -38,6 +38,14 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     label: "TOOLS: concurrent calls",
     code: 'async ({ tools: { mcp__fixture__slow } }) => Promise.all(["a", "b", "c"].map((label, index) => mcp__fixture__slow({ label, delayMs: 1500 * (index + 1) })))',
   },
+  "tools-save": {
+    label: "TOOLS: save a function that injects a tool",
+    code: 'async function fixtureSearch({ tools: { mcp__fixture__search } }) { return mcp__fixture__search({ query: "saved" }); }',
+  },
+  "tools-saved-run": {
+    label: "TOOLS: run the saved function",
+    code: "async ({ fixtureSearch }) => fixtureSearch()",
+  },
   "tools-index": {
     label: "TOOLS: search and describe",
     code: 'async ({ toolIndex: { search, describe } }) => ({ found: await search("fixture graph"), graph: await describe("mcp__fixture__graph") })',
