@@ -4,6 +4,8 @@ import type {
   ToolLoadoutChanges,
 } from "@earendil-works/pi-coding-agent";
 
+import { createPiToolCatalog, piToolPrompt } from "./pi-tools.js";
+
 export const PIT_TOOL_NAME = "typescript";
 
 /** Tool selection resolved from a trusted project's `.pi/pit.json` at session start. */
@@ -56,10 +58,14 @@ export function activatePitTools(pi: ExtensionAPI, selection: PitToolSelection):
  * Hides the declarations of tools the model would otherwise see beside `typescript`. They stay
  * active and callable. Declared: `typescript`, `allowedTools` matches, MCP tools configured with
  * `direct` exposure, and tools that are declared only because a tool such as `tool_search`
- * loaded them (`codemode` or `deferred` exposure).
+ * loaded them (`codemode` or `deferred` exposure). `typescript`'s description lists the callable
+ * tools a program can inject from `tools`; Pi passes the original description every time.
  */
 export function pitLoadout(loadout: ToolLoadout, selection: PitToolSelection): ToolLoadoutChanges {
+  const own = loadout.declared.find(({ name }) => name === PIT_TOOL_NAME);
+  const prompt = piToolPrompt(createPiToolCatalog(loadout.callable));
   return {
+    ...(own && prompt ? { descriptions: { [PIT_TOOL_NAME]: own.description + prompt } } : {}),
     hiddenDeclarations: loadout.declared
       .map(({ name }) => name)
       .filter(

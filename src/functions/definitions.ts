@@ -18,11 +18,13 @@ export interface SourceFunctionDefinition
 
 export type FunctionDefinition = NativeFunctionDefinition | SourceFunctionDefinition;
 
+/** `globals` adds call-specific native definitions, such as Pi tools, to the global layer. */
 export function createLayeredFunctionRegistry(
   definitions: Iterable<FunctionDefinition> = [],
+  globals: Iterable<NativeFunctionDefinition> = [],
 ): LayeredFunctionRegistry<FunctionDefinition> {
   const registry = new LayeredFunctionRegistry<FunctionDefinition>();
-  for (const definition of globalFunctionDefinitions()) {
+  for (const definition of [...globalFunctionDefinitions(), ...globals]) {
     registry.set(definition);
   }
   for (const definition of definitions) {
