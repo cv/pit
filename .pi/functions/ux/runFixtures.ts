@@ -27,6 +27,27 @@ async function runFixtures(
     throw new Error("timeoutMs must be an integer between 1000 and 120000");
   }
 
+  const screen = async () =>
+    (
+      await execFile("tmux", ["-S", input.socket, "capture-pane", "-p", "-t", input.target], {
+        maxBytes: 51200,
+        truncate: "tail",
+      })
+    ).stdout;
+  // Pi's first /new can take seconds while the new session starts; a prompt typed earlier is
+  // lost. /new clears the screen, so the notice without an earlier completion marks the start.
+  const newSessionStarted = async () => {
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const shown = await screen();
+      if (shown.includes("New session started") && !shown.includes("Fixture completed.")) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const results: Array<{ fixture: string; settled: boolean; outcome: string[] }> = [];
   for (const fixture of input.fixtures) {
     // A new session clears the screen, so each fixture's completion is the first one shown.
@@ -35,7 +56,14 @@ async function runFixtures(
         raise: true,
       });
     }
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    if (!(await newSessionStarted())) {
+      results.push({
+        fixture,
+        settled: false,
+        outcome: ["New session did not start within 15 s; the fixture was not submitted"],
+      });
+      continue;
+    }
     const run = await runCase({
       socket: input.socket,
       target: input.target,
