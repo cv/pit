@@ -4,6 +4,19 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-09-30
+
+### Changed
+
+- The native runtime is built with Wasmtime 49.0.1 (from 48.0.2) and Rust 1.98.1 (from 1.95.0). Updated native crates: `napi` 3.13.0, `napi-derive` 3.6.9, `napi-build` 2.5.0, `futures` 0.3.34, and the QuickJS guest's `wit-bindgen` 0.62.0. Prebuilds for all six platforms are published with this release.
+- Smoke-test containers use Debian 13 (`trixie`) images: `rust:1.98-trixie` and `node:24-trixie-slim`.
+- Development tooling: Pi packages 0.99.1, Vitest 5.0.3, oxlint 1.86.0, and oxfmt 0.71.0. Dependabot now also tracks Rust crates and container images.
+- TypeScript stays at 6.0.3: TypeScript 7 no longer exports the compiler API Pit validates programs with (#196).
+
+### Security
+
+- `npm audit` reports `brace-expansion` 5.0.9 (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) through Pi 0.99.1's published `npm-shrinkwrap.json`, which npm honors over Pit's lockfile. Pit doesn't ship it: Pi is a development and peer dependency and provides its own copy. The fix needs a Pi release.
+
 ## [0.22.0] - 2026-09-30
 
 ### Added
@@ -282,7 +295,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/cv/pit/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/cv/pit/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/cv/pit/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/cv/pit/compare/v0.20.1...v0.21.0
