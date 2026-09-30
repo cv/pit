@@ -277,6 +277,13 @@ type PitContextEditReceipt = {
   estimatedReprefillTokens: number;
 };
 
+type PitContextSummaryInput = { from: string; to: string; summary: string };
+
+type PitContextSummaryReceipt = PitContextEditReceipt & {
+  summarizedEntries: number;
+  summaryTokens: number;
+};
+
 type PitContextNoteReceipt = PitContextEditReceipt & {
   key: string;
   action: "created" | "replaced" | "removed";
@@ -523,6 +530,8 @@ interface PitSessionFunctions {
   setNote(key: string, content: string | null): Promise<PitContextNoteReceipt>;
 
   notes(): Promise<PitContextNotes>;
+
+  summarize(input: PitContextSummaryInput): Promise<PitContextSummaryReceipt>;
 }
 
 interface PitCommandsFunctions {

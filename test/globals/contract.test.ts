@@ -37,6 +37,9 @@ async function accepted(c: PitDependencies) {
   const action: "created" | "replaced" | "removed" = (await c.session.setNote("progress", "v1")).action;
   await c.session.setNote("progress", null);
   const budget: number = (await c.session.notes()).budgetTokens;
+  const summarized: number = (
+    await c.session.summarize({ from: "a1b2c3d4", to: "b2c3d4e5", summary: "Tried X." })
+  ).summarizedEntries;
   return { text, exitCode, status, readKinds, editKinds };
 }
 
@@ -75,6 +78,8 @@ async function rejected(c: PitDependencies) {
   const applied: "applied" = (await c.session.restore(["a1b2c3d4"])).status;
   // @ts-expect-error removing a note passes null explicitly
   await c.session.setNote("progress");
+  // @ts-expect-error a summary needs a range and its text
+  await c.session.summarize({ from: "a1b2c3d4" });
 
 }
 `;

@@ -62,6 +62,7 @@ export let functionsCommand: { handler: (args: string, ctx: any) => Promise<void
 let sessionName: string | undefined;
 let slashCommands: any[] = [];
 let configuredModels: any[] = [];
+let piSettings: Record<string, unknown> = {};
 const registeredCommands = new Map<string, any>();
 export let sentUserMessages: Array<{ content: string; options: unknown }> = [];
 export let sentMessages: Array<{ message: any; options: unknown }> = [];
@@ -197,6 +198,10 @@ export function setSlashCommands(commands: any[]): void {
   slashCommands = commands;
 }
 
+export function setPiSettings(settings: Record<string, unknown>): void {
+  piSettings = settings;
+}
+
 export function setConfiguredModels(models: any[]): void {
   configuredModels = models;
 }
@@ -213,6 +218,7 @@ export async function setupHarness(): Promise<void> {
   sessionName = undefined;
   slashCommands = [];
   configuredModels = [];
+  piSettings = {};
   registeredCommands.clear();
   eventHandlers.clear();
   sentUserMessages = [];
@@ -254,6 +260,7 @@ export async function setupHarness(): Promise<void> {
     }),
     getSessionName: vi.fn(() => sessionName),
     getCommands: vi.fn(() => slashCommands),
+    getSettings: vi.fn(() => piSettings),
     setModel: vi.fn(async (model: any) => model.available !== false),
     sendMessage: vi.fn((message: unknown, options: unknown) => {
       sentMessages.push({ message, options });

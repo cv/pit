@@ -277,6 +277,13 @@ type PitContextEditReceipt = {
   estimatedReprefillTokens: number;
 };
 
+type PitContextSummaryInput = { from: string; to: string; summary: string };
+
+type PitContextSummaryReceipt = PitContextEditReceipt & {
+  summarizedEntries: number;
+  summaryTokens: number;
+};
+
 type PitContextNoteReceipt = PitContextEditReceipt & {
   key: string;
   action: "created" | "replaced" | "removed";
