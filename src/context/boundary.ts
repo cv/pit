@@ -6,6 +6,7 @@ import type {
   TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 
+import { registerNoteRecovery } from "./notes.js";
 import type { ContextEditQueue, StagedEdit } from "./queue.js";
 import { PROVENANCE_TYPE, type ProvenanceData } from "./view.js";
 
@@ -69,6 +70,7 @@ export function contextBoundaryEntries(
 }
 
 export function registerContextBoundary(pi: ExtensionAPI, queue: ContextEditQueue): void {
+  registerNoteRecovery(pi);
   // Staged edits belong to the running turn on the current branch.
   pi.on("session_start", () => {
     queue.clear();

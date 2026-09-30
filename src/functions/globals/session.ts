@@ -85,4 +85,19 @@ export const sessionFunctions = [
     minimumArguments: 1,
     maximumArguments: 1,
   }),
+  defineNativeFunction("session", "setNote", {
+    summary: "Keep a keyed working note in context",
+    declaration: "setNote(key: string, content: string | null): Promise<PitContextNoteReceipt>;",
+    documentation:
+      "session.setNote(key, content) stages creating or replacing a keyed model note at the end of context, or removing it with null; notes share max(4,096 tokens, 10% of the window)",
+    minimumArguments: 2,
+    maximumArguments: 2,
+  }),
+  defineNativeFunction("session", "notes", {
+    summary: "List live model notes",
+    declaration: "notes(): Promise<PitContextNotes>;",
+    documentation: "session.notes() lists live notes on the active branch and the note budget",
+    minimumArguments: 0,
+    maximumArguments: 0,
+  }),
 ] as const;

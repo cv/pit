@@ -275,6 +275,18 @@ type PitContextEditReceipt = {
   targets: string[];
   estimatedTokensFreed: number;
   estimatedReprefillTokens: number;
+};
+
+type PitContextNoteReceipt = PitContextEditReceipt & {
+  key: string;
+  action: "created" | "replaced" | "removed";
+};
+
+type PitContextNotes = {
+  notes: Array<{ key: string; entryId: string; tokens: number; pending?: boolean }>;
+  tokens: number;
+  budgetTokens: number;
+  maxNotes: number;
 };`;
 
 function interfaceName(namespace: string): string {
