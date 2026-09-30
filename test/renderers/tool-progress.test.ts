@@ -410,3 +410,92 @@ describe("tool rendering", () => {
     expect(shellIndex).toBeGreaterThan(childIndex);
   });
 });
+
+interface TraceInput {
+  namespace: string;
+  method: string;
+  status: "running" | "succeeded" | "failed" | "rejected";
+  inFunction?: string;
+}
+
+function partialWith(traces: TraceInput[]) {
+  const now = Date.now();
+  return {
+    content: [{ type: "text", text: "Running TypeScript…" }],
+    details: {
+      value: undefined,
+      truncated: false,
+      traces: traces.map((trace, index) => ({
+        id: index + 1,
+        sequence: index + 1,
+        namespace: trace.namespace,
+        method: trace.method,
+        arguments: [],
+        startedAt: now - 1000,
+        ...(trace.status === "running" ? {} : { durationMs: 500 }),
+        status: trace.status,
+        ...(trace.inFunction
+          ? { function: { invocationId: 1, name: trace.inFunction, scope: "session", depth: 1 } }
+          : {}),
+      })),
+    },
+  };
+}
+
+const slow = (status: TraceInput["status"]): TraceInput => ({
+  namespace: "tools",
+  method: "mcp__fixture__slow",
+  status,
+});
+
+describe("collapsed running view", () => {
+  it.each<{ name: string; traces: TraceInput[]; rows: string[]; absent: string[] }>([
+    {
+      name: "a running call group with completed calls",
+      traces: [slow("succeeded"), slow("succeeded"), slow("running")],
+      rows: ["● tools.mcp__fixture__slow 2 completed, 1 running over"],
+      absent: ["failed so far", "more call"],
+    },
+    {
+      name: "more running groups than it lists",
+      traces: [
+        { namespace: "shell", method: "exec", status: "running" },
+        { namespace: "http", method: "request", status: "running" },
+        { namespace: "gh", method: "api", status: "running" },
+      ],
+      rows: ["… 1 more call running", "● http.request running", "● gh.api running"],
+      absent: ["shell.exec"],
+    },
+    {
+      name: "failures so far beside running work",
+      traces: [
+        { namespace: "tools", method: "mcp__fixture__fail", status: "failed" },
+        { namespace: "http", method: "request", status: "rejected" },
+        slow("running"),
+      ],
+      rows: ["● tools.mcp__fixture__slow running", "✗ 2 calls failed so far"],
+      absent: ["tools.mcp__fixture__fail"],
+    },
+    {
+      name: "a call inside a saved function",
+      traces: [{ namespace: "git", method: "status", status: "running", inFunction: "checks" }],
+      rows: ["● git.status running"],
+      absent: ["session function"],
+    },
+  ])("lists $name", ({ traces, rows, absent }) => {
+    const collapsed = renderToolResult(partialWith(traces), { expanded: false, isPartial: true });
+    const lines = collapsed.split("\n");
+    expect(lines[0]).toContain("Running...");
+    for (const row of rows) expect(lines.some((line) => line.includes(row))).toBe(true);
+    for (const text of absent) expect(collapsed).not.toContain(text);
+    expect(lines).toHaveLength(1 + rows.length);
+  });
+
+  it("adds nothing while no call is running or has failed", () => {
+    const collapsed = renderToolResult(
+      partialWith([slow("succeeded"), { namespace: "git", method: "status", status: "succeeded" }]),
+      { expanded: false, isPartial: true },
+    );
+    expect(collapsed.split("\n")).toHaveLength(1);
+  });
+});
