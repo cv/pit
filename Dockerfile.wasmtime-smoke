@@ -1,4 +1,4 @@
-FROM rust:1.95-bookworm AS builder
+FROM rust:1.98-trixie AS builder
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends libclang-dev \
@@ -19,7 +19,7 @@ COPY native/wasmtime-executor/queued-guest/src /queued-guest/src
 COPY native/wasmtime-executor/queued-guest/wit /queued-guest/wit
 RUN --mount=type=cache,id=pit-cargo-registry,target=/usr/local/cargo/registry \
   --mount=type=cache,id=pit-queued-guest-target,target=/queued-guest/target \
-  BINDGEN_EXTRA_CLANG_ARGS="-isystem /usr/lib/llvm-14/lib/clang/14.0.6/include" \
+  BINDGEN_EXTRA_CLANG_ARGS="-isystem /usr/lib/llvm-19/lib/clang/19/include" \
   cargo build --manifest-path /queued-guest/Cargo.toml --target wasm32-wasip2 --release --locked \
   && cp /queued-guest/target/wasm32-wasip2/release/pit_queued_quickjs_guest.wasm /build/pit_queued_quickjs_guest.wasm
 
@@ -28,7 +28,7 @@ FROM scratch AS artifacts
 COPY --from=builder /build/pit_wasmtime_executor.node /
 COPY --from=builder /build/pit_queued_quickjs_guest.wasm /
 
-FROM node:24-bookworm-slim AS program
+FROM node:24-trixie-slim AS program
 
 WORKDIR /pit
 COPY package.json package-lock.json ./
@@ -38,7 +38,7 @@ COPY native/wasmtime-executor/prepare-smoke.mts ./native/wasmtime-executor/prepa
 RUN npx tsx native/wasmtime-executor/prepare-smoke.mts /prepared-program.json \
   && npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=/wasmtime-adapter.cjs
 
-FROM node:24-bookworm-slim AS pi-smoke
+FROM node:24-trixie-slim AS pi-smoke
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1 \
   && npm cache clean --force
@@ -63,7 +63,7 @@ RUN mkdir -p /workspace \
 WORKDIR /workspace
 ENTRYPOINT ["pi", "--no-extensions", "-e", "/opt/pit/src/index.ts"]
 
-FROM node:24-bookworm-slim AS smoke
+FROM node:24-trixie-slim AS smoke
 
 WORKDIR /smoke
 COPY --from=builder /build/pit_wasmtime_executor.node ./pit_wasmtime_executor.node
