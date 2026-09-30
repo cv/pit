@@ -186,6 +186,7 @@ async function executeSandboxValue({
     ...(onShellProgress ? { onShellProgress } : {}),
     images,
     ...(toolCalls ? { toolCalls } : {}),
+    toolCallId: request.id,
   });
   const options = {
     timings,

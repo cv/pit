@@ -44,4 +44,27 @@ export const sessionFunctions = [
     minimumArguments: 0,
     maximumArguments: 1,
   }),
+  defineNativeFunction("session", "outline", {
+    summary: "Outline model-visible context",
+    declaration: `outline(options?: {
+  after?: string;
+  limit?: number;
+  roles?: PitContextRole[];
+  tool?: string;
+  previewChars?: number;
+}): Promise<PitContextOutline>;`,
+    documentation:
+      "session.outline(options?) pages model-visible active-branch entries with tokens, re-prefill cost, edit state, and protection",
+    minimumArguments: 0,
+    maximumArguments: 1,
+  }),
+  defineNativeFunction("session", "inspectEntry", {
+    summary: "Read an entry's original content",
+    declaration:
+      "inspectEntry(id: string, options?: { offset?: number; limit?: number }): Promise<PitContextEntry>;",
+    documentation:
+      "session.inspectEntry(id, options?) pages an active-branch entry's original content, including elided, summarized, and compacted entries",
+    minimumArguments: 1,
+    maximumArguments: 2,
+  }),
 ] as const;
