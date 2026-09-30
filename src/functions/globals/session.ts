@@ -100,4 +100,12 @@ export const sessionFunctions = [
     minimumArguments: 0,
     maximumArguments: 0,
   }),
+  defineNativeFunction("session", "summarize", {
+    summary: "Summarize a range of completed turns",
+    declaration: "summarize(input: PitContextSummaryInput): Promise<PitContextSummaryReceipt>;",
+    documentation:
+      "session.summarize({ from, to, summary }) stages replacing a closed range of completed assistant turns and tool results with a model-written summary; restore undoes it",
+    minimumArguments: 1,
+    maximumArguments: 1,
+  }),
 ] as const;

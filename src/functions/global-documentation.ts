@@ -6,7 +6,7 @@ const NAMESPACE_SUMMARIES: Partial<Record<GlobalNamespace, string>> = {
   npm: "npm.run, npm.test, npm.install, npm.audit, npm.outdated, and npm.pack provide typed bounded npm workflows",
   gh: "typed bounded issue/PR/run/release workflows with selectable JSON fields, common list filters, and argument-safe extra args; api is the escape hatch",
   session:
-    "info/name/compact; outline(options?) pages model-visible entries with tokens, reprefillTokens, edit state, and editability; inspectEntry(id) reads original content; elide(ids, {reason?})/restore(ids) and setNote(key, content|null) stage branch-local edits applied after this turn if the call succeeds; notes() lists live notes",
+    "info/name/compact; outline(options?) pages model-visible entries with tokens, reprefillTokens, edit state, and editability; inspectEntry(id) reads original content; elide(ids, {reason?}), summarize({from, to, summary}), restore(ids), and setNote(key, content|null) stage branch-local edits applied after this turn if the call succeeds; notes() lists live notes",
   commands: "list",
   models: "current/list/set",
   runtime: "runtime status",

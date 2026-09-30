@@ -1,6 +1,7 @@
 import { MAX_REASON_CHARS, planElide, planRestore } from "../../context/edits.js";
 import { planNote } from "../../context/notes.js";
 import { MAX_EDIT_TARGETS, type PlannedEdit } from "../../context/planning.js";
+import { planSummarize, summaryTokenCap } from "../../context/summarize.js";
 import { buildContextView } from "../../context/view.js";
 import {
   recordValue as record,
@@ -31,6 +32,7 @@ function reason(value: unknown): string | undefined {
 }
 
 export function createSessionEditHandlers({
+  pi,
   ctx,
   toolCallId,
   contextEdits,
@@ -64,6 +66,17 @@ export function createSessionEditHandlers({
       return stage(planElide(view(), entryIds(args[0]), reason(options.reason)));
     },
     restore: (args) => stage(planRestore(view(), ctx.sessionManager, entryIds(args[0]))),
+    summarize: (args) => {
+      const input = record(args[0], "input");
+      return stage(
+        planSummarize(view(), {
+          from: string(input.from, "input.from"),
+          to: string(input.to, "input.to"),
+          summary: string(input.summary, "input.summary"),
+          capTokens: summaryTokenCap(pi.getSettings(), ctx.model),
+        }),
+      );
+    },
     setNote: (args) =>
       stage(
         planNote(view(), {
