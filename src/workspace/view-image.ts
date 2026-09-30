@@ -101,6 +101,13 @@ export interface ImageCollector {
   ): Promise<{ file: string; mimeType: string; queued: true }>;
   /** Images attached so far, in call order. Pending and failed calls are excluded. */
   attached(): AttachedImage[];
+  /**
+   * Attaches an image a Pi tool returned. The tool call has already finished, so an image past
+   * the invocation's limits is recorded as an omission instead of failing the call.
+   */
+  attachBlock(image: ImageBlock, source: string): void;
+  /** Why returned images were not attached, in call order. */
+  omissions(): string[];
 }
 
 // Pi runs its read tool with the context of the tool that calls it.
@@ -109,6 +116,37 @@ export function createImageCollector(ctx: ExtensionToolContext): ImageCollector 
   // call releases its slot; pending calls count toward the limit.
   const slots: Array<{ loaded?: AttachedImage }> = [];
   const attached = () => slots.flatMap(({ loaded }) => (loaded ? [loaded] : []));
+  const omitted: string[] = [];
+  const attachBlock = (image: ImageBlock, source: string) => {
+    const bytes = Buffer.byteLength(image.data, "utf8");
+    const total = attached().reduce(
+      (sum, { image: attachedImage }) => sum + Buffer.byteLength(attachedImage.data, "utf8"),
+      bytes,
+    );
+    const reason =
+      slots.length >= MAX_IMAGES
+        ? `at most ${MAX_IMAGES} images attach per invocation`
+        : bytes > MAX_ENCODED_BYTES
+          ? "the encoded image exceeds 5 MiB"
+          : total > MAX_TOTAL_ENCODED_BYTES
+            ? "images attached by one invocation would exceed 16 MiB encoded"
+            : undefined;
+    if (reason) {
+      omitted.push(`Image from ${source} not attached: ${reason}`);
+      return;
+    }
+    slots.push({
+      loaded: {
+        image,
+        info: {
+          file: source,
+          mimeType: image.mimeType,
+          note: `Returned by ${source}`,
+          omitted: ctx.model !== undefined && !ctx.model.input.includes("image"),
+        },
+      },
+    });
+  };
   const view = async (args: unknown[], signal?: AbortSignal) => {
     checkAbort(signal);
     if (slots.length >= MAX_IMAGES)
@@ -130,5 +168,5 @@ export function createImageCollector(ctx: ExtensionToolContext): ImageCollector 
       throw error;
     }
   };
-  return { view, attached };
+  return { view, attached, attachBlock, omissions: () => [...omitted] };
 }

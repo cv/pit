@@ -11,11 +11,12 @@ import { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { ExecutionProgressSnapshot, ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { functionDependencyBinding } from "../functions/identifier.js";
+import { createPiToolCatalog, type PiToolCatalog } from "../functions/pi-tools.js";
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { pitLoadout, type PitToolSelection } from "../functions/tool-loadout.js";
-import { createHostDispatcher } from "../host/dispatcher.js";
+import { createHostDispatcher, type HostServices } from "../host/dispatcher.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
 import { renderTypeScriptToolResult } from "../renderers/typescript-tool.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
@@ -150,6 +151,8 @@ interface SandboxValueExecution {
   executionProgress: ExecutionProgressController;
   timings: ExecutionTimingRecorder;
   images: ImageCollector;
+  piTools: PiToolCatalog;
+  onTerminate: () => void;
 }
 
 async function executeSandboxValue({
@@ -161,6 +164,8 @@ async function executeSandboxValue({
   executionProgress,
   timings,
   images,
+  piTools,
+  onTerminate,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
     return { savedFunction: preparedFunction.name, executed: false };
@@ -177,6 +182,16 @@ async function executeSandboxValue({
     promotionSuggestions,
     ...(onShellProgress ? { onShellProgress } : {}),
     images,
+    ...(piTools.bindings.size > 0
+      ? {
+          piTools: {
+            ctx: request.ctx,
+            catalog: piTools,
+            onTerminate,
+            attachImage: (image, source) => images.attachBlock(image, source),
+          } satisfies HostServices["piTools"],
+        }
+      : {}),
   });
   const options = {
     timings,
@@ -197,6 +212,7 @@ async function executeSandboxValue({
     userFunctions: preparedFunction.userFunctions,
     projectFunctions: preparedFunction.projectFunctions,
     sessionFunctions: preparedFunction.sessionFunctions,
+    ...(piTools.bindings.size > 0 ? { piTools } : {}),
     ...(input === undefined ? {} : { input }),
     onHostCallTrace: (trace: HostCallTrace) => executionProgress.recordTrace(trace),
   };
@@ -218,6 +234,7 @@ function buildToolResult(input: {
   promotionSuggestions: string[];
   executionProgress: ExecutionProgressController;
   imageMetadata: ImageAttachmentInfo[];
+  imageOmissions: string[];
 }) {
   const savedSignature = input.namedFunction
     ? getSavedFunctionCallSignature(input.functionState.effective.get(input.namedFunction) ?? "")
@@ -235,9 +252,9 @@ function buildToolResult(input: {
     promotionSuggestionNotice(input.promotionSuggestions) +
     savedFunctionCatalogNotice(input.functionState.session);
   // The result gets the budget the notices leave, so the complete text stays within Pi's limit.
-  const attachmentText = input.imageMetadata
-    .map(({ file, note }) => `\nImage: ${file}\n${note}`)
-    .join("");
+  const attachmentText =
+    input.imageMetadata.map(({ file, note }) => `\nImage: ${file}\n${note}`).join("") +
+    input.imageOmissions.map((omission) => `\n${omission}`).join("");
   const reserved = TRUNCATION_NOTICE + notices + attachmentText;
   const output = fitValue(input.value, {
     maxBytes: LIMITS.result.maxBytes - Buffer.byteLength(reserved),
@@ -264,6 +281,9 @@ function buildToolResult(input: {
 
 async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const functionActivity: FunctionActivity[] = [];
+  // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
+  const piTools = createPiToolCatalog(request.ctx.tools);
+  let terminate = false;
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
@@ -288,6 +308,10 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       executionProgress,
       timings,
       images,
+      piTools,
+      onTerminate: () => {
+        terminate = true;
+      },
     });
     timings.enter("commit");
     await request.savedFunctionService.commit(preparedFunction, request.ctx, functionActivity);
@@ -302,6 +326,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       functionState: request.functionState,
       functionActivity,
       imageMetadata: attached.map(({ info }) => info),
+      imageOmissions: images.omissions(),
       promotionSuggestions,
       executionProgress,
     });
@@ -309,6 +334,9 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       ...result,
       content: [...result.content, ...attached.map(({ image }) => image)],
       details: { ...result.details, timings: timings.finish() },
+      // A nested tool asked to end the turn, for example pi-goal's goal_complete, and the
+      // program that called it succeeded.
+      ...(terminate ? { terminate: true } : {}),
     };
   } catch (error) {
     request.pendingFailures.set(

@@ -3,6 +3,7 @@ import { getFunctionDependencies, type FunctionDependency } from "./dependencies
 import type { FunctionDefinitionReference } from "./environment.js";
 import { functionDependencyBinding } from "./identifier.js";
 import type { LayeredFunctionRegistry } from "./layered-registry.js";
+import { isPiToolNamespace } from "./pi-tools.js";
 
 export interface ResolvedFunctionDependency extends FunctionDependency {
   targetKey: string;
@@ -40,6 +41,32 @@ function namespaceDependencyHint(
   );
 }
 
+/**
+ * Saved functions cannot inject Pi tools yet: they outlive the call whose tools they were checked
+ * against. A user, project, or session function deliberately named `tools.x` is still injectable.
+ */
+export function assertSavedFunctionWithoutPiTools(
+  id: string,
+  source: string,
+  registry: LayeredFunctionRegistry<FunctionDefinition>,
+): void {
+  let dependencies: FunctionDependency[];
+  try {
+    dependencies = getFunctionDependencies(source).dependencies;
+  } catch {
+    // Malformed sources get their own diagnostics.
+    return;
+  }
+  for (const dependency of dependencies) {
+    if (!isPiToolNamespace(dependency.id.split(".")[0] as string)) continue;
+    const target = registry.resolve(dependency.id);
+    if (target && target.kind !== "native") continue;
+    throw new Error(
+      `Saved function "${id}" cannot inject ${dependency.id}: saved functions cannot use Pi tools yet. Call the tool from a submitted program instead.`,
+    );
+  }
+}
+
 export function resolveFunctionGraph(
   source: string,
   registry: LayeredFunctionRegistry<FunctionDefinition>,
@@ -73,6 +100,7 @@ export function resolveFunctionGraph(
       return key;
     }
 
+    assertSavedFunctionWithoutPiTools(definition.id, definition.source, registry);
     const declared = getFunctionDependencies(definition.source);
     const dependencies = declared.dependencies.map((dependency) => {
       const target = registry.resolve(dependency.id);

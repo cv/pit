@@ -8,7 +8,11 @@ import {
   type FunctionEnvironment,
   type FunctionDefinitionReference,
 } from "../functions/environment.js";
-import { resolveFunctionGraph, type ResolvedFunctionGraph } from "../functions/resolved-graph.js";
+import {
+  assertSavedFunctionWithoutPiTools,
+  resolveFunctionGraph,
+  type ResolvedFunctionGraph,
+} from "../functions/resolved-graph.js";
 import { isProgramExpression } from "../functions/source.js";
 import { SANDBOX_GLOBALS } from "./contract.js";
 import { functionTypeModel } from "./function-types.js";
@@ -175,6 +179,10 @@ function validateSource(
     throw new Error("TypeScript programs must be function expressions");
   }
   const registry = functionRegistry(validation.environment ?? { sessionFunctions: savedFunctions });
+  // Before type checking, whose missing-property errors would not say why.
+  if (validation.definition) {
+    assertSavedFunctionWithoutPiTools(validation.definition.id, source, registry);
+  }
   const names = [
     ...(validation.availableNames ??
       (validation.environment ? registry.identifiers() : savedFunctions.keys())),
@@ -236,7 +244,7 @@ function validateSource(
     [
       CONTRACT_FILE,
       `${GLOBAL_CONTRACT.replace("interface PitDependencies {", "interface PitGlobalFunctions {") + SANDBOX_GLOBALS}
-${model.declarations}`,
+${model.declarations}${validation.environment?.piTools?.declarations ?? ""}`,
     ],
     [PROGRAM_FILE, wrapped],
     [SIGNATURES_FILE, model.signatures],

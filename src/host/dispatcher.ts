@@ -11,6 +11,7 @@ import {
   validateNativeCall,
 } from "../functions/globals.js";
 import { createFunctionHostHandler } from "../functions/host-handler.js";
+import { isPiToolNamespace } from "../functions/pi-tools.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { createProcessRunner, formatProcessCommand } from "../process/runner.js";
 import type { HostCallHandler } from "../sandbox/dispatcher.js";
@@ -25,6 +26,7 @@ import { handleWorkspace } from "../workspace/host-handler.js";
 import type { ImageCollector } from "../workspace/view-image.js";
 import { createCommandsHostHandler } from "./handlers/commands.js";
 import { createModelsHostHandler } from "./handlers/models.js";
+import { callPiTool, type PiToolCallServices } from "./handlers/pi-tools.js";
 import { createRuntimeHostHandler } from "./handlers/runtime.js";
 import { createSessionHostHandler } from "./handlers/session.js";
 
@@ -93,6 +95,8 @@ export interface HostServices {
   promotionSuggestions: string[];
   /** Collects the images this invocation's workspace.viewImage calls attach to its result. */
   images: ImageCollector;
+  /** Pi tools this invocation may call through `tools.*`; absent when none are callable. */
+  piTools?: PiToolCallServices;
 }
 
 interface ProcessHostHandlers {
@@ -202,6 +206,7 @@ export function createHostDispatcher({
   promotionSuggestions,
   onShellProgress,
   images,
+  piTools,
 }: HostServices): HostCallHandler {
   const processHandlers = createProcessHostHandlers({
     pi,
@@ -307,6 +312,11 @@ export function createHostDispatcher({
         return null;
       }
 
+      if (isPiToolNamespace(namespace)) {
+        /* v8 ignore next -- validation rejects tools.* when the call has no callable tools. */
+        if (!piTools) throw new Error(`Unknown host function: ${namespace}.${method}`);
+        return callPiTool(piTools, { namespace, method, args, signal });
+      }
       validateNativeCall(namespace, method, args);
       return publicHandlers[namespace as NativeNamespace](method, args, signal);
     });
