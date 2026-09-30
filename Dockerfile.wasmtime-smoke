@@ -28,7 +28,7 @@ FROM scratch AS artifacts
 COPY --from=builder /build/pit_wasmtime_executor.node /
 COPY --from=builder /build/pit_queued_quickjs_guest.wasm /
 
-FROM node:24-trixie-slim AS program
+FROM node:26-trixie-slim AS program
 
 WORKDIR /pit
 COPY package.json package-lock.json ./
@@ -38,7 +38,7 @@ COPY native/wasmtime-executor/prepare-smoke.mts ./native/wasmtime-executor/prepa
 RUN npx tsx native/wasmtime-executor/prepare-smoke.mts /prepared-program.json \
   && npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=/wasmtime-adapter.cjs
 
-FROM node:24-trixie-slim AS pi-smoke
+FROM node:26-trixie-slim AS pi-smoke
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1 \
   && npm cache clean --force
@@ -63,7 +63,7 @@ RUN mkdir -p /workspace \
 WORKDIR /workspace
 ENTRYPOINT ["pi", "--no-extensions", "-e", "/opt/pit/src/index.ts"]
 
-FROM node:24-trixie-slim AS smoke
+FROM node:26-trixie-slim AS smoke
 
 WORKDIR /smoke
 COPY --from=builder /build/pit_wasmtime_executor.node ./pit_wasmtime_executor.node
