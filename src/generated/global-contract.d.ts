@@ -222,6 +222,52 @@ type PitPromotionOptions = { to?: "user" | "project" };
 type PitRemoveOptions = { cascade?: boolean };
 type PitRemoveResult = { name: string; removed: string[] };
 
+type PitContextRole =
+  | "user"
+  | "assistant"
+  | "toolResult"
+  | "note"
+  | "notice"
+  | "custom"
+  | "bash"
+  | "summary";
+type PitContextState = "original" | "elided" | "summarized" | "replaced";
+type PitContextOperation = "elide" | "summarize" | "restore" | "note";
+
+type PitContextOutlineEntry = {
+  id: string;
+  role: PitContextRole;
+  tool?: string;
+  key?: string;
+  tokens: number;
+  reprefillTokens: number;
+  state: PitContextState;
+  editable: boolean;
+  protectedReason?: string;
+  pending?: PitContextOperation;
+  preview: string;
+};
+
+type PitContextOutline = {
+  leafId: string | null;
+  contextTokens: number | null;
+  contextWindow: number | null;
+  estimatedTokens: number;
+  entries: PitContextOutlineEntry[];
+  nextAfter?: string;
+  omitted: number;
+};
+
+type PitContextEntry = {
+  id: string;
+  role: PitContextRole;
+  tool?: string;
+  state: PitContextState | "omitted" | "compacted";
+  original: { text: string; offset: number; totalChars: number; truncated: boolean };
+  visible?: { text: string; totalChars: number; truncated: boolean };
+  covers?: string[];
+};
+
 interface PitWorkspaceFunctions {
   viewImage(file: string): Promise<{ file: string; mimeType: string; queued: true }>;
 
@@ -438,6 +484,16 @@ interface PitSessionFunctions {
     tokensBefore: number;
     estimatedTokensAfter: number | undefined;
   }>;
+
+  outline(options?: {
+    after?: string;
+    limit?: number;
+    roles?: PitContextRole[];
+    tool?: string;
+    previewChars?: number;
+  }): Promise<PitContextOutline>;
+
+  inspectEntry(id: string, options?: { offset?: number; limit?: number }): Promise<PitContextEntry>;
 }
 
 interface PitCommandsFunctions {

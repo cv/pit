@@ -220,7 +220,53 @@ type PitSavedFunctionRemovalPlan = {
 type PitPromotionOptions = { to?: "user" | "project" };
 
 type PitRemoveOptions = { cascade?: boolean };
-type PitRemoveResult = { name: string; removed: string[] };`;
+type PitRemoveResult = { name: string; removed: string[] };
+
+type PitContextRole =
+  | "user"
+  | "assistant"
+  | "toolResult"
+  | "note"
+  | "notice"
+  | "custom"
+  | "bash"
+  | "summary";
+type PitContextState = "original" | "elided" | "summarized" | "replaced";
+type PitContextOperation = "elide" | "summarize" | "restore" | "note";
+
+type PitContextOutlineEntry = {
+  id: string;
+  role: PitContextRole;
+  tool?: string;
+  key?: string;
+  tokens: number;
+  reprefillTokens: number;
+  state: PitContextState;
+  editable: boolean;
+  protectedReason?: string;
+  pending?: PitContextOperation;
+  preview: string;
+};
+
+type PitContextOutline = {
+  leafId: string | null;
+  contextTokens: number | null;
+  contextWindow: number | null;
+  estimatedTokens: number;
+  entries: PitContextOutlineEntry[];
+  nextAfter?: string;
+  omitted: number;
+};
+
+type PitContextEntry = {
+  id: string;
+  role: PitContextRole;
+  tool?: string;
+  state: PitContextState | "omitted" | "compacted";
+  original: { text: string; offset: number; totalChars: number; truncated: boolean };
+  visible?: { text: string; totalChars: number; truncated: boolean };
+  covers?: string[];
+};`;
 
 function interfaceName(namespace: string): string {
   return namespace === "functions"

@@ -5,7 +5,8 @@ const NAMESPACE_SUMMARIES: Partial<Record<GlobalNamespace, string>> = {
   git: "git.status, git.diff, git.log, git.add, git.commit, git.show, git.push, and git.tag accept optional argument arrays and shell.execFile options; results are bounded",
   npm: "npm.run, npm.test, npm.install, npm.audit, npm.outdated, and npm.pack provide typed bounded npm workflows",
   gh: "typed bounded issue/PR/run/release workflows with selectable JSON fields, common list filters, and argument-safe extra args; api is the escape hatch",
-  session: "info/name/compact",
+  session:
+    "info/name/compact; outline(options?) pages model-visible entries with tokens, reprefillTokens, edit state, and editability; inspectEntry(id) reads original content",
   commands: "list",
   models: "current/list/set",
   runtime: "runtime status",

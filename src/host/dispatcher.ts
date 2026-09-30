@@ -97,6 +97,8 @@ export interface HostServices {
   images: ImageCollector;
   /** Pi tools this invocation may call through `tools.*`; absent when none are callable. */
   toolCalls?: PiToolCallServices;
+  /** The tool call running this program; its turn is protected from context edits. */
+  toolCallId?: string;
 }
 
 interface ProcessHostHandlers {
@@ -207,6 +209,7 @@ export function createHostDispatcher({
   onShellProgress,
   images,
   toolCalls,
+  toolCallId,
 }: HostServices): HostCallHandler {
   const processHandlers = createProcessHostHandlers({
     pi,
@@ -273,7 +276,11 @@ export function createHostDispatcher({
       commitFunctionState,
       activity,
     }),
-    session: createSessionHostHandler({ pi, ctx }),
+    session: createSessionHostHandler({
+      pi,
+      ctx,
+      ...(toolCallId === undefined ? {} : { toolCallId }),
+    }),
     commands: createCommandsHostHandler({ pi }),
     models: createModelsHostHandler({ pi, ctx }),
     runtime: createRuntimeHostHandler({ pi, ctx }),

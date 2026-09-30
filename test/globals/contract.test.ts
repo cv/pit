@@ -27,6 +27,10 @@ async function accepted(c: PitDependencies) {
   const response = await c.http.request("https://example.invalid");
   const status: number = response.status;
   await c.functions.removeSession("helper", { cascade: true });
+  const outline = await c.session.outline({ roles: ["toolResult"], tool: "bash", limit: 5 });
+  const reprefill: number | undefined = outline.entries[0]?.reprefillTokens;
+  const inspected = await c.session.inspectEntry("a1b2c3d4", { offset: 0, limit: 100 });
+  const originalText: string = inspected.original.text;
   return { text, exitCode, status, readKinds, editKinds };
 }
 
@@ -55,6 +59,10 @@ async function rejected(c: PitDependencies) {
   await c.workspace.viewImage();
   // @ts-expect-error workspace image paths are strings
   await c.workspace.viewImage(42);
+  // @ts-expect-error outline roles are model-context roles, not prompt roles
+  await c.session.outline({ roles: ["system"] });
+  // @ts-expect-error an entry ID is required
+  await c.session.inspectEntry();
 
 }
 `;

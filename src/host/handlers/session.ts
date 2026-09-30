@@ -1,10 +1,16 @@
 import { stringValue as string } from "../../shared/argument-values.js";
-import type { PiControlServices } from "./services.js";
+import { createSessionContextHandlers, type SessionContextServices } from "./session-context.js";
 
 type SessionHostHandler = (method: string, args: unknown[]) => unknown | Promise<unknown>;
 
-export function createSessionHostHandler({ pi, ctx }: PiControlServices): SessionHostHandler {
+export function createSessionHostHandler(services: SessionContextServices): SessionHostHandler {
+  const { pi, ctx } = services;
+  const contextHandlers = createSessionContextHandlers(services);
   return (method, args) => {
+    const contextHandler = contextHandlers[method];
+    if (contextHandler) {
+      return contextHandler(args);
+    }
     if (method === "info") {
       const usage = ctx.getContextUsage();
       return {

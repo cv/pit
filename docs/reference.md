@@ -33,7 +33,7 @@ Pit injects only the functions that submitted code requests.
 | `http`      | Send an HTTP request and receive a bounded response body.                                    |
 | `ui`        | Ask for confirmation, text, or a selection, and show notifications.                          |
 | `context`   | Inspect the active Pi and Pit context.                                                       |
-| `session`   | Inspect session metadata and manage its display name.                                        |
+| `session`   | Inspect session metadata, context usage, and model-visible context; manage its display name. |
 | `commands`  | List extension, prompt-template, and skill slash commands with provenance.                   |
 | `models`    | List configured models, inspect the current model, and select a model.                       |
 | `runtime`   | Inspect runtime state.                                                                       |
@@ -118,6 +118,8 @@ UI methods require a mode that provides a UI.
 - `getName()` returns the session display name.
 - `setName(name)` sets the session display name.
 - `compact(instructions?)` awaits manual compaction and returns bounded cut-point and token metadata without returning the generated summary.
+- `outline(options?)` pages the model-visible entries on the active branch in context order. Each entry reports its role, tool, estimated tokens, `reprefillTokens` (the tokens from that entry to the leaf, which a provider re-prefills when the entry changes), edit state, and whether the model may edit it. Options filter by `roles` and `tool`, page with `after` and `limit` (1-200, default 50), and size previews with `previewChars` (0-2,000, default 200). Prompt and tool system messages are not listed.
+- `inspectEntry(id, options?)` pages the original content of an active-branch entry by character `offset` and `limit` (default 20,000, at most 40,000), including entries that were elided, summarized, or compacted. Edited entries also return their current visible text. Thinking blocks and images are omitted.
 
 ### `commands`
 
