@@ -1,4 +1,6 @@
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { type SessionBoundaryDraft, SessionManager } from "@earendil-works/pi-coding-agent";
+
+import { context, emit } from "./extension-fixture.js";
 
 const usage = {
   input: 0,
@@ -90,4 +92,71 @@ export class SessionBuilder {
   current(name = "typescript"): string {
     return this.assistant("", [{ id: "call-id", name, args: { code: "async () => 1" } }]).id;
   }
+}
+
+/** Appends boundary drafts with the same session-manager calls Pi's boundary commit uses. */
+export function applyBoundary(manager: SessionManager, drafts: SessionBoundaryDraft[]): void {
+  for (const draft of drafts) {
+    if (draft.type === "custom") manager.appendCustomEntry(draft.customType, draft.data);
+    else if (draft.type === "custom_message") {
+      manager.appendCustomMessageEntry(
+        draft.customType,
+        draft.content,
+        draft.display,
+        draft.details,
+      );
+    } else if (draft.type === "context_edit") {
+      manager.appendContextEdit(draft.targetId, draft.replacement);
+    }
+  }
+}
+
+export interface EndTurnOptions {
+  isError?: boolean;
+  outcome?: "completed" | "aborted" | "error";
+  /** Entries earlier boundary handlers proposed. */
+  entries?: SessionBoundaryDraft[];
+  ctx?: Record<string, unknown>;
+}
+
+/**
+ * Finishes the harness tool call's turn as Pi does: persists its result, runs `turn_end`
+ * handlers, and commits the entries they return.
+ */
+export async function endTurn(
+  session: SessionBuilder,
+  options: EndTurnOptions = {},
+): Promise<SessionBoundaryDraft[]> {
+  const isError = options.isError ?? false;
+  session.result("call-id", "typescript", isError ? "failed" : "ok");
+  const results = await emit(
+    "turn_end",
+    {
+      type: "turn_end",
+      turnIndex: 0,
+      message: {},
+      toolResults: [
+        {
+          role: "toolResult",
+          toolCallId: "call-id",
+          toolName: "typescript",
+          content: [],
+          isError,
+          timestamp: 0,
+        },
+      ],
+      messageEntryId: "",
+      toolResultEntryIds: [],
+      entries: options.entries ?? [],
+      continue: false,
+      context: {},
+      outcome: options.outcome ?? "completed",
+    },
+    context({ sessionManager: session.manager, ...options.ctx }),
+  );
+  // Pit registers one turn_end handler; it returns nothing when it adds no entries.
+  const returned = results.find(Boolean) as { entries?: SessionBoundaryDraft[] } | undefined;
+  const entries = returned?.entries ?? options.entries ?? [];
+  applyBoundary(session.manager, entries);
+  return entries;
 }

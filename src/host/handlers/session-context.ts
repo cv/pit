@@ -4,6 +4,7 @@ import {
   OUTLINE_LIMITS,
   outlineContext,
 } from "../../context/inspect.js";
+import type { ContextEditQueue } from "../../context/queue.js";
 import { buildContextView, CONTEXT_ROLES, type ContextRole } from "../../context/view.js";
 import {
   boundedIntegerValue as boundedInteger,
@@ -16,9 +17,11 @@ import type { PiControlServices } from "./services.js";
 export interface SessionContextServices extends PiControlServices {
   /** The tool call running this program; its turn is protected from edits. */
   toolCallId?: string;
+  /** Edits staged by the running turn; absent outside the TypeScript tool. */
+  contextEdits?: ContextEditQueue;
 }
 
-type ContextMethod = (args: unknown[]) => unknown;
+export type ContextMethod = (args: unknown[]) => unknown;
 
 function optionalString(value: unknown, label: string): string | undefined {
   return value === undefined ? undefined : string(value, label);
@@ -39,6 +42,7 @@ function roles(value: unknown): Set<ContextRole> | undefined {
 export function createSessionContextHandlers({
   ctx,
   toolCallId,
+  contextEdits,
 }: SessionContextServices): Record<string, ContextMethod> {
   const view = () =>
     buildContextView(ctx.sessionManager, toolCallId === undefined ? {} : { toolCallId });
@@ -54,6 +58,7 @@ export function createSessionContextHandlers({
         ...(after === undefined ? {} : { after }),
         ...(tool === undefined ? {} : { tool }),
         ...(selectedRoles === undefined ? {} : { roles: selectedRoles }),
+        ...(contextEdits ? { pending: contextEdits.pending() } : {}),
         limit: boundedInteger(options.limit, "options.limit", OUTLINE_LIMITS.limit),
         previewChars: boundedInteger(options.previewChars, "options.previewChars", {
           minimum: 0,

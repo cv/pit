@@ -45,6 +45,14 @@ export let sessionStart: (...args: any[]) => void;
 export let sessionTree: (...args: any[]) => void;
 export let beforeAgentStart: (event: PromptEvent, ctx?: unknown) => PromptContribution;
 export let toolResult: (...args: any[]) => any;
+const eventHandlers = new Map<string, Array<(...args: any[]) => any>>();
+
+/** Runs Pit's handlers for a Pi event in registration order and returns their results. */
+export async function emit(event: string, payload: unknown, ctx: unknown): Promise<unknown[]> {
+  const results: unknown[] = [];
+  for (const handler of eventHandlers.get(event) ?? []) results.push(await handler(payload, ctx));
+  return results;
+}
 export let branchEntries: any[];
 export let execMock: ReturnType<typeof vi.fn>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
@@ -205,6 +213,7 @@ export async function setupHarness(): Promise<void> {
   slashCommands = [];
   configuredModels = [];
   registeredCommands.clear();
+  eventHandlers.clear();
   sentUserMessages = [];
   execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
@@ -221,6 +230,7 @@ export async function setupHarness(): Promise<void> {
       }
     }),
     on: vi.fn((event: string, callback: (...args: any[]) => void) => {
+      eventHandlers.set(event, [...(eventHandlers.get(event) ?? []), callback]);
       if (event === "session_start") {
         sessionStart = callback;
       }

@@ -5,6 +5,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
+import type { ContextEditQueue } from "../context/queue.js";
 import type { HostCallTrace } from "../execution/host-call-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
 import { ExecutionTimingRecorder } from "../execution/timings.js";
@@ -88,6 +89,7 @@ export function promotionSuggestionNotice(names: readonly string[]): string {
 }
 
 interface TypeScriptToolServices {
+  contextEdits: ContextEditQueue;
   pi: ExtensionAPI;
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
@@ -187,6 +189,7 @@ async function executeSandboxValue({
     images,
     ...(toolCalls ? { toolCalls } : {}),
     toolCallId: request.id,
+    contextEdits: request.contextEdits,
   });
   const options = {
     timings,

@@ -67,4 +67,22 @@ export const sessionFunctions = [
     minimumArguments: 1,
     maximumArguments: 2,
   }),
+  defineNativeFunction("session", "elide", {
+    summary: "Elide tool results from context",
+    declaration:
+      "elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;",
+    documentation:
+      "session.elide(ids, options?) stages replacing tool results with stubs that point to session.inspectEntry; applied after the current turn if the call succeeds",
+    minimumArguments: 1,
+    maximumArguments: 2,
+  }),
+  defineNativeFunction("session", "restore", {
+    summary: "Restore edited context entries",
+    declaration:
+      "restore(ids: string[]): Promise<PitContextEditReceipt & { restoredChars: number }>;",
+    documentation:
+      "session.restore(ids) stages restoring entries Pit elided or summarized; a summarized range restores as a unit",
+    minimumArguments: 1,
+    maximumArguments: 1,
+  }),
 ] as const;

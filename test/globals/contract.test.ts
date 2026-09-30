@@ -31,6 +31,9 @@ async function accepted(c: PitDependencies) {
   const reprefill: number | undefined = outline.entries[0]?.reprefillTokens;
   const inspected = await c.session.inspectEntry("a1b2c3d4", { offset: 0, limit: 100 });
   const originalText: string = inspected.original.text;
+  const elided = await c.session.elide(["a1b2c3d4"], { reason: "stale log" });
+  const freed: number = elided.estimatedTokensFreed;
+  const restoredChars: number = (await c.session.restore(["a1b2c3d4"])).restoredChars;
   return { text, exitCode, status, readKinds, editKinds };
 }
 
@@ -63,6 +66,10 @@ async function rejected(c: PitDependencies) {
   await c.session.outline({ roles: ["system"] });
   // @ts-expect-error an entry ID is required
   await c.session.inspectEntry();
+  // @ts-expect-error elide takes an array of entry IDs
+  await c.session.elide("a1b2c3d4");
+  // @ts-expect-error receipts report staged edits, not applied ones
+  const applied: "applied" = (await c.session.restore(["a1b2c3d4"])).status;
 
 }
 `;
