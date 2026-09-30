@@ -7,6 +7,8 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import { contextFixtures, describeContext, isPitContextMessage } from "./context-fixtures.ts";
+
 function processFixture(label: string, script: string, timeoutMs = 5000, raise = false) {
   return {
     label,
@@ -327,6 +329,7 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     code: 'async ({ workspace: { read } }) => read("package-lock.json")',
     timeoutMs: 10000,
   },
+  ...contextFixtures,
   json: {
     label: "UX JSON: nested multiline data",
     code: "async ({}, value: { identity: string; rows: { filename: string; patch: string; reviewed: boolean }[]; extra: string; flag: boolean }) => value",
@@ -382,7 +385,8 @@ export default function (pi: ExtensionAPI) {
         const last = context.messages
           .slice()
           .reverse()
-          .find((message) => message.role !== "system");
+          // Pit notes and notices follow a turn's tool results; they are not a new prompt.
+          .find((message) => message.role !== "system" && !isPitContextMessage(message));
         const text =
           last?.role === "user"
             ? typeof last.content === "string"
@@ -437,23 +441,25 @@ export default function (pi: ExtensionAPI) {
           output.stopReason = "toolUse";
         } else {
           const content =
-            name === "loadout"
-              ? // The tools declared in this request, after every prepareLoadout() hook.
-                `Declared tools: ${
-                  getCurrentTools(context.messages)
-                    .map((tool) => tool.name)
-                    .join(", ") || "(none)"
-                }\nFixture completed.`
-              : name === "tools-description"
-                ? // What typescript's description tells the model about injectable tools.
-                  `TOOLS:${
+            name === "context-view"
+              ? describeContext(context.messages)
+              : name === "loadout"
+                ? // The tools declared in this request, after every prepareLoadout() hook.
+                  `Declared tools: ${
                     getCurrentTools(context.messages)
-                      .find((tool) => tool.name === "typescript")
-                      ?.description.split("\n\nTOOLS:")[1] ?? " (no tools section)"
+                      .map((tool) => tool.name)
+                      .join(", ") || "(none)"
                   }\nFixture completed.`
-                : last?.role === "toolResult"
-                  ? "Fixture completed."
-                  : `Available fixtures: ${Object.keys(fixtures).join(", ")}, loadout, tools-description, codemode-pit`;
+                : name === "tools-description"
+                  ? // What typescript's description tells the model about injectable tools.
+                    `TOOLS:${
+                      getCurrentTools(context.messages)
+                        .find((tool) => tool.name === "typescript")
+                        ?.description.split("\n\nTOOLS:")[1] ?? " (no tools section)"
+                    }\nFixture completed.`
+                  : last?.role === "toolResult"
+                    ? "Fixture completed."
+                    : `Available fixtures: ${Object.keys(fixtures).join(", ")}, loadout, tools-description, codemode-pit, context-view`;
           output.content.push({ type: "text", text: content });
           stream.push({ type: "text_start", contentIndex: 0, partial: output });
           stream.push({ type: "text_delta", contentIndex: 0, delta: content, partial: output });
