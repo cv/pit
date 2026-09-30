@@ -38,6 +38,7 @@ export function reprefillAfter(
 ): number {
   const changed = new Set(targets);
   const earliest = view.items.findIndex((item) => changed.has(item.id));
+  /* v8 ignore next -- every edit changes at least one model-visible entry. */
   if (earliest < 0) return 0;
   const suffix = view.items.slice(earliest).reduce((sum, item) => sum + item.tokens, 0);
   return Math.max(0, suffix - tokensFreed);

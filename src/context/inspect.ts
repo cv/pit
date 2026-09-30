@@ -4,14 +4,16 @@ import { clipText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import {
   entryRole,
+  isModelMessage,
   toolsOf,
-  type AgentMessage,
+  type AssistantMessage,
   type ContextItem,
   type ContextOperation,
   type ContextRole,
   type ContextState,
   type ContextView,
   type EditableContent,
+  type ModelMessage,
   type SessionReader,
 } from "./view.js";
 
@@ -32,7 +34,7 @@ export function contentText(content: EditableContent): string {
     .join("\n");
 }
 
-function assistantText(message: Extract<AgentMessage, { role: "assistant" }>): string {
+function assistantText(message: AssistantMessage): string {
   return message.content
     .flatMap((block) => {
       if (block.type === "text") return [block.text];
@@ -42,7 +44,7 @@ function assistantText(message: Extract<AgentMessage, { role: "assistant" }>): s
     .join("\n");
 }
 
-export function messageText(message: AgentMessage): string {
+export function messageText(message: ModelMessage): string {
   switch (message.role) {
     case "assistant":
       return assistantText(message);
@@ -55,16 +57,17 @@ export function messageText(message: AgentMessage): string {
     case "compactionSummary":
     case "branchSummary":
       return message.summary;
-    default:
-      return "";
   }
 }
 
-/** The model content an entry contributed before any edit, or undefined for state entries. */
+/**
+ * The model content an entry contributed before any edit, or undefined for prompt and tool
+ * state and other entries without conversation content.
+ */
 export function entryText(entry: SessionEntry): string | undefined {
   switch (entry.type) {
     case "message":
-      return messageText(entry.message);
+      return isModelMessage(entry.message) ? messageText(entry.message) : undefined;
     case "custom_message":
       return contentText(entry.content);
     case "compaction":

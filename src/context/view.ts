@@ -14,6 +14,12 @@ export type ContextSource = Pick<
 >;
 export type AgentMessage = ProjectedSessionEntry["messages"][number];
 export type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
+/** A message the model reads as conversation rather than prompt and tool state. */
+export type ModelMessage = Exclude<AgentMessage, { role: "system" }>;
+
+export function isModelMessage(message: AgentMessage): message is ModelMessage {
+  return message.role !== "system";
+}
 export type EditableContent = NonNullable<ContextEditEntry["replacement"]>["content"];
 
 export const NOTE_TYPE = "pit.note";
@@ -71,7 +77,7 @@ export interface ContextItem {
   readonly id: string;
   readonly entry: SessionEntry;
   readonly role: ContextRole;
-  readonly messages: readonly AgentMessage[];
+  readonly messages: readonly ModelMessage[];
   readonly tokens: number;
   readonly state: ContextState;
   /** Tools called (assistant) or answered (tool result). */
@@ -118,14 +124,13 @@ export function firstText(content: EditableContent): string {
   return block?.type === "text" ? block.text : "";
 }
 
-/** The raw content an entry contributed before any context edit. */
-export function originalContent(entry: SessionEntry): EditableContent | undefined {
+/**
+ * The raw content an entry contributed before any context edit. Callers pass only entries Pi
+ * lets edits target: user, assistant, and tool-result messages, and custom messages.
+ */
+export function originalContent(entry: SessionEntry): EditableContent {
   if (entry.type === "custom_message") return entry.content;
-  if (entry.type !== "message") return undefined;
-  const { message } = entry;
-  return message.role === "user" || message.role === "assistant" || message.role === "toolResult"
-    ? message.content
-    : undefined;
+  return (entry as { message: { content: EditableContent } }).message.content;
 }
 
 function stateOf(entry: SessionEntry, edit: ContextEditEntry | undefined): ContextState {
@@ -139,20 +144,11 @@ function stateOf(entry: SessionEntry, edit: ContextEditEntry | undefined): Conte
     : "replaced";
 }
 
-function messageRole(message: AgentMessage): ContextRole {
-  switch (message.role) {
-    case "user":
-    case "assistant":
-    case "toolResult":
-      return message.role;
-    case "bashExecution":
-      return "bash";
-    case "compactionSummary":
-    case "branchSummary":
-      return "summary";
-    default:
-      return "custom";
-  }
+/** Message entries Pi's API can append; anything else reads as a protected extension message. */
+function messageRole(message: ModelMessage): ContextRole {
+  if (message.role === "bashExecution") return "bash";
+  const { role } = message;
+  return role === "user" || role === "assistant" || role === "toolResult" ? role : "custom";
 }
 
 /** The role of a content-bearing entry: a message, custom message, or summary. */
@@ -161,7 +157,7 @@ export function entryRole(entry: SessionEntry): ContextRole {
     if (entry.customType === NOTE_TYPE) return "note";
     return entry.customType === NOTICE_TYPE ? "notice" : "custom";
   }
-  return entry.type === "message" ? messageRole(entry.message) : "summary";
+  return entry.type === "message" ? messageRole(entry.message as ModelMessage) : "summary";
 }
 
 export function toolsOf(messages: readonly AgentMessage[]): {
@@ -194,7 +190,7 @@ function contextItem(
   edit: ContextEditEntry | undefined,
   currentTurn: ReadonlySet<string>,
 ): ContextItem | undefined {
-  const messages = projected.messages.filter((message) => message.role !== "system");
+  const messages = projected.messages.filter(isModelMessage);
   if (messages.length === 0) return undefined;
   const entry = projected.sourceEntry;
   const role = entryRole(entry);
@@ -246,16 +242,16 @@ function recordProvenance(data: unknown, summaries: Map<string, readonly string[
   if (!Array.isArray(operations)) return;
   for (const value of operations) {
     const operation = record(value);
-    const carrier = operation?.carrier;
-    if (typeof carrier !== "string") continue;
-    if (operation?.operation === "summarize" && Array.isArray(operation.covers)) {
-      summaries.set(
-        carrier,
-        operation.covers.filter((id): id is string => typeof id === "string"),
-      );
-    } else if (operation?.operation === "restore") {
-      summaries.delete(carrier);
+    if (!operation || typeof operation.carrier !== "string") continue;
+    if (operation.operation === "restore") {
+      summaries.delete(operation.carrier);
+      continue;
     }
+    const covers: unknown[] = Array.isArray(operation.covers) ? operation.covers : [];
+    summaries.set(
+      operation.carrier,
+      covers.filter((id): id is string => typeof id === "string"),
+    );
   }
 }
 

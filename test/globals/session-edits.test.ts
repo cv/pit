@@ -346,3 +346,115 @@ describe("context edit boundary", () => {
     );
   });
 });
+
+describe("context edit edge cases", () => {
+  function manyResults(count: number) {
+    const session = new SessionBuilder();
+    session.user("Investigate");
+    const results = Array.from({ length: count }, () => session.turn("bash", LOG).result);
+    session.current();
+    return { session, results };
+  }
+
+  it("lists the first five problems and counts the rest", async () => {
+    const { session, results } = manyResults(1);
+    session.manager.appendContextEdit(results[0] as string, null);
+    session.current();
+    const ids = [results[0] as string, "m1", "m2", "m3", "m4", "m5", "m6"];
+
+    await expect(
+      runWithParams(
+        "async ({ session: { elide } }, ids: string[]) => elide(ids)",
+        ids,
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow(
+      `Cannot elide: ${results[0]} is not model-visible; m1 is not on the active branch; m2 is not on the active branch; m3 is not on the active branch; m4 is not on the active branch; and 2 more`,
+    );
+  });
+
+  it("names at most five conflicting targets", async () => {
+    const { session, results } = manyResults(6);
+    const elide = () =>
+      runWithParams(
+        "async ({ session: { elide } }, ids: string[]) => elide(ids)",
+        results,
+        context({ sessionManager: session.manager }),
+      );
+    await elide();
+
+    await expect(elide()).rejects.toThrow(
+      `${results.slice(0, 5).join(", ")} and 1 more already have a staged elide in this turn`,
+    );
+  });
+
+  it("counts every discarded edit and stays quiet without a UI", async () => {
+    const { session, results } = manyResults(2);
+    for (const id of results) {
+      await runWithParams(
+        "async ({ session: { elide } }, id: string) => elide([id])",
+        id,
+        context({ sessionManager: session.manager }),
+      );
+    }
+    const notify = vi.fn();
+    await endTurn(session, { isError: true, ctx: { ui: { notify } } });
+    expect(notify).toHaveBeenCalledWith(
+      "Pit discarded staged context edits: 2 edits whose tool call did not succeed.",
+      "warning",
+    );
+
+    session.current();
+    await runWithParams(
+      "async ({ session: { elide } }, id: string) => elide([id])",
+      results[0],
+      context({ sessionManager: session.manager }),
+    );
+    const quiet = vi.fn();
+    await endTurn(session, { isError: true, ctx: { hasUI: false, ui: { notify: quiet } } });
+    expect(quiet).not.toHaveBeenCalled();
+  });
+
+  it("omits a reason that is blank after sanitizing", async () => {
+    const { session, results } = manyResults(1);
+    await runWithParams(
+      "async ({ session: { elide } }, id: string) => elide([id], { reason: ' \\n\\t ' })",
+      results[0],
+      context({ sessionManager: session.manager }),
+    );
+    await endTurn(session);
+
+    expect(modelText(session, results[0] as string)).not.toContain("reason:");
+  });
+
+  it("refuses to elide a Pit notice", async () => {
+    const { session } = manyResults(1);
+    const notice = session.manager.appendCustomMessageEntry(
+      "pit.context-pressure",
+      "x".repeat(4_000),
+      true,
+      {
+        level: 50,
+      },
+    );
+    session.current();
+
+    await expect(
+      run(
+        `async ({ session: { elide } }) => elide([${JSON.stringify(notice)}])`,
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow(`${notice} is a notice entry; elide accepts tool results`);
+  });
+
+  it("answers read-only queries outside a Pit tool call", async () => {
+    const { session } = manyResults(1);
+    const handler = createSessionHostHandler({
+      pi: {} as never,
+      ctx: context({ sessionManager: session.manager }) as never,
+    });
+
+    expect(handler("outline", [])).toMatchObject({ entries: expect.any(Array), omitted: 0 });
+    expect(handler("notes", [])).toMatchObject({ notes: [], budgetTokens: 20_000 });
+  });
+});
