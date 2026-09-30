@@ -96,10 +96,38 @@ function programDiagnostics(program: ts.Program): readonly ts.Diagnostic[] {
   return diagnostics.filter((diagnostic) => !IGNORED_DIAGNOSTIC_CODES.has(diagnostic.code));
 }
 
+/**
+ * Identifies one error in a saved definition's source, which is checked both as the program and
+ * as its signature copy: the code, message, and source text from the error to the end of its line.
+ * The copy's first line carries a prefix, so columns differ; the remaining text does not.
+ */
+function sourceErrorKey(diagnostic: ts.Diagnostic, file: ts.SourceFile): string {
+  // TypeScript positions every diagnostic it reports in a source file.
+  const position = file.getLineAndCharacterOfPosition(diagnostic.start as number);
+  const rest = (file.text.split("\n")[position.line] as string).slice(position.character);
+  return `${diagnostic.code}\0${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}\0${rest.trimEnd()}`;
+}
+
+/** Signature diagnostics that repeat a program diagnostic add nothing and name an internal file. */
+function withoutSignatureRepeats(diagnostics: readonly ts.Diagnostic[]): ts.Diagnostic[] {
+  const programErrors = new Set(
+    diagnostics.flatMap((diagnostic) =>
+      diagnostic.file?.fileName === PROGRAM_FILE
+        ? [sourceErrorKey(diagnostic, diagnostic.file)]
+        : [],
+    ),
+  );
+  return diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.file?.fileName !== SIGNATURES_FILE ||
+      !programErrors.has(sourceErrorKey(diagnostic, diagnostic.file)),
+  );
+}
+
 function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly string[]): string {
   const unique = [
     ...new Map(
-      diagnostics.map((diagnostic) => [
+      withoutSignatureRepeats(diagnostics).map((diagnostic) => [
         `${diagnostic.code}:${diagnostic.file?.fileName}:${diagnostic.start}:${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
         diagnostic,
       ]),

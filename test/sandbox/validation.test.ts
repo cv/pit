@@ -4,6 +4,23 @@ import { describe, expect, it } from "vitest";
 import { formatDiagnostic, validateTypeScript } from "../../src/sandbox/validation.js";
 
 describe("validateTypeScript", () => {
+  it("reports a saved definition's type errors once, at the program location", () => {
+    const source = `async function bad({ missing }) {\n  return Math.max("one");\n}`;
+    let message = "";
+    try {
+      validateTypeScript(source, new Map(), undefined, {
+        environment: { sessionFunctions: new Map([["bad", source]]) },
+        definition: { id: "bad", layer: "session" },
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("TypeScript validation failed");
+    expect(message).not.toContain("saved-signatures");
+    expect(message.match(/Property 'missing' does not exist/g)).toHaveLength(1);
+    expect(message.match(/not assignable to parameter of type 'number'/g)).toHaveLength(1);
+  });
+
   it("retains virtual saved-function typing for annotated dependencies", () => {
     const saved = new Map([["answer", "async function answer({}) { return 42; }"]]);
     expect(() =>
