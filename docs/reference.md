@@ -128,6 +128,8 @@ UI methods require a mode that provides a UI.
 
 Context edits are staged, not applied. They take effect at the end of the current turn, starting with the next model request, and only when the TypeScript call that staged them succeeds; a tree change discards them. A turn can stage each target once. User messages, other extensions' messages, summaries, notes, and the running turn are protected. Pi records edits as branch-local `context_edit` entries: `/tree` to a point before an edit shows the original again, and raw history, exports, and usage accounting are unchanged. Pit records each applied batch in a `pit.context-edit` entry.
 
+When the TypeScript tool is active and context usage first crosses 50% or 75%, Pit appends a short displayed `pit.context-pressure` notice at the end of the turn. The notice reports usage and points to these functions. It is skipped when the turn already applies context edits or was aborted. Earlier notices stay in context because they are small and omitting one would re-prefill everything after it; a compaction that removes them lets the levels notice again.
+
 ### `commands`
 
 - `list()` returns bounded extension, prompt-template, and skill commands with canonical source information. Built-in interactive commands are not included.

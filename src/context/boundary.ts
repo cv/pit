@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { registerNoteRecovery } from "./notes.js";
+import { pressureNotice } from "./notices.js";
 import type { ContextEditQueue, StagedEdit } from "./queue.js";
 import { PROVENANCE_TYPE, type ProvenanceData } from "./view.js";
 
@@ -80,6 +81,14 @@ export function registerContextBoundary(pi: ExtensionAPI, queue: ContextEditQueu
   });
   pi.on("turn_end", (event, ctx) => {
     const entries = contextBoundaryEntries(event, ctx, queue);
+    // Nudge only when the model can act on it and is not already editing its context.
+    if (
+      entries.length === 0 &&
+      event.outcome === "completed" &&
+      pi.getActiveTools().includes("typescript")
+    ) {
+      entries.push(...pressureNotice(ctx));
+    }
     // Boundary handlers chain: keep the entries earlier handlers proposed.
     return entries.length === 0 ? undefined : { entries: [...event.entries, ...entries] };
   });
