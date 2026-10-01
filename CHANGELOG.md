@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-10-01
+
+### Changed
+
+- The usage guide documents calling other Pi tools from TypeScript: finding them with `toolIndex`, injecting them from `tools`, what results contain and leave out, and when to prefer them over `workspace`, `gh`, `http`, and `shell`. The reference covers `tools` and `toolIndex`, the custom-functions guide covers functions that inject tools and their `(unavailable)` state, and troubleshooting covers a missing tool (#193).
+
 ### Fixed
 
 - Host calls stopped because their program was cancelled or timed out show as `⚠ cancelled` or `⚠ timed out` in the execution view, instead of `✗ failed`. They no longer count toward "N calls failed so far" or add "execution had failures" to a cancelled result. A call that fails on its own while the program runs still shows as failed.
@@ -319,7 +325,9 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/cv/pit/compare/v0.23.0...v0.23.1
+[0.23.0]: https://github.com/cv/pit/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/cv/pit/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/cv/pit/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/cv/pit/compare/v0.21.0...v0.21.1
