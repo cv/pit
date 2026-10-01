@@ -236,25 +236,32 @@ function observe(
   });
 }
 
-/** Prompts until the driver is done, continuing after refusals but not other provider failures. */
+/**
+ * Prompts until the driver is done. It resumes after a model-requested compaction, which ends the
+ * turn, and after refusals, but not after other provider failures.
+ */
 async function drive(
   session: Awaited<ReturnType<typeof createSession>>,
   driver: Driver,
   state: Observed,
-  workspace: string,
+  options: { workspace: string; settle: () => Promise<boolean> },
 ): Promise<number> {
   let nudges = 0;
   let refusalRetries = 0;
   await session.prompt(driver.firstPrompt);
   while (!state.error) {
     let text: string;
-    if (state.stopReason === "error") {
+    if (await options.settle()) {
+      // The compaction aborted the turn that requested it; that stop is not a provider failure.
+      state.stopReason = null;
+      text = driver.resume();
+    } else if (state.stopReason === "error") {
       const refused = REFUSAL.test(state.providerError ?? "");
       if (driver.complete() || !refused || refusalRetries >= REFUSAL_RETRIES) break;
       refusalRetries++;
       text = driver.resume();
     } else {
-      const step = await driver.next(workspace);
+      const step = await driver.next(options.workspace);
       if (!step) break;
       if (step.nudge) nudges++;
       text = step.text;
@@ -315,7 +322,7 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
       void session.abort();
     }, spec.timeoutMs);
     try {
-      nudges = await drive(session, driver, state, workspace);
+      nudges = await drive(session, driver, state, { workspace, settle: pressure.settle });
     } finally {
       clearTimeout(timer);
       unsubscribe();

@@ -252,6 +252,39 @@ describe("context evaluation feed", () => {
     });
   });
 
+  // Pi's manual compaction aborts the running turn and waits for it, so the tool must not await it.
+  it("starts a requested compaction, ends the turn, and reports it once settled", async () => {
+    const pressure = createPressure({ compactTool: true });
+    const tool = load(pressure).tools.get("compact_context") as unknown as {
+      execute: (...args: unknown[]) => Promise<{ content: Array<{ text: string }> }>;
+    };
+    const turn = new AbortController();
+    let finish: (() => void) | undefined;
+    const requests: unknown[] = [];
+    const ctx = {
+      compact: (options: { customInstructions?: string; onComplete: () => void }) => {
+        requests.push(options.customInstructions);
+        // Like Pi: abort the turn first, compact only once it is idle.
+        queueMicrotask(() => turn.abort());
+        finish = options.onComplete;
+      },
+    };
+    const result = await tool.execute(
+      "call",
+      { instructions: " keep codes " },
+      turn.signal,
+      undefined,
+      ctx,
+    );
+    expect(result.content[0]?.text).toMatch(/^Compaction started/);
+    expect(requests).toEqual(["keep codes"]);
+    const settled = pressure.settle();
+    finish?.();
+    expect(await settled).toBe(true);
+    expect(pressure.state).toEqual({ compactions: 1, failures: 0 });
+    expect(await pressure.settle()).toBe(false);
+  });
+
   it("adds an absolute-token notice once while it stays in context", async () => {
     const turnEnd = load(createPressure({ noticeTokens: [6000] })).handlers.get("turn_end");
     let tokens = 5000;
