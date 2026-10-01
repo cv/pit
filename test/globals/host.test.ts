@@ -113,16 +113,44 @@ describe("host dependencies", () => {
       const capture = async (options) => { try { await raw.exec("invalid", options); return "ok"; } catch (error) { return error.message; } };
       return [
         await capture({ maxBytes: 0 }),
-        await capture({ maxLines: 2001 }),
+        await capture({ maxLines: 1_000_001 }),
         await capture({ truncate: "middle" }),
       ];
     }`);
     expect(errors).toEqual([
-      "options.maxBytes must be an integer between 1 and 51200",
-      "options.maxLines must be an integer between 1 and 2000",
+      "options.maxBytes must be an integer between 1 and 4000000",
+      "options.maxLines must be an integer between 1 and 1000000",
       'options.truncate must be "head" or "tail"',
     ]);
     expect(execMock).toHaveBeenCalledTimes(callsBeforeInvalid);
+  });
+
+  it("captures 1 MB of process output when a program asks for it", async () => {
+    const script =
+      'process.stdout.write(JSON.stringify(Array.from({ length: 40000 }, (_, i) => ({ id: "row-" + i, value: i }))))';
+    // Progress updates select the real streaming process runner instead of the exec mock.
+    const result = await tool.execute(
+      "capture-call",
+      {
+        code: `async ({ shell: { execFile } }) => {
+          const run = await execFile(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(script)}], { maxBytes: 2_000_000 });
+          const rows = JSON.parse(run.stdout);
+          return { bytes: run.stdout.length, rows: rows.length, last: rows.at(-1).id, truncated: run.truncated };
+        }`,
+      },
+      undefined,
+      () => undefined,
+      context(),
+    );
+
+    expect(execMock).not.toHaveBeenCalled();
+    expect(result.details.value).toEqual({
+      bytes: expect.any(Number),
+      rows: 40_000,
+      last: "row-39999",
+      truncated: false,
+    });
+    expect(result.details.value.bytes).toBeGreaterThan(1_000_000);
   });
 
   it("streams bounded shell progress through tool updates", async () => {

@@ -19,7 +19,12 @@ const PI_TOOL_OUTPUT = { maxBytes: 50 * 1024, maxLines: 2000 } as const;
 export const LIMITS = {
   /** Model-visible text of one invocation result: Pi's tool-output budget. */
   result: PI_TOOL_OUTPUT,
-  /** Default and maximum capture per process stream. */
+  /**
+   * Data a program consumes without returning it, such as a raw file read or captured process
+   * output. It stays under the 8,000,000-byte protocol frame, leaving room for JSON escaping.
+   */
+  programData: { maxBytes: 4_000_000, maxLines: 1_000_000 },
+  /** Default capture per process stream; options can raise it to `programData`. */
   processStream: PI_TOOL_OUTPUT,
   /** Diagnostic excerpt embedded in a raised process error. */
   processError: { maxBytes: 4_000 },

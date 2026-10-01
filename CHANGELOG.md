@@ -8,6 +8,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 - In context windows larger than 400K tokens, Pit adds a context-pressure notice when context first reaches 200K tokens, before the 50% and 75% notices. Notices record the threshold that fired, the transcript row names a token threshold, and `sessions.analyze()` counts notices by threshold, such as `50%` or `200K` (#220).
 - The context-management guideline says which entries `session.elide` and `session.summarize` accept and points to `session.inspectEntry`. A rejected elide names the IDs that can be elided, and a rejected summarize suggests a valid nearby range when there is one (#221).
+- **Behavior change:** a raw `workspace.read` returns the whole file by default, up to 4,000,000 bytes, and fails when the selection is larger instead of returning a shortened copy that a parser could mistake for the file; pass `offset` and `limit` to read part of it. Process methods accept `maxBytes` up to 4,000,000 and `maxLines` up to 1,000,000, so a program can capture and parse large output; the defaults stay 50 KB and 2,000 lines. Hashed reads and the model-visible result keep Pi's 50 KB budget (#210).
 
 ## [0.23.1] - 2026-10-01
 

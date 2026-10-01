@@ -136,7 +136,10 @@ function parseReadRequest(cwd: string, args: unknown[]): WorkspaceReadRequest {
     throw new Error('options.format must be "hashed" or "raw"');
   }
   const offset = Number(options.offset ?? 1);
-  const limit = Number(options.limit ?? LIMITS.result.maxLines);
+  // Raw reads are program data: whole files by default. Hashed reads are bounded for the model.
+  const limit = Number(
+    options.limit ?? (format === "raw" ? Number.MAX_SAFE_INTEGER : LIMITS.result.maxLines),
+  );
   if (!Number.isInteger(offset) || offset < 1 || !Number.isInteger(limit) || limit < 1) {
     throw new Error("offset and limit must be positive integers");
   }
@@ -156,21 +159,31 @@ function hashedContent(scan: WorkspaceReadScan, offset: number): string {
 }
 
 function readResult(cwd: string, request: WorkspaceReadRequest, scan: WorkspaceReadScan) {
-  const content = request.format === "hashed" ? hashedContent(scan, request.offset) : scan.selected;
+  const raw = request.format === "raw";
+  const content = raw ? scan.selected : hashedContent(scan, request.offset);
+  const budget = raw ? LIMITS.programData : LIMITS.result;
   // A partial hashed line would carry the anchor of the whole line, so hashed reads keep whole lines.
   const result = sliceText(
     content,
-    { maxBytes: LIMITS.result.maxBytes, maxLines: request.limit },
+    { maxBytes: budget.maxBytes, maxLines: request.limit },
     "head",
-    { partialLine: request.format === "raw" },
+    {
+      partialLine: raw,
+    },
   );
+  const truncated = result.truncated || scan.selectionTruncated;
+  // A shortened raw read would reach parsers and writers as if it were the whole file.
+  if (raw && truncated) {
+    throw new Error(
+      `Cannot read ${workspaceResultPath(cwd, request.path)} raw: the selection is larger than ${budget.maxBytes.toLocaleString("en-US")} bytes (the file has ${scan.totalLines.toLocaleString("en-US")} lines). Pass offset and limit to read it in parts.`,
+    );
+  }
   let returnedLines =
     result.text === "" ? (scan.selectedHashes.length > 0 ? 1 : 0) : Math.max(1, result.lines);
-  if (request.format === "raw" && result.text.endsWith("\n")) {
+  if (raw && result.text.endsWith("\n")) {
     returnedLines++;
   }
   const hasMore = request.offset + request.limit - 1 < scan.totalLines;
-  const truncated = result.truncated || scan.selectionTruncated;
   return {
     file: workspaceResultPath(cwd, request.path),
     format: request.format,
@@ -186,7 +199,8 @@ function readResult(cwd: string, request: WorkspaceReadRequest, scan: WorkspaceR
 
 export async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const request = parseReadRequest(cwd, args);
-  const scanner = new WorkspaceReadScanner(request.offset, request.limit);
+  const capture = request.format === "raw" ? LIMITS.programData.maxBytes + 1 : undefined;
+  const scanner = new WorkspaceReadScanner(request.offset, request.limit, capture);
   const stream = createReadStream(request.path, { encoding: "utf8", signal });
   for await (const chunk of stream) {
     scanner.push(String(chunk));

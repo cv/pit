@@ -47,7 +47,7 @@ See [Global function reference](#global-function-reference) for method details.
 
 ### `workspace`
 
-- `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a bounded selection. Hashed format is the default and includes edit-ready anchors and a whole-file revision.
+- `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a file. Hashed format is the default and includes edit-ready anchors and a whole-file revision; it returns at most 2,000 lines and Pi's 50 KB output budget, marking a shortened read `truncated`. Raw format is data for a program: it returns the whole file, or the lines that `offset` and `limit` select, up to 4,000,000 bytes, and fails rather than return part of a larger selection.
 - `viewImage(file)` attaches a local image to the successful tool result. See [image viewing and limits](usage.md#view-workspace-images).
 - `edit(file, { revision, changes })` applies revision-checked anchored or file-level changes.
 - `batch(operations, options?)` runs a homogeneous read batch or edit batch and returns ordered `{ results }`. Only read batches accept `{ failure?: "fail-fast" | "settled" }`; mixed batches are rejected.
@@ -96,7 +96,7 @@ List and view methods return structured JSON and accept `json` to select fields.
 - `exec(command, options?)` runs a command through the shell.
 - `execFile(program, args, options?)` runs a program with an argument array.
 
-Git, npm, and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. A nonzero exit is result data by default. Set `raise` to `true` to make a nonzero exit stop the function.
+Git, npm, and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. Each stream keeps 50 KB and 2,000 lines by default; a program that parses large output can raise `maxBytes` to 4,000,000 and `maxLines` to 1,000,000. Only the program's return value reaches the model, and Pi's output budget bounds it. A nonzero exit is result data by default. Set `raise` to `true` to make a nonzero exit stop the function.
 
 ### `http`
 
@@ -176,7 +176,7 @@ Output is bounded. Read metadata uses sparse defaults:
 
 - If `offset` is absent, its value is 1.
 - If `totalLines` is absent, its value is equal to `lines`.
-- If `hasMore` or `truncated` is absent, its value is `false`.
+- If `hasMore` or `truncated` is absent, its value is `false`. Raw reads never return `truncated: true`.
 
 ## Limitations
 
