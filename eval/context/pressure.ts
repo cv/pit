@@ -22,7 +22,11 @@ export interface PressureOptions {
 const reply = (text: string) => ({ content: [{ type: "text" as const, text }], details: {} });
 
 export function createPressure(options: PressureOptions) {
-  const state = { compactions: 0 };
+  const state = { compactions: 0, failures: 0 };
+  // Pi's manual compaction first aborts the running agent turn and waits for it, so a tool that
+  // awaited the compaction would deadlock. Like Pit's session.compact(), the tool starts it and
+  // ends the turn; the worker resumes once it settles.
+  let pending: Promise<boolean> | null = null;
   const thresholds = [...(options.noticeTokens ?? [])].sort((a, b) => b - a);
   const extension = (pi: ExtensionAPI) => {
     if (options.compactTool) {
@@ -33,17 +37,29 @@ export function createPressure(options: PressureOptions) {
           "Compacts the conversation now: Pi summarizes older messages into one summary and keeps recent messages. Optional instructions focus the summary.",
         parameters: Type.Object({ instructions: Type.Optional(Type.String()) }),
         // oxlint-disable-next-line max-params -- Pi defines the tool execute signature.
-        execute(_id, params, _signal, _update, ctx) {
+        execute(_id, params, signal, _update, ctx) {
           const instructions = params.instructions?.trim();
-          return new Promise((resolve, fail) => {
+          pending = new Promise<boolean>((settle) => {
             ctx.compact({
               ...(instructions ? { customInstructions: instructions } : {}),
-              onComplete: (result) => {
+              onComplete: () => {
                 state.compactions++;
-                resolve(reply(`Compacted; context held ~${result.tokensBefore} tokens before.`));
+                settle(true);
               },
-              onError: fail,
+              onError: () => {
+                state.failures++;
+                settle(true);
+              },
             });
+          });
+          const started = reply(
+            "Compaction started. This turn ends now; the conversation continues after it.",
+          );
+          return new Promise((resolve) => {
+            if (signal?.aborted) resolve(started);
+            else signal?.addEventListener("abort", () => resolve(started), { once: true });
+            // A compaction that fails before aborting the turn still ends the tool call.
+            void pending?.then(() => resolve(started));
           });
         },
       });
@@ -77,7 +93,13 @@ export function createPressure(options: PressureOptions) {
       };
     });
   };
-  return { extension, state };
+  /** Waits for a model-requested compaction; true when one ran since the last call. */
+  const settle = async (): Promise<boolean> => {
+    const current = pending;
+    pending = null;
+    return current ? current : false;
+  };
+  return { extension, state, settle };
 }
 
 /** The largest absolute threshold among notices still in context; a compaction clears them. */
