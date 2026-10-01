@@ -1,5 +1,6 @@
 import {
   type HostCallTrace,
+  type HostCallTraceStatus,
   type FunctionExecutionContext,
   finishHostCallTrace,
   startHostCallTrace,
@@ -29,6 +30,13 @@ interface HostCallDispatcherOptions {
   onTrace?(trace: HostCallTrace): void;
 }
 
+/** A call that rejects after its program ended was stopped by it, not failed on its own. */
+function stoppedStatus(signal: AbortSignal | undefined): "cancelled" | "timed out" | undefined {
+  if (!signal?.aborted) return undefined;
+  const reason: unknown = signal.reason;
+  return reason instanceof Error && reason.name === "TimeoutError" ? "timed out" : "cancelled";
+}
+
 export class HostCallDispatcher {
   readonly #inFlight = new Set<Promise<void>>();
   #callCount = 0;
@@ -54,7 +62,7 @@ export class HostCallDispatcher {
       ...(functionContext ? { functionContext } : {}),
     });
     this.#report(trace);
-    const finishTrace = (status: "succeeded" | "failed" | "rejected") =>
+    const finishTrace = (status: Exclude<HostCallTraceStatus, "running">) =>
       this.#report(finishHostCallTrace(trace, status));
 
     const call = `${namespace}.${method}`;
@@ -127,7 +135,7 @@ export class HostCallDispatcher {
               ? { errorName: error.name.slice(0, 100) }
               : {}),
           });
-          finishTrace("failed");
+          finishTrace(stoppedStatus(this.options.signal) ?? "failed");
           return undefined;
         },
       )

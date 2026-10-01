@@ -103,4 +103,40 @@ describe("HostCallDispatcher", () => {
     await Promise.all(dispatcher.pending());
     expect(sent).toEqual([{ type: "response", id: 1, ...response }]);
   });
+
+  it.each<{ name: string; end: "cancel" | "timeout" | null; status: HostCallTrace["status"] }>([
+    { name: "cancelling the program", end: "cancel", status: "cancelled" },
+    { name: "the program's timeout", end: "timeout", status: "timed out" },
+    { name: "its own timeout while the program runs", end: null, status: "failed" },
+  ])("records a call rejected by $name as $status", async ({ end, status }) => {
+    const controller = new AbortController();
+    const traces: HostCallTrace[] = [];
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const dispatcher = new HostCallDispatcher({
+      handler: ({ signal }) => {
+        started();
+        return end === null
+          ? Promise.reject(terminationError("timeout", "request timed out"))
+          : new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            });
+      },
+      signal: controller.signal,
+      maximumCalls: 1,
+      maximumConcurrentCalls: 1,
+      send: () => true,
+      parseFunctionContext: () => undefined,
+      onTrace: (trace) => traces.push(trace),
+    });
+    dispatcher.handle({ type: "call", id: 1, namespace: "tools", method: "slow", args: [] });
+    await running;
+    if (end === "cancel") controller.abort();
+    if (end === "timeout")
+      controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+    await Promise.all(dispatcher.pending());
+    expect(traces.map((trace) => trace.status)).toEqual(["running", status]);
+  });
 });

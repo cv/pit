@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Fixed
+
+- Host calls stopped because their program was cancelled or timed out show as `⚠ cancelled` or `⚠ timed out` in the execution view, instead of `✗ failed`. They no longer count toward "N calls failed so far" or add "execution had failures" to a cancelled result. A call that fails on its own while the program runs still shows as failed.
+
 ## [0.23.0] - 2026-09-30
 
 ### Added

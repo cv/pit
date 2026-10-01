@@ -74,6 +74,9 @@ function callMarker(call: DashboardCall, theme: ExecutionDashboardTheme, settled
   if (call.status === "succeeded") {
     return theme.fg("dim", "·");
   }
+  if (call.status === "cancelled" || call.status === "timed out") {
+    return outcomeMarker(theme, "warning");
+  }
   return outcomeMarker(theme, "error");
 }
 

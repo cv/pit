@@ -1,7 +1,17 @@
 import type { FunctionScope } from "../functions/core.js";
 import { clipText } from "../shared/bounds.js";
 
-export type HostCallTraceStatus = "running" | "succeeded" | "failed" | "rejected";
+/**
+ * `cancelled` and `timed out` mark calls stopped because their program was cancelled or timed out,
+ * rather than calls that failed on their own.
+ */
+export type HostCallTraceStatus =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "rejected"
+  | "cancelled"
+  | "timed out";
 
 export interface HostCallArgumentSummary {
   type: "null" | "string" | "number" | "boolean" | "array" | "object" | "other";
