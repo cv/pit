@@ -144,7 +144,7 @@ For TUI, extension, reload, saved-function, sandbox, progress, or renderer behav
 
 1. Validate and prepare delivery.
 2. Commit and push **without** `Closes #...`.
-3. Ask the user to run `/reload`.
+3. Ask the user to run `/reload`. That reloads only the Pit that Pi loaded. If Pi loads Pit from an installed package, which shows as `~/.pi/agent/git/github.com/cv/pit` in place of the checkout, ask the user to restart Pi from the checkout instead: `pi -ne -e ./src/index.ts --session <sessionFile>`. `-ne` stops the installed copy from loading as well.
 4. Exercise live partial state and expanded final state interactively.
 5. Test relevant success, warning, failure, concurrency, nesting, cancellation, or timeout cases.
 6. Correct observed mismatches and revalidate.
