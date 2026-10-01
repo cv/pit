@@ -132,6 +132,7 @@ function behaviorTable(byCondition: ReadonlyArray<[string, RunResult[]]>): strin
       "Re-edited",
       "Nudges",
       "External writes",
+      "Refusals",
     ],
     byCondition.map(([condition, group]) => {
       const shown = sum(group, (run) => run.telemetry?.context.notices.shown ?? 0);
@@ -155,6 +156,7 @@ function behaviorTable(byCondition: ReadonlyArray<[string, RunResult[]]>): strin
         spread(group.map((run) => run.telemetry?.context.churn.reeditedEntries ?? 0)),
         spread(group.map((run) => run.nudges)),
         spread(group.map((run) => run.externalWrites ?? 0)),
+        spread(group.map((run) => run.refusals ?? 0)),
       ];
     }),
   );

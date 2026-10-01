@@ -11,8 +11,8 @@ Each run streams a deterministic task through two feed tools under context press
 
 | Task     | Stream                                                             | Questions                                        |
 | -------- | ------------------------------------------------------------------ | ------------------------------------------------ |
-| `needle` | Prose with two vault access codes per chunk                        | Exact codes, at mid-stream and at the end        |
-| `kv`     | `PUT <key>` JSON records among prose                               | One field of a stored record, every fourth chunk |
+| `needle` | Prose with two museum catalog codes per chunk                      | Exact codes, at mid-stream and at the end        |
+| `kv`     | `PUT <key>` JSON inventory records among prose                     | One field of a stored record, every fourth chunk |
 | `logs`   | One service log with a few ERROR lines                             | Counts, order, services, request IDs, and codes  |
 | `ledger` | Opening balances, then transfers, deposits, withdrawals, and VOIDs | Current balances, every sixth chunk              |
 
@@ -67,6 +67,7 @@ The summary reports means with sample standard deviations over runs:
 - Pressure notices and how many were followed by an elide or summarize within three model turns.
 - Churn: literal `inspectEntry("id")` reads of entries an earlier edit removed, and entries removed more than once.
 - External writes: tool calls that could store data outside the conversation, namely `bash`, `write`, `edit`, and Pit programs that use the shell or edit workspace files. In `context` mode these are instruction violations.
+- Refusals: assistant messages the provider ended as refusals. Claude models on Bedrock intermittently refused benign evaluation context, most often right after a compaction, so the worker continues after a refusal up to three times per run and reports the count.
 
 The same telemetry is available for any recorded session through `sessions.analyze()` and `sessions.analyzeRecent()`.
 

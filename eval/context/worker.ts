@@ -107,6 +107,8 @@ export interface RunResult {
   basePromptTokens: number;
   /** Tool calls that could store data outside the conversation; see externalWriteCalls. */
   externalWrites: number;
+  /** Assistant messages the provider ended as refusals; see REFUSAL_RETRIES. */
+  refusals: number;
   telemetry: SessionAudit | null;
   sessionFile: string | null;
 }
@@ -121,6 +123,14 @@ export function taskPrompt(task: Task, contextWindow: number, memory: Memory = "
     "Work autonomously until feed_answer reports that the test is complete. Do not ask for confirmation.",
   ].join("\n\n");
 }
+
+/**
+ * Claude models on Bedrock sometimes refuse benign evaluation context, intermittently and most often
+ * right after a compaction. A run continues after a refusal at most this many times; the count is
+ * reported, and the run fails if refusals persist.
+ */
+export const REFUSAL_RETRIES = 3;
+const REFUSAL = /refused/i;
 
 export const NUDGE =
   "Continue the test: call feed_next, or feed_answer for pending questions, until feed_answer reports that the test is complete.";
@@ -148,6 +158,7 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
   let error: string | null = null;
   let basePromptTokens = 0;
   let externalWrites = 0;
+  let refusals = 0;
   let sessionFile: string | null = null;
   try {
     await mkdir(join(workspace, ".pi"), { recursive: true });
@@ -184,6 +195,7 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
           basePromptTokens ||=
             (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);
           externalWrites += externalWriteCalls(message.content);
+          if (REFUSAL.test(message.errorMessage ?? "")) refusals++;
         }
       }
     });
@@ -193,12 +205,21 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
     }, spec.timeoutMs);
     try {
       await session.prompt(taskPrompt(task, spec.contextWindow, spec.memory));
-      // Nudge a model that stopped early, but not one whose provider failed.
-      // The subscription updates these between prompts.
-      const shouldNudge = () =>
-        !feed.state.complete && !error && stopReason !== "error" && nudges < spec.maxNudges;
-      while (shouldNudge()) {
-        nudges++;
+      // Continue after an early stop or a refusal, but not after another provider failure. The
+      // subscription updates these between prompts.
+      let refusalRetries = 0;
+      const next = (): "nudge" | "refusal" | null => {
+        if (feed.state.complete || error) return null;
+        if (stopReason === "error") {
+          return REFUSAL.test(providerError ?? "") && refusalRetries < REFUSAL_RETRIES
+            ? "refusal"
+            : null;
+        }
+        return nudges < spec.maxNudges ? "nudge" : null;
+      };
+      for (let step = next(); step; step = next()) {
+        if (step === "refusal") refusalRetries++;
+        else nudges++;
         await session.prompt(NUDGE);
       }
       if (stopReason === "error" && !feed.state.complete) {
@@ -246,6 +267,7 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
     score: scoreTask(task, feed.state.answers),
     basePromptTokens,
     externalWrites,
+    refusals,
     telemetry,
     sessionFile,
   };
