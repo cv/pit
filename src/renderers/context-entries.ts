@@ -80,8 +80,13 @@ export function renderNotice(
   theme: Theme,
 ): Component {
   const details = noticeDetails(message.details);
+  // A percentage threshold shows in the usage; a token threshold, such as 200K, needs naming.
+  const absolute =
+    details && typeof details.threshold === "string" && !details.threshold.endsWith("%")
+      ? ` · passed ${clean(details.threshold)}`
+      : "";
   const summary = details
-    ? `Context ${details.percent}% full · ~${formatTokens(details.tokens)} of ${formatTokens(details.contextWindow)} tokens`
+    ? `Context ${details.percent}% full · ~${formatTokens(details.tokens)} of ${formatTokens(details.contextWindow)} tokens${absolute}`
     : "Context pressure notice";
   const lines = [theme.fg("warning", `▲ ${summary}`)];
   if (options.expanded || !details) lines.push(theme.fg("dim", clean(messageText(message))));

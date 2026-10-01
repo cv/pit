@@ -296,6 +296,21 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
         display: true,
         details: { level: 50, percent: 51, tokens: 510, contextWindow: 1000 },
       }),
+      // A large window's absolute-token notice, keyed by its threshold rather than its percentage.
+      entry({
+        type: "custom_message",
+        customType: "pit.context-pressure",
+        content: "[Pit] Context is 20% full",
+        display: true,
+        details: {
+          level: 19,
+          percent: 20,
+          tokens: 210_000,
+          contextWindow: 1_050_000,
+          threshold: "200K",
+          thresholdTokens: 200_000,
+        },
+      }),
       entry({
         type: "custom_message",
         customType: "pit.note",
@@ -331,7 +346,7 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
         tokensFreed: 900,
         reprefillTokens: 4000,
       },
-      notices: { shown: 1, byLevel: { 50: 1 }, followed: 0, followWindowTurns: 3 },
+      notices: { shown: 2, byLevel: { "50%": 1, "200K": 1 }, followed: 0, followWindowTurns: 3 },
       churn: { inspectedRemovedEntries: 3, reeditedEntries: 0 },
       sessionCalls: { elide: 1 },
     });

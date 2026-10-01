@@ -165,23 +165,36 @@ describe("session.summarize", () => {
     {
       name: "a range that starts at a tool result",
       input: ({ first, second }) => ({ from: first.result, to: second.result }),
-      message: ({ first }) =>
-        `a range starts at an assistant entry; ${first.result} is a toolResult entry`,
+      message: ({ first, second }) =>
+        `a range starts at an assistant entry; ${first.result} is a toolResult entry; ${first.result} answers a tool call outside the range. Try summarize({ from: "${first.assistant}", to: "${second.result}" })`,
     },
     {
       name: "a range that separates a call from its result",
       input: ({ first }) => ({ from: first.assistant, to: first.assistant }),
       message: ({ first }) =>
-        `${first.result} answers a tool call in the range; end the range at or after it`,
+        `${first.result} answers a tool call in the range; end the range at or after it. Try summarize({ from: "${first.assistant}", to: "${first.result}" })`,
     },
     {
       name: "a range that includes the user's message",
       input: ({ prompt, first }) => ({ from: prompt, to: first.result }),
-      message: ({ prompt }) => `${prompt} is protected: user message`,
+      message: ({ prompt, first }) =>
+        `${prompt} is protected: user message. Try summarize({ from: "${first.assistant}", to: "${first.result}" })`,
     },
     {
       name: "a range that reaches the running turn",
       input: ({ third, current }) => ({ from: third.assistant, to: current }),
+      message: ({ current }) => `${current} is protected: current turn`,
+    },
+    {
+      // No suggestion: there is no assistant turn to start from.
+      name: "a range without an assistant turn",
+      input: ({ prompt }) => ({ from: prompt, to: prompt }),
+      message: ({ prompt }) => `${prompt} is protected: user message`,
+    },
+    {
+      // No suggestion: the repaired range would still reach the running turn.
+      name: "a range from a tool result into the running turn",
+      input: ({ third, current }) => ({ from: third.result, to: current }),
       message: ({ current }) => `${current} is protected: current turn`,
     },
     {
@@ -197,9 +210,12 @@ describe("session.summarize", () => {
     },
   ])("rejects $name", async ({ input, message }) => {
     const run = agentRun();
-    await expect(summarize(run.session, { ...input(run), summary: "Summary." })).rejects.toThrow(
-      message(run),
+    const error = await summarize(run.session, { ...input(run), summary: "Summary." }).then(
+      () => undefined,
+      (failure: Error) => failure,
     );
+    // The end of the message carries the retry hint, or shows that there is none.
+    expect(error?.message.slice(-message(run).length)).toBe(message(run));
   });
 
   it.each<{ name: string; summary: string; message: string }>([

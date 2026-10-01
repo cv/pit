@@ -54,14 +54,19 @@ export function describeMissing(view: ContextView, id: string): string {
 export class PlanProblems {
   readonly #problems: string[] = [];
 
+  get size(): number {
+    return this.#problems.length;
+  }
+
   add(problem: string): void {
     this.#problems.push(problem);
   }
 
-  throwIfAny(action: string): void {
+  /** The retry hint, when given, follows the problems so a model can correct the call at once. */
+  throwIfAny(action: string, retry?: string): void {
     if (this.#problems.length === 0) return;
     const shown = this.#problems.slice(0, 5).join("; ");
     const more = this.#problems.length > 5 ? `; and ${this.#problems.length - 5} more` : "";
-    throw new Error(`Cannot ${action}: ${shown}${more}`);
+    throw new Error(`Cannot ${action}: ${shown}${more}${retry ? `. ${retry}` : ""}`);
   }
 }

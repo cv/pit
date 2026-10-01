@@ -113,7 +113,9 @@ async function analyze(
       }
     }
     if (telemetry.notice) {
-      increment(noticeLevels, String(telemetry.notice.level));
+      // Keyed by the threshold that fired; notices from before Pit 0.24 had only percentages.
+      const { level, threshold } = telemetry.notice;
+      increment(noticeLevels, threshold ?? `${level}%`);
       pendingNotices.push(0);
     }
     if (telemetry.compaction) {

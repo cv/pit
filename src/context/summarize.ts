@@ -53,8 +53,8 @@ function rangeOf(view: ContextView, from: string, to: string): ContextItem[] {
   return view.items.slice(start, end + 1);
 }
 
-/** A range must be completed agent work whose tool calls and results stay together. */
-function checkRange(view: ContextView, range: readonly ContextItem[]): void {
+/** Why a range is not completed agent work whose tool calls and results stay together. */
+function rangeProblems(view: ContextView, range: readonly ContextItem[]): PlanProblems {
   const problems = new PlanProblems();
   const [first] = range;
   if (first && first.role !== "assistant") {
@@ -79,7 +79,53 @@ function checkRange(view: ContextView, range: readonly ContextItem[]): void {
       problems.add(`${item.id} answers a tool call in the range; end the range at or after it`);
     }
   }
-  problems.throwIfAny("summarize");
+  return problems;
+}
+
+/**
+ * The nearest valid range around a rejected one: starting at the assistant turn the requested
+ * start belongs to, or the next one, and ending once every tool call in it has its result. None
+ * when the repair would cross a protected entry.
+ */
+function repairRange(view: ContextView, start: number, end: number): [string, string] | undefined {
+  const { items } = view;
+  const first = items[start] as ContextItem;
+  let from = start;
+  if (first.role === "toolResult") {
+    const call = first.toolCallIds[0];
+    const caller = items.findIndex(
+      (item) => item.role === "assistant" && item.toolCallIds.includes(call as string),
+    );
+    if (caller >= 0 && caller < start) from = caller;
+  }
+  while (from <= end && items[from]?.role !== "assistant") from++;
+  if (from > end) return undefined;
+  let to = end;
+  for (let index = from; index <= to && index < items.length; index++) {
+    const item = items[index] as ContextItem;
+    if (item.role !== "assistant") continue;
+    for (const call of item.toolCallIds) {
+      const answer = items.findIndex(
+        (candidate) => candidate.role === "toolResult" && candidate.toolCallIds[0] === call,
+      );
+      if (answer > to) to = answer;
+    }
+  }
+  if (from === start && to === end) return undefined;
+  const repaired = items.slice(from, to + 1);
+  if (rangeProblems(view, repaired).size > 0) return undefined;
+  return [(items[from] as ContextItem).id, (items[to] as ContextItem).id];
+}
+
+function checkRange(view: ContextView, range: readonly ContextItem[]): void {
+  const problems = rangeProblems(view, range);
+  if (problems.size === 0) return;
+  const start = view.items.indexOf(range[0] as ContextItem);
+  const repaired = repairRange(view, start, start + range.length - 1);
+  const retry = repaired
+    ? `Try summarize({ from: ${JSON.stringify(repaired[0])}, to: ${JSON.stringify(repaired[1])} })`
+    : undefined;
+  problems.throwIfAny("summarize", retry);
 }
 
 function carrierMessage(item: ContextItem, text: string): AssistantMessage {
