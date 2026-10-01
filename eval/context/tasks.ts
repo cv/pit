@@ -55,8 +55,8 @@ export function generateTask(kind: TaskKind, seed: number, size: TaskSize = DEFA
 
 const DESCRIPTIONS: Record<TaskKind, string> = {
   needle:
-    "The feed is long prose. Scattered sentences record vault access codes. Questions ask for the exact access code of a named vault.",
-  kv: "The feed stores account records: `PUT <key>` followed by a JSON value, among unrelated text. Questions ask for one field of a stored record by key.",
+    "The feed is long prose. Scattered sentences record museum catalog codes. Questions ask for the exact catalog code of a named exhibit.",
+  kv: "The feed stores inventory records: `PUT <key>` followed by a JSON value, among unrelated text. Questions ask for one field of a stored record by key.",
   logs: "The feed is one long service log. Questions ask about its ERROR lines: their order, count, services, request IDs, and error codes.",
   ledger:
     "The feed is a transaction ledger for a few accounts. It starts with opening balances; transfers, deposits, and withdrawals change them, and `VOID <id>` cancels an earlier transaction. Questions ask for current balances.",
@@ -72,10 +72,12 @@ const GENERATORS: Record<TaskKind, (rng: Rng, size: TaskSize) => Chunk[]> = {
 };
 
 function needle(rng: Rng, size: TaskSize): Chunk[] {
-  const vaults = uniqueNames(rng, size.chunks * 2, () => `${rng.pick(STARS)}-${rng.int(10, 99)}`);
-  const facts = vaults.map((vault, index) => ({
-    vault,
-    code: `${rng.code(4)}-${rng.code(4)}`,
+  const exhibits = uniqueNames(rng, size.chunks * 2, () => `${rng.pick(STARS)}-${rng.int(10, 99)}`);
+  // Word-based values: Claude models on Bedrock refused requests whose context listed many
+  // random key-like strings, such as `JV5K-SWCQ`, when the prompt forbade storing them elsewhere.
+  const facts = exhibits.map((exhibit, index) => ({
+    exhibit,
+    code: `${rng.pick(COLORS)}-${rng.pick(LAST_NAMES).toLowerCase()}-${rng.int(100, 999)}`,
     chunk: Math.floor(index / 2),
   }));
   const checkpoints = new Map<number, typeof facts>();
@@ -89,10 +91,12 @@ function needle(rng: Rng, size: TaskSize): Chunk[] {
   return range(size.chunks).map((chunk) => {
     const inserts = facts
       .filter((fact) => fact.chunk === chunk)
-      .map((fact) => `For the record, the access code for vault ${fact.vault} is ${fact.code}.`);
+      .map(
+        (fact) => `For the record, the catalog code for exhibit ${fact.exhibit} is ${fact.code}.`,
+      );
     const questions = (checkpoints.get(chunk) ?? []).map((fact) => ({
       id: `q${++id}`,
-      prompt: `What is the access code for vault ${fact.vault}?`,
+      prompt: `What is the catalog code for exhibit ${fact.exhibit}?`,
       answer: fact.code,
       distance: chunk - fact.chunk,
     }));
@@ -102,23 +106,22 @@ function needle(rng: Rng, size: TaskSize): Chunk[] {
 
 function kv(rng: Rng, size: TaskSize): Chunk[] {
   const perChunk = 3;
-  const keys = uniqueNames(rng, size.chunks * perChunk, () => `acct-${rng.int(1000, 9999)}`);
+  const keys = uniqueNames(rng, size.chunks * perChunk, () => `sku-${rng.int(1000, 9999)}`);
   const records = keys.map((key, index) => ({
     key,
     chunk: Math.floor(index / perChunk),
     value: {
-      owner: `${rng.pick(FIRST_NAMES)} ${rng.pick(LAST_NAMES)}`,
-      email: `${rng.pick(FIRST_NAMES).toLowerCase()}.${rng.code(5, "abcdefghijkmnpqrstuvwxyz")}@example.com`,
-      plan: rng.pick(["free", "starter", "team", "business", "enterprise"]),
-      region: rng.pick(["us-east-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-south-1"]),
-      quota: rng.int(10, 5000),
-      token: rng.code(24, "0123456789abcdef"),
-      created: `20${rng.int(18, 25)}-${pad(rng.int(1, 12))}-${pad(rng.int(1, 28))}`,
+      supplier: `${rng.pick(LAST_NAMES)} Supply`,
+      color: rng.pick(COLORS),
+      warehouse: rng.pick(["north-1", "north-2", "south-1", "east-3", "west-2"]),
+      stock: rng.int(10, 5000),
+      batch: `L${rng.int(10000, 99999)}`,
+      received: `20${rng.int(18, 25)}-${pad(rng.int(1, 12))}-${pad(rng.int(1, 28))}`,
       tags: rng.sample(TAGS, 3),
       notes: sentence(rng, 18) + " " + sentence(rng, 14),
     },
   }));
-  const fields = ["email", "plan", "region", "quota", "token", "created"] as const;
+  const fields = ["supplier", "color", "warehouse", "stock", "batch", "received"] as const;
   let id = 0;
   return range(size.chunks).map((chunk) => {
     const stored = records.filter((record) => record.chunk === chunk);
@@ -428,24 +431,7 @@ const STARS = [
   "Antares",
   "Castor",
 ];
-const FIRST_NAMES = [
-  "Ada",
-  "Bram",
-  "Cleo",
-  "Dmitri",
-  "Esme",
-  "Farid",
-  "Greta",
-  "Hiro",
-  "Ines",
-  "Jonas",
-  "Kemi",
-  "Luis",
-  "Mira",
-  "Nils",
-  "Oona",
-  "Priya",
-];
+const COLORS = ["amber", "cobalt", "crimson", "ivory", "jade", "ochre", "slate", "teal"];
 const LAST_NAMES = [
   "Abara",
   "Berg",

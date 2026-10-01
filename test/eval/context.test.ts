@@ -45,11 +45,11 @@ describe("context evaluation tasks", () => {
   });
 
   // The answer key must follow from the streamed text alone, re-derived here independently.
-  it("answers needle questions with the code streamed for the vault", () => {
+  it("answers needle questions with the code streamed for the exhibit", () => {
     for (const { question, index, chunks } of asked(generateTask("needle", 3))) {
-      const vault = match(question.prompt, /vault (\S+)\?$/)[1];
+      const exhibit = match(question.prompt, /exhibit (\S+)\?$/)[1];
       const holder = chunks.findIndex((chunk) =>
-        chunk.text.includes(`the access code for vault ${vault} is ${question.answer}.`),
+        chunk.text.includes(`the catalog code for exhibit ${exhibit} is ${question.answer}.`),
       );
       expect(holder).toBeGreaterThanOrEqual(0);
       expect(question.distance).toBe(index - holder);
