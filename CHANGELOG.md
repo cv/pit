@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-30
+
 ### Added
 
 - Models can manage their own context with branch-local `session.*` globals (#198):
@@ -13,6 +15,14 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
   - Edits are staged and apply at the end of the turn, only when the call that staged them succeeds. Pi records them as `context_edit` entries, so `/tree` to an earlier point shows the originals and raw history, exports, and usage are unchanged. User messages, other extensions' messages, summaries, and the running turn are protected.
   - The transcript shows notes and a row for each applied edit with its token effect. Tool results summarize staged edits, for example `Staged elide of 1 tool result · ~2K tokens freed · applies after this turn`, and list an outline one entry per row.
 - When context usage first crosses 50% or 75%, Pit appends a short notice pointing the model to these functions, and the prompt gains one context-management guideline.
+
+### Changed
+
+- Tested with Pi 0.99.2. The Pi development packages and `@earendil-works/pi-codemode` are 0.99.2.
+
+### Security
+
+- `npm audit` still reports `brace-expansion` 5.0.9 (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) through Pi 0.99.2's published `npm-shrinkwrap.json`. Pit doesn't ship it: Pi is a development and peer dependency and provides its own copy.
 
 ## [0.22.1] - 2026-09-30
 

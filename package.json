@@ -1,6 +1,6 @@
 {
   "name": "pit",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "description": "A single, dependency-injected TypeScript tool for Pi",
   "type": "module",
   "files": [
@@ -40,15 +40,15 @@
     ]
   },
   "dependencies": {
-    "@earendil-works/pi-codemode": "^0.99.1",
+    "@earendil-works/pi-codemode": "^0.99.2",
     "esbuild": "^0.28.1",
     "fast-glob": "^3.3.3",
     "oxfmt": "0.71.0",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.99.1",
-    "@earendil-works/pi-tui": "^0.99.1",
+    "@earendil-works/pi-coding-agent": "^0.99.2",
+    "@earendil-works/pi-tui": "^0.99.2",
     "@types/node": "^26.6.3",
     "@vitest/coverage-v8": "^5.0.3",
     "oxlint": "1.86.0",
