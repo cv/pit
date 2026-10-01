@@ -1,6 +1,8 @@
 /**
- * Projects one page of session JSONL into compact tool-call and failure events using jq.
+ * Projects one page of session JSONL into compact tool-call, failure, and context events using jq.
  * Skips malformed lines and non-message data; never returns full code, images, or successful tool output.
+ * Context events carry provider usage, successful `session.*` calls, `pit.context-edit` operations,
+ * `pit.context-pressure` notices, and compactions.
  *
  * @param input.afterLine - Exclusive physical-line cursor, initially 0.
  * @param input.limit - Physical lines per page (1-500), default 200. Pages also end early after
@@ -22,19 +24,27 @@ async function readEvents({ jq }, input: { file: string; afterLine?: number; lim
   }
   // Stays below the jq adapter's 50 KB output cap, which rejects rather than truncates.
   const MAX_PAGE_BYTES = 40_000;
-  // jq handles projection only. Failure categories, correlation, and recommendations stay in TypeScript.
+  // jq handles projection only. Failure categories, correlation, context metrics, and
+  // recommendations stay in TypeScript.
   const filter = String.raw`
 def text: if type == "string" then . else "" end;
+def num: if type == "number" then . else 0 end;
 def clip($n): if length > $n then .[0:$n] else . end;
 def object: if type == "object" then . else {} end;
+def items: if type == "array" then .[] else empty end;
+def ids($n): [items | select(type == "string") | clip(64)] | .[0:$n];
 def parts: .content | if type == "array" then map(select(type == "object")) else [] end;
+def usage: object | {input: (.input | num), output: (.output | num), cacheRead: (.cacheRead | num),
+  cacheWrite: (.cacheWrite | num), cost: (.cost | object | .total | num)};
 def call:
   (.arguments | object) as $args | ($args.code | text) as $code |
+  ([$code | scan("inspectEntry\\(\\s*[\"'\u0060]([^\"'\u0060]+)") | .[0] | clip(64)] | .[0:16]) as $inspected |
   {id: (.id | text), label: ($args.label | text | clip(200)),
    programs: ([$code | scan("shell\\.execFile\\(\\s*[\"']([^\"']+)") | .[0] | clip(200)] | .[0:16]),
    shellExec: ($code | test("shell\\.exec\\(")),
    promiseAll: ($code | contains("Promise.all")),
-   workspaceBatch: ($code | test("workspace\\.batch\\("))};
+   workspaceBatch: ($code | test("workspace\\.batch\\("))} +
+  (if ($inspected | length) > 0 then {inspectTargets: $inspected} else {} end);
 def failure($message; $parts):
   ($parts | map(.text | text) | join("\n")) as $text |
   if $message.role == "toolResult" and ($message.isError == true or ($text | test("^(Error:|TypeScript validation failed:|Command failed)"))) then
@@ -44,16 +54,35 @@ def failure($message; $parts):
      functionPath: ($failure.functionPath | if type == "array" then map(select(type == "string") | clip(200)) | .[0:16] else [] end),
      failureKind: ($failure.kind | if type == "string" then . else null end)}
   else null end;
+def context($entry; $message):
+  if $entry.type == "message" and $message.role == "assistant" then {request: ($message.usage | usage)}
+  elif $entry.type == "message" and $message.role == "toolResult" then
+    ([$message.details | object | .traces | items | object |
+      select(.namespace == "session" and .status == "succeeded") | .method | text | clip(64)] | .[0:64]) as $calls |
+    if ($calls | length) > 0 then {sessionCalls: $calls} else null end
+  elif $entry.type == "custom" and $entry.customType == "pit.context-edit" then
+    {edits: [$entry.data | object | .operations | items | object |
+      {operation: (.operation | text | clip(32)), targets: (.targets | ids(128)), covers: (.covers | ids(128)),
+       action: (.action | if type == "string" then clip(32) else null end),
+       tokensFreed: (.tokensFreed | num), reprefillTokens: (.reprefillTokens | num)}] | .[0:32]}
+  elif $entry.type == "custom_message" and $entry.customType == "pit.context-pressure" then
+    {notice: ($entry.details | object | {level: (.level | num), percent: (.percent | num),
+      tokens: (.tokens | num), contextWindow: (.contextWindow | num)})}
+  elif $entry.type == "compaction" then
+    {compaction: {tokensBefore: ($entry.tokensBefore | num), usage: ($entry.usage | usage)}}
+  else null end;
 [limit($limit + 1; inputs | select(input_line_number > $afterLine) |
-  {line: input_line_number, message: (try fromjson catch null)} |
-  (.message | object | .message | object) as $message | ($message | parts) as $parts |
-  {line, calls: [$parts[] | select(.type == "toolCall") | call], failure: failure($message; $parts)} |
-  .bytes = (if (.calls | length) > 0 or .failure != null then ({calls, failure} | tojson | utf8bytelength) + 1 else 0 end))] |
+  {line: input_line_number, entry: (try fromjson catch null)} |
+  (.entry | object) as $entry | ($entry.message | object) as $message | ($message | parts) as $parts |
+  {line, calls: [$parts[] | select(.type == "toolCall") | call], failure: failure($message; $parts),
+   context: context($entry; $message)} |
+  .event = ({calls, failure} + (if .context == null then {} else {context} end)) |
+  .bytes = (if (.calls | length) > 0 or .failure != null or .context != null then (.event | tojson | utf8bytelength) + 1 else 0 end))] |
 (reduce .[0:$limit][] as $line ({count: 0, bytes: 0, full: false};
   if .full then . elif .count > 0 and .bytes + $line.bytes > $maxBytes then .full = true
   else .count += 1 | .bytes += $line.bytes end) | .count) as $count |
 {hasMore: (length > $count), nextLine: (if $count > 0 then .[$count - 1].line else $afterLine end),
- events: [.[0:$count][] | select(.bytes > 0) | {calls, failure}]}
+ events: [.[0:$count][] | select(.bytes > 0) | .event]}
 `;
   const { values } = await jq({
     file: input.file,
@@ -69,13 +98,39 @@ def failure($message; $parts):
     shellExec: boolean;
     promiseAll: boolean;
     workspaceBatch: boolean;
+    /** Literal entry IDs passed to `inspectEntry(...)` in the call's code. */
+    inspectTargets?: string[];
   };
   type Failure = { id: string; error: string; functionPath: string[]; failureKind: string | null };
+  type Usage = {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    cost: number;
+  };
+  type EditOperation = {
+    operation: string;
+    targets: string[];
+    covers: string[];
+    action: string | null;
+    tokensFreed: number;
+    reprefillTokens: number;
+  };
+  type Context = {
+    /** One assistant message: a provider request and its usage. */
+    request?: Usage;
+    /** Successful `session.*` method names traced in one tool result. */
+    sessionCalls?: string[];
+    edits?: EditOperation[];
+    notice?: { level: number; percent: number; tokens: number; contextWindow: number };
+    compaction?: { tokensBefore: number; usage: Usage };
+  };
   if (values.length !== 1) throw new Error("Expected one jq session page");
   // The fixed projection above owns this schema; the jq adapter guarantees complete, valid JSON.
   return values[0] as {
     hasMore: boolean;
     nextLine: number;
-    events: Array<{ calls: Call[]; failure: Failure | null }>;
+    events: Array<{ calls: Call[]; failure: Failure | null; context?: Context }>;
   };
 }

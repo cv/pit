@@ -142,6 +142,15 @@ session-schema projection, and external query execution.
   each page; it does not slurp the session. Paging reopens and scans past the
   earlier lines, so audits request the largest (500-line) pages, trading extra
   sequential I/O for a stateless, bounded interface.
+- `sessions.analyze()` also returns `context` telemetry for evaluating context
+  management: provider usage summed over assistant messages and the largest
+  prompt, compactions (`modelRequested` counts successful `session.compact()`
+  traces), `pit.context-edit` operations with their estimated `tokensFreed` and
+  `reprefillTokens`, `pit.context-pressure` notices and how many were followed by
+  an elide or summarize within three model turns, and churn: literal
+  `inspectEntry("id")` reads of entries an earlier edit removed, and entries
+  removed more than once. `sessions.analyzeRecent()` sums these across sessions,
+  keeping the largest prompt.
 - As before, audits cover all recorded branches, skip malformed JSONL lines, and
   use heuristic source-text usage counters. They are not active-branch execution
   traces or TypeScript AST analysis. Sessions are expected to remain append-only

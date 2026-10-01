@@ -16,6 +16,36 @@ const page = (events: unknown[] = [], hasMore = false, nextLine = 0) => ({
   hasMore,
   nextLine,
 });
+const usage = (input: number, cacheRead = 0, cost = 0) => ({
+  input,
+  output: 5,
+  cacheRead,
+  cacheWrite: 10,
+  cost,
+});
+const edit = (
+  operation: string,
+  targets: string[],
+  extra: {
+    covers?: string[];
+    action?: string;
+    tokensFreed?: number;
+    reprefillTokens?: number;
+  } = {},
+) => ({
+  operation,
+  targets,
+  covers: [],
+  action: null,
+  tokensFreed: 0,
+  reprefillTokens: 0,
+  ...extra,
+});
+const contextEvent = (context: Record<string, unknown>, calls: unknown[] = []) => ({
+  calls,
+  failure: null,
+  context,
+});
 
 describe("sessions.analyze", () => {
   it.each<{ name: string; label: string; error: string; category: string; workflow: number }>([
@@ -164,7 +194,102 @@ describe("sessions.analyze", () => {
       failures: 0,
       failureRatePercent: 0,
       workflowFailureRatePercent: 0,
+      context: {
+        requests: 0,
+        compactions: { total: 0, modelRequested: 0 },
+        edits: { total: 0, byOperation: {} },
+        notices: { shown: 0, followed: 0 },
+        churn: { inspectedRemovedEntries: 0, reeditedEntries: 0 },
+      },
       recommendations: ["No recurring workflow failure needs action."],
+    });
+  });
+
+  it.each<{ name: string; turns: number; operation: string; followed: number }>([
+    { name: "an elide in the window's last turn", turns: 3, operation: "elide", followed: 1 },
+    { name: "a summarize after the window", turns: 4, operation: "summarize", followed: 0 },
+    { name: "a note, which frees no context", turns: 1, operation: "note", followed: 0 },
+  ])("scores a pressure notice followed by $name", async ({ turns, operation, followed }) => {
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const events = [
+      contextEvent({ notice: { level: 50, percent: 52, tokens: 520, contextWindow: 1000 } }),
+      ...Array.from({ length: turns }, () => contextEvent({ request: usage(10) })),
+      contextEvent({ edits: [edit(operation, ["a"])] }),
+    ];
+    const result = await analyze(
+      { context: { get: vi.fn() }, sessions: { readEvents: async () => page(events) } },
+      { file: "/session" },
+    );
+    expect(result).toMatchObject({
+      context: { notices: { shown: 1, byLevel: { 50: 1 }, followed, followWindowTurns: 3 } },
+    });
+  });
+
+  it("totals usage, compactions, edits, and churn in session order", async () => {
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const readEvents = vi
+      .fn()
+      .mockResolvedValueOnce(
+        page(
+          [
+            contextEvent({ request: usage(10, 980, 0.0001) }),
+            contextEvent({
+              edits: [
+                edit("note", [], { action: "created", tokensFreed: -20, reprefillTokens: 20 }),
+                edit("elide", ["a"], { tokensFreed: 400, reprefillTokens: 1000 }),
+              ],
+            }),
+            // Reading an elided entry is churn; reading a visible one is not.
+            contextEvent({ request: usage(20, 400, 0.0002) }, [
+              { ...call("read", "Inspect"), inspectTargets: ["a", "b"] },
+            ]),
+          ],
+          true,
+          200,
+        ),
+      )
+      .mockResolvedValueOnce(
+        page([
+          contextEvent({
+            edits: [edit("summarize", ["c"], { covers: ["a", "c"], tokensFreed: 300 })],
+          }),
+          contextEvent({ edits: [edit("restore", ["c"], { tokensFreed: -300 })] }),
+          { calls: [{ ...call("reread", "Inspect"), inspectTargets: ["c"] }], failure: null },
+          contextEvent({
+            compaction: {
+              tokensBefore: 5000,
+              usage: { ...usage(1), cacheWrite: 4000, cost: 0.003 },
+            },
+          }),
+          contextEvent({ sessionCalls: ["compact", "outline", "outline"] }),
+        ]),
+      );
+    const result = await analyze(
+      { context: { get: vi.fn() }, sessions: { readEvents } },
+      { file: "/session" },
+    );
+    expect(result).toMatchObject({
+      toolCalls: 2,
+      context: {
+        requests: 2,
+        usage: { input: 30, output: 10, cacheRead: 1380, cacheWrite: 20, cost: 0.0003 },
+        peakPromptTokens: 1000,
+        compactions: {
+          total: 1,
+          modelRequested: 1,
+          tokensBefore: 5000,
+          usage: { cacheWrite: 4000, cost: 0.003 },
+        },
+        edits: {
+          total: 4,
+          byOperation: { note: 1, elide: 1, summarize: 1, restore: 1 },
+          noteActions: { created: 1 },
+          tokensFreed: 380,
+          reprefillTokens: 1020,
+        },
+        churn: { inspectedRemovedEntries: 1, reeditedEntries: 1 },
+        sessionCalls: { compact: 1, outline: 2 },
+      },
     });
   });
 
@@ -315,5 +440,58 @@ describe("sessions.analyzeRecent", () => {
         sessions: { analyze: analyzeSession },
       }),
     ).toMatchObject({ recommendations: ["Action needed"] });
+  });
+
+  it("sums context telemetry across sessions and keeps peaks as maxima", async () => {
+    const analyzeRecent = await loadWorkflowFunction("sessions.analyzeRecent");
+    const context = (peak: number, operation: string, cost: number) => ({
+      requests: 2,
+      usage: { input: 1, output: 2, cacheRead: 30, cacheWrite: 4, cost },
+      peakPromptTokens: peak,
+      compactions: { total: 1, modelRequested: 0, tokensBefore: 900, usage: usage(0) },
+      edits: { total: 1, byOperation: { [operation]: 1 }, noteActions: {}, tokensFreed: 50 },
+      notices: { shown: 1, byLevel: { 50: 1 }, followed: 1, followWindowTurns: 3 },
+      churn: { inspectedRemovedEntries: 1, reeditedEntries: 0 },
+      sessionCalls: { outline: 1 },
+    });
+    const contexts: Record<string, ReturnType<typeof context>> = {
+      a: context(800, "elide", 0.1),
+      b: context(300, "summarize", 0.2),
+    };
+    // An audit without context telemetry, such as c, contributes nothing.
+    const analyzeSession = vi.fn(async ({ file }: { file: string }) => ({
+      ...audit(file),
+      ...(contexts[file] ? { context: contexts[file] } : {}),
+    }));
+    const result = await analyzeRecent({
+      context: { get: async () => ({ sessionFile: "/sessions/current" }) },
+      workspace: { glob: async () => ({ entries: ["a", "b", "c"], truncated: false }) },
+      sessions: { analyze: analyzeSession },
+    });
+    expect(result.context).toEqual({
+      requests: 4,
+      usage: { input: 2, output: 4, cacheRead: 60, cacheWrite: 8, cost: 0.3 },
+      peakPromptTokens: 800,
+      compactions: {
+        total: 2,
+        modelRequested: 0,
+        tokensBefore: 1800,
+        usage: { input: 0, output: 10, cacheRead: 0, cacheWrite: 20, cost: 0 },
+      },
+      edits: {
+        total: 2,
+        byOperation: { elide: 1, summarize: 1 },
+        noteActions: {},
+        tokensFreed: 100,
+      },
+      notices: { shown: 2, byLevel: { 50: 2 }, followed: 2, followWindowTurns: 3 },
+      churn: { inspectedRemovedEntries: 2, reeditedEntries: 0 },
+      sessionCalls: { outline: 2 },
+    });
+    expect(result.perSession).toMatchObject([
+      { file: "c", contextEdits: 0, contextNotices: 0, compactions: 0 },
+      { file: "b", contextEdits: 1, contextNotices: 1, compactions: 1 },
+      { file: "a", contextEdits: 1, contextNotices: 1, compactions: 1 },
+    ]);
   });
 });
