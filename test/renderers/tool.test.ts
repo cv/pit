@@ -53,6 +53,43 @@ describe("tool rendering", () => {
     expect(stripTerminalSequences(expandedCircular)).toContain("[object Object]");
   });
 
+  it("tells a failed result what it can recover, collapsed and expanded", () => {
+    const failed = (recoverable: unknown) => ({
+      content: [{ type: "text", text: "ENOENT: missing-state-file.json" }],
+      details: {
+        value: undefined,
+        truncated: false,
+        failure: { functionPath: [], rootError: "ENOENT: missing-state-file.json", kind: "user" },
+        recoverable,
+      },
+    });
+    const collapsed = renderToolResult(
+      failed({ toolCallId: "call-19", calls: 1, omitted: 0 }),
+      { expanded: false, isPartial: false },
+      { isError: true, args: { code: "ingest()" } },
+    );
+    expect(collapsed.split("\n").map((line) => line.trimEnd())).toEqual([
+      expect.stringContaining("✗ Failed"),
+      expect.stringContaining("ENOENT: missing-state-file.json"),
+      expect.stringContaining("↺ Recoverable: 1 completed call"),
+      expect.stringContaining('runtime.completedCalls("call-19")'),
+    ]);
+    const expanded = renderToolResult(
+      failed({ toolCallId: "call-19", calls: 130, omitted: 2 }),
+      { expanded: true, isPartial: false },
+      { isError: true, args: { code: "ingest()" } },
+    );
+    expect(expanded).toContain("↺ Recoverable: 130 completed calls · 2 not kept");
+    // Malformed details from another version must not invent a recovery route.
+    expect(
+      renderToolResult(
+        failed({ calls: "many" }),
+        { expanded: false, isPartial: false },
+        { isError: true, args: {} },
+      ),
+    ).not.toContain("Recoverable");
+  });
+
   it("renders concise and bounded failures", () => {
     const error = renderToolResult(
       { content: [{ type: "text", text: "bad code" }] },

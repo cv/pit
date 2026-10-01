@@ -41,7 +41,8 @@ export interface RegisteredTool {
 
 export let cwd: string;
 export let tool: RegisteredTool;
-export let sessionStart: (...args: any[]) => void;
+/** Runs every session_start handler Pit registered, in order, as Pi does. */
+export let sessionStart: (...args: any[]) => Promise<void>;
 export let sessionTree: (...args: any[]) => void;
 export let beforeAgentStart: (event: PromptEvent, ctx?: unknown) => PromptContribution;
 export let toolResult: (...args: any[]) => any;
@@ -243,7 +244,9 @@ export async function setupHarness(): Promise<void> {
     on: vi.fn((event: string, callback: (...args: any[]) => void) => {
       eventHandlers.set(event, [...(eventHandlers.get(event) ?? []), callback]);
       if (event === "session_start") {
-        sessionStart = callback;
+        sessionStart = async (...args: any[]) => {
+          for (const handler of eventHandlers.get("session_start") ?? []) await handler(...args);
+        };
       }
       if (event === "session_tree") {
         sessionTree = callback;

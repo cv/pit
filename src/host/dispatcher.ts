@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { ContextEditQueue } from "../context/queue.js";
+import type { CompletedCallJournal, RecoverableCallStore } from "../execution/completed-calls.js";
 import type { HostShellProgressEvent, ShellProgressEvent } from "../execution/types.js";
 import { type FunctionActivity, functionRunScope } from "../functions/core.js";
 import {
@@ -102,6 +103,10 @@ export interface HostServices {
   toolCallId?: string;
   /** Context edits staged by the running turn. */
   contextEdits?: ContextEditQueue;
+  /** Records the results of this program's completed calls, kept if the program fails. */
+  completedCalls?: CompletedCallJournal;
+  /** Journals of recent failed programs, read by `runtime.completedCalls`. */
+  recoverableCalls?: RecoverableCallStore;
 }
 
 interface ProcessHostHandlers {
@@ -214,6 +219,8 @@ export function createHostDispatcher({
   toolCalls,
   toolCallId,
   contextEdits,
+  completedCalls,
+  recoverableCalls,
 }: HostServices): HostCallHandler {
   const processHandlers = createProcessHostHandlers({
     pi,
@@ -288,7 +295,11 @@ export function createHostDispatcher({
     }),
     commands: createCommandsHostHandler({ pi }),
     models: createModelsHostHandler({ pi, ctx }),
-    runtime: createRuntimeHostHandler({ pi, ctx }),
+    runtime: createRuntimeHostHandler({
+      pi,
+      ctx,
+      ...(recoverableCalls ? { recoverableCalls } : {}),
+    }),
   };
 
   return ({ namespace, method, args, signal, functionContext, traceSequence }) =>
@@ -324,12 +335,20 @@ export function createHostDispatcher({
         return null;
       }
 
-      if (isPiToolNamespace(namespace)) {
-        /* v8 ignore next -- validation rejects tools.* when the call has no callable tools. */
-        if (!toolCalls) throw new Error(`Unknown host function: ${namespace}.${method}`);
-        return callPiTool(toolCalls, { namespace, method, args, signal });
-      }
-      validateNativeCall(namespace, method, args);
-      return publicHandlers[namespace as NativeNamespace](method, args, signal);
+      const result = isPiToolNamespace(namespace)
+        ? (() => {
+            /* v8 ignore next -- validation rejects tools.* when the call has no callable tools. */
+            if (!toolCalls) throw new Error(`Unknown host function: ${namespace}.${method}`);
+            return callPiTool(toolCalls, { namespace, method, args, signal });
+          })()
+        : (() => {
+            validateNativeCall(namespace, method, args);
+            return publicHandlers[namespace as NativeNamespace](method, args, signal);
+          })();
+      if (!completedCalls) return result;
+      return Promise.resolve(result).then((value) => {
+        completedCalls.record(traceSequence, `${namespace}.${method}`, value);
+        return value;
+      });
     });
 }

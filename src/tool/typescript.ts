@@ -6,6 +6,7 @@ import type {
 import { type Static, Type } from "typebox";
 
 import type { ContextEditQueue } from "../context/queue.js";
+import { CompletedCallJournal, RecoverableCallStore } from "../execution/completed-calls.js";
 import type { HostCallTrace } from "../execution/host-call-trace.js";
 import { ExecutionProgressController } from "../execution/progress.js";
 import { ExecutionTimingRecorder } from "../execution/timings.js";
@@ -121,6 +122,8 @@ interface TypeScriptToolExecution extends TypeScriptToolServices {
   update?: TypeScriptToolUpdate;
   ctx: ExtensionToolContext;
   pendingFailures: Map<string, TypeScriptFailureDetails>;
+  /** Journals of recent failed programs, readable through `runtime.completedCalls`. */
+  recoverableCalls: RecoverableCallStore;
 }
 
 function createExecutionProgress(
@@ -158,6 +161,8 @@ interface SandboxValueExecution {
   toolCatalog: PiToolCatalog;
   /** Pi tools the program may call; absent when Pi lets this call use none. */
   toolCalls: PiToolCallServices | undefined;
+  /** This program's completed calls, kept if it fails. */
+  completedCalls: CompletedCallJournal;
 }
 
 async function executeSandboxValue({
@@ -171,6 +176,7 @@ async function executeSandboxValue({
   images,
   toolCatalog,
   toolCalls,
+  completedCalls,
 }: SandboxValueExecution): Promise<unknown> {
   if (request.params.saveOnly) {
     return { savedFunction: preparedFunction.name, executed: false };
@@ -190,6 +196,8 @@ async function executeSandboxValue({
     ...(toolCalls ? { toolCalls } : {}),
     toolCallId: request.id,
     contextEdits: request.contextEdits,
+    completedCalls,
+    recoverableCalls: request.recoverableCalls,
   });
   const options = {
     timings,
@@ -278,10 +286,12 @@ function buildToolResult(input: {
 }
 
 async function executeTypeScriptTool(request: TypeScriptToolExecution) {
+  const completedCalls = new CompletedCallJournal();
   const functionActivity: FunctionActivity[] = [];
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = createExecutionProgress(request.update, functionActivity, timings);
+
   const images = createImageCollector(request.ctx);
   // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
   const catalog = createPiToolCatalog(request.ctx.tools);
@@ -312,6 +322,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
     });
     const value = await executeSandboxValue({
       request,
+      completedCalls,
       preparedFunction,
       input,
       functionActivity,
@@ -348,12 +359,18 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
       ...(terminate ? { terminate: true } : {}),
     };
   } catch (error) {
+    // A later program can recover what this one consumed before failing.
+    request.recoverableCalls.retain(request.id, completedCalls);
     request.pendingFailures.set(
       request.id,
-      captureTypeScriptFailure(error, functionActivity, {
-        ...executionProgress.snapshot(),
-        timings: timings.finish(),
-      }),
+      captureTypeScriptFailure(
+        error,
+        functionActivity,
+        { ...executionProgress.snapshot(), timings: timings.finish() },
+        completedCalls.size > 0
+          ? { toolCallId: request.id, calls: completedCalls.size, omitted: completedCalls.omitted }
+          : undefined,
+      ),
     );
     throw error;
   } finally {
@@ -394,6 +411,9 @@ const TOOL_PARAMETERS = Type.Object({
 export function registerTypeScriptTool(services: TypeScriptToolServices): void {
   const { pi, functionState } = services;
   const pendingFailures = new Map<string, TypeScriptFailureDetails>();
+  const recoverableCalls = new RecoverableCallStore();
+  // Recoverable values stay in memory only, for the Pi session that produced them.
+  pi.on("session_start", () => recoverableCalls.clear());
   pi.registerTool({
     name: "typescript",
     label: "TypeScript Workspace",
@@ -428,6 +448,7 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
         ...(update ? { update } : {}),
         ctx,
         pendingFailures,
+        recoverableCalls,
       });
     },
   });

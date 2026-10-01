@@ -551,6 +551,15 @@ interface PitModelsFunctions {
 
 interface PitRuntimeFunctions {
   status(): Promise<{ mode: string; idle: boolean; pendingMessages: boolean }>;
+
+  completedCalls(
+    toolCallId: string,
+    options?: { sequence?: number },
+  ): Promise<{
+    toolCallId: string;
+    calls: Array<{ sequence: number; call: string; value: PitJsonValue }>;
+    omitted: number;
+  }>;
 }
 
 interface PitFunctionControls {

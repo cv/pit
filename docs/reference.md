@@ -145,6 +145,7 @@ When the TypeScript tool is active and context usage first crosses 50% or 75% of
 ### `runtime`
 
 - `status()` reports mode, idle state, and whether messages are queued.
+- `completedCalls(toolCallId, { sequence? })` returns the results of host calls that a failed program completed, so a later program can use them without repeating calls that consumed input, such as a feed, a queue, or a request with side effects. A failed result names its tool call ID and how many calls it can recover. Pit keeps, in memory only, the newest 128 calls and 4,000,000 bytes per program for the 8 most recent failed programs in the Pi session; `omitted` counts completed calls it did not keep. Values are JSON snapshots taken when each call completed. Successful programs keep nothing, and a new Pi session starts empty.
 
 ### `functions`
 

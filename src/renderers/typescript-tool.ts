@@ -7,7 +7,7 @@ import type { FunctionActivity } from "../functions/core.js";
 import { isRecord } from "../shared/records.js";
 import { shapeGuard } from "../shared/shape-guard.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import type { StructuredTypeScriptFailure } from "../tool/failure-context.js";
+import type { RecoverableCalls, StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { executionTiming } from "../tool/timing.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
@@ -26,6 +26,7 @@ interface TypeScriptDetails extends ExecutionProgressSnapshot {
   truncated: boolean;
   functions?: FunctionActivity[];
   failure?: StructuredTypeScriptFailure;
+  recoverable?: RecoverableCalls;
   imageAttachments?: Array<{ file: string; mimeType: string; note: string; omitted?: boolean }>;
 }
 
@@ -109,6 +110,15 @@ function renderToolError(input: {
       (notExecuted ? "" : input.theme.fg("dim", ` (${input.duration})`)),
   )}`;
   text += `\n${input.theme.fg("error", message)}`;
+  const recoverable = input.details?.recoverable;
+  if (recoverable && typeof recoverable.toolCallId === "string") {
+    // What the program consumed before failing is retained; say how to get it back.
+    const kept =
+      recoverable.calls === 1 ? "1 completed call" : `${recoverable.calls} completed calls`;
+    const lost = recoverable.omitted > 0 ? ` · ${recoverable.omitted} not kept` : "";
+    text += `\n${input.theme.fg("warning", `↺ Recoverable: ${kept}${lost}`)}`;
+    text += `\n${input.theme.fg("dim", `runtime.completedCalls(${JSON.stringify(recoverable.toolCallId)})`)}`;
+  }
   if (input.expanded) {
     const path = input.details?.failure?.functionPath ?? [];
     if (path.length > 0) {
