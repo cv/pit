@@ -73,8 +73,7 @@ const GENERATORS: Record<TaskKind, (rng: Rng, size: TaskSize) => Chunk[]> = {
 
 function needle(rng: Rng, size: TaskSize): Chunk[] {
   const exhibits = uniqueNames(rng, size.chunks * 2, () => `${rng.pick(STARS)}-${rng.int(10, 99)}`);
-  // Word-based values: Claude models on Bedrock refused requests whose context listed many
-  // random key-like strings, such as `JV5K-SWCQ`, when the prompt forbade storing them elsewhere.
+  // Word-based values keep the needles from looking like credentials.
   const facts = exhibits.map((exhibit, index) => ({
     exhibit,
     code: `${rng.pick(COLORS)}-${rng.pick(LAST_NAMES).toLowerCase()}-${rng.int(100, 999)}`,
@@ -118,7 +117,7 @@ function kv(rng: Rng, size: TaskSize): Chunk[] {
       batch: `L${rng.int(10000, 99999)}`,
       received: `20${rng.int(18, 25)}-${pad(rng.int(1, 12))}-${pad(rng.int(1, 28))}`,
       tags: rng.sample(TAGS, 3),
-      notes: sentence(rng, 18) + " " + sentence(rng, 14),
+      notes: `${sentence(rng)} ${sentence(rng)}`,
     },
   }));
   const fields = ["supplier", "color", "warehouse", "stock", "batch", "received"] as const;
@@ -282,7 +281,7 @@ function ledger(rng: Rng, size: TaskSize): Chunk[] {
     while (estimateTokens(lines.join("\n")) < size.chunkTokens) {
       const tx = `TX-${String(++serial).padStart(6, "0")}`;
       const roll = rng.next();
-      const memo = `memo: ${sentence(rng, rng.int(14, 30))}`;
+      const memo = `memo: ${sentence(rng)} ${sentence(rng)}`;
       const voidable = history.filter((entry) => !entry.void && entry.chunk >= chunk - 2);
       if (roll < 0.08 && voidable.length > 0) {
         const target = rng.pick(voidable);
@@ -331,7 +330,7 @@ function proseWith(rng: Rng, tokens: number, inserts: string[]): string {
   while (estimateTokens(paragraphs.join("\n\n")) < Math.max(200, tokens - insertTokens)) {
     paragraphs.push(
       range(rng.int(4, 8))
-        .map(() => sentence(rng, rng.int(8, 22)))
+        .map(() => sentence(rng))
         .join(" "),
     );
   }
@@ -341,10 +340,20 @@ function proseWith(rng: Rng, tokens: number, inserts: string[]): string {
   return paragraphs.join("\n\n");
 }
 
-function sentence(rng: Rng, words: number): string {
-  const text = range(words)
-    .map(() => rng.pick(WORDS))
-    .join(" ");
+/**
+ * One mundane, grammatical sentence. Random word salad made Claude models on Bedrock refuse
+ * requests intermittently, likely because it resembles adversarial noise.
+ */
+function sentence(rng: Rng): string {
+  const thing = `${rng.pick(ADJECTIVES)} ${rng.pick(NOUNS)}`;
+  const text = rng.pick([
+    () => `the ${thing} in the ${rng.pick(PLACES)} ${rng.pick(EVENTS)} ${rng.pick(TIMES)}`,
+    () => `visitors to the ${rng.pick(PLACES)} often ${rng.pick(ACTIVITIES)} the ${thing}`,
+    () => `${rng.pick(LAST_NAMES)} noted that the ${thing} ${rng.pick(EVENTS)} ${rng.pick(TIMES)}`,
+    () =>
+      `${rng.pick(TIMES)}, the staff of the ${rng.pick(PLACES)} ${rng.pick(ACTIVITIES)} the ${thing}`,
+    () => `a guide in the ${rng.pick(PLACES)} said the ${thing} is ${rng.pick(QUALITIES)}`,
+  ])();
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
@@ -476,10 +485,60 @@ const ERROR_REASONS = [
   "certificate expired",
 ];
 const ACCOUNTS = ["ACME", "BOLT", "CRUX", "DUNE", "EMBER", "FJORD", "GLYPH", "HALO"];
-const WORDS = (
-  "the a of and to in that it with as for was on are by this be from at or which an have not they " +
-  "river stone market winter lantern harbor orchard signal ledger window garden thread copper meadow " +
-  "quiet bright narrow ancient distant gentle steady hollow amber silver northern western " +
-  "carries follows gathers measures crosses remembers settles opens returns describes " +
-  "engine archive bridge corridor village council season valley journal compass canvas"
-).split(" ");
+const ADJECTIVES = [
+  "quiet",
+  "narrow",
+  "copper",
+  "northern",
+  "old",
+  "bright",
+  "painted",
+  "wooden",
+  "small",
+  "tall",
+];
+const NOUNS = [
+  "lantern",
+  "bridge model",
+  "map",
+  "clock",
+  "journal",
+  "compass",
+  "loom",
+  "bench",
+  "window",
+  "vase",
+];
+const PLACES = [
+  "east wing",
+  "reading room",
+  "garden court",
+  "main hall",
+  "print gallery",
+  "harbor room",
+  "atrium",
+];
+const EVENTS = [
+  "was cleaned",
+  "was moved to a new case",
+  "was photographed",
+  "was relabeled",
+  "drew a crowd",
+  "was dusted",
+];
+const TIMES = [
+  "on Tuesday",
+  "last spring",
+  "after the storm",
+  "during the winter",
+  "each morning",
+  "before noon",
+];
+const ACTIVITIES = ["sketch", "photograph", "ask about", "admire", "measure", "describe"];
+const QUALITIES = [
+  "popular with children",
+  "older than it looks",
+  "due for repair",
+  "on loan",
+  "easy to miss",
+];
