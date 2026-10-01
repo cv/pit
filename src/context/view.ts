@@ -49,14 +49,17 @@ export const CONTEXT_ROLES: readonly ContextRole[] = [
 ];
 
 export type ContextState = "original" | "elided" | "summarized" | "replaced";
-export type ContextOperation = "elide" | "summarize" | "restore" | "note";
+/** Operations the model can stage. */
+export type ContextOperation = "elide" | "summarize" | "note";
+/** Operations a provenance record can name; `restore` appears in sessions from before #202. */
+export type RecordedOperation = ContextOperation | "restore";
 
 /** One operation recorded in a `pit.context-edit` provenance entry. */
 export interface ProvenanceOperation {
   toolCallId: string;
-  operation: ContextOperation;
+  operation: RecordedOperation;
   targets: string[];
-  /** Summarize and range restores: the entry carrying the summary. */
+  /** Summarize, and restores recorded before #202: the entry carrying the summary. */
   carrier?: string;
   /** Summarize: every entry the summary replaced, including the carrier. */
   covers?: string[];

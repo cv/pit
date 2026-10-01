@@ -76,15 +76,6 @@ export const sessionFunctions = [
     minimumArguments: 1,
     maximumArguments: 2,
   }),
-  defineNativeFunction("session", "restore", {
-    summary: "Restore edited context entries",
-    declaration:
-      "restore(ids: string[]): Promise<PitContextEditReceipt & { restoredChars: number }>;",
-    documentation:
-      "session.restore(ids) stages restoring entries Pit elided or summarized; a summarized range restores as a unit",
-    minimumArguments: 1,
-    maximumArguments: 1,
-  }),
   defineNativeFunction("session", "setNote", {
     summary: "Keep a keyed working note in context",
     declaration: "setNote(key: string, content: string | null): Promise<PitContextNoteReceipt>;",
@@ -104,7 +95,7 @@ export const sessionFunctions = [
     summary: "Summarize a range of completed turns",
     declaration: "summarize(input: PitContextSummaryInput): Promise<PitContextSummaryReceipt>;",
     documentation:
-      "session.summarize({ from, to, summary }) stages replacing a closed range of completed assistant turns and tool results with a model-written summary; restore undoes it",
+      "session.summarize({ from, to, summary }) stages replacing a closed range of completed assistant turns and tool results with a model-written summary; inspectEntry reads the originals",
     minimumArguments: 1,
     maximumArguments: 1,
   }),

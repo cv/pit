@@ -136,15 +136,5 @@ describe("context pressure notices", () => {
     session.current();
     const entries = await endTurn(session, { ctx: usage(53) });
     expect(entries.map((entry: any) => entry.customType)).toEqual(["pit.context-pressure"]);
-
-    // Restoring the summary brings the folded notice back with the rest of the range.
-    session.current();
-    await runWithParams(
-      "async ({ session: { restore } }, id: string) => restore([id])",
-      first.assistant,
-      context({ sessionManager: session.manager }),
-    );
-    await endTurn(session);
-    expect(notices(session)).toEqual([50, 50]);
   });
 });

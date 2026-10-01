@@ -81,7 +81,7 @@ describe("session.summarize", () => {
     expect(messages[1]?.content).toEqual([
       {
         type: "text",
-        text: `[Model summary of 4 entries from ${first.assistant} to ${second.result} · originals: session.inspectEntry(id) · undo: session.restore(["${first.assistant}"])]\n\nBenchmark: 12.4s. The parser dominates solver.ts.`,
+        text: `[Model summary of 4 entries from ${first.assistant} to ${second.result} · originals: session.inspectEntry(id)]\n\nBenchmark: 12.4s. The parser dominates solver.ts.`,
       },
       { type: "toolCall", id: first.callId, name: "bash", arguments: { command: "make bench" } },
     ]);
@@ -112,33 +112,8 @@ describe("session.summarize", () => {
     expect(member).toMatchObject({ state: "summarized", original: { text: OUTPUT } });
   });
 
-  it("restores the whole range from any entry it covers", async () => {
-    const { session, first, second } = agentRun();
-    const before = llm(session);
-    await summarize(session, { from: first.assistant, to: second.result, summary: "Short." });
-    await endTurn(session);
-    session.current();
-
-    const receipt = await call(
-      session,
-      "async ({ session: { restore } }, ids: string[]) => restore(ids)",
-      [second.result],
-    );
-    expect(receipt.targets).toEqual([
-      first.assistant,
-      first.result,
-      second.assistant,
-      second.result,
-    ]);
-    await endTurn(session);
-
-    // The restored range matches the original; later turns follow it.
-    expect(llm(session).slice(0, before.length - 1)).toEqual(before.slice(0, -1));
-  });
-
-  it("folds an earlier summary into a larger one and restores both", async () => {
+  it("folds an earlier summary into a larger one and lists every entry it covers", async () => {
     const { session, first, second, third } = agentRun();
-    const before = llm(session);
     await summarize(session, { from: first.assistant, to: second.result, summary: "Inner." });
     await endTurn(session);
     session.current();
@@ -153,12 +128,33 @@ describe("session.summarize", () => {
     );
     await endTurn(session);
     session.current();
-    await call(session, "async ({ session: { restore } }, ids: string[]) => restore(ids)", [
-      first.assistant,
-    ]);
-    await endTurn(session);
 
-    expect(llm(session).slice(0, before.length - 1)).toEqual(before.slice(0, -1));
+    const texts = llm(session).flatMap((message: any) =>
+      Array.isArray(message.content) ? message.content.map((block: any) => block.text ?? "") : [],
+    );
+    expect(texts.some((text: string) => text.endsWith("\n\nOuter."))).toBe(true);
+    expect(texts.some((text: string) => text.endsWith("\n\nInner."))).toBe(false);
+    const carrier = await call(
+      session,
+      "async ({ session: { inspectEntry } }, id: string) => inspectEntry(id)",
+      first.assistant,
+    );
+    expect(carrier.covers).toEqual(
+      expect.arrayContaining([
+        first.assistant,
+        first.result,
+        second.assistant,
+        second.result,
+        third.assistant,
+        third.result,
+      ]),
+    );
+    const inner = await call(
+      session,
+      "async ({ session: { inspectEntry } }, id: string) => inspectEntry(id)",
+      second.result,
+    );
+    expect(inner).toMatchObject({ state: "summarized", original: { text: OUTPUT } });
   });
 
   it.each<{
@@ -266,26 +262,6 @@ describe("session.summarize", () => {
 });
 
 describe("summarize edges", () => {
-  it("restores a range once when several of its entries are named", async () => {
-    const { session, first, second } = agentRun();
-    await summarize(session, { from: first.assistant, to: second.result, summary: "Short." });
-    await endTurn(session);
-    session.current();
-
-    const receipt = await call(
-      session,
-      "async ({ session: { restore } }, ids: string[]) => restore(ids)",
-      [second.result, first.assistant, first.result],
-    );
-
-    expect(receipt.targets).toEqual([
-      first.assistant,
-      first.result,
-      second.assistant,
-      second.result,
-    ]);
-  });
-
   it("uses Pi's default compaction reserve without a model", async () => {
     const { session, first, third } = agentRun();
     await expect(

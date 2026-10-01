@@ -232,7 +232,7 @@ type PitContextRole =
   | "bash"
   | "summary";
 type PitContextState = "original" | "elided" | "summarized" | "replaced";
-type PitContextOperation = "elide" | "summarize" | "restore" | "note";
+type PitContextOperation = "elide" | "summarize" | "note";
 
 type PitContextOutlineEntry = {
   id: string;

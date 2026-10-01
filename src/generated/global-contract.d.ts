@@ -232,7 +232,7 @@ type PitContextRole =
   | "bash"
   | "summary";
 type PitContextState = "original" | "elided" | "summarized" | "replaced";
-type PitContextOperation = "elide" | "summarize" | "restore" | "note";
+type PitContextOperation = "elide" | "summarize" | "note";
 
 type PitContextOutlineEntry = {
   id: string;
@@ -524,8 +524,6 @@ interface PitSessionFunctions {
   inspectEntry(id: string, options?: { offset?: number; limit?: number }): Promise<PitContextEntry>;
 
   elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;
-
-  restore(ids: string[]): Promise<PitContextEditReceipt & { restoredChars: number }>;
 
   setNote(key: string, content: string | null): Promise<PitContextNoteReceipt>;
 
