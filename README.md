@@ -2,7 +2,7 @@
 
 **One typed tool for Pi, instead of a toolbox.**
 
-Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It swaps Pi's built-in tools for a single `typescript` tool. Rather than reading a file, running a command, and making an edit in three separate turns, the model writes one small TypeScript function that uses the dependencies it needs, and only that function's return value comes back.
+Pit is an extension for the [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). It replaces Pi's built-in coding tools with a single `typescript` tool, so the agent can read files, run commands, and act on the results in one call:
 
 ```ts
 async ({ workspace: { read }, git: { status: gitStatus } }) => {
@@ -24,16 +24,15 @@ That call reads a file and checks Git status in parallel, then returns a three-f
 
 ## Why try it
 
-- **Fewer round trips.** Related reads, commands, and edits, plus the logic between them, fit in one call.
-- **Quieter context.** Intermediate output stays inside the call; only the returned value reaches the model.
-- **Earlier feedback.** Each call is type-checked before it runs, so a misspelled method or bad argument is reported with its line and column before anything happens.
-- **Reusable workflows.** A call that works can be saved as a typed function and reused later in the session, across a project, or in all your projects.
+- **Fewer round trips.** Related reads, commands, and edits, plus the logic between them, fit in one call. Independent work can [run in parallel](docs/usage.md#control-concurrency).
+- **Quieter context.** Only what the call returns reaches the model, so intermediate output never fills the conversation.
+- **Sandboxed execution.** Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It reaches the host only through the functions it requests, and results are bounded to keep the context and TUI compact.
+- **Earlier feedback.** Calls are [type-checked before they run](docs/usage.md#build-a-call), catching misspelled methods and bad arguments before anything happens.
+- **Reusable workflows.** A useful call can become a [saved function](docs/saved-functions.md), ready to reuse in the session, share with a project, or carry across your projects.
 
-Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It can affect the host only through the functions it requests, and results are bounded so the context and TUI stay compact.
+Pit makes `typescript` the only coding tool the model sees by default. Extension and MCP tools remain available through it; if your setup needs them visible directly, you can [allow selected tools alongside it](docs/configuration.md#allow-other-tools).
 
-It's a different way of working, and it won't suit every setup. Pit makes `typescript` the only coding tool the model sees by default. Other tools stay active, so extensions and Pi features that depend on them keep working, but their declarations are hidden. You can [declare specific tools directly](docs/configuration.md#allow-other-tools), but otherwise the agent's coding work goes through TypeScript.
-
-For a longer first-hand account, see [I Wasn't Trying to Build an App](docs/case_study/), a case study of growing a music-recommendation system through everyday Pit use.
+Want to see what that looks like over time? [I Wasn't Trying to Build an App](docs/case_study/) follows a music-recommendation system growing through everyday Pit use.
 
 ## Install and update
 
@@ -45,70 +44,42 @@ Install the latest version:
 pi install git:github.com/cv/pit
 ```
 
-This tracks `main`, where releases are cut from; changes land there only after CI passes. To update:
+This tracks `main`, where changes land after CI passes. To update:
 
 ```sh
 pi update git:github.com/cv/pit
 ```
 
-Run `/reload` in Pi after source-only updates. Restart Pi after a native runtime update, because Node caches loaded addons.
+Run `/reload` after source-only updates; restart Pi after a native runtime update. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.23.1` instead; package updates won't move a pinned install.
 
-To pin a release instead (package updates won't move a pinned install):
-
-```sh
-pi install git:github.com/cv/pit@v0.23.1
-```
-
-See [configuration](docs/configuration.md) for one-session and project-only installs, and [troubleshooting](docs/troubleshooting.md) if the runtime cannot load. Pit is distributed from GitHub only; it isn't published to npm. [Releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) describe what changed.
+For a one-session trial or a project-only install, see [installation options](docs/configuration.md#installation-scope). Pit is distributed from GitHub, not npm; [releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) cover what's new.
 
 > [!IMPORTANT]
 > Pi extensions run with your user's permissions, so review the source before installing. Pit sandboxes the code the model writes, but the functions it exposes can still change files, run commands, and reach the network. Dependency injection is not an approval boundary. See the [security model](docs/security.md).
 
 ## Use it
 
-Start Pi and ask for work as usual—for example, “Inspect this repository and summarize how to run its tests.” Pit supplies the agent with its typed function contract; you don't need to paste the example above.
+Start Pi and ask for work as usual: “Inspect this repository and summarize how to run its tests.” The agent writes the calls; you don't need to paste the example above or learn the API.
 
-Calls appear as compact descriptions in the terminal. Press `Ctrl+O` to inspect the submitted code, retained result, and execution details. See the [usage guide](docs/usage.md) for authoring calls and reading their results.
+Calls appear as compact descriptions in the terminal. Press `Ctrl+O` to see the code, result, and execution details. The [usage guide](docs/usage.md#read-results-in-the-tui) shows how to follow the work without wading through every intermediate output.
 
-Tools from other extensions and MCP servers stay callable from the same calls as typed `tools.*` functions, and `toolIndex` finds them. See [calling other Pi tools](docs/usage.md#call-other-pi-tools).
+From there, try a workflow that fits your project:
 
-When an operation proves useful, ask the agent to keep it as a named function. For example: “Save that test workflow so we can reuse it.” A successful definition becomes a session function; later calls can compose it with other functions:
-
-```ts
-async function runTests({ npm: { test } }, input: { coverage?: boolean } = {}) {
-  return test({ coverage: input.coverage, raise: true });
-}
-```
-
-```ts
-async ({ runTests }) => runTests({ coverage: true })
-```
-
-Use `/functions` to inspect and manage definitions. Proven functions can be promoted to a trusted project or your user directory; `/pit-reflect` helps identify worthwhile reuse. See [saved functions](docs/saved-functions.md) for scopes, promotion, and overrides.
-
-## View workspace images
-
-`workspace.viewImage(file)` accepts local file paths (relative paths resolve from Pi's cwd; absolute paths are supported; URLs are not). Source size is limited to 10 MiB; after Pi's model-aware processing each encoded image is limited to 5 MiB. The path label is limited to 1,024 UTF-8 bytes. Images are attached separately only to the final TypeScript result after execution and function-state commit succeed; discarded return metadata does not discard them. One invocation can attach up to 8 images and 16 MiB of encoded image data, in call order, including concurrent calls; failed calls do not count toward either limit.
-
-```ts
-async ({ workspace: { viewImage } }) => {
-  const [before, after] = await Promise.all([
-    viewImage("artifacts/before.png"),
-    viewImage("artifacts/after.png"),
-  ]);
-  return { before: before.file, after: after.file };
-}
-```
+- **Work with more than text.** Ask the agent to compare local screenshots or inspect a generated chart. [Image viewing](docs/usage.md#view-workspace-images) brings those files into the same workflow as code and commands.
+- **Keep your existing tools.** Tools from other extensions and MCP servers can join the same calls, so the agent can [combine their results with local work](docs/usage.md#call-other-pi-tools).
+- **Keep what works.** Ask, “Save that test workflow so we can reuse it,” and the agent turns the call into a [saved function](docs/saved-functions.md).
+- **Manage and share functions.** Use `/functions` to inspect saved functions, and promote proven ones to a trusted project or your user directory. `/pit-reflect` helps spot opportunities for reuse.
 
 ## Documentation
 
 Start at the [documentation index](docs/README.md), or go directly to:
 
-- [Usage](docs/usage.md): calls, parameters, concurrency, other Pi tools, safe edits, and results.
+- [Understand a call](docs/usage.md): how the agent combines operations, edits safely, and handles results.
+- [Make Pit fit your setup](docs/configuration.md): installation options, tool visibility, and trusted project functions.
+- [Look up an API](docs/reference.md): available functions, parameters, and limits.
+- [Resolve a problem](docs/troubleshooting.md): installation and runtime diagnostics.
 - [Saved functions](docs/saved-functions.md): reusable workflows and their lifecycle.
-- [Configuration](docs/configuration.md): installation options, tool exceptions, trust, and runtime settings.
-- [Reference](docs/reference.md): tool parameters, global functions, defaults, and limits.
-- [Security model](docs/security.md) and [troubleshooting](docs/troubleshooting.md).
+- [Security model](docs/security.md): the sandbox, injected capabilities, and trust boundaries.
 - [Contributing](CONTRIBUTING.md): local development and review requirements.
 - [Architecture](docs/architecture.md) and [releasing](docs/releasing.md): maintainer guides.
 
