@@ -125,11 +125,12 @@ export function taskPrompt(task: Task, contextWindow: number, memory: Memory = "
 }
 
 /**
- * Claude models on Bedrock sometimes refuse benign evaluation context, intermittently and most often
- * right after a compaction. A run continues after a refusal at most this many times; the count is
- * reported, and the run fails if refusals persist.
+ * Claude models on Bedrock intermittently refuse this benign evaluation context, in either memory
+ * mode and more often in context mode; Pi's own retries recover most refusals. A run continues
+ * after a refusal at most this many more times; the count is reported, and the run fails if
+ * refusals persist.
  */
-export const REFUSAL_RETRIES = 3;
+export const REFUSAL_RETRIES = 10;
 const REFUSAL = /refused/i;
 
 export const NUDGE =

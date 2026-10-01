@@ -67,7 +67,7 @@ The summary reports means with sample standard deviations over runs:
 - Pressure notices and how many were followed by an elide or summarize within three model turns.
 - Churn: literal `inspectEntry("id")` reads of entries an earlier edit removed, and entries removed more than once.
 - External writes: tool calls that could store data outside the conversation, namely `bash`, `write`, `edit`, and Pit programs that use the shell or edit workspace files. In `context` mode these are instruction violations.
-- Refusals: assistant messages the provider ended as refusals. Claude models on Bedrock intermittently refused benign evaluation context, most often right after a compaction, so the worker continues after a refusal up to three times per run and reports the count.
+- Refusals: assistant messages the provider ended as refusals. Claude models on Bedrock intermittently refused this benign evaluation context in both memory modes, more often in `context` mode. Pi's own retries recover most refusals; the worker then continues after a refusal up to ten more times per run and reports the count.
 
 The same telemetry is available for any recorded session through `sessions.analyze()` and `sessions.analyzeRecent()`.
 
