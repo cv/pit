@@ -32,6 +32,27 @@ Every condition gets the same task prompt, which names the feed tools, the task,
 
 Pressure comes from an evaluation model entry whose `contextWindow` is reduced, by default to 32,000 tokens, not from truncating inputs. Pi's compaction uses that window, with `reserveTokens` and `keepRecentTokens` each set to a quarter of it. The worker loads only Pit (when the condition uses it) and the feed extension: no other extensions, skills, prompt templates, or context files, and an empty temporary agent directory, so user and global saved functions do not change the prompt. Model definitions and credentials are read from your agent directory.
 
+## Repository task
+
+The synthetic tasks isolate retention; `--tasks repo` checks that their results transfer to coding work. In a repository the model can re-read almost anything from disk, so what lives only in the conversation is what the user said, the decisions made, and progress. Re-reading becomes a cost to measure.
+
+The generator ([`repo/`](repo/)) writes "shopline", a seeded, dependency-free Node.js library (`node --test`) with about 20 modules, docs, a 20K-token CI log, and a 300-order export, and commits it to a fresh Git repository. Eight tickets arrive one at a time as user messages; the model calls `ticket_done` to receive the next. A ticket the model does not report done after `--max-nudges` reminders is skipped.
+
+| Ticket | Work                                                                    | Long-range dependency                                                                  |
+| ------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 1      | Fix the CSV parser from the two failing rows in a CI log                | Log triage                                                                             |
+| 2      | Convert `applyDiscount` to integer cents; halves round by a seeded rule | Sets a standing rule: no `parseFloat` or `toFixed` in `src/money/` and `src/billing/`  |
+| 3      | Implement shipping from the zone table in `docs/SHIPPING.md`            |                                                                                        |
+| 4      | Add `refundCents`                                                       | Sets two standing rules: never modify `src/legacy/`, and new exports need `@since 2.4` |
+| 5      | Round tax to the nearest cent                                           | "The same rule we agreed for discounts in ticket 2"                                    |
+| 6      | Fix a disputed order from the export                                    | Only the best discount code applies                                                    |
+| 7      | Rename `calcTotal` to `orderTotal`, keeping an alias                    | The legacy and `@since` rules                                                          |
+| 8      | Changelog entries for every ticket, and a passing suite                 | Progress across the session                                                            |
+
+Scoring copies the final workspace, runs the visible suite, then hidden tests kept outside the workspace. Twelve checks pass or fail: each ticket's hidden tests (ticket 7 also needs no `calcTotal` left in `src/` outside `total.js` and `src/legacy/`; tests may still exercise the alias; ticket 8 needs the changelog lines and a passing suite), the three standing rules checked statically, and a regression suite for modules no ticket touches. The `@since` rule applies only to exports added after ticket 4 arrived. Accuracy is the share of checks passed. The task's own tests confirm that the shipped repository fails every ticket and that a reference solution passes all twelve checks for both rounding rules.
+
+Run it with a 64K window, where condition A compacts repeatedly, and once at the model's full window as a ceiling.
+
 ## Run
 
 Requires `jq` on `PATH` (for the session audit) and credentials for the evaluated providers. For a provider whose stored key comes from an interactive helper such as a password manager, run from your terminal or pass the key for this process only:
@@ -45,6 +66,12 @@ Preview the matrix, then run it:
 ```sh
 npm run eval:context -- --models provider/model-a,provider/model-b --dry-run
 npm run eval:context -- --models provider/model-a,provider/model-b --seeds 1,2,3 --concurrency 2
+```
+
+The repository task needs a larger window and more time:
+
+```sh
+npm run eval:context -- --models provider/model --tasks repo --window 64000 --seeds 1,2 --timeout-minutes 180
 ```
 
 `--conditions`, `--tasks`, `--window`, `--chunks`, `--chunk-tokens`, `--notice-tokens`, `--thinking`, `--max-nudges`, and `--timeout-minutes` adjust the matrix; `--help` lists them. `--thinking` defaults to `off`; models that require reasoning, such as recent Claude models, need `--thinking low` or higher. Results go to `eval/context/results/<timestamp>/` unless `--out` names a directory. Rerunning with the same `--out` skips finished runs, so an interrupted evaluation resumes.
