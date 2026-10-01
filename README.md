@@ -70,6 +70,8 @@ Start Pi and ask for work as usual—for example, “Inspect this repository and
 
 Calls appear as compact descriptions in the terminal. Press `Ctrl+O` to inspect the submitted code, retained result, and execution details. See the [usage guide](docs/usage.md) for authoring calls and reading their results.
 
+Tools from other extensions and MCP servers stay callable from the same calls as typed `tools.*` functions, and `toolIndex` finds them. See [calling other Pi tools](docs/usage.md#call-other-pi-tools).
+
 When an operation proves useful, ask the agent to keep it as a named function. For example: “Save that test workflow so we can reuse it.” A successful definition becomes a session function; later calls can compose it with other functions:
 
 ```ts
@@ -102,7 +104,7 @@ async ({ workspace: { viewImage } }) => {
 
 Start at the [documentation index](docs/README.md), or go directly to:
 
-- [Usage](docs/usage.md): calls, parameters, concurrency, safe edits, and results.
+- [Usage](docs/usage.md): calls, parameters, concurrency, other Pi tools, safe edits, and results.
 - [Saved functions](docs/saved-functions.md): reusable workflows and their lifecycle.
 - [Configuration](docs/configuration.md): installation options, tool exceptions, trust, and runtime settings.
 - [Reference](docs/reference.md): tool parameters, global functions, defaults, and limits.

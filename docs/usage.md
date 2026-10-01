@@ -60,6 +60,52 @@ async ({ workspace: { read }, git: { status: gitStatus } }) => {
 
 Unknown functions and methods fail closed at run time.
 
+## Call other Pi tools
+
+Tools that other extensions and Pi's MCP support provide stay callable as typed functions under `tools`, even though Pit hides their declarations from the model. While any are callable, `typescript`'s description lists their identifiers, up to a length budget; it counts the rest and names any tools whose identifiers collide. Identifiers follow Pi's codemode conversion: an MCP tool reads like `mcp__github__list_issues`.
+
+Find a tool and read its declaration with `toolIndex`:
+
+```ts
+async ({ toolIndex: { search, describe } }) => {
+  const [match] = await search("list repository issues", 3);
+  return match ? describe(match.name) : null;
+}
+```
+
+`search(query, limit?)` ranks tools by name and description and returns `{ name, summary }` entries: 8 by default, at most 20. `describe(name)` returns the tool's description and TypeScript declaration, or `null` for an unknown name.
+
+Then inject the tool like any other function:
+
+```ts
+async ({ tools: { mcp__github__list_issues } }) => {
+  const issues: Array<{ number: number; title: string }> = JSON.parse(
+    await mcp__github__list_issues({ owner: "acme", repo: "widgets" }),
+  );
+  return issues.map((issue) => `#${issue.number} ${issue.title}`);
+}
+```
+
+Calls run through Pi like the model's own tool calls: argument preparation, validation, extension hooks, and permission checks all apply. Cancelling the `typescript` call, or reaching its timeout, aborts every tool call it is running.
+
+### Results
+
+- **Text:** a tool without an output schema returns its text. MCP servers often send JSON as text; parse it with `JSON.parse`. For MCP tools, Pit returns the server's untruncated result, not the preview Pi shows the model.
+- **Structured values:** a tool with an output schema returns its structured value, typed by that schema. Pit removes properties the schema doesn't declare, then validates the rest; a missing or mismatched value throws.
+- **Failures:** a failed call throws an error that starts with the tool's name and includes its text.
+- **Images:** images a tool returns attach to the `typescript` result, within the [image limits](../README.md#view-workspace-images) shared with `workspace.viewImage`.
+- **Ending the turn:** a tool that ends the agent's turn, such as a goal tool marking a goal complete, ends it when the program succeeds.
+
+What you don't get back:
+
+- A non-MCP tool's `details`, which Pi keeps for its own renderers.
+- MCP content other than text and images, such as audio and resource blocks.
+- Calls to `typescript`, `codemode`, `tool_search`, and Pi's file and shell built-ins (`read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, and `ls`). `workspace` and `shell` replace the built-ins.
+
+When one of these tools covers a service, use it instead of Pit's `workspace`, `gh`, `http`, or `shell` functions. Those act on this machine and your own accounts, not on the servers a tool is configured for.
+
+See [`tools` and `toolIndex`](reference.md#tools-and-toolindex) in the reference, and [functions that inject tools](saved-functions.md#functions-that-inject-tools) to keep a workflow that uses them.
+
 ## Edit files safely
 
 Hashed reads are the default. Each selected line contains a line number, a short hash, and its content. The result also contains a revision for the complete UTF-8 file:

@@ -58,6 +58,23 @@ Successful tool results include a compact, compaction-safe catalog of active ses
 
 Pit tracks only in-memory invocation counts by function name; it does not retain arguments, source, or results as usage telemetry. After five invocations in one loaded branch lifecycle, a non-temporary session function receives one bounded suggestion to use `functions.promote(name, summary)`. User functions, project functions, session overrides, and names that look temporary are excluded. Reload and session-tree navigation reset counts and suggestion state.
 
+## Functions that inject tools
+
+A custom function can inject [other Pi tools](usage.md#call-other-pi-tools) like any other dependency:
+
+```ts
+async function openIssues({ tools: { mcp__github__list_issues } }, input: { repo: string }) {
+  const issues: Array<{ number: number }> = JSON.parse(
+    await mcp__github__list_issues({ owner: "acme", repo: input.repo }),
+  );
+  return issues.map((issue) => issue.number);
+}
+```
+
+Which tools are callable can change between sessions and during one: an MCP server can be disabled or still connecting, or an extension can be removed. While a tool it injects is missing, the function is kept rather than rejected. `/functions` marks it `(unavailable)`, not `(invalid)`, and a call that uses it fails with `Function "openIssues" is unavailable: …` and the reason. The function works again as soon as the tool is callable.
+
+While the tool is missing, Pit can't check the function's use of it, so arguments and results of that tool are loosely typed until it returns.
+
 ## Namespaced session functions
 
 Set the optional `functionId` tool parameter to give a named definition a dotted identity:
