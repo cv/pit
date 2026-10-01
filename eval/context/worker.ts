@@ -125,9 +125,9 @@ export function taskPrompt(task: Task, contextWindow: number, memory: Memory = "
 }
 
 /**
- * Claude models on Bedrock intermittently refuse this benign evaluation context, in either memory
- * mode and more often in context mode; Pi's own retries recover most refusals. A run continues
- * after a refusal at most this many more times; the count is reported, and the run fails if
+ * Claude models on Bedrock refused requests intermittently when the feed's filler was random
+ * word salad; grammatical filler stopped that in testing. A run still continues after a refusal at
+ * most this many more times beyond Pi's own retries; the count is reported, and the run fails if
  * refusals persist.
  */
 export const REFUSAL_RETRIES = 10;
