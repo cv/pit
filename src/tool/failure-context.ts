@@ -20,11 +20,25 @@ export interface StructuredTypeScriptFailure {
   kind: "cancelled" | "timeout" | "host" | "user";
 }
 
+/** Completed calls a later program can recover with `runtime.completedCalls(toolCallId)`. */
+export interface RecoverableCalls {
+  toolCallId: string;
+  calls: number;
+  omitted: number;
+}
+
 export interface TypeScriptFailureDetails extends ExecutionProgressSnapshot {
   value: undefined;
   truncated: false;
   functions?: FunctionActivity[];
   failure: StructuredTypeScriptFailure;
+  recoverable?: RecoverableCalls;
+}
+
+export function recoverableNotice({ toolCallId, calls, omitted }: RecoverableCalls): string {
+  const kept = calls === 1 ? "1 call" : `${calls} calls`;
+  const lost = omitted > 0 ? `; ${omitted} more were not kept` : "";
+  return `[Recoverable: results of ${kept} this program completed${lost}. Read them with runtime.completedCalls(${JSON.stringify(toolCallId)}) instead of repeating calls that consumed input.]`;
 }
 
 function errorName(error: unknown): string | undefined {
@@ -78,6 +92,7 @@ export function captureTypeScriptFailure(
   error: unknown,
   activity: readonly FunctionActivity[],
   progress: ExecutionProgressSnapshot,
+  recoverable?: RecoverableCalls,
 ): TypeScriptFailureDetails {
   return {
     value: undefined,
@@ -85,6 +100,7 @@ export function captureTypeScriptFailure(
     ...(activity.length > 0 ? { functions: [...activity] } : {}),
     ...progress,
     failure: structureTypeScriptFailure(error, activity),
+    ...(recoverable ? { recoverable } : {}),
   };
 }
 
@@ -102,7 +118,14 @@ export function registerTypeScriptFailureEnrichment(
     }
     pending.delete(event.toolCallId);
     return {
-      content: [{ type: "text" as const, text: details.failure.rootError }],
+      content: [
+        {
+          type: "text" as const,
+          text: details.recoverable
+            ? `${details.failure.rootError}\n${recoverableNotice(details.recoverable)}`
+            : details.failure.rootError,
+        },
+      ],
       details,
     };
   });

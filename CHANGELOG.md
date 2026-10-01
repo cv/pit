@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- A failed program's completed host calls stay recoverable. Its result says how many calls it completed and how to read them; `runtime.completedCalls(toolCallId)` returns their values, so a later program does not need to repeat calls that consumed input. Pit keeps the newest 128 calls and 4,000,000 bytes per program, in memory, for the 8 most recent failed programs in the Pi session (#211).
+
 ### Changed
 
 - In context windows larger than 400K tokens, Pit adds a context-pressure notice when context first reaches 200K tokens, before the 50% and 75% notices. Notices record the threshold that fired, the transcript row names a token threshold, and `sessions.analyze()` counts notices by threshold, such as `50%` or `200K` (#220).

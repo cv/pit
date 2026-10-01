@@ -43,6 +43,7 @@
     {
       "files": ["src/generated/global-contract.d.ts"],
       "rules": {
+        "eslint/max-lines": "off",
         "typescript/no-explicit-any": "off"
       }
     },
