@@ -28,7 +28,6 @@
     "format:check": "oxfmt --check .",
     "quality:audit": "node scripts/audit-code-size.mjs",
     "package:check": "node scripts/verify-package.mjs",
-    "eval:context": "node --import tsx eval/context/run.ts",
     "wasmtime:build": "docker build -f Dockerfile.wasmtime-smoke --target artifacts --output type=local,dest=native/prebuilds/linux-arm64 .",
     "install": "node scripts/install-wasmtime.mjs"
   },
