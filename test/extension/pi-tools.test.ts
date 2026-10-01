@@ -712,3 +712,64 @@ describe("typescript's description", () => {
     expect(tool.prepareLoadout?.(loadout(["read"]))?.descriptions).toBeUndefined();
   });
 });
+
+/** Pending nested calls that settle only when Pit aborts the signal it passed to `executeTool()`. */
+function pendingToolContext() {
+  const calls: { name: string; signal: AbortSignal; aborted: boolean }[] = [];
+  let notifyStarted!: () => void;
+  const bothStarted = new Promise<void>((resolve) => {
+    notifyStarted = resolve;
+  });
+  const executeTool = vi.fn(
+    (name: string, _args: unknown, options: { signal: AbortSignal }) =>
+      new Promise<never>((_resolve, reject) => {
+        const call = { name, signal: options.signal, aborted: false };
+        calls.push(call);
+        if (calls.length === 2) notifyStarted();
+        options.signal.addEventListener(
+          "abort",
+          () => {
+            call.aborted = true;
+            reject(new Error(`${name} aborted`));
+          },
+          { once: true },
+        );
+      }),
+  );
+  return { ctx: context({ tools: TOOLS, executeTool }), executeTool, calls, bothStarted };
+}
+
+const CONCURRENT_TOOL_CALLS = `async ({ tools: { goal_complete, screenshot } }) => {
+  await Promise.all([goal_complete({ summary: "pending" }), screenshot()]);
+  return "finished";
+}`;
+
+describe("ending a program with nested tool calls", () => {
+  it.each<{
+    name: string;
+    end: RegExp;
+    start(code: string, ctx: object, started: Promise<void>): Promise<unknown>;
+  }>([
+    {
+      name: "cancelling the typescript call",
+      end: /cancelled/i,
+      start: (code, ctx, started) => {
+        const controller = new AbortController();
+        void started.then(() => controller.abort());
+        return run(code, ctx as never, controller.signal);
+      },
+    },
+    {
+      name: "the typescript call's timeout",
+      end: /timed out after 750ms/,
+      start: (code, ctx) =>
+        tool.execute("call-id", { code, timeoutMs: 750 }, undefined, undefined, ctx as never),
+    },
+  ])("$name aborts every running tools.* call", async ({ end, start }) => {
+    const { ctx, executeTool, calls, bothStarted } = pendingToolContext();
+    await expect(start(CONCURRENT_TOOL_CALLS, ctx, bothStarted)).rejects.toThrow(end);
+    expect(calls.map((call) => call.name).sort()).toEqual(["goal_complete", "screenshot"]);
+    expect(calls.every((call) => call.signal.aborted && call.aborted)).toBe(true);
+    expect(executeTool).toHaveBeenCalledTimes(2);
+  });
+});
