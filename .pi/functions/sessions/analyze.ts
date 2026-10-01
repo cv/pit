@@ -1,5 +1,6 @@
 /**
- * Audits a Pi session for recurring tool-call failures and workflow smells.
+ * Audits a Pi session for recurring tool-call failures, workflow smells, and context-management
+ * telemetry: provider usage, compactions, context edits, pressure notices, and edit churn.
  * Processes compact pages, keeping correlation and classification in TypeScript.
  *
  * @param input.examples - Recent failure examples to retain (1-30). The default is 12.
@@ -44,8 +45,83 @@ async function analyze(
   let shellExecCalls = 0;
   let promiseAllCalls = 0;
   let workspaceBatchCalls = 0;
+  // Context telemetry. A pressure notice counts as followed when an elide or summarize is
+  // recorded within the next NOTICE_WINDOW model turns (assistant messages).
+  const NOTICE_WINDOW = 3;
+  type Usage = {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    cost: number;
+  };
+  const emptyUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+  const addUsage = (total: Usage, usage: Usage) => {
+    for (const key of Object.keys(total) as Array<keyof Usage>) total[key] += usage[key];
+  };
+  const roundCost = (usage: Usage) => ({ ...usage, cost: Number(usage.cost.toFixed(6)) });
+  const sum = (counts: Map<string, number>) => [...counts.values()].reduce((a, b) => a + b, 0);
+  const requestUsage = emptyUsage();
+  const compactionUsage = emptyUsage();
+  let requests = 0;
+  let peakPromptTokens = 0;
+  let compactions = 0;
+  let compactedTokens = 0;
+  const operations = new Map<string, number>();
+  const noteActions = new Map<string, number>();
+  let tokensFreed = 0;
+  let reprefillTokens = 0;
+  const sessionCalls = new Map<string, number>();
+  const noticeLevels = new Map<string, number>();
+  let noticesFollowed = 0;
+  let pendingNotices: number[] = [];
+  // Entries an elide or summarize removed from context, and how many times each was removed.
+  const removed = new Set<string>();
+  const reductions = new Map<string, number>();
+  let inspectedRemoved = 0;
   let afterLine = 0;
   const MAX_SESSION_LINES = 100_000;
+  type Telemetry = NonNullable<Awaited<ReturnType<typeof readEvents>>["events"][number]["context"]>;
+  const recordContext = (telemetry: Telemetry) => {
+    if (telemetry.request) {
+      const { request } = telemetry;
+      requests++;
+      addUsage(requestUsage, request);
+      peakPromptTokens = Math.max(
+        peakPromptTokens,
+        request.input + request.cacheRead + request.cacheWrite,
+      );
+      pendingNotices = pendingNotices
+        .map((turns) => turns + 1)
+        .filter((turns) => turns <= NOTICE_WINDOW);
+    }
+    for (const method of telemetry.sessionCalls ?? []) increment(sessionCalls, method);
+    for (const edit of telemetry.edits ?? []) {
+      increment(operations, edit.operation);
+      if (edit.action) increment(noteActions, edit.action);
+      tokensFreed += edit.tokensFreed;
+      reprefillTokens += edit.reprefillTokens;
+      if (edit.operation === "restore") {
+        for (const target of [...edit.targets, ...edit.covers]) removed.delete(target);
+      }
+      if (edit.operation !== "elide" && edit.operation !== "summarize") continue;
+      noticesFollowed += pendingNotices.length;
+      pendingNotices = [];
+      for (const target of edit.covers.length > 0 ? edit.covers : edit.targets) {
+        removed.add(target);
+        increment(reductions, target);
+      }
+    }
+    if (telemetry.notice) {
+      increment(noticeLevels, String(telemetry.notice.level));
+      pendingNotices.push(0);
+    }
+    if (telemetry.compaction) {
+      compactions++;
+      compactedTokens += telemetry.compaction.tokensBefore;
+      addUsage(compactionUsage, telemetry.compaction.usage);
+    }
+  };
   for (;;) {
     if (afterLine >= MAX_SESSION_LINES)
       throw new Error(`Session exceeds ${MAX_SESSION_LINES} lines; refusing an incomplete audit`);
@@ -60,7 +136,10 @@ async function analyze(
         shellExecCalls += Number(call.shellExec);
         promiseAllCalls += Number(call.promiseAll);
         workspaceBatchCalls += Number(call.workspaceBatch);
+        for (const target of call.inspectTargets ?? [])
+          inspectedRemoved += Number(removed.has(target));
       }
+      if (event.context) recordContext(event.context);
       const failure = event.failure;
       if (!failure || !calls.has(failure.id)) continue;
       const label = calls.get(failure.id) ?? "";
@@ -118,6 +197,35 @@ async function analyze(
       functionPath,
       failureKind: failureKind ?? undefined,
     })),
+    context: {
+      requests,
+      usage: roundCost(requestUsage),
+      peakPromptTokens,
+      compactions: {
+        total: compactions,
+        modelRequested: sessionCalls.get("compact") ?? 0,
+        tokensBefore: compactedTokens,
+        usage: roundCost(compactionUsage),
+      },
+      edits: {
+        total: sum(operations),
+        byOperation: Object.fromEntries(operations),
+        noteActions: Object.fromEntries(noteActions),
+        tokensFreed,
+        reprefillTokens,
+      },
+      notices: {
+        shown: sum(noticeLevels),
+        byLevel: Object.fromEntries(noticeLevels),
+        followed: noticesFollowed,
+        followWindowTurns: NOTICE_WINDOW,
+      },
+      churn: {
+        inspectedRemovedEntries: inspectedRemoved,
+        reeditedEntries: [...reductions.values()].filter((count) => count > 1).length,
+      },
+      sessionCalls: Object.fromEntries(sessionCalls),
+    },
     recommendations,
   };
 }

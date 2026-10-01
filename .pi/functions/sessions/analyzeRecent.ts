@@ -1,5 +1,6 @@
 /**
- * Aggregates workflow failures and usage patterns across recent Pit sessions.
+ * Aggregates workflow failures, usage patterns, and context-management telemetry across recent
+ * Pit sessions.
  *
  * @param input.limit - Maximum sessions to inspect (1-20). The default is 12.
  * @param input.examples - Repeated failure labels retained per session (1-30, validated by
@@ -55,6 +56,35 @@ async function analyzeRecent(
       recommendations.add(recommendation);
     }
   }
+  // Sums each numeric leaf of the per-session context reports. Peaks and fixed parameters take
+  // the maximum. Null-prototype nodes keep recorded names such as "__proto__" as plain keys.
+  type Tree = { [key: string]: number | Tree };
+  const MAXIMA = new Set(["peakPromptTokens", "followWindowTurns"]);
+  const merge = (total: Tree, add: Tree): Tree => {
+    for (const [key, value] of Object.entries(add)) {
+      const current = total[key];
+      if (typeof value === "number") {
+        const base = typeof current === "number" ? current : 0;
+        total[key] = MAXIMA.has(key) ? Math.max(base, value) : base + value;
+      } else {
+        total[key] = merge(typeof current === "object" ? current : Object.create(null), value);
+      }
+    }
+    return total;
+  };
+  const roundCosts = (tree: Tree): Tree => {
+    for (const [key, value] of Object.entries(tree)) {
+      if (typeof value === "object") roundCosts(value);
+      else if (key === "cost") tree[key] = Number(value.toFixed(6));
+    }
+    return tree;
+  };
+  const context = roundCosts(
+    audits.reduce<Tree>(
+      (total, audit) => merge(total, (audit.context ?? {}) as unknown as Tree),
+      Object.create(null),
+    ),
+  );
   if (recommendations.size > 1)
     recommendations.delete("No recurring workflow failure needs action.");
   const total = (
@@ -76,6 +106,7 @@ async function analyzeRecent(
     categories: Object.fromEntries(categories),
     execFilePrograms: Object.fromEntries(programs),
     repeatedWorkflowFailureLabels: [...labels].sort((a, b) => b[1] - a[1]).slice(0, 12),
+    context,
     recommendations: [...recommendations],
     perSession: audits.map((audit) => ({
       file: audit.file.split("/").at(-1),
@@ -84,6 +115,9 @@ async function analyzeRecent(
       gateFailures: audit.gateFailures,
       expectedFailures: audit.expectedFailures,
       categories: audit.categories,
+      contextEdits: audit.context?.edits.total ?? 0,
+      contextNotices: audit.context?.notices.shown ?? 0,
+      compactions: audit.context?.compactions.total ?? 0,
     })),
   };
 }

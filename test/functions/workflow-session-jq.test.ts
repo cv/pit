@@ -243,6 +243,100 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
     });
   });
 
+  it("audits context telemetry from recorded usage, edits, notices, and compactions", async () => {
+    const { analyze } = await workflows();
+    const file = join(directory, "context.jsonl");
+    const entry = (value: Record<string, unknown>) => JSON.stringify(value);
+    const inspect =
+      "session.inspectEntry(\"e1\"); inspectEntry('e2'); inspectEntry(`e3`); inspectEntry(id);";
+    const lines = [
+      message({
+        role: "assistant",
+        usage: { input: 3, output: 7, cacheRead: 500, cacheWrite: 40, cost: { total: 0.25 } },
+        content: [toolCall("hide", "Elide stale results", 'session.elide(["e1", "e2", "e3"])')],
+      }),
+      message({
+        role: "toolResult",
+        toolCallId: "hide",
+        content: [{ type: "text", text: "staged" }],
+        details: {
+          traces: [
+            { namespace: "session", method: "elide", status: "succeeded" },
+            { namespace: "session", method: "outline", status: "failed" },
+            { namespace: "workspace", method: "read", status: "succeeded" },
+          ],
+        },
+      }),
+      entry({
+        type: "custom",
+        customType: "pit.context-edit",
+        data: {
+          version: 1,
+          operations: [
+            {
+              toolCallId: "hide",
+              operation: "elide",
+              targets: ["e1", "e2", "e3"],
+              reason: "stale",
+              tokensFreed: 900,
+              reprefillTokens: 4000,
+            },
+          ],
+        },
+      }),
+      entry({
+        type: "custom",
+        customType: "other.extension",
+        data: { operations: [{ operation: "elide", targets: ["x"] }] },
+      }),
+      entry({
+        type: "custom_message",
+        customType: "pit.context-pressure",
+        content: "[Pit] Context is 51% full",
+        display: true,
+        details: { level: 50, percent: 51, tokens: 510, contextWindow: 1000 },
+      }),
+      entry({
+        type: "custom_message",
+        customType: "pit.note",
+        content: "<model-note>",
+        display: true,
+        details: { key: "k" },
+      }),
+      // An assistant message without usage still counts as a request.
+      message({ role: "assistant", content: [toolCall("look", "Inspect", inspect)] }),
+      entry({
+        type: "compaction",
+        summary: "summary",
+        firstKeptEntryId: "e9",
+        tokensBefore: 12000,
+        usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 3, cost: { total: 0.5 } },
+      }),
+    ];
+    await writeFile(file, lines.join("\n") + "\n");
+    expect((await analyze({ file })).context).toEqual({
+      requests: 2,
+      usage: { input: 3, output: 7, cacheRead: 500, cacheWrite: 40, cost: 0.25 },
+      peakPromptTokens: 543,
+      compactions: {
+        total: 1,
+        modelRequested: 0,
+        tokensBefore: 12000,
+        usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 3, cost: 0.5 },
+      },
+      edits: {
+        total: 1,
+        byOperation: { elide: 1 },
+        noteActions: {},
+        tokensFreed: 900,
+        reprefillTokens: 4000,
+      },
+      notices: { shown: 1, byLevel: { 50: 1 }, followed: 0, followWindowTurns: 3 },
+      churn: { inspectedRemovedEntries: 3, reeditedEntries: 0 },
+      sessionCalls: { elide: 1 },
+    });
+  });
+
   it("ends dense pages at the byte budget without losing or duplicating calls", async () => {
     const { events } = await workflows();
     const file = join(directory, "dense.jsonl");
