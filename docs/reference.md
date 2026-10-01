@@ -38,6 +38,8 @@ Pit injects only the functions that submitted code requests.
 | `models`    | List configured models, inspect the current model, and select a model.                       |
 | `runtime`   | Inspect runtime state.                                                                       |
 | `functions` | Inspect definitions across scopes and manage authored functions.                             |
+| `tools`     | Call tools from other extensions and MCP servers as typed functions.                         |
+| `toolIndex` | Search and describe the tools available under `tools`.                                       |
 
 See [Global function reference](#global-function-reference) for method details.
 
@@ -157,6 +159,14 @@ When the TypeScript tool is active and context usage first crosses 50% or 75%, P
 - `promote(name, summary, options?)` saves a session function to the trusted project by default or to user scope with `{ to: "user" }` after confirmation.
 - `removeSession(name, options?)` removes a branch-local function; dependent cascades require `{ cascade: true }`.
 
+### `tools` and `toolIndex`
+
+- `tools.NAME(args?)` calls another Pi tool through Pi's `executeTool()`, with Pi's argument preparation, validation, hooks, and permission checks. Its argument and result types come from the tool's schemas. It returns the tool's structured value when the tool declares an output schema, or its text otherwise; MCP tools return the server's untruncated result. A failed call throws.
+- `toolIndex.search(query, limit?)` returns up to `limit` `{ name, summary }` matches ranked by name and description. The default is 8, the maximum 20.
+- `toolIndex.describe(name)` returns a tool's description and TypeScript declaration, or `null`.
+
+The usage guide covers [results and omissions](usage.md#call-other-pi-tools).
+
 ### Common behavior
 
 Paths are relative to the Pi working directory. Absolute paths are also valid. Workspace mutation results use slash-normalized paths relative to the working directory. A path outside the working directory contains `../` segments in the result.
@@ -181,3 +191,5 @@ Output is bounded. Read metadata uses sparse defaults:
 - Workspace search skips binary files and files larger than 1 MB. It searches at most 2,000 files per call.
 - The sandbox is an application boundary, not a container or virtual machine. See the [security model](security.md) for trust boundaries and [architecture](architecture.md#sandbox-and-rpc-boundary) for internal resource budgets.
 - Saved-function source quotas, nesting, and scope rules are described in [saved functions](saved-functions.md).
+- `tools` omits Pit's own `typescript` tool, Pi's `codemode` and `tool_search` tools, Pi's file and shell built-ins, and tools whose identifiers collide. It doesn't return a non-MCP tool's `details`, or MCP content other than text and images.
+- With Pi 0.99.2 or newer, MCP servers without `direct` tools connect in the background, and their tools are missing from `tools` until they connect ([#207](https://github.com/cv/pit/issues/207)).

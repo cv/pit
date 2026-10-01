@@ -6,7 +6,7 @@ New to Pit? Start with the [project README](../README.md) for what it does, inst
 
 | Guide                                 | Read it when you want to…                                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| [Usage](usage.md)                     | Build a call, pass input, sequence work, edit safely, or understand a result                      |
+| [Usage](usage.md)                     | Build a call, pass input, sequence work, call other Pi tools, edit safely, or understand a result |
 | [Saved functions](saved-functions.md) | Retain and compose workflows, promote them, or understand scopes and overrides                    |
 | [Configuration](configuration.md)     | Choose an installation scope, allow other tools, enable project functions, or configure a runtime |
 | [Reference](reference.md)             | Look up tool parameters, global methods, defaults, return shapes, and limits                      |
