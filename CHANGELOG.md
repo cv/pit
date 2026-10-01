@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-01
+
 ### Added
 
 - A failed program's completed host calls stay recoverable. Its result says how many calls it completed and how to read them; `runtime.completedCalls(toolCallId)` returns their values, so a later program does not need to repeat calls that consumed input. Pit keeps the newest 128 calls and 4,000,000 bytes per program, in memory, for the 8 most recent failed programs in the Pi session (#211).
@@ -335,7 +337,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/cv/pit/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/cv/pit/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/cv/pit/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/cv/pit/compare/v0.22.0...v0.22.1
