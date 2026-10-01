@@ -84,6 +84,10 @@ function cost(result: RunResult): number {
   return (context?.usage.cost ?? 0) + (context?.compactions.usage.cost ?? 0);
 }
 
+/** Compactions the model asked for: Pit's session.compact() calls and condition B's tool calls. */
+const modelCompactions = (run: RunResult) =>
+  (run.telemetry?.context.compactions.modelRequested ?? 0) + (run.compactToolCalls ?? 0);
+
 const operation = (result: RunResult, name: string) =>
   result.telemetry?.context.edits.byOperation[name] ?? 0;
 
@@ -205,7 +209,7 @@ export function summarize(results: readonly RunResult[]): string {
             1000,
             1,
           ),
-          `${spread(group.map((run) => (run.telemetry?.context.compactions.total ?? 0) - (run.telemetry?.context.compactions.modelRequested ?? 0)))} + ${spread(group.map((run) => run.telemetry?.context.compactions.modelRequested ?? 0))}`,
+          `${spread(group.map((run) => (run.telemetry?.context.compactions.total ?? 0) - modelCompactions(run)))} + ${spread(group.map(modelCompactions))}`,
         ]),
       ),
     );
