@@ -11,13 +11,15 @@ import { parseArgs } from "node:util";
 
 import { CONDITION_IDS, type ConditionId, isConditionId } from "./conditions.js";
 import { writeReport } from "./report.js";
-import { DEFAULT_SIZE, estimateTokens, generateTask, TASK_KINDS, type TaskKind } from "./tasks.js";
+import { DEFAULT_SIZE, estimateTokens, generateTask, TASK_KINDS } from "./tasks.js";
 import {
   type Memory,
   MEMORY_MODES,
+  REPO_TASK,
   ROOT,
   resultPath,
   type RunSpec,
+  type TaskId,
   type Thinking,
   THINKING_LEVELS,
 } from "./worker.js";
@@ -26,7 +28,7 @@ const USAGE = `Usage: npm run eval:context -- --models <provider/model,...> [opt
 
   --models           Comma-separated provider/model IDs (required)
   --conditions       Subset of ${CONDITION_IDS.join(",")} (default: all)
-  --tasks            Subset of ${TASK_KINDS.join(",")} (default: all)
+  --tasks            Subset of ${TASK_KINDS.join(",")},${REPO_TASK} (default: the feed tasks)
   --seeds            Comma-separated integers (default: 1,2,3)
   --window           Evaluation context window in tokens (default: 32000)
   --chunks           Chunks per task (default: ${DEFAULT_SIZE.chunks})
@@ -69,8 +71,8 @@ function list<T extends string>(
   return items as T[];
 }
 
-const isTaskKind = (value: string): value is TaskKind =>
-  (TASK_KINDS as readonly string[]).includes(value);
+const isTaskKind = (value: string): value is TaskId =>
+  value === REPO_TASK || (TASK_KINDS as readonly string[]).includes(value);
 const isMemory = (value: string): value is Memory =>
   (MEMORY_MODES as readonly string[]).includes(value);
 const isThinking = (value: string): value is Thinking =>
@@ -120,7 +122,7 @@ export function parseRun(argv: string[]) {
   return {
     models,
     conditions: list<ConditionId>(values.conditions, "conditions", isConditionId),
-    tasks: list<TaskKind>(values.tasks, "tasks", isTaskKind),
+    tasks: list<TaskId>(values.tasks, "tasks", isTaskKind),
     seeds: integers(values.seeds, "seeds", 0, 1_000_000),
     contextWindow,
     size,
@@ -206,6 +208,7 @@ async function main() {
   const specs = matrix(options);
   const pending = specs.filter((spec) => !existsSync(resultPath(spec.outDir, spec.id)));
   const streamed = options.tasks.map((task) => {
+    if (task === REPO_TASK) return `${task}: 8 tickets`;
     const generated = generateTask(task, options.seeds[0] ?? 1, options.size);
     const tokens = generated.chunks.reduce((sum, chunk) => sum + estimateTokens(chunk.text), 0);
     const questions = generated.chunks.reduce((sum, chunk) => sum + chunk.questions.length, 0);
