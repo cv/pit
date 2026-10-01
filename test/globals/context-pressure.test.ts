@@ -47,7 +47,14 @@ describe("context pressure notices", () => {
         content:
           "[Pit] Context is 52% full (~104K of 200K tokens). Use session.outline() to find stale tool results for session.elide() or finished turns for session.summarize(), and keep task state in session.setNote().",
         display: true,
-        details: { level: 50, percent: 52, tokens: 104_000, contextWindow: 200_000 },
+        details: {
+          level: 50,
+          percent: 52,
+          tokens: 104_000,
+          contextWindow: 200_000,
+          threshold: "50%",
+          thresholdTokens: 100_000,
+        },
       },
     ]);
 
@@ -95,6 +102,79 @@ describe("context pressure notices", () => {
     const entries = await endTurn(session, { ctx, ...(outcome ? { outcome } : {}) });
 
     expect(entries.filter((entry) => entry.type === "custom_message")).toEqual([]);
+  });
+
+  // Pit's 50% notice fired at ~644K of a 1.05M window in #205's acceptance run.
+  it("notices at 200K tokens in a large window, before 50% and 75%", async () => {
+    const session = agentRun();
+    const large = (tokens: number) => ({
+      getContextUsage: () => ({
+        tokens,
+        contextWindow: 1_050_000,
+        percent: (100 * tokens) / 1_050_000,
+      }),
+    });
+
+    expect(await endTurn(session, { ctx: large(199_000) })).toEqual([]);
+    session.current();
+    const [first] = await endTurn(session, { ctx: large(210_000) });
+    expect(first).toMatchObject({
+      content: expect.stringMatching(/^\[Pit\] Context is 20% full \(~210K of 1\.1M tokens\)/),
+      details: {
+        level: 19,
+        percent: 20,
+        tokens: 210_000,
+        threshold: "200K",
+        thresholdTokens: 200_000,
+      },
+    });
+    session.current();
+    expect(await endTurn(session, { ctx: large(400_000) })).toEqual([]);
+    session.current();
+    await endTurn(session, { ctx: large(530_000) });
+    session.current();
+    await endTurn(session, { ctx: large(800_000) });
+
+    expect(notices(session)).toEqual([19, 50, 75]);
+  });
+
+  it.each([
+    { name: "a window where 200K is 50%", contextWindow: 400_000 },
+    { name: "a small window", contextWindow: 128_000 },
+  ])("adds no 200K notice in $name", async ({ contextWindow }) => {
+    const session = agentRun();
+    const ctx = {
+      getContextUsage: () => ({
+        tokens: 0.49 * contextWindow,
+        contextWindow,
+        percent: 49,
+      }),
+    };
+
+    expect(await endTurn(session, { ctx })).toEqual([]);
+  });
+
+  it("counts a notice from before thresholds were recorded at its percentage", async () => {
+    const session = agentRun();
+    // Pit 0.23 recorded only the percentage level.
+    session.manager.appendCustomMessageEntry(
+      "pit.context-pressure",
+      "[Pit] Context is 51% full.",
+      true,
+      {
+        level: 50,
+        percent: 51,
+        tokens: 535_000,
+        contextWindow: 1_050_000,
+      },
+    );
+    session.current();
+    const ctx = {
+      getContextUsage: () => ({ tokens: 560_000, contextWindow: 1_050_000, percent: 53 }),
+    };
+
+    // The visible 50% notice already covers the lower 200K threshold.
+    expect(await endTurn(session, { ctx })).toEqual([]);
   });
 
   it("notices again once a compaction removes the earlier notice", async () => {

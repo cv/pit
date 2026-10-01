@@ -67,7 +67,8 @@ def context($entry; $message):
        tokensFreed: (.tokensFreed | num), reprefillTokens: (.reprefillTokens | num)}] | .[0:32]}
   elif $entry.type == "custom_message" and $entry.customType == "pit.context-pressure" then
     {notice: ($entry.details | object | {level: (.level | num), percent: (.percent | num),
-      tokens: (.tokens | num), contextWindow: (.contextWindow | num)})}
+      tokens: (.tokens | num), contextWindow: (.contextWindow | num),
+      threshold: (.threshold | if type == "string" then clip(16) else null end)})}
   elif $entry.type == "compaction" then
     {compaction: {tokensBefore: ($entry.tokensBefore | num), usage: ($entry.usage | usage)}}
   else null end;
@@ -123,7 +124,14 @@ def context($entry; $message):
     /** Successful `session.*` method names traced in one tool result. */
     sessionCalls?: string[];
     edits?: EditOperation[];
-    notice?: { level: number; percent: number; tokens: number; contextWindow: number };
+    notice?: {
+      level: number;
+      percent: number;
+      tokens: number;
+      contextWindow: number;
+      /** The threshold that fired, such as "50%" or "200K"; null before Pit 0.24. */
+      threshold: string | null;
+    };
     compaction?: { tokensBefore: number; usage: Usage };
   };
   if (values.length !== 1) throw new Error("Expected one jq session page");

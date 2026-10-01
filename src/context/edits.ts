@@ -52,7 +52,11 @@ export function planElide(view: ContextView, ids: readonly string[], reason?: st
     if (problem) problems.add(problem);
     else stubs.push({ item, stub, tokens });
   }
-  problems.throwIfAny("elide");
+  const retry =
+    stubs.length > 0
+      ? `These can be elided: ${JSON.stringify(stubs.map(({ item }) => item.id))}`
+      : undefined;
+  problems.throwIfAny("elide", retry);
   const tokensFreed = stubs.reduce((sum, { item, tokens }) => sum + item.tokens - tokens, 0);
   const reprefillTokens = reprefillAfter(view, ids, tokensFreed);
   return {

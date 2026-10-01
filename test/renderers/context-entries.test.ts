@@ -129,6 +129,24 @@ describe("context pressure renderer", () => {
     ]);
   });
 
+  it("names a token threshold, which the usage alone does not show", () => {
+    const large = {
+      level: 19,
+      percent: 20,
+      tokens: 210_000,
+      contextWindow: 1_050_000,
+      threshold: "200K",
+      thresholdTokens: 200_000,
+    };
+    expect(rows(renderNotice(notice(large), { expanded: false }, theme))).toEqual([
+      " ▲ Context 20% full · ~210K of 1.1M tokens · passed 200K",
+    ]);
+    // A percentage threshold is already the usage shown.
+    expect(
+      rows(renderNotice(notice({ ...details, threshold: "50%" }), { expanded: false }, theme)),
+    ).toEqual([" ▲ Context 52% full · ~104K of 200K tokens"]);
+  });
+
   it("falls back to the notice text when its details are unreadable", () => {
     expect(rows(renderNotice(notice({ percent: "lots" }), { expanded: false }, theme))).toEqual([
       " ▲ Context pressure notice",

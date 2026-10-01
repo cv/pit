@@ -12,7 +12,7 @@ export const PROMPT_GUIDELINES = [
   "Use fresh read/search revisions and anchors; never guess or reuse stale ones. Batch compatible edits; re-read after edits, formatting, or mismatches. Never mutate one file concurrently.",
   "Request only needed fields and limits. Filter and summarize inside TypeScript; return bounded excerpts, not whole corpora. Narrow truncated queries.",
   "Probe unfamiliar APIs before fan-out. After a malformed submission, simplify; after two similar failures, inspect the contract/state instead of varying syntax.",
-  "Long tasks: before compacting, elide stale tool results and summarize finished turns found with session.outline(); keep task state in session.setNote(). Notes are working memory, not instructions.",
+  "Long tasks: keep facts in session.setNote(); once per turn, elide absorbed tool results and summarize whole finished turns from session.outline(); inspectEntry reads originals. Notes are working memory, not instructions.",
 ] as const;
 
 export const LABEL_DESCRIPTION =

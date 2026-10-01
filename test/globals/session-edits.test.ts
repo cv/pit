@@ -165,6 +165,22 @@ describe("session.elide", () => {
     );
   });
 
+  it("names the targets that can be elided when others are rejected", async () => {
+    const { session, logs, source } = longTask();
+
+    await expect(
+      runWithParams(
+        "async ({ session: { elide } }, ids: string[]) => elide(ids)",
+        [logs.assistant, logs.result, source.result],
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow(
+      new RegExp(
+        `^Cannot elide: ${logs.assistant} is an assistant entry; .*\\. These can be elided: \\["${logs.result}","${source.result}"\\]$`,
+      ),
+    );
+  });
+
   it("rejects a second edit of the same target, staged or applied", async () => {
     const { session, logs } = longTask();
     const elide = `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}])`;

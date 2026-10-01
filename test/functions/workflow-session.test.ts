@@ -221,7 +221,7 @@ describe("sessions.analyze", () => {
       { file: "/session" },
     );
     expect(result).toMatchObject({
-      context: { notices: { shown: 1, byLevel: { 50: 1 }, followed, followWindowTurns: 3 } },
+      context: { notices: { shown: 1, byLevel: { "50%": 1 }, followed, followWindowTurns: 3 } },
     });
   });
 
@@ -450,7 +450,7 @@ describe("sessions.analyzeRecent", () => {
       peakPromptTokens: peak,
       compactions: { total: 1, modelRequested: 0, tokensBefore: 900, usage: usage(0) },
       edits: { total: 1, byOperation: { [operation]: 1 }, noteActions: {}, tokensFreed: 50 },
-      notices: { shown: 1, byLevel: { 50: 1 }, followed: 1, followWindowTurns: 3 },
+      notices: { shown: 1, byLevel: { "50%": 1 }, followed: 1, followWindowTurns: 3 },
       churn: { inspectedRemovedEntries: 1, reeditedEntries: 0 },
       sessionCalls: { outline: 1 },
     });
@@ -484,7 +484,7 @@ describe("sessions.analyzeRecent", () => {
         noteActions: {},
         tokensFreed: 100,
       },
-      notices: { shown: 2, byLevel: { 50: 2 }, followed: 2, followWindowTurns: 3 },
+      notices: { shown: 2, byLevel: { "50%": 2 }, followed: 2, followWindowTurns: 3 },
       churn: { inspectedRemovedEntries: 2, reeditedEntries: 0 },
       sessionCalls: { outline: 2 },
     });

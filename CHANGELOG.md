@@ -4,6 +4,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- In context windows larger than 400K tokens, Pit adds a context-pressure notice when context first reaches 200K tokens, before the 50% and 75% notices. Notices record the threshold that fired, the transcript row names a token threshold, and `sessions.analyze()` counts notices by threshold, such as `50%` or `200K` (#220).
+- The context-management guideline says which entries `session.elide` and `session.summarize` accept and points to `session.inspectEntry`. A rejected elide names the IDs that can be elided, and a rejected summarize suggests a valid nearby range when there is one (#221).
+
 ## [0.23.1] - 2026-10-01
 
 ### Changed
