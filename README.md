@@ -50,7 +50,7 @@ This tracks `main`, where changes land after CI passes. To update:
 pi update git:github.com/cv/pit
 ```
 
-Run `/reload` after source-only updates; restart Pi after a native runtime update. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.23.1` instead; package updates won't move a pinned install.
+Run `/reload` after source-only updates; restart Pi after a native runtime update. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.24.0` instead; package updates won't move a pinned install.
 
 For a one-session trial or a project-only install, see [installation options](docs/configuration.md#installation-scope). Pit is distributed from GitHub, not npm; [releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) cover what's new.
 
