@@ -93,7 +93,7 @@ Calls run through Pi like the model's own tool calls: argument preparation, vali
 - **Text:** a tool without an output schema returns its text. MCP servers often send JSON as text; parse it with `JSON.parse`. For MCP tools, Pit returns the server's untruncated result, not the preview Pi shows the model.
 - **Structured values:** a tool with an output schema returns its structured value, typed by that schema. Pit removes properties the schema doesn't declare, then validates the rest; a missing or mismatched value throws.
 - **Failures:** a failed call throws an error that starts with the tool's name and includes its text.
-- **Images:** images a tool returns attach to the `typescript` result, within the [image limits](../README.md#view-workspace-images) shared with `workspace.viewImage`.
+- **Images:** images a tool returns attach to the `typescript` result, within the [image limits](#image-limits) shared with `workspace.viewImage`.
 - **Ending the turn:** a tool that ends the agent's turn, such as a goal tool marking a goal complete, ends it when the program succeeds.
 
 What you don't get back:
@@ -137,6 +137,29 @@ Pit validates all anchors against the supplied revision. It rejects overlapping 
 A successful edit invalidates all earlier revisions and anchors for that file. Read or search the file again before the next edit.
 
 A read batch supports `fail-fast` and `settled` failure handling. An edit batch must target unique files. Pit validates every edit before the first write. If a later write fails, Pit makes a best-effort attempt to restore files that it already changed. A multi-file edit batch is not an atomic filesystem transaction.
+
+## View workspace images
+
+Use `workspace.viewImage(file)` to let the agent inspect local screenshots, charts, or other image files alongside its code and command results. Relative paths resolve from Pi's working directory; absolute paths are supported, but URLs are not.
+
+```ts
+async ({ workspace: { viewImage } }) => {
+  const [before, after] = await Promise.all([
+    viewImage("artifacts/before.png"),
+    viewImage("artifacts/after.png"),
+  ]);
+  return { before: before.file, after: after.file };
+}
+```
+
+Images attach separately to the final TypeScript result only after execution and function-state commit succeed. Discarding the returned metadata does not discard the images. Attachments preserve call order, including concurrent calls.
+
+### Image limits
+
+- Each local source file is limited to 10 MiB, and its path label to 1,024 UTF-8 bytes.
+- After Pi's model-aware processing, each encoded image is limited to 5 MiB.
+- One invocation can attach up to 8 images and 16 MiB of encoded image data, shared with images returned by other Pi tools.
+- Failed calls do not count toward either per-invocation limit.
 
 ## Read results in the TUI
 

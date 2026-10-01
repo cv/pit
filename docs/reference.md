@@ -48,6 +48,7 @@ See [Global function reference](#global-function-reference) for method details.
 ### `workspace`
 
 - `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a bounded selection. Hashed format is the default and includes edit-ready anchors and a whole-file revision.
+- `viewImage(file)` attaches a local image to the successful tool result. See [image viewing and limits](usage.md#view-workspace-images).
 - `edit(file, { revision, changes })` applies revision-checked anchored or file-level changes.
 - `batch(operations, options?)` runs a homogeneous read batch or edit batch and returns ordered `{ results }`. Only read batches accept `{ failure?: "fail-fast" | "settled" }`; mixed batches are rejected.
 - `search(query, options?)` returns bounded matches with revisions, anchors, and context. Regex matching is interruptible.
