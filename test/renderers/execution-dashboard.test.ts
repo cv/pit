@@ -110,6 +110,18 @@ describe("execution dashboard rendering", () => {
       settled: false,
       line: "✗ shell.execFile rejected, 0ms",
     },
+    {
+      name: "calls cancelled with their program",
+      traces: [trace(1, "exec", "cancelled", 0, 1_400), trace(2, "exec", "cancelled", 0, 1_400)],
+      settled: true,
+      line: "⚠ shell.exec cancelled ×2 over 1.4s",
+    },
+    {
+      name: "a call stopped by its program's timeout",
+      traces: [trace(1, "exec", "timed out", 0, 750)],
+      settled: true,
+      line: "⚠ shell.exec timed out, 750ms",
+    },
   ])("words $name from structured call facts", ({ traces, settled, line }) => {
     expect(renderExecutionDashboard({ traces }, theme, settled).trim()).toBe(line);
   });

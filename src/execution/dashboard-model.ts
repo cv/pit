@@ -99,6 +99,12 @@ function traceGroupStatus(group: HostCallTraceGroup): HostCallTraceStatus {
   if (statuses.has("rejected")) {
     return "rejected";
   }
+  if (statuses.has("timed out")) {
+    return "timed out";
+  }
+  if (statuses.has("cancelled")) {
+    return "cancelled";
+  }
   if (statuses.has("running")) {
     return "running";
   }
