@@ -44,31 +44,72 @@ describe("workspace read and edit", () => {
     });
   });
 
-  it("bounds large reads and handles empty or out-of-range selections", async () => {
+  it("bounds large hashed reads and handles empty or out-of-range selections", async () => {
     await writeFile(join(cwd, "large.txt"), "x".repeat(5_000_000), "utf8");
     await writeFile(join(cwd, "empty.txt"), "", "utf8");
     const result =
       await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => ({
       large: await workspaceRead("large.txt"),
-      largeRaw: await workspaceRead("large.txt", { format: "raw" }).then((read) => ({
-        truncated: read.truncated,
-        lines: read.lines,
-        length: read.content.length,
-        onlyX: /^x+$/.test(read.content),
-      })),
       empty: await workspaceRead("empty.txt"),
       missingRange: await workspaceRead("empty.txt", { offset: 2 }),
     })`);
     expect(result.large).toMatchObject({ truncated: true, lines: 1 });
     expect(result.large).not.toHaveProperty("totalLines");
-    expect(result.large.content.length).toBeLessThan(100_000);
-    // Hashed reads never show part of a line under a whole-line anchor; raw reads keep a prefix.
+    // Hashed reads never show part of a line under a whole-line anchor.
     expect(result.large.content).toBe("");
-    expect(result.largeRaw).toMatchObject({ truncated: true, lines: 1, onlyX: true });
-    expect(result.largeRaw.length).toBeGreaterThan(50_000);
-    expect(result.largeRaw.length).toBeLessThanOrEqual(51_200);
     expect(result.empty.content).toBe(`${lineAnchor(1, "")}|`);
     expect(result.missingRange.content).toBe("");
+  });
+
+  // In #205, a 52,789-byte state file read as 51,200 characters broke JSON.parse, and the
+  // program rewrote the file from the fragment.
+  it("reads, rewrites, and re-reads a 1 MB JSON state file intact", async () => {
+    const ledger = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `TX-${index}`,
+      from: "ACCT-A",
+      to: "ACCT-B",
+      amount: index * 7,
+    }));
+    const text = JSON.stringify(ledger);
+    expect(text.length).toBeGreaterThan(1_000_000);
+    await writeFile(join(cwd, "ledger.json"), text, "utf8");
+
+    const result = await value(`async ({ workspace: { read, edit } }) => {
+      const first = await read("ledger.json", { format: "raw" });
+      const entries = JSON.parse(first.content);
+      entries.push({ id: "TX-new", from: "ACCT-B", to: "ACCT-A", amount: 1 });
+      await edit("ledger.json", {
+        revision: first.revision,
+        changes: [{ kind: "replaceFile", content: JSON.stringify(entries) }],
+      });
+      const second = await read("ledger.json", { format: "raw" });
+      const reread = JSON.parse(second.content);
+      return { count: reread.length, last: reread.at(-1).id, truncated: second.truncated ?? false };
+    }`);
+
+    expect(result).toEqual({ count: 20_001, last: "TX-new", truncated: false });
+    // The model-visible result stays within Pi's budget; the program held the whole file.
+    expect(JSON.parse(await readFile(join(cwd, "ledger.json"), "utf8"))).toHaveLength(20_001);
+  });
+
+  it("fails a raw read larger than the program-data budget unless it selects a part", async () => {
+    await writeFile(join(cwd, "huge.txt"), "x\n".repeat(2_500_000), "utf8");
+    const result = await value(`async ({ workspace: { read } }) => {
+      let whole;
+      try { await read("huge.txt", { format: "raw" }); whole = "read"; } catch (error) { whole = error.message; }
+      const part = await read("huge.txt", { format: "raw", offset: 1_000, limit: 3 });
+      return { whole, part };
+    }`);
+    expect(result.whole).toBe(
+      "Cannot read huge.txt raw: the selection is larger than 4,000,000 bytes (the file has 2,500,001 lines). Pass offset and limit to read it in parts.",
+    );
+    expect(result.part).toMatchObject({
+      content: "x\nx\nx",
+      offset: 1_000,
+      lines: 3,
+      hasMore: true,
+    });
+    expect(result.part).not.toHaveProperty("truncated");
   });
 
   it("validates read arguments and supports @-prefixed paths", async () => {

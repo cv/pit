@@ -51,12 +51,13 @@ export async function executeHostProcess({
   }
   const cwd =
     options.cwd === undefined ? defaultCwd : resolveWorkspacePath(defaultCwd, options.cwd);
+  // Captured output is program data: a program can raise the default to parse large output.
   const maxBytes = boundedIntegerValue(options.maxBytes, "options.maxBytes", {
-    maximum: LIMITS.processStream.maxBytes,
+    maximum: LIMITS.programData.maxBytes,
     fallback: LIMITS.processStream.maxBytes,
   });
   const maxLines = boundedIntegerValue(options.maxLines, "options.maxLines", {
-    maximum: LIMITS.processStream.maxLines,
+    maximum: LIMITS.programData.maxLines,
     fallback: LIMITS.processStream.maxLines,
   });
   const truncate = options.truncate ?? "tail";
