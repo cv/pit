@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   createAgentSession,
   DefaultResourceLoader,
+  type ExtensionAPI,
   getAgentDir,
   ModelRuntime,
   SessionManager,
@@ -21,6 +22,8 @@ import {
 
 import { CONDITIONS, type ConditionId } from "./conditions.js";
 import { createFeed } from "./feed.js";
+import { createPressure } from "./pressure.js";
+import { repoDriver } from "./repo/driver.js";
 import { type Score, scoreTask } from "./score.js";
 import { estimateTokens, generateTask, type Task, type TaskKind, type TaskSize } from "./tasks.js";
 import { auditSession, type SessionAudit } from "./telemetry.js";
@@ -33,6 +36,10 @@ export type Thinking = (typeof THINKING_LEVELS)[number];
 /** files: the model may keep data in workspace files. context: it is asked to keep everything in the conversation. */
 export const MEMORY_MODES = ["files", "context"] as const;
 export type Memory = (typeof MEMORY_MODES)[number];
+
+/** The realistic long task: a repository maintained through a sequence of tickets. */
+export const REPO_TASK = "repo";
+export type TaskId = TaskKind | typeof REPO_TASK;
 
 export const CONTEXT_ONLY =
   "Keep everything you need in this conversation: do not write files, run shell commands, or store data anywhere else. Your context is your only memory.";
@@ -70,7 +77,7 @@ export interface RunSpec {
   model: string;
   thinking: Thinking;
   condition: ConditionId;
-  task: TaskKind;
+  task: TaskId;
   seed: number;
   size: TaskSize;
   /** The evaluation model's reduced context window, in tokens. */
@@ -79,8 +86,9 @@ export interface RunSpec {
   noticeTokens: number[];
   /** Absolute results directory. */
   outDir: string;
+  /** Continue prompts after an early stop: per run for feed tasks, per ticket for the repository. */
   maxNudges: number;
-  /** Where the model may keep data. The default is files. */
+  /** Where the model may keep data in feed tasks. The default is files. */
   memory?: Memory;
   timeoutMs: number;
 }
@@ -90,7 +98,7 @@ export interface RunResult {
   spec: RunSpec;
   startedAt: string;
   wallMs: number;
-  /** complete: every question answered. incomplete: the model stopped or a limit ended the run. */
+  /** complete: the task finished. incomplete: the model stopped or a limit ended the run. */
   status: "complete" | "incomplete" | "error";
   error: string | null;
   /** The last assistant message's stop reason and error, when the provider reported one. */
@@ -98,7 +106,10 @@ export interface RunResult {
   providerError: string | null;
   nudges: number;
   turns: number;
-  feed: { delivered: number; total: number; rejectedCalls: number; compactToolCalls: number };
+  /** Task-specific progress, such as chunks delivered or tickets done. */
+  progress: Record<string, unknown>;
+  /** Successful compact_context calls (condition B). */
+  compactToolCalls: number;
   score: Score;
   /**
    * Prompt tokens of the first provider request: system prompt, tool definitions, and the task
@@ -111,6 +122,30 @@ export interface RunResult {
   refusals: number;
   telemetry: SessionAudit | null;
   sessionFile: string | null;
+}
+
+/** The next user message once the agent is idle. */
+export interface Step {
+  text: string;
+  /** Whether it only asks the model to continue. */
+  nudge: boolean;
+}
+
+/** A task's tools, prompts, and scoring; the worker owns the session. */
+export interface Driver {
+  extension: (pi: ExtensionAPI) => void;
+  /** Tool name patterns Pit should expose directly (.pi/pit.json allowedTools). */
+  allowedTools: string[];
+  prepare(workspace: string): Promise<void>;
+  firstPrompt: string;
+  turnLimit: number;
+  /** The next message, or null when the run is over. */
+  next(workspace: string): Promise<Step | null>;
+  /** The message that continues after a provider refusal. */
+  resume(): string;
+  complete(): boolean;
+  progress(): Record<string, unknown>;
+  score(workspace: string): Promise<Score>;
 }
 
 export function taskPrompt(task: Task, contextWindow: number, memory: Memory = "files"): string {
@@ -136,11 +171,106 @@ const REFUSAL = /refused/i;
 export const NUDGE =
   "Continue the test: call feed_next, or feed_answer for pending questions, until feed_answer reports that the test is complete.";
 
+function feedDriver(spec: RunSpec, kind: TaskKind): Driver {
+  const task = generateTask(kind, spec.seed, spec.size);
+  const feed = createFeed({ task });
+  let nudges = 0;
+  return {
+    extension: feed.extension,
+    allowedTools: ["feed_*"],
+    prepare: async () => {},
+    firstPrompt: taskPrompt(task, spec.contextWindow, spec.memory),
+    turnLimit: task.chunks.length * 4 + 40,
+    async next() {
+      if (feed.state.complete || nudges >= spec.maxNudges) return null;
+      nudges++;
+      return { text: NUDGE, nudge: true };
+    },
+    resume: () => NUDGE,
+    complete: () => feed.state.complete,
+    progress: () => ({
+      delivered: feed.state.delivered,
+      total: task.chunks.length,
+      rejectedCalls: feed.state.rejectedCalls,
+    }),
+    score: async () => scoreTask(task, feed.state.answers),
+  };
+}
+
+interface Observed {
+  turns: number;
+  stopReason: string | null;
+  providerError: string | null;
+  error: string | null;
+  basePromptTokens: number;
+  externalWrites: number;
+  refusals: number;
+}
+
+function observe(
+  session: Awaited<ReturnType<typeof createSession>>,
+  state: Observed,
+  turnLimit: number,
+) {
+  return session.subscribe((event) => {
+    if (event.type === "turn_end" && ++state.turns > turnLimit && !state.error) {
+      state.error = `Stopped after ${turnLimit} turns`;
+      void session.abort();
+    }
+    if (event.type !== "message_end" || !("role" in event.message)) return;
+    const message = event.message as {
+      role: string;
+      stopReason?: string;
+      errorMessage?: string;
+      usage?: { input?: number; cacheRead?: number; cacheWrite?: number };
+      content?: unknown;
+    };
+    if (message.role !== "assistant") return;
+    state.stopReason = message.stopReason ?? null;
+    state.providerError = message.errorMessage?.split("\n")[0] ?? null;
+    const usage = message.usage;
+    state.basePromptTokens ||=
+      (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);
+    state.externalWrites += externalWriteCalls(message.content);
+    if (REFUSAL.test(message.errorMessage ?? "")) state.refusals++;
+  });
+}
+
+/** Prompts until the driver is done, continuing after refusals but not other provider failures. */
+async function drive(
+  session: Awaited<ReturnType<typeof createSession>>,
+  driver: Driver,
+  state: Observed,
+  workspace: string,
+): Promise<number> {
+  let nudges = 0;
+  let refusalRetries = 0;
+  await session.prompt(driver.firstPrompt);
+  while (!state.error) {
+    let text: string;
+    if (state.stopReason === "error") {
+      const refused = REFUSAL.test(state.providerError ?? "");
+      if (driver.complete() || !refused || refusalRetries >= REFUSAL_RETRIES) break;
+      refusalRetries++;
+      text = driver.resume();
+    } else {
+      const step = await driver.next(workspace);
+      if (!step) break;
+      if (step.nudge) nudges++;
+      text = step.text;
+    }
+    await session.prompt(text);
+  }
+  if (state.stopReason === "error" && !driver.complete()) {
+    state.error ??= `Provider error: ${state.providerError ?? "unknown"}`;
+  }
+  return nudges;
+}
+
 export async function runOne(spec: RunSpec): Promise<RunResult> {
   const condition = CONDITIONS[spec.condition];
-  const task = generateTask(spec.task, spec.seed, spec.size);
-  const feed = createFeed({
-    task,
+  const driver = spec.task === REPO_TASK ? repoDriver(spec) : feedDriver(spec, spec.task);
+  const pressure = createPressure({
     compactTool: condition.compactTool,
     noticeTokens: condition.extraNotices ? spec.noticeTokens : [],
   });
@@ -152,80 +282,40 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
   const workspace = await mkdtemp(join(tmpdir(), "pit-eval-workspace-"));
   process.env.PI_CODING_AGENT_DIR = agentDir;
   const sessionDir = join(spec.outDir, "sessions", spec.id);
-  let turns = 0;
+  const state: Observed = {
+    turns: 0,
+    stopReason: null,
+    providerError: null,
+    error: null,
+    basePromptTokens: 0,
+    externalWrites: 0,
+    refusals: 0,
+  };
   let nudges = 0;
-  let stopReason: string | null = null;
-  let providerError: string | null = null;
-  let error: string | null = null;
-  let basePromptTokens = 0;
-  let externalWrites = 0;
-  let refusals = 0;
   let sessionFile: string | null = null;
+  let score: Score | null = null;
   try {
     await mkdir(join(workspace, ".pi"), { recursive: true });
     await writeFile(
       join(workspace, ".pi", "pit.json"),
-      JSON.stringify({ allowedTools: ["feed_*", "compact_context"] }, null, 2),
+      JSON.stringify({ allowedTools: [...driver.allowedTools, "compact_context"] }, null, 2),
     );
+    await driver.prepare(workspace);
     const session = await createSession({
       spec,
       userAgentDir,
       agentDir,
       workspace,
       sessionDir,
-      extension: feed.extension,
+      extensions: [driver.extension, pressure.extension],
     });
-    const turnLimit = task.chunks.length * 4 + 40;
-    const unsubscribe = session.subscribe((event) => {
-      if (event.type === "turn_end" && ++turns > turnLimit && !error) {
-        error = `Stopped after ${turnLimit} turns`;
-        void session.abort();
-      }
-      if (event.type === "message_end" && "role" in event.message) {
-        const message = event.message as {
-          role: string;
-          stopReason?: string;
-          errorMessage?: string;
-          usage?: { input?: number; cacheRead?: number; cacheWrite?: number };
-          content?: unknown;
-        };
-        if (message.role === "assistant") {
-          stopReason = message.stopReason ?? null;
-          providerError = message.errorMessage?.split("\n")[0] ?? null;
-          const usage = message.usage;
-          basePromptTokens ||=
-            (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);
-          externalWrites += externalWriteCalls(message.content);
-          if (REFUSAL.test(message.errorMessage ?? "")) refusals++;
-        }
-      }
-    });
+    const unsubscribe = observe(session, state, driver.turnLimit);
     const timer = setTimeout(() => {
-      error ??= `Timed out after ${Math.round(spec.timeoutMs / 60_000)} minutes`;
+      state.error ??= `Timed out after ${Math.round(spec.timeoutMs / 60_000)} minutes`;
       void session.abort();
     }, spec.timeoutMs);
     try {
-      await session.prompt(taskPrompt(task, spec.contextWindow, spec.memory));
-      // Continue after an early stop or a refusal, but not after another provider failure. The
-      // subscription updates these between prompts.
-      let refusalRetries = 0;
-      const next = (): "nudge" | "refusal" | null => {
-        if (feed.state.complete || error) return null;
-        if (stopReason === "error") {
-          return REFUSAL.test(providerError ?? "") && refusalRetries < REFUSAL_RETRIES
-            ? "refusal"
-            : null;
-        }
-        return nudges < spec.maxNudges ? "nudge" : null;
-      };
-      for (let step = next(); step; step = next()) {
-        if (step === "refusal") refusalRetries++;
-        else nudges++;
-        await session.prompt(NUDGE);
-      }
-      if (stopReason === "error" && !feed.state.complete) {
-        error ??= `Provider error: ${providerError ?? "unknown"}`;
-      }
+      nudges = await drive(session, driver, state, workspace);
     } finally {
       clearTimeout(timer);
       unsubscribe();
@@ -233,8 +323,13 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
       session.dispose();
     }
   } catch (failure) {
-    error ??= failure instanceof Error ? failure.message : String(failure);
+    state.error ??= failure instanceof Error ? failure.message : String(failure);
   } finally {
+    try {
+      score = await driver.score(workspace);
+    } catch (failure) {
+      state.error ??= `Scoring failed: ${failure instanceof Error ? failure.message : String(failure)}`;
+    }
     await Promise.all([
       rm(agentDir, { recursive: true, force: true }),
       rm(workspace, { recursive: true, force: true }),
@@ -245,7 +340,7 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
     try {
       telemetry = await auditSession(ROOT, sessionFile);
     } catch (failure) {
-      error ??= `Session audit failed: ${failure instanceof Error ? failure.message : String(failure)}`;
+      state.error ??= `Session audit failed: ${failure instanceof Error ? failure.message : String(failure)}`;
     }
   }
   return {
@@ -253,22 +348,18 @@ export async function runOne(spec: RunSpec): Promise<RunResult> {
     spec,
     startedAt: startedAt.toISOString(),
     wallMs: Date.now() - startedAt.getTime(),
-    status: feed.state.complete ? "complete" : error ? "error" : "incomplete",
-    error,
-    stopReason,
-    providerError,
+    status: driver.complete() ? "complete" : state.error ? "error" : "incomplete",
+    error: state.error,
+    stopReason: state.stopReason,
+    providerError: state.providerError,
     nudges,
-    turns,
-    feed: {
-      delivered: feed.state.delivered,
-      total: task.chunks.length,
-      rejectedCalls: feed.state.rejectedCalls,
-      compactToolCalls: feed.state.compactions,
-    },
-    score: scoreTask(task, feed.state.answers),
-    basePromptTokens,
-    externalWrites,
-    refusals,
+    turns: state.turns,
+    progress: driver.progress(),
+    compactToolCalls: pressure.state.compactions,
+    score: score ?? { correct: 0, total: 0, accuracy: 0, answers: [] },
+    basePromptTokens: state.basePromptTokens,
+    externalWrites: state.externalWrites,
+    refusals: state.refusals,
     telemetry,
     sessionFile,
   };
@@ -280,7 +371,7 @@ export async function createSession(input: {
   agentDir: string;
   workspace: string;
   sessionDir: string;
-  extension: ReturnType<typeof createFeed>["extension"];
+  extensions: Array<(pi: ExtensionAPI) => void>;
 }) {
   const { spec, agentDir, workspace } = input;
   const condition = CONDITIONS[spec.condition];
@@ -313,7 +404,7 @@ export async function createSession(input: {
     additionalSkillPaths: condition.skill
       ? [join(ROOT, "eval", "context", "skills", "pit-context")]
       : [],
-    extensionFactories: [input.extension],
+    extensionFactories: input.extensions,
   });
   await resourceLoader.reload();
   await mkdir(input.sessionDir, { recursive: true });

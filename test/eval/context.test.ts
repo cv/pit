@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createFeed } from "../../eval/context/feed.js";
+import { createPressure } from "../../eval/context/pressure.js";
 import { spread } from "../../eval/context/report.js";
 import { matrix, parseRun } from "../../eval/context/run.js";
 import { normalizeAnswer, scoreTask } from "../../eval/context/score.js";
@@ -198,7 +199,7 @@ describe("context evaluation feed", () => {
     name: string;
     execute: (...args: unknown[]) => Promise<{ content: Array<{ text: string }> }>;
   };
-  function load(feed: ReturnType<typeof createFeed>) {
+  function load(feed: { extension: (pi: never) => void }) {
     const tools = new Map<string, Tool>();
     const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
     feed.extension({
@@ -252,11 +253,7 @@ describe("context evaluation feed", () => {
   });
 
   it("adds an absolute-token notice once while it stays in context", async () => {
-    const feed = createFeed({
-      task: generateTask("needle", 1, { chunks: 4, chunkTokens: 500 }),
-      noticeTokens: [6000],
-    });
-    const turnEnd = load(feed).handlers.get("turn_end");
+    const turnEnd = load(createPressure({ noticeTokens: [6000] })).handlers.get("turn_end");
     let tokens = 5000;
     let visible: unknown[] = [];
     const ctx = {
