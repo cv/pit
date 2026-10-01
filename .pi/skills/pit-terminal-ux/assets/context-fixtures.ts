@@ -42,15 +42,6 @@ export const contextFixtures: Record<string, ToolCall["arguments"]> = {
       return summarize({ from: first.id, to: result.id, summary: "Setup printed a 200-line build log; nothing failed." });
     }`,
   },
-  "context-restore": {
-    label: "CONTEXT: restore Pit's edits",
-    code: `async ({ session: { outline, restore } }) => {
-      const { entries } = await outline({ limit: 200 });
-      const edited = entries.filter((entry) => entry.state === "elided" || entry.state === "summarized");
-      if (edited.length === 0) throw new Error("Nothing to restore");
-      return restore(edited.map((entry) => entry.id));
-    }`,
-  },
 };
 
 /** What a request sends after Pit's context edits: message roles, stubs, summaries, and notes. */

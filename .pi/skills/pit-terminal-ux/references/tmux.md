@@ -54,7 +54,6 @@ Submit one fixture name as ordinary prompt text:
 | `context-elide`     | Elides the largest unedited tool result; the receipt says staged, and a provenance row appears when the turn ends.     |
 | `context-note`      | `session.setNote("progress", …)`: a labelled note box and a provenance row follow the turn.                            |
 | `context-summarize` | Summarizes the first completed turn; its carrier keeps the tool call and the result becomes a stub.                    |
-| `context-restore`   | Restores every elided or summarized entry the outline lists.                                                           |
 | `context-view`      | No tool call: the provider reports the stubs, summaries, notes, and notices it actually received.                      |
 
 Use `/new` between cases when independent captures are useful. Expansion state persists across new sessions: track it rather than blindly toggling twice. Use the configured expand action (the isolated default is Ctrl+O).

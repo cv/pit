@@ -426,6 +426,41 @@ describe("context classification", () => {
     ]);
   });
 
+  it("honors restore records written before session.restore was removed", async () => {
+    const session = new SessionBuilder();
+    session.user("Investigate");
+    const work = session.turn("bash", "output line\n".repeat(40));
+    const covers = [work.assistant, work.result];
+    const record = (operation: unknown) =>
+      session.manager.appendCustomEntry("pit.context-edit", {
+        version: 1,
+        operations: [operation],
+      });
+    record({
+      toolCallId: "c",
+      operation: "summarize",
+      targets: covers,
+      carrier: work.assistant,
+      covers,
+      tokensFreed: 0,
+      reprefillTokens: 0,
+    });
+    session.current();
+    await expect(inspect(session, work.assistant)).resolves.toMatchObject({ covers });
+
+    record({
+      toolCallId: "c",
+      operation: "restore",
+      targets: covers,
+      carrier: work.assistant,
+      tokensFreed: 0,
+      reprefillTokens: 0,
+    });
+    session.current();
+    const restored = await inspect(session, work.assistant);
+    expect(restored.covers).toBeUndefined();
+  });
+
   it.each<{ name: string; ctx: Record<string, unknown>; expected: unknown }>([
     {
       name: "the model's window when usage is unknown",

@@ -103,11 +103,11 @@ export function planSummarize(
     );
   }
   const carrier = range[0] as ContextItem;
-  // Earlier summaries inside the range fold into this one, so restoring it restores them too.
+  // Earlier summaries inside the range fold into this one, so inspectEntry lists their entries.
   const covers = [
     ...new Set(range.flatMap((item) => [item.id, ...(view.summaries.get(item.id) ?? [])])),
   ];
-  const header = `${SUMMARY_PREFIX}${range.length} entries from ${input.from} to ${input.to} · originals: session.inspectEntry(id) · undo: session.restore(["${carrier.id}"])]`;
+  const header = `${SUMMARY_PREFIX}${range.length} entries from ${input.from} to ${input.to} · originals: session.inspectEntry(id)]`;
   const message = carrierMessage(carrier, `${header}\n\n${summary}`);
   const drafts: SessionBoundaryDraft[] = [
     { type: "context_edit", targetId: carrier.id, replacement: { content: message.content } },

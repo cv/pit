@@ -92,11 +92,6 @@ describe("context result rendering", () => {
       collapsed: "Staged summary of 4 entries · ~2K tokens freed · applies after this turn",
     },
     {
-      name: "a restore",
-      value: receipt({ operation: "restore", estimatedTokensFreed: -2_040, restoredChars: 8_160 }),
-      collapsed: "Staged restore of 1 entry · ~2K tokens added · applies after this turn",
-    },
-    {
       name: "a note",
       value: receipt({
         operation: "note",
@@ -118,7 +113,6 @@ describe("context result rendering", () => {
         targets: ["a", "b"],
         summarizedEntries: 2,
         summaryTokens: 12,
-        restoredChars: 3,
       }),
       true,
     ).join("\n");
@@ -128,7 +122,6 @@ describe("context result rendering", () => {
     expect(rows).toContain("targets: a, b");
     expect(rows).toContain("re-prefill: ~5.1K tokens");
     expect(rows).toContain("summary: ~12 tokens");
-    expect(rows).toContain("restored: 3 characters");
   });
 
   it("summarizes an outline and lists one row per entry when expanded", () => {

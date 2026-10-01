@@ -14,7 +14,6 @@ const isReceipt = shapeGuard(
       operation: Type.Union([
         Type.Literal("elide"),
         Type.Literal("summarize"),
-        Type.Literal("restore"),
         Type.Literal("note"),
       ]),
       targets: Type.Array(Type.String()),
@@ -22,7 +21,6 @@ const isReceipt = shapeGuard(
       estimatedReprefillTokens: Type.Number(),
       key: Type.Optional(Type.String()),
       action: Type.Optional(Type.String()),
-      restoredChars: Type.Optional(Type.Number()),
       summarizedEntries: Type.Optional(Type.Number()),
       summaryTokens: Type.Optional(Type.Number()),
     },
@@ -104,8 +102,6 @@ function receiptSubject(receipt: {
       return `elide of ${plural(receipt.targets.length, "tool result")}`;
     case "summarize":
       return `summary of ${plural(receipt.summarizedEntries ?? receipt.targets.length, "entry", "entries")}`;
-    case "restore":
-      return `restore of ${plural(receipt.targets.length, "entry", "entries")}`;
     default:
       return `note "${clean(receipt.key ?? "?")}" ${clean(receipt.action ?? "change")}`;
   }
@@ -131,7 +127,6 @@ export function renderContextReceipt(
       ...(value.summaryTokens === undefined
         ? []
         : [`summary: ~${formatTokens(value.summaryTokens)} tokens`]),
-      ...(value.restoredChars === undefined ? [] : [`restored: ${value.restoredChars} characters`]),
     ],
   };
 }

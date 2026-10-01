@@ -33,7 +33,6 @@ async function accepted(c: PitDependencies) {
   const originalText: string = inspected.original.text;
   const elided = await c.session.elide(["a1b2c3d4"], { reason: "stale log" });
   const freed: number = elided.estimatedTokensFreed;
-  const restoredChars: number = (await c.session.restore(["a1b2c3d4"])).restoredChars;
   const action: "created" | "replaced" | "removed" = (await c.session.setNote("progress", "v1")).action;
   await c.session.setNote("progress", null);
   const budget: number = (await c.session.notes()).budgetTokens;
@@ -75,7 +74,7 @@ async function rejected(c: PitDependencies) {
   // @ts-expect-error elide takes an array of entry IDs
   await c.session.elide("a1b2c3d4");
   // @ts-expect-error receipts report staged edits, not applied ones
-  const applied: "applied" = (await c.session.restore(["a1b2c3d4"])).status;
+  const applied: "applied" = (await c.session.elide(["a1b2c3d4"])).status;
   // @ts-expect-error removing a note passes null explicitly
   await c.session.setNote("progress");
   // @ts-expect-error a summary needs a range and its text

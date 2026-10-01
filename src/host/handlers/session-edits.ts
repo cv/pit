@@ -1,4 +1,4 @@
-import { MAX_REASON_CHARS, planElide, planRestore } from "../../context/edits.js";
+import { MAX_REASON_CHARS, planElide } from "../../context/edits.js";
 import { planNote } from "../../context/notes.js";
 import { MAX_EDIT_TARGETS, type PlannedEdit } from "../../context/planning.js";
 import { planSummarize, summaryTokenCap } from "../../context/summarize.js";
@@ -65,7 +65,6 @@ export function createSessionEditHandlers({
       const options = args[1] === undefined ? {} : record(args[1], "options");
       return stage(planElide(view(), entryIds(args[0]), reason(options.reason)));
     },
-    restore: (args) => stage(planRestore(view(), ctx.sessionManager, entryIds(args[0]))),
     summarize: (args) => {
       const input = record(args[0], "input");
       return stage(
