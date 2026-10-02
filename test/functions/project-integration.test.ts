@@ -182,7 +182,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     expect(ctx.ui.custom).toHaveBeenCalledTimes(1);
     expect(ctx.ui.confirm).toHaveBeenCalledWith(
       "Remove managedProject from project?",
-      "Delete .pi/functions/managedProject.ts?",
+      `Delete ${join(cwd, ".pi", "functions", "managedProject.ts")}?`,
     );
     expect(ctx.ui.notify).toHaveBeenCalledWith("Removed project function: managedProject", "info");
     await expect(

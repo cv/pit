@@ -25,6 +25,7 @@ import {
   type FunctionStateCommit,
   reconcileFunctionState,
 } from "./state.js";
+import { defaultProjectFunctionDirectory } from "./storage/paths.js";
 import { removeProjectFunction, saveProjectFunction } from "./storage/project.js";
 import { removeUserFunction, saveUserFunction } from "./storage/user.js";
 
@@ -73,6 +74,14 @@ function projectFunctionSource(source: string, summary: string): string {
   return persistentFunctionSource(source, summary, "project");
 }
 
+/** The session's project-function directory, or the default before session start resolves it. */
+export function projectDirectory(
+  state: Pick<FunctionState, "projectDirectory">,
+  cwd: string,
+): string {
+  return state.projectDirectory || defaultProjectFunctionDirectory(cwd);
+}
+
 export function removeProjectFunctionFromState(
   request: ProjectFunctionStateRemovalRequest,
 ): Promise<boolean> {
@@ -92,7 +101,7 @@ export function removeProjectFunctionFromState(
         );
       }
     }
-    const removed = await removeProjectFunction(cwd, name);
+    const removed = await removeProjectFunction(projectDirectory(state, cwd), name);
     state.invalidProject.delete(name);
     state.project.delete(name);
     state.projectCandidates.delete(name);
@@ -194,7 +203,12 @@ export class SavedFunctionService {
         },
       );
       const replaced = this.#state.user.has(request.name);
-      await saveUserFunction(request.name, promotedSource, this.#state.user);
+      await saveUserFunction(
+        request.name,
+        promotedSource,
+        this.#state.user,
+        this.#state.userDirectory,
+      );
       this.#state.user.set(request.name, promotedSource);
       this.#state.userMetadata.set(request.name, metadata);
       this.#state.invalidUser.delete(request.name);
@@ -214,7 +228,7 @@ export class SavedFunctionService {
           `Cannot remove user function "${name}"; dependent saved functions remain: ${dependents.join(", ")}`,
         );
       }
-      const removed = await removeUserFunction(name);
+      const removed = await removeUserFunction(name, this.#state.userDirectory);
       this.#state.invalidUser.delete(name);
       this.#state.user.delete(name);
       this.#state.userMetadata.delete(name);
@@ -288,7 +302,7 @@ export class SavedFunctionService {
         );
 
         const replaced = this.#state.project.has(name);
-        await saveProjectFunction(context.cwd, name, source, {
+        await saveProjectFunction(projectDirectory(this.#state, context.cwd), name, source, {
           registry: this.#state.projectCandidates,
           user: this.#state.user,
         });

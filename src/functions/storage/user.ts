@@ -1,7 +1,5 @@
 import { join } from "node:path";
 
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-
 import { type FunctionRegistry, validateRegistryCapacity } from "../core.js";
 import { functionRelativePath } from "../identifier.js";
 import {
@@ -14,52 +12,59 @@ import {
   removePersistentFunctionFile,
   writePersistentFunctionFile,
 } from "./files.js";
+import { defaultUserFunctionDirectory } from "./paths.js";
 import {
   assertFunctionsAvailable,
   validatePersistentFunction,
   filterPersistentIdentifiers,
 } from "./validation.js";
 
-export function userFunctionDirectory(): string {
-  return join(getAgentDir(), "functions");
+/**
+ * The user-function directory for a session: `paths.user` from the project's `.pi/pit.json`,
+ * or Pi's default. Callers pass the session's resolved directory; omitting it uses the default.
+ */
+export function userFunctionDirectory(directory?: string): string {
+  return directory || defaultUserFunctionDirectory();
 }
 
-export function userFunctionPath(name: string): string {
-  return join(userFunctionDirectory(), functionRelativePath(name));
+export function userFunctionPath(name: string, directory?: string): string {
+  return join(userFunctionDirectory(directory), functionRelativePath(name));
 }
 
 export async function saveUserFunction(
   name: string,
   source: string,
   registry: FunctionRegistry,
+  directory?: string,
 ): Promise<boolean> {
   validateRegistryCapacity(registry, name, source);
   const candidates = new Map(registry);
   candidates.set(name, source);
   validatePersistentFunction(name, source, candidates);
   const replaced = registry.has(name);
-  const path = userFunctionPath(name);
-  await assertPersistentPath(userFunctionDirectory(), name);
+  const path = userFunctionPath(name, directory);
+  await assertPersistentPath(userFunctionDirectory(directory), name);
   await writePersistentFunctionFile(path, source);
   registry.set(name, source);
   return replaced;
 }
 
-export async function removeUserFunction(name: string): Promise<boolean> {
-  await assertPersistentPath(userFunctionDirectory(), name);
-  return removePersistentFunctionFile(userFunctionPath(name));
+export async function removeUserFunction(name: string, directory?: string): Promise<boolean> {
+  await assertPersistentPath(userFunctionDirectory(directory), name);
+  return removePersistentFunctionFile(userFunctionPath(name, directory));
 }
 
 export async function loadUserFunctions(
   registry: FunctionRegistry,
   metadata: PersistentFunctionMetadataRegistry,
   invalidDefinitions: Map<string, string> = new Map(),
+  directory?: string,
 ): Promise<string[]> {
   registry.clear();
   metadata.clear();
   invalidDefinitions.clear();
   const { candidates, errors, invalid } = await readPersistentFunctionCandidates({
-    directory: userFunctionDirectory(),
+    directory: userFunctionDirectory(directory),
     metadata: getPersistentFunctionMetadata,
   });
 

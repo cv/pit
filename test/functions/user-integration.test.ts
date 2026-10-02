@@ -28,8 +28,6 @@ async function writeUserFunction(name: string, source: string): Promise<void> {
   await writeFile(join(directory, `${name}.ts`), source);
 }
 
-async function enableProjectFunctions(): Promise<void> {}
-
 async function writeProjectFunction(name: string, source: string): Promise<void> {
   const directory = join(cwd, ".pi", "functions");
   await mkdir(directory, { recursive: true });
@@ -37,6 +35,70 @@ async function writeProjectFunction(name: string, source: string): Promise<void>
 }
 
 describe("user functions", () => {
+  // A project chooses its own collection of user functions, and project functions may live in
+  // another repository.
+  it("loads and saves functions in the directories paths names", async () => {
+    const shared = join(cwd, "shared-functions");
+    const rust = join(cwd, "rust-user-functions");
+    for (const [directory, name, result] of [
+      [shared, "sharedProject", "project"],
+      [rust, "rustUser", "user"],
+    ] as const) {
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, `${name}.ts`),
+        `/** Loaded from paths. */ async function ${name}({}) { return "${result}"; }`,
+      );
+    }
+    // Pi's agent directory holds a user function this project must not see.
+    await writeUserFunction(
+      "defaultUser",
+      "/** Default. */ async function defaultUser({}) { return 0; }",
+    );
+    await mkdir(join(cwd, ".pi"), { recursive: true });
+    await writeFile(
+      join(cwd, ".pi", "pit.json"),
+      JSON.stringify({ paths: { project: "shared-functions", user: rust } }),
+    );
+    await sessionStart({}, context());
+
+    expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
+      projectFunctions: ["sharedProject"],
+      userFunctions: ["rustUser"],
+    });
+    await expect(
+      value("async ({ sharedProject, rustUser }) => [await sharedProject(), await rustUser()]"),
+    ).resolves.toEqual(["project", "user"]);
+
+    // Promotion writes to the configured project directory, and getSaved reports it.
+    await run("async function promotedHere({}) { return 1; }");
+    await value(
+      'async ({ functions: { promote } }) => promote("promotedHere", "Promoted to the shared directory.")',
+    );
+    await expect(readFile(join(shared, "promotedHere.ts"), "utf8")).resolves.toContain(
+      "Promoted to the shared directory.",
+    );
+    expect(
+      await value(
+        'async ({ functions: { getSaved } }) => (await getSaved("sharedProject")).origin',
+      ),
+    ).toBe(join(shared, "sharedProject.ts"));
+
+    // User removal asks about, and deletes, the file in the configured user directory.
+    const ctx = context();
+    ctx.ui.confirm.mockResolvedValue(true);
+    await sessionStart({}, ctx);
+    await value('async ({ functions: { removeUser } }) => removeUser("rustUser")', ctx);
+    expect(ctx.ui.confirm).toHaveBeenCalledWith(
+      "Remove user function rustUser?",
+      `Delete ${join(rust, "rustUser.ts")} for every project that uses it?`,
+      expect.anything(),
+    );
+    await expect(readFile(join(rust, "rustUser.ts"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("loads users, supports project dependencies, and applies scope precedence", async () => {
     await writeUserFunction(
       "sharedValue",
@@ -46,7 +108,6 @@ describe("user functions", () => {
       "userConsumer",
       "/** User consumer. */ async function userConsumer({ sharedValue }) { return sharedValue(); }",
     );
-    await enableProjectFunctions();
     await writeProjectFunction(
       "projectConsumer",
       "/** Project consumer. */ async function projectConsumer({ sharedValue }) { return sharedValue(); }",

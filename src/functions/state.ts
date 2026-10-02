@@ -23,6 +23,16 @@ export interface FunctionState {
    */
   announcedSessionCatalog: string;
   /**
+   * Project-function directory for this session: `paths.project` from `.pi/pit.json`, or
+   * `.pi/functions`. Empty until session start resolves it.
+   */
+  projectDirectory: string;
+  /**
+   * User-function directory for this session: `paths.user` from the project's `.pi/pit.json`,
+   * or Pi's default. Empty until session start resolves it.
+   */
+  userDirectory: string;
+  /**
    * The Pi tools callable most recently, from the latest loadout or `typescript` call. Saved
    * functions are checked against it outside a call, for example when a session is resumed.
    */
@@ -46,6 +56,8 @@ export function createFunctionState(): FunctionState {
     sessionRunCounts: new Map(),
     promotionSuggested: new Set(),
     announcedSessionCatalog: "",
+    projectDirectory: "",
+    userDirectory: "",
   };
 }
 

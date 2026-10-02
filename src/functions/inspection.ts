@@ -10,6 +10,7 @@ import { FUNCTION_LAYERS } from "./layered-registry.js";
 import type { PiToolCatalog } from "./pi-tools.js";
 import { assertGraphAvailable, resolveFunctionGraph } from "./resolved-graph.js";
 import { getPersistentFunctionMetadata, getSavedFunctionCallSignature } from "./source.js";
+import { defaultProjectFunctionDirectory } from "./storage/paths.js";
 import { userFunctionDirectory } from "./storage/user.js";
 
 export interface FunctionInspectionState {
@@ -19,6 +20,10 @@ export interface FunctionInspectionState {
   invalidUser?: ReadonlyMap<string, string>;
   invalidProject?: ReadonlyMap<string, string>;
   toolCatalog?: PiToolCatalog;
+  /** The session's project-function directory; defaults to `.pi/functions`. */
+  projectDirectory?: string;
+  /** The session's user-function directory; defaults to Pi's agent directory. */
+  userDirectory?: string;
 }
 
 export interface FunctionListOptions {
@@ -80,11 +85,15 @@ export class FunctionInspector {
   readonly #dependencies = new Map<string, FunctionDependencies>();
   readonly #analyses = new Map<string, { effects: string[]; error?: string }>();
   readonly #invalid: ReadonlyMap<string, string>;
+  readonly #projectDirectory: string;
+  readonly #userDirectory: string;
 
   constructor(
     state: FunctionInspectionState,
     private readonly cwd: string,
   ) {
+    this.#projectDirectory = state.projectDirectory || defaultProjectFunctionDirectory(cwd);
+    this.#userDirectory = userFunctionDirectory(state.userDirectory);
     this.#registry = functionRegistry({
       userFunctions: state.user ?? new Map(),
       projectFunctions: state.project ?? new Map(),
@@ -146,7 +155,7 @@ export class FunctionInspector {
     if (entry.layer === "session") return "<active session branch>";
     try {
       return join(
-        entry.layer === "user" ? userFunctionDirectory() : join(this.cwd, ".pi/functions"),
+        entry.layer === "user" ? this.#userDirectory : this.#projectDirectory,
         functionRelativePath(entry.id),
       );
     } catch {
