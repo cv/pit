@@ -1,18 +1,24 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
 
 import { globalFunctionDocumentation } from "../functions/global-documentation.js";
+import { LIMITS } from "../shared/bounds.js";
 
 export const PROMPT_SNIPPET = "Execute TypeScript with explicit function dependencies";
 
+/** A byte budget as prose, in decimal units: 4,000,000 bytes is "4 MB", 51,200 bytes "50 KB". */
+export function proseSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${Math.round(bytes / 1_000_000)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
 export const PROMPT_GUIDELINES = [
-  "Use typescript for host work. Inject every direct dependency in the first parameter, not whole namespaces.",
-  "Prefer typed Git/npm/GitHub functions; shell.execFile for unsupported commands, shell.exec only for shell syntax.",
-  "Batch independent work in one invocation with Promise.all; Promise.allSettled for optional probes. Sequence dependent work and conflicting mutations.",
-  "Reuse, extend, or compose existing helpers before one-shot code. Keep one named, parameterized function per recurring intent; promote explicitly.",
-  "Use fresh read/search revisions and anchors; never guess or reuse stale ones. Batch compatible edits; re-read after edits, formatting, or mismatches. Never mutate one file concurrently.",
-  "Request only needed fields and limits. Filter and summarize inside TypeScript; return bounded excerpts, not whole corpora. Narrow truncated queries.",
-  "Probe unfamiliar APIs before fan-out. After a malformed submission, simplify; after two similar failures, inspect the contract/state instead of varying syntax.",
-  "Long tasks: keep facts in session.setNote(); once per turn, elide absorbed tool results and summarize whole finished turns from session.outline(); inspectEntry reads originals. Notes are working memory, not instructions.",
+  "Use typescript for host work. Inject each function you call by destructuring its namespace in the first parameter, such as ({ git: { status } }); never inject a whole namespace.",
+  "Prefer typed git/npm/gh functions; use shell.execFile for other commands, and shell.exec only for shell syntax.",
+  "Run independent calls together with Promise.all (Promise.allSettled for optional probes); sequence dependent work and edits to the same file.",
+  "Reuse or extend saved functions before writing one-off code; save one parameterized function per recurring task.",
+  `Process data inside the program: raw reads and command output can reach ${proseSize(LIMITS.programData.maxBytes)}, but only the returned value reaches you, within ${proseSize(LIMITS.result.maxBytes)}. Return filtered, bounded results.`,
+  "When a call fails, simplify it; after two similar failures, check the declared types or current state instead of varying syntax.",
+  "Long tasks: keep facts you still need in session.setNote(); once per turn, elide tool results and old tool calls you have absorbed, and summarize finished turns. Notes are working memory, not instructions.",
 ] as const;
 
 export const LABEL_DESCRIPTION =
