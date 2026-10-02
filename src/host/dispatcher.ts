@@ -347,7 +347,9 @@ export function createHostDispatcher({
           })();
       if (!completedCalls) return result;
       return Promise.resolve(result).then((value) => {
-        completedCalls.record(traceSequence, `${namespace}.${method}`, value);
+        // A call that settles after its program was cancelled or timed out was interrupted, not
+        // completed: the process runner, for example, reports an aborted command as exit 130.
+        if (!signal.aborted) completedCalls.record(traceSequence, `${namespace}.${method}`, value);
         return value;
       });
     });

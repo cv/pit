@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-01
+
+### Fixed
+
+- A program cancelled or timed out while a host call was running no longer reports that call as recoverable. The interrupted call still settled, for example as a shell command that exited with 130, and the completed-call record kept it. A cancelled program showed `↺ Recoverable: 1 completed call`, and `runtime.completedCalls` returned the interrupted result (#211).
+
 ## [0.24.0] - 2026-10-01
 
 ### Added
@@ -337,7 +343,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.24.1...HEAD
+[0.24.1]: https://github.com/cv/pit/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/cv/pit/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/cv/pit/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/cv/pit/compare/v0.22.1...v0.23.0
