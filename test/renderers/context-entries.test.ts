@@ -2,6 +2,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { renderNote, renderNotice, renderProvenance } from "../../src/renderers/context-entries.js";
+import { elidedTargets } from "../../src/renderers/shared.js";
 import { cleanupHarness, renderers, setupHarness } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
@@ -69,6 +70,42 @@ const OPERATIONS = [
     reprefillTokens: 400,
   },
 ];
+
+describe("elided targets", () => {
+  it.each([
+    { name: "tool results only", targets: 3, calls: 0, phrase: "3 tool results" },
+    { name: "tool calls only", targets: 2, calls: 2, phrase: "2 tool calls" },
+    { name: "both", targets: 3, calls: 1, phrase: "2 tool results and 1 tool call" },
+    {
+      name: "a record from before tool calls could be elided",
+      targets: 1,
+      calls: undefined,
+      phrase: "1 tool result",
+    },
+  ])("names $name", ({ targets, calls, phrase }) => {
+    expect(elidedTargets(targets, calls)).toBe(phrase);
+  });
+
+  it("shows tool calls in a recorded elide row", () => {
+    const row = rows(
+      renderProvenance(
+        provenance([
+          {
+            toolCallId: "t",
+            operation: "elide",
+            targets: ["a", "b"],
+            toolCallEntries: 1,
+            tokensFreed: 4200,
+            reprefillTokens: 9000,
+          },
+        ]) as never,
+        { expanded: false },
+        theme,
+      ),
+    );
+    expect(row.join("\n")).toContain("elided 1 tool result and 1 tool call");
+  });
+});
 
 describe("model note renderer", () => {
   const body = Array.from({ length: 10 }, (_, index) => `step ${index + 1}`).join("\n");

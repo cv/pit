@@ -24,8 +24,10 @@ function longTask() {
   const prompt = session.user("Fix the failing build");
   const logs = session.turn("bash", LOG, { command: "npm test" });
   const source = session.turn("read", "export const value = 1;\n".repeat(30), { path: "a.ts" });
+  // An assistant reply with no tool calls, before the running turn.
+  const reply = session.assistant("Done.").id;
   const current = session.current();
-  return { session, prompt, logs, source, current };
+  return { session, prompt, logs, source, reply, current };
 }
 
 const call = (session: SessionBuilder, code: string) =>
@@ -152,8 +154,8 @@ describe("session.elide", () => {
   });
 
   it("explains every rejected target in one error", async () => {
-    const { session, prompt, logs, current } = longTask();
-    const ids = [prompt, current, logs.assistant, "missing"];
+    const { session, prompt, logs, reply, current } = longTask();
+    const ids = [prompt, current, reply, logs.assistant, "missing"];
 
     await expect(
       run(
@@ -161,24 +163,101 @@ describe("session.elide", () => {
         context({ sessionManager: session.manager }),
       ),
     ).rejects.toThrow(
-      `Cannot elide: ${prompt} is protected: user message; ${current} is protected: current turn; ${logs.assistant} is an assistant entry; elide accepts tool results, and session.summarize replaces assistant turns; missing is not on the active branch`,
+      `Cannot elide: ${prompt} is protected: user message; ${current} is protected: current turn; ${reply} is an assistant entry without tool calls; elide shrinks tool results and tool-call arguments, and session.summarize replaces assistant turns; ${logs.assistant} is no larger than its elision stub; missing is not on the active branch`,
     );
   });
 
   it("names the targets that can be elided when others are rejected", async () => {
-    const { session, logs, source } = longTask();
+    const { session, logs, source, reply } = longTask();
 
     await expect(
       runWithParams(
         "async ({ session: { elide } }, ids: string[]) => elide(ids)",
-        [logs.assistant, logs.result, source.result],
+        [reply, logs.result, source.result],
         context({ sessionManager: session.manager }),
       ),
     ).rejects.toThrow(
       new RegExp(
-        `^Cannot elide: ${logs.assistant} is an assistant entry; .*\\. These can be elided: \\["${logs.result}","${source.result}"\\]$`,
+        `^Cannot elide: ${reply} is an assistant entry without tool calls; .*\\. These can be elided: \\["${logs.result}","${source.result}"\\]$`,
       ),
     );
+  });
+
+  // #222: in long coding sessions tool-call arguments were 93% of the assistant side of context,
+  // and elide could not touch them.
+  it("stubs an assistant entry's tool-call arguments and keeps everything else", async () => {
+    const session = new SessionBuilder();
+    session.user("Rewrite the parser");
+    const program =
+      'async ({ workspace: { edit } }) => edit("src/parse.ts", { revision: "r1", changes: [] });\n'.repeat(
+        40,
+      );
+    const signed = {
+      type: "thinking" as const,
+      thinking: "Plan the rewrite.",
+      thinkingSignature: "sig-abc",
+    };
+    const { id, callIds } = session.assistant(
+      "Writing the new parser.",
+      [{ name: "typescript", args: { code: program } }],
+      [signed],
+    );
+    const result = session.result(callIds[0] as string, "typescript", '{"applied":1}');
+    session.current();
+
+    const receipt = await call(
+      session,
+      `async ({ session: { elide } }) => elide([${JSON.stringify(id)}], { reason: "parser written" })`,
+    );
+    expect(receipt).toMatchObject({ operation: "elide", targets: [id], toolCallEntries: 1 });
+    expect(receipt.estimatedTokensFreed).toBeGreaterThan(500);
+    await endTurn(session);
+
+    const projected = session.manager
+      .buildSessionProjection()
+      .entries.find((entry) => entry.sourceEntry.id === id);
+    const message = projected?.messages[0] as unknown as {
+      content: Array<Record<string, unknown>>;
+    };
+    const { content } = message;
+    // Thinking (with its signature), text, and the call's ID and name stay for replay.
+    expect(content.slice(0, 2)).toEqual([
+      signed,
+      { type: "text", text: "Writing the new parser." },
+    ]);
+    expect(content[2]).toMatchObject({ type: "toolCall", id: callIds[0], name: "typescript" });
+    expect((content[2] as { arguments: { elided: string } }).arguments).toEqual({
+      elided: expect.stringMatching(
+        new RegExp(
+          `^\\[Pit: these arguments were elided to save context; this is not the original call · ~[\\d.]+K? tokens · reason: parser written · original: session\\.inspectEntry\\("${id}"\\)\\]$`,
+        ),
+      ),
+    });
+    // The result still answers the call.
+    expect(modelText(session, result)).toBe('{"applied":1}');
+
+    const view = await call(
+      session,
+      `async ({ session: { outline, inspectEntry } }) => ({ outline: await outline({ roles: ["assistant"], limit: 5 }), original: await inspectEntry(${JSON.stringify(id)}) })`,
+    );
+    expect(view.outline.entries.find((entry: { id: string }) => entry.id === id)).toMatchObject({
+      state: "elided",
+    });
+    expect(view.original.original.text).toContain("src/parse.ts");
+  });
+
+  it("elides tool results and tool calls in one batch and names both in the receipt", async () => {
+    const session = new SessionBuilder();
+    session.user("Fix the failing build");
+    const logs = session.turn("bash", LOG, { command: "npm test" });
+    const big = session.turn("typescript", "1", { code: "async () => 1;\n".repeat(200) });
+    session.current();
+
+    const receipt = await call(
+      session,
+      `async ({ session: { elide } }) => elide(${JSON.stringify([logs.result, big.assistant])})`,
+    );
+    expect(receipt).toMatchObject({ targets: [logs.result, big.assistant], toolCallEntries: 1 });
   });
 
   it("rejects a second edit of the same target, staged or applied", async () => {

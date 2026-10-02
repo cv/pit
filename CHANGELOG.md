@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `session.elide` also accepts assistant entries with tool calls. It replaces each call's arguments with a stub that points to `session.inspectEntry` and keeps the entry's text, thinking, and each call's ID and name. In a long coding session, tool-call arguments were 93% of the assistant side of context, and elide could not shrink them. Provider replay probes through Anthropic Messages (Bedrock) and OpenAI Responses accepted stubbed arguments, including next to signed thinking, and kept the prompt cache up to the first edited entry (#222).
+
 ## [0.24.1] - 2026-10-01
 
 ### Fixed

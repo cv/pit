@@ -3,7 +3,7 @@ import { Type } from "typebox";
 import { formatTokens } from "../context/planning.js";
 import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import { plural } from "./shared.js";
+import { elidedTargets, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 const isReceipt = shapeGuard(
@@ -23,6 +23,7 @@ const isReceipt = shapeGuard(
       action: Type.Optional(Type.String()),
       summarizedEntries: Type.Optional(Type.Number()),
       summaryTokens: Type.Optional(Type.Number()),
+      toolCallEntries: Type.Optional(Type.Number()),
     },
     CLOSED,
   ),
@@ -96,10 +97,11 @@ function receiptSubject(receipt: {
   key?: string;
   action?: string;
   summarizedEntries?: number;
+  toolCallEntries?: number;
 }): string {
   switch (receipt.operation) {
     case "elide":
-      return `elide of ${plural(receipt.targets.length, "tool result")}`;
+      return `elide of ${elidedTargets(receipt.targets.length, receipt.toolCallEntries)}`;
     case "summarize":
       return `summary of ${plural(receipt.summarizedEntries ?? receipt.targets.length, "entry", "entries")}`;
     default:

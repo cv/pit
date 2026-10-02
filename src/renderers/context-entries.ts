@@ -15,6 +15,7 @@ import {
   type ProvenanceOperation,
 } from "../context/view.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import { elidedTargets } from "./shared.js";
 
 type CustomMessage = Parameters<MessageRenderer>[0];
 
@@ -103,7 +104,7 @@ function operationSummary(operation: ProvenanceOperation): string {
   const count = operation.targets.length;
   switch (operation.operation) {
     case "elide":
-      return `elided ${plural(count, "tool result")}`;
+      return `elided ${elidedTargets(count, operation.toolCallEntries)}`;
     case "summarize":
       return `summarized ${plural(operation.covers?.length ?? count, "entry", "entries")}`;
     case "restore":

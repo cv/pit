@@ -16,6 +16,15 @@ export function plural(count: number, singular: string, pluralForm = `${singular
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+/** What an elide changed: tool results, tool calls (assistant entries whose arguments it stubbed), or both. */
+export function elidedTargets(targets: number, toolCallEntries = 0): string {
+  const calls = Math.min(Math.max(0, toolCallEntries), targets);
+  const results = targets - calls;
+  if (calls === 0) return plural(results, "tool result");
+  if (results === 0) return plural(calls, "tool call");
+  return `${plural(results, "tool result")} and ${plural(calls, "tool call")}`;
+}
+
 type Outcome = NonNullable<RenderedResultValue["outcome"]>;
 
 const OUTCOME_MARKERS: Readonly<Record<Outcome, string>> = {
