@@ -19,6 +19,11 @@ export interface FunctionState {
   sessionRunCounts: Map<string, number>;
   promotionSuggested: Set<string>;
   /**
+   * The session-function notice last appended to a result. A result repeats it only when the
+   * list changes, so it is not resent with every call.
+   */
+  announcedSessionCatalog: string;
+  /**
    * The Pi tools callable most recently, from the latest loadout or `typescript` call. Saved
    * functions are checked against it outside a call, for example when a session is resumed.
    */
@@ -42,6 +47,7 @@ export function createFunctionState(): FunctionState {
     candidateMetadata: new Map(),
     sessionRunCounts: new Map(),
     promotionSuggested: new Set(),
+    announcedSessionCatalog: "",
   };
 }
 
@@ -60,6 +66,8 @@ export function createFunctionStateCommitQueue(): FunctionStateCommit {
 export function resetFunctionUsage(state: FunctionState): void {
   state.sessionRunCounts.clear();
   state.promotionSuggested.clear();
+  // A new session or branch starts without the notice in context.
+  state.announcedSessionCatalog = "";
 }
 
 export function refreshEffectiveFunctions(state: FunctionState): void {
