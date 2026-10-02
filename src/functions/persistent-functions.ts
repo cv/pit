@@ -229,6 +229,23 @@ export function reconcileProjectFunctionsForSession({
   return errors;
 }
 
+/** The summary's first sentence; the rest is one functions.get call away. */
+export function firstSentence(summary: string): string {
+  const text = summary.replace(/\s+/g, " ").trim();
+  // Code spans may contain periods, so look only outside them for the sentence end.
+  let inCode = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index] as string;
+    if (char === "`") inCode = !inCode;
+    if (inCode || !".!?".includes(char)) continue;
+    const rest = text.slice(index + 1);
+    const sentence = text.slice(0, index + 1);
+    // A sentence ends before whitespace and a capital or code span, not after an abbreviation.
+    if (/^\s+[A-Z`]/.test(rest) && !/\b(?:e\.g|i\.e|etc|vs)\.$/i.test(sentence)) return sentence;
+  }
+  return text;
+}
+
 function persistentFunctionCatalog(
   metadata: ReadonlyMap<string, PersistentFunctionMetadata>,
   sessionFunctions: ReadonlyMap<string, string>,
@@ -238,7 +255,10 @@ function persistentFunctionCatalog(
     return "";
   }
   const title = scope === "user" ? "User" : "Project";
-  const lines = [`## ${title} functions`];
+  const method = scope === "user" ? "getUser" : "get";
+  // Signatures and summaries only: parameter documentation is one functions.get call away, and
+  // listing it for every function made this the largest section of the prompt.
+  const lines = [`## ${title} functions`, `Parameter docs: functions.${method}(name).`];
   const entries = [...metadata.values()].sort((a, b) => a.name.localeCompare(b.name));
   let shown = 0;
   for (const entry of entries) {
@@ -246,30 +266,19 @@ function persistentFunctionCatalog(
     if (shown >= MAX_PROJECT_FUNCTIONS) {
       break;
     }
-    const isSessionOverride = sessionFunctions.has(entry.name);
-    const effectiveSignature = isSessionOverride
-      ? getSavedFunctionCallSignature(sessionFunctions.get(entry.name) ?? "", entry.name)
-      : entry.signature;
-    const addition = isSessionOverride
-      ? [`- ${effectiveSignature ?? entry.name} — Session override of ${scope} function.`]
-      : [`- ${entry.signature} — ${entry.summary.replace(/\s+/g, " ").trim()}`];
-    const parameters = isSessionOverride ? [] : entry.parameters;
-    for (const parameter of parameters) {
-      const description = parameter.description
-        ? `: ${parameter.description.replace(/\s+/g, " ").trim()}`
-        : "";
-      addition.push(`  - ${parameter.name}${description}`);
-    }
-    if (Buffer.byteLength([...lines, ...addition].join("\n")) > MAX_PROJECT_CATALOG_BYTES) {
+    const line = sessionFunctions.has(entry.name)
+      ? `- ${getSavedFunctionCallSignature(sessionFunctions.get(entry.name) ?? "", entry.name) ?? entry.name} — Session override of ${scope} function.`
+      : `- ${entry.signature} — ${firstSentence(entry.summary)}`;
+    if (Buffer.byteLength([...lines, line].join("\n")) > MAX_PROJECT_CATALOG_BYTES) {
       break;
     }
-    lines.push(...addition);
+    lines.push(line);
     shown++;
   }
   if (shown < entries.length) {
-    const method = scope === "user" ? "listUser" : "list";
+    const list = scope === "user" ? "listUser" : "list";
     lines.push(
-      `- … ${entries.length - shown} more; use functions.${method}() for the complete catalog.`,
+      `- … ${entries.length - shown} more; use functions.${list}() for the complete catalog.`,
     );
   }
   return lines.join("\n");
