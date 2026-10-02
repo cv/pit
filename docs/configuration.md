@@ -18,14 +18,19 @@ Pi manages package installation in its settings; `.pi/pit.json` below configures
 
 ## Project configuration
 
-Pit reads a trusted project's `.pi/pit.json`. This example enables project functions and allows a family of other tools alongside `typescript`:
+Pit reads a trusted project's `.pi/pit.json`; an untrusted project's file is ignored. This example allows a family of other tools alongside `typescript` and chooses where saved functions live:
 
 ```json
 {
-  "projectFunctions": { "enabled": true },
-  "allowedTools": ["goal_*"]
+  "allowedTools": ["goal_*"],
+  "paths": {
+    "project": ".pi/functions",
+    "user": "~/.pi/agent/functions"
+  }
 }
 ```
+
+Every key is optional. Run `/reload` after changing configuration. An invalid file is reported as a warning at session start, and Pit uses the defaults instead.
 
 Run `/reload` after changing configuration.
 
@@ -42,15 +47,26 @@ Pit also leaves these tools declared, because they reflect explicit choices:
 
 Pit resolves `allowedTools` at session start. It activates `typescript` and the matching tools, and adds them again after `/tree` navigation, because Pi restores the tool set recorded on the destination branch. It does not deactivate tools that Pi's `defaultTools` setting or other extensions activated.
 
-### Enable project functions
+### Choose function directories
 
-Project functions are disabled by default. Set `projectFunctions.enabled` to `true` only after reviewing and trusting the project's `.pi/functions/` source. Pit requires both explicit opt-in and Pi's project-trust check.
+`paths` sets the directories Pit loads saved functions from and promotes them to:
 
-Disabling project functions leaves their files in place. A named function submitted through the tool is session-scoped; [promotion](saved-functions.md#share-trusted-project-functions) explicitly writes it to persistent storage.
+| Key             | Default                                                    | Holds              |
+| --------------- | ---------------------------------------------------------- | ------------------ |
+| `paths.project` | `.pi/functions`                                            | Project functions. |
+| `paths.user`    | `$PI_CODING_AGENT_DIR/functions` (`~/.pi/agent/functions`) | User functions.    |
+
+Relative paths resolve against the project root, `~` expands to your home directory, and absolute paths are used as given. Either directory may be outside the project. For example, keep project functions in a separate repository, or give your Rust projects one collection of user functions and your Python projects another:
+
+```json
+{ "paths": { "user": "~/pit-functions/rust" } }
+```
+
+Project functions load in every trusted project. They run in the same sandbox as session functions, but they are code the project ships, so review `.pi/functions` (or the configured directory) before trusting a project. Removing a definition deletes its file; a named function submitted through the tool stays session-scoped until [promotion](saved-functions.md#share-trusted-project-functions) writes it to a directory.
 
 ## User functions and storage
 
-User functions load automatically from `${PI_CODING_AGENT_DIR}/functions/`, defaulting to `~/.pi/agent/functions/`. There is no user enablement flag, and project configuration does not disable them.
+User functions load from `paths.user`, by default `${PI_CODING_AGENT_DIR}/functions/` (`~/.pi/agent/functions/`), in trusted and untrusted projects alike. An untrusted project's `.pi/pit.json` is not read, so it uses the default.
 
 External source edits are picked up at session start or `/reload`. See [saved functions](saved-functions.md) for path-derived names, scope precedence, dependency restrictions, and confirmed user promotion/removal.
 

@@ -63,7 +63,7 @@ On session start, `src/functions/lifecycle.ts`:
 1. clears in-memory usage counts and promotion suggestions;
 2. loads user functions automatically from the active Pi agent directory;
 3. makes package-owned global definitions available independently of persistent configuration;
-4. enables project definitions only for a trusted project with `.pi/pit.json` opt-in;
+4. loads project definitions only for a project Pi trusts, from `paths.project` in `.pi/pit.json` (default `.pi/functions`);
 5. loads and validates persistent candidates;
 6. reconstructs session definitions from the active Pi branch's custom entries;
 7. reconciles scope precedence and dependency closure;
@@ -233,14 +233,14 @@ Invalid user and project definitions are retained separately by identifier. Prep
 
 ### Storage and enablement
 
-| Scope   | Source of truth                              | Enablement                                            |
-| ------- | -------------------------------------------- | ----------------------------------------------------- |
-| Global  | Package-owned definitions                    | Always                                                |
-| User    | `${PI_CODING_AGENT_DIR}/functions/`          | Automatic                                             |
-| Project | `.pi/functions/`                             | Trusted project and `projectFunctions.enabled` opt-in |
-| Session | Pi `pit-function-definitions` branch entries | Active branch                                         |
+| Scope   | Source of truth                                           | Enablement      |
+| ------- | --------------------------------------------------------- | --------------- |
+| Global  | Package-owned definitions                                 | Always          |
+| User    | `paths.user`, default `${PI_CODING_AGENT_DIR}/functions/` | Automatic       |
+| Project | `paths.project`, default `.pi/functions/`                 | Trusted project |
+| Session | Pi `pit-function-definitions` branch entries              | Active branch   |
 
-The default user directory is `~/.pi/agent/functions/`; Pi's `getAgentDir()` determines it.
+The default user directory is `~/.pi/agent/functions/`; Pi's `getAgentDir()` determines it. Session start resolves both directories from the trusted project's `.pi/pit.json` and stores them in function state, which loading, persistence, inspection, and confirmation prompts read.
 
 Persistent identifiers come from canonical relative file paths: `company/check.ts` declares `check` and defines `company.check`. Each file contains one documented top-level function declaration. Dotted filenames, case-only collisions, reserved filesystem names, namespace collisions, and declaration mismatches are rejected. Discovery visits at most 2,048 entries and reads at most 100,000 bytes per file, with a 4 MB aggregate source budget. Symlinked directories are not traversed; symlinked definition files are invalid. An absent directory is empty and is not created by loading.
 

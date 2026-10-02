@@ -4,6 +4,14 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `.pi/pit.json` accepts `paths.project` and `paths.user`, the directories Pit loads saved functions from and promotes them to. They default to `.pi/functions` and `$PI_CODING_AGENT_DIR/functions` (`~/.pi/agent/functions`). Relative paths resolve against the project root and `~` expands to the home directory; either may point outside the project, for example to a separate repository of functions or to one collection of user functions per language.
+
+### Changed
+
+- **Behavior change:** project functions load in every project Pi trusts. The `projectFunctions.enabled` opt-in in `.pi/pit.json` is removed and ignored if present, and `context.get()` no longer returns `projectFunctionsEnabled`. Saving, promoting, and removing project functions need only project trust.
+
 ## [0.25.0] - 2026-10-02
 
 ### Added

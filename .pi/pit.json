@@ -1,6 +1,3 @@
 {
-  "allowedTools": ["goal_*"],
-  "projectFunctions": {
-    "enabled": true
-  }
+  "allowedTools": ["goal_*"]
 }

@@ -119,7 +119,7 @@ Removing an override reveals a lower definition only if the resulting chain rema
 
 ## Reuse user functions
 
-User functions load automatically from `${PI_CODING_AGENT_DIR}/functions/` (default `~/.pi/agent/functions/`). No user enablement flag is required, and project configuration does not disable user functions. Global functions are immutable built-ins owned by Pit, not files owned by the user.
+User functions load automatically from `paths.user` in `.pi/pit.json`, by default `${PI_CODING_AGENT_DIR}/functions/` (`~/.pi/agent/functions/`); see [configuration](configuration.md#choose-function-directories). No user enablement flag is required. Global functions are immutable built-ins owned by Pit, not files owned by the user.
 
 Use `functions.promote(name, summary, { to: "user" })` or **Save to user scope** in `/functions`. User promotion and removal require interactive confirmation. Promotion rejects project- or session-only dependencies; promote stable dependencies first. At invocation, dependencies resolve virtually against session, project, user, and global layers.
 
@@ -127,7 +127,7 @@ Files have one documented function declaration and canonical path-derived identi
 
 ## Share trusted project functions
 
-Project functions are disabled by default. [Enable them in `.pi/pit.json`](configuration.md#enable-project-functions) only for a trusted project.
+Project functions load in every project Pi trusts, from `paths.project` in `.pi/pit.json` (default `.pi/functions`); see [configuration](configuration.md#choose-function-directories).
 
 Use `functions.promote(name, summary)` or **Save to project** in `/functions` to persist a session function. Pit writes a documented source file like this:
 
@@ -146,9 +146,9 @@ If the definition already has a JSDoc block, the summary replaces that block's s
 
 Project functions use the same execution rules as session functions. Pit retains a session definition after successful execution, or after static validation when `saveOnly` is `true`; promotion is the separate persistence step.
 
-Pit stores project functions as readable TypeScript files in `.pi/functions/`; scope comes from storage location. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
+Pit stores project functions as readable TypeScript files in `paths.project`; scope comes from storage location. A named definition submitted directly creates a session override; promote it explicitly to update the project version and clear that override.
 
-Pit loads project source only after explicit opt-in and Pi's project-trust check. The function still runs in the same sandbox as a session function.
+Pit loads project source only for a project Pi trusts. The function still runs in the same sandbox as a session function.
 
 Persistent removal is blocked when saved functions depend on the target. Inspect `functions.planRemoval(name, scope?)` before removing a definition. Session removal rejects dependent cascades unless `functions.removeSession(name, { cascade: true })` explicitly opts in. See the [function-management reference](reference.md#functions) for the scoped inspection, promotion, and removal methods.
 

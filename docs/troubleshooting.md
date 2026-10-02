@@ -46,4 +46,4 @@ Confirm whether the package is pinned to a tag; package updates do not move pinn
 
 ### A project or user function does not load
 
-For project functions, check both Pi's project trust and `projectFunctions.enabled` in `.pi/pit.json`. User functions load automatically from the active Pi agent directory. Inspect `/functions` for loading diagnostics: an invalid definition reserves its identifier rather than silently exposing a lower implementation. Fix the source or explicitly remove the definition, then reload. See [configuration](configuration.md) and [saved functions](saved-functions.md).
+For project functions, check Pi's project trust and `paths.project` in `.pi/pit.json`; for user functions, check `paths.user`. `getSaved(name).origin` shows the file a definition came from. Inspect `/functions` for loading diagnostics: an invalid definition reserves its identifier rather than silently exposing a lower implementation. Fix the source or explicitly remove the definition, then reload. See [configuration](configuration.md) and [saved functions](saved-functions.md).
