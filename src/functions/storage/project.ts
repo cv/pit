@@ -17,20 +17,34 @@ import {
   removePersistentFunctionFile,
   writePersistentFunctionFile,
 } from "./files.js";
+import { type ConfiguredFunctionPaths, defaultProjectFunctionDirectory } from "./paths.js";
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
 /** Settings from a trusted project's `.pi/pit.json`. Absent or invalid files yield the defaults. */
 export interface PitProjectConfig {
   allowedTools?: string[];
+  /** Directories for project and user functions, as written; see resolveFunctionPaths. */
+  paths?: ConfiguredFunctionPaths;
   error?: string;
 }
 
-function projectFunctionDirectory(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, "functions");
+function projectFunctionPath(directory: string, name: string): string {
+  return join(directory, functionRelativePath(name));
 }
 
-function projectFunctionPath(cwd: string, name: string): string {
-  return join(projectFunctionDirectory(cwd), functionRelativePath(name));
+function configuredPaths(value: unknown): ConfiguredFunctionPaths | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("paths must be an object");
+  const paths: ConfiguredFunctionPaths = {};
+  for (const key of ["project", "user"] as const) {
+    const path = value[key];
+    if (path === undefined) continue;
+    if (typeof path !== "string" || path.trim().length === 0) {
+      throw new Error(`paths.${key} must be a non-empty string`);
+    }
+    paths[key] = path;
+  }
+  return paths;
 }
 
 export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
@@ -59,14 +73,18 @@ export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitPr
     ) {
       throw new Error("allowedTools must be an array of non-empty strings");
     }
-    return allowedTools === undefined ? {} : { allowedTools };
+    const paths = configuredPaths(config.paths);
+    return {
+      ...(allowedTools === undefined ? {} : { allowedTools }),
+      ...(paths === undefined ? {} : { paths }),
+    };
   } catch (error) {
     return { error: `Invalid ${CONFIG_DIR_NAME}/pit.json: ${(error as Error).message}` };
   }
 }
 
 export async function saveProjectFunction(
-  cwd: string,
+  directory: string,
   name: string,
   source: string,
   storage: FunctionRegistry | { registry: FunctionRegistry; user: ReadonlyMap<string, string> },
@@ -78,15 +96,15 @@ export async function saveProjectFunction(
   candidates.set(name, source);
   validatePersistentFunction(name, source, candidates, { layer: "project", userFunctions: user });
   const replaced = registry.has(name);
-  await assertPersistentPath(projectFunctionDirectory(cwd), name);
-  await writePersistentFunctionFile(projectFunctionPath(cwd, name), source);
+  await assertPersistentPath(directory, name);
+  await writePersistentFunctionFile(projectFunctionPath(directory, name), source);
   registry.set(name, source);
   return replaced;
 }
 
-export async function removeProjectFunction(cwd: string, name: string): Promise<boolean> {
-  await assertPersistentPath(projectFunctionDirectory(cwd), name);
-  return removePersistentFunctionFile(projectFunctionPath(cwd, name));
+export async function removeProjectFunction(directory: string, name: string): Promise<boolean> {
+  await assertPersistentPath(directory, name);
+  return removePersistentFunctionFile(projectFunctionPath(directory, name));
 }
 
 export async function loadProjectFunctions(
@@ -97,10 +115,13 @@ export async function loadProjectFunctions(
     user = new Map(),
     invalidDefinitions = new Map(),
     invalidUser = new Map(),
+    directory = defaultProjectFunctionDirectory(ctx.cwd),
   }: {
     user?: ReadonlyMap<string, string>;
     invalidDefinitions?: Map<string, string>;
     invalidUser?: ReadonlyMap<string, string>;
+    /** The resolved project-function directory; defaults to `.pi/functions`. */
+    directory?: string;
   } = {},
 ): Promise<string[]> {
   registry.clear();
@@ -111,7 +132,7 @@ export async function loadProjectFunctions(
   }
 
   const { candidates, errors, invalid } = await readPersistentFunctionCandidates({
-    directory: projectFunctionDirectory(ctx.cwd),
+    directory,
     metadata: getPersistentFunctionMetadata,
   });
 

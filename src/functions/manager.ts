@@ -35,6 +35,8 @@ export interface FunctionManagerOptions {
   invalidProject?: ReadonlyMap<string, string>;
   /** The Pi tools callable most recently, for availability of saved functions that use them. */
   toolCatalog?: () => PiToolCatalog | undefined;
+  /** The session's resolved function directories, for the paths it reports. */
+  directories?: () => { projectDirectory: string; userDirectory: string };
   planSessionRemoval(name: string): SessionFunctionRemovalPlan;
   removeSession(name: string): Promise<string[]>;
   saveToProject?: (name: string, ctx: ExtensionContext) => Promise<void>;
@@ -72,6 +74,7 @@ class SavedFunctionManager {
         ...(this.options.invalidUser ? { invalidUser: this.options.invalidUser } : {}),
         ...(this.options.invalidProject ? { invalidProject: this.options.invalidProject } : {}),
         ...(toolCatalog ? { toolCatalog } : {}),
+        ...this.options.directories?.(),
       },
       ctx.cwd,
     );

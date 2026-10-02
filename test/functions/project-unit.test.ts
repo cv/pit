@@ -111,6 +111,9 @@ afterEach(async () => {
   await rm(cwd, { recursive: true, force: true });
 });
 
+/** The default project-function directory, `.pi/functions` in the test project. */
+const projectDir = () => join(cwd, ".pi", "functions");
+
 describe("project function storage", () => {
   it("reads only a trusted project's configuration and reports invalid files", async () => {
     expect(await loadPitProjectConfig(ctx())).toEqual({});
@@ -141,14 +144,38 @@ describe("project function storage", () => {
     await expect(loadPitProjectConfig(ctx())).rejects.toThrow();
   });
 
+  it("reads configured function paths and rejects malformed ones", async () => {
+    await mkdir(join(cwd, ".pi"), { recursive: true });
+    await writeFile(
+      join(cwd, ".pi/pit.json"),
+      JSON.stringify({ paths: { project: "../shared/pit", user: "~/pit/rust" } }),
+    );
+    expect(await loadPitProjectConfig(ctx())).toEqual({
+      paths: { project: "../shared/pit", user: "~/pit/rust" },
+    });
+    await writeFile(join(cwd, ".pi/pit.json"), JSON.stringify({ paths: {} }));
+    expect(await loadPitProjectConfig(ctx())).toEqual({ paths: {} });
+
+    for (const [paths, message] of [
+      ["~/pit", "paths must be an object"],
+      [{ project: 1 }, "paths.project must be a non-empty string"],
+      [{ user: "  " }, "paths.user must be a non-empty string"],
+    ] as const) {
+      await writeFile(join(cwd, ".pi/pit.json"), JSON.stringify({ paths }));
+      expect(await loadPitProjectConfig(ctx())).toEqual({
+        error: `Invalid .pi/pit.json: ${message}`,
+      });
+    }
+  });
+
   it("saves, replaces, and removes files", async () => {
     const functions = registry();
     const source = "/** Summary. */ async function saved({}) { return true; }";
-    expect(await saveProjectFunction(cwd, "saved", source, functions)).toBe(false);
+    expect(await saveProjectFunction(projectDir(), "saved", source, functions)).toBe(false);
     expect(await readFile(join(cwd, ".pi/functions/saved.ts"), "utf8")).toBe(source + "\n");
-    expect(await saveProjectFunction(cwd, "saved", source + "\n", functions)).toBe(true);
-    expect(await removeProjectFunction(cwd, "saved")).toBe(true);
-    expect(await removeProjectFunction(cwd, "saved")).toBe(false);
+    expect(await saveProjectFunction(projectDir(), "saved", source + "\n", functions)).toBe(true);
+    expect(await removeProjectFunction(projectDir(), "saved")).toBe(true);
+    expect(await removeProjectFunction(projectDir(), "saved")).toBe(false);
   });
 
   it("does not impose an aggregate quota on project storage alone", async () => {
@@ -160,9 +187,9 @@ describe("project function storage", () => {
     );
     const source = sizedProjectFunction("storedProjectExtra", 2000);
 
-    await expect(saveProjectFunction(cwd, "storedProjectExtra", source, functions)).resolves.toBe(
-      false,
-    );
+    await expect(
+      saveProjectFunction(projectDir(), "storedProjectExtra", source, functions),
+    ).resolves.toBe(false);
     expect(
       [...functions.values()].reduce((total, value) => total + Buffer.byteLength(value), 0),
     ).toBe(1_001_900);
@@ -485,14 +512,16 @@ describe("project function storage", () => {
   it("surfaces storage errors and cleans failed temporary writes", async () => {
     await mkdir(join(cwd, ".pi/functions/blocked.ts"), { recursive: true });
     const source = "/** Blocked. */ async function blocked({}) { return null; }";
-    await expect(saveProjectFunction(cwd, "blocked", source, registry())).rejects.toThrow();
+    await expect(
+      saveProjectFunction(projectDir(), "blocked", source, registry()),
+    ).rejects.toThrow();
     await rm(join(cwd, ".pi"), { recursive: true });
     await mkdir(join(cwd, ".pi/pit"), { recursive: true });
     await writeFile(join(cwd, ".pi/functions"), "not a directory");
     await expect(loadProjectFunctions(ctx(), registry(), metadata())).rejects.toThrow();
     await rm(join(cwd, ".pi"), { recursive: true });
     await mkdir(join(cwd, ".pi/functions/directory.ts"), { recursive: true });
-    await expect(removeProjectFunction(cwd, "directory")).rejects.toThrow();
+    await expect(removeProjectFunction(projectDir(), "directory")).rejects.toThrow();
   });
 
   it("derives no-input, required-input, and optional-input signatures", () => {

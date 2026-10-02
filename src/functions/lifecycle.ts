@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { formatPitSkillsForPrompt } from "../skill-prompt.js";
@@ -5,11 +7,12 @@ import { reconstructFunctions } from "./core.js";
 import { functionRelativePath } from "./identifier.js";
 import { registerFunctionManager } from "./manager.js";
 import { userFunctionCatalog, projectFunctionCatalog } from "./persistent-functions.js";
-import type { SavedFunctionService } from "./service.js";
+import { projectDirectory, type SavedFunctionService } from "./service.js";
 import type { FunctionState } from "./state.js";
 import { reconcileFunctionState, resetFunctionUsage, stateFunctionEnvironment } from "./state.js";
+import { resolveFunctionPaths } from "./storage/paths.js";
 import { loadPitProjectConfig, loadProjectFunctions } from "./storage/project.js";
-import { userFunctionDirectory, userFunctionPath, loadUserFunctions } from "./storage/user.js";
+import { loadUserFunctions, userFunctionDirectory, userFunctionPath } from "./storage/user.js";
 import {
   activatePitTools,
   compileToolPatterns,
@@ -32,6 +35,10 @@ function registerSavedFunctionManager({
     invalidUser: functionState.invalidUser,
     invalidProject: functionState.invalidProject,
     toolCatalog: () => functionState.toolCatalog,
+    directories: () => ({
+      projectDirectory: functionState.projectDirectory,
+      userDirectory: functionState.userDirectory,
+    }),
     userFunctions: functionState.user,
     projectFunctions: functionState.project,
     planSessionRemoval: (name) => savedFunctionService.planRemoval(name, "session"),
@@ -57,7 +64,7 @@ function registerSavedFunctionManager({
       }
       const confirmed = await ctx.ui.confirm(
         `Save ${name} to user scope?`,
-        `Make ${name} available in every Pit project under ${userFunctionDirectory()}?`,
+        `Make ${name} available in every Pit project that uses ${userFunctionDirectory(functionState.userDirectory)}?`,
       );
       if (!confirmed) {
         return;
@@ -69,7 +76,7 @@ function registerSavedFunctionManager({
     removeFromProject: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
         `Remove ${name} from project?`,
-        `Delete .pi/functions/${functionRelativePath(name)}?`,
+        `Delete ${join(projectDirectory(functionState, ctx.cwd), functionRelativePath(name))}?`,
       );
       if (!confirmed) {
         return;
@@ -83,7 +90,7 @@ function registerSavedFunctionManager({
     removeFromUser: async (name, ctx) => {
       const confirmed = await ctx.ui.confirm(
         `Remove ${name} from user scope?`,
-        `Delete ${userFunctionPath(name)} for every project?`,
+        `Delete ${userFunctionPath(name, functionState.userDirectory)} for every project that uses it?`,
       );
       if (!confirmed) {
         return;
@@ -105,10 +112,16 @@ function registerFunctionLifecycle(
   pi.on("session_start", async (_event, ctx) => {
     resetFunctionUsage(functionState);
     const projectConfig = await loadPitProjectConfig(ctx);
+    // Both directories come from the project's pit.json, so a project can choose its own
+    // collection of user functions; an untrusted project uses the defaults.
+    const paths = resolveFunctionPaths(ctx.cwd, projectConfig.paths);
+    functionState.userDirectory = paths.user;
+    functionState.projectDirectory = paths.project;
     const errors = await loadUserFunctions(
       functionState.user,
       functionState.userMetadata,
       functionState.invalidUser,
+      paths.user,
     );
     // Project functions load in every trusted project; loadProjectFunctions checks trust.
     errors.push(
@@ -120,6 +133,7 @@ function registerFunctionLifecycle(
           user: functionState.user,
           invalidDefinitions: functionState.invalidProject,
           invalidUser: functionState.invalidUser,
+          directory: paths.project,
         },
       )),
     );

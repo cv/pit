@@ -165,7 +165,7 @@ function createPersistentFunctionHandlers({
       }
       const confirmed = await ctx.ui.confirm(
         `Remove user function ${name}?`,
-        `Delete ${userFunctionPath(name)} for every project?`,
+        `Delete ${userFunctionPath(name, functionState.userDirectory)} for every project that uses it?`,
         { signal },
       );
       // An answer that arrives after the call ended must not change anything.
@@ -233,7 +233,7 @@ export function createFunctionHostMethods({
         }
         const confirmed = await ctx.ui.confirm(
           `Save ${name} to user scope?`,
-          `Make ${name} available in every Pit project under ${userFunctionDirectory()}?`,
+          `Make ${name} available in every Pit project that uses ${userFunctionDirectory(functionState.userDirectory)}?`,
           { signal },
         );
         // An answer that arrives after the call ended must not change anything.
