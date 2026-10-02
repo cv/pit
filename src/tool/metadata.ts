@@ -21,24 +21,22 @@ export const PROMPT_GUIDELINES = [
   "Long tasks: keep facts you still need in session.setNote(); once per turn, elide tool results and old tool calls you have absorbed, and summarize finished turns. Notes are working memory, not instructions.",
 ] as const;
 
-export const LABEL_DESCRIPTION =
-  "Short TUI action label; aim for about 15 words, not a hard limit.";
+export const LABEL_DESCRIPTION = "Short transcript label, about 15 words.";
 
 export const CODE_DESCRIPTION =
-  "TypeScript function expression or named definition. Inject dependencies first; no imports; return JSON-compatible data or undefined.";
+  "Async function expression, or a named function definition to save. Destructure what it calls in its first parameter; no imports. Return JSON or nothing.";
 
 export const PARAMS_DESCRIPTION =
-  "JSON input after the dependency object; annotate its type. Put large or quote-heavy data here.";
+  "JSON passed as the second argument; annotate its type. Put large or quote-heavy data here.";
 
 export const FUNCTION_ID_DESCRIPTION =
-  "Optional dotted ID for a named function, e.g. company.check. Its leaf must match the declaration; not valid for anonymous code.";
+  "Dotted ID to save a named function under, such as company.check; the last segment is its name.";
 
-export const SAVE_ONLY_DESCRIPTION =
-  "Validate and save a named function without execution; cannot combine with params.";
+export const SAVE_ONLY_DESCRIPTION = "Save a named function without running it; not with params.";
 
 export function createToolDescription(maxOutputBytes: number): string {
   return [
-    "Contextually type-checked TypeScript. Injected functions are async; no imports or Node globals.",
+    "Runs a sandboxed TypeScript function, type-checked against the async functions it injects. No imports or Node globals.",
     "",
     "```ts",
     "async ({ workspace: { stat }, git: { status: gitStatus } }) => Promise.all([",
@@ -46,37 +44,32 @@ export function createToolDescription(maxOutputBytes: number): string {
     "])",
     "```",
     "",
-    "FUNCTIONS",
-    "Named definitions save to session after successful execution or saveOnly.",
+    "SAVED FUNCTIONS",
+    "A named definition is saved to the session when it succeeds, or with saveOnly; later calls inject it:",
     "```ts",
     "async function runTests({ npm: { test } }, coverage: boolean = false) {",
     "  return test({ coverage, raise: true });",
     "}",
     "```",
-    "Invoke through injection:",
     "```ts",
     "async ({ runTests }) => runTests(true)",
     "```",
-    'functionId: "company.check" names a declaration check. Invoke with:',
-    "```ts",
-    "async ({ company: { check } }) => check()",
-    "```",
-    "Resolution: session > project > user > global; dependencies resolve virtually. User functions auto-load; projects need trust/enablement.",
-    "Read-only package globals allow overrides unless sealed; functions.* is sealed. Preserve lower public signatures. Inject $next for the same ID's next lower layer, not prior same-layer versions. Promotion rebinds $next and validates at the destination before writing.",
+    'functionId: "company.check" saves it as company.check, injected as ({ company: { check } }).',
+    "Lookup: session, project, user, global. User functions load automatically; project functions need trust and enablement. A saved function may override a global one except functions.*; inject $next to call what it overrides.",
     "",
-    "HASHED EDITS",
-    "Substitute actual read/search revision and line:hash anchors:",
+    "EDITS",
+    "Use the revision and line:hash anchors from the latest read or search of the file; never guess them, and read again after any edit or formatter run:",
     "```ts",
     'async ({ workspace: { edit } }) => edit("src/file.ts", {',
     '  revision: "revision-from-read",',
     '  changes: [{ kind: "replace", start: "12:abc12", content: "replacement" }],',
     "})",
     "```",
-    "Create: revision: null with replaceFile. Parse raw reads. Absent metadata: offset=1, totalLines=lines, hasMore/truncated=false. Edit batches require unique files.",
+    'Create files with revision: null and replaceFile. Read data you parse with format: "raw". Omitted read metadata: offset 1, totalLines = lines, hasMore and truncated false. A batch edits each file once.',
     "",
     "GLOBAL FUNCTIONS",
     ...globalFunctionDocumentation(),
     "",
-    `Paths are relative to Pi cwd unless absolute. Output limit: ${formatSize(maxOutputBytes)}.`,
+    `Paths are relative to Pi's working directory unless absolute. Returned values over ${formatSize(maxOutputBytes)} are cut.`,
   ].join("\n");
 }
