@@ -1,5 +1,3 @@
-import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
-
 import { validateTypeScript } from "../sandbox/validation.js";
 import { getSavedFunctionDependencyGraph } from "./graph.js";
 import {
@@ -141,11 +139,6 @@ export class SavedFunctionService {
   removeFromProject(request: ProjectFunctionRemovalRequest): Promise<boolean> {
     if (!request.context.isProjectTrusted()) {
       throw new Error("Project functions require a trusted project");
-    }
-    if (!this.#state.projectEnabled) {
-      throw new Error(
-        `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
-      );
     }
     return removeProjectFunctionFromState({
       cwd: request.context.cwd,

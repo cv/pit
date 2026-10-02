@@ -49,8 +49,7 @@ describe("SavedFunctionService", () => {
   });
 
   it("validates explicit project preparation and trust", () => {
-    const { state, service } = fixture();
-    state.projectEnabled = true;
+    const { service } = fixture();
     expect(() =>
       service.prepare({
         source: "async () => true",
@@ -72,10 +71,6 @@ describe("SavedFunctionService", () => {
     directories.push(cwd);
     const { state, service } = fixture();
     const source = "/** Project helper. */\nasync function projectHelper({}) { return 2; }";
-    expect(() =>
-      service.prepare({ source, project: true, context: { cwd, isProjectTrusted: () => true } }),
-    ).toThrow("Project functions are disabled");
-    state.projectEnabled = true;
     state.session.set("projectHelper", "async function projectHelper({}) { return 1; }");
     const prepared = service.prepare({
       source,
@@ -104,7 +99,6 @@ describe("SavedFunctionService", () => {
       context: { cwd, isProjectTrusted: () => true },
     });
     await service.commit(prepared, { cwd }, []);
-    state.projectEnabled = true;
 
     await service.promoteToProject({
       name: "promotedHelper",
@@ -126,7 +120,6 @@ describe("SavedFunctionService", () => {
 
   it("rejects invalid session-function promotions", async () => {
     const { state, service } = fixture();
-    state.projectEnabled = true;
     state.session.set("summaryRequired", "async function summaryRequired({}) { return true; }");
     await expect(
       service.promoteToProject({
@@ -154,9 +147,8 @@ describe("SavedFunctionService", () => {
     ).rejects.toThrow("must be a top-level function declaration");
   });
 
-  it("requires trust and opt-in for project removal", async () => {
-    const { state, service } = fixture();
-    state.projectEnabled = true;
+  it("requires a trusted project for project removal", async () => {
+    const { service } = fixture();
     expect(() =>
       service.removeFromProject({
         name: "helper",
@@ -164,17 +156,8 @@ describe("SavedFunctionService", () => {
       }),
     ).toThrow("require a trusted project");
 
-    state.projectEnabled = false;
-    expect(() =>
-      service.removeFromProject({
-        name: "helper",
-        context: { cwd: "/tmp", isProjectTrusted: () => true },
-      }),
-    ).toThrow("Project functions are disabled");
-
     const cwd = await mkdtemp(join(tmpdir(), "pit-service-"));
     directories.push(cwd);
-    state.projectEnabled = true;
     await expect(
       service.removeFromProject({
         name: "alreadyAbsent",

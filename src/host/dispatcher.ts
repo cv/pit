@@ -278,7 +278,6 @@ export function createHostDispatcher({
       userFunctions: [...functionState.user.keys()].sort(),
       projectFunctions: [...functionState.project.keys()].sort(),
       sessionFunctions: [...functionState.session.keys()].sort(),
-      projectFunctionsEnabled: functionState.projectEnabled,
     }),
     functions: createFunctionHostHandler({
       pi,

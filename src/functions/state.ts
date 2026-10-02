@@ -5,7 +5,6 @@ import type { PiToolCatalog } from "./pi-tools.js";
 import type { PersistentFunctionMetadataRegistry } from "./source.js";
 
 export interface FunctionState {
-  projectEnabled: boolean;
   user: FunctionRegistry;
   invalidUser: Map<string, string>;
   invalidProject: Map<string, string>;
@@ -34,7 +33,6 @@ export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promis
 
 export function createFunctionState(): FunctionState {
   return {
-    projectEnabled: false,
     user: new Map(),
     invalidUser: new Map(),
     invalidProject: new Map(),

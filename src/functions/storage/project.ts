@@ -19,8 +19,8 @@ import {
 } from "./files.js";
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
-export interface ProjectFunctionConfig {
-  enabled: boolean;
+/** Settings from a trusted project's `.pi/pit.json`. Absent or invalid files yield the defaults. */
+export interface PitProjectConfig {
   allowedTools?: string[];
   error?: string;
 }
@@ -33,18 +33,16 @@ function projectFunctionPath(cwd: string, name: string): string {
   return join(projectFunctionDirectory(cwd), functionRelativePath(name));
 }
 
-export async function loadProjectFunctionConfig(
-  ctx: ExtensionContext,
-): Promise<ProjectFunctionConfig> {
+export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
   if (!ctx.isProjectTrusted()) {
-    return { enabled: false };
+    return {};
   }
   let source: string;
   try {
     source = await readFile(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "utf8");
   } catch (error) {
     if (isMissingFileError(error)) {
-      return { enabled: false };
+      return {};
     }
     throw error;
   }
@@ -52,18 +50,6 @@ export async function loadProjectFunctionConfig(
     const config = JSON.parse(source) as unknown;
     if (!isRecord(config)) {
       throw new Error("configuration must be a JSON object");
-    }
-    const section = config.projectFunctions;
-    let projectEnabled = false;
-    if (section !== undefined) {
-      if (!isRecord(section)) {
-        throw new Error("projectFunctions must be an object");
-      }
-      const enabled = section.enabled;
-      if (enabled !== undefined && typeof enabled !== "boolean") {
-        throw new Error("projectFunctions.enabled must be a boolean");
-      }
-      projectEnabled = enabled ?? false;
     }
     const allowedTools = config.allowedTools;
     if (
@@ -73,15 +59,9 @@ export async function loadProjectFunctionConfig(
     ) {
       throw new Error("allowedTools must be an array of non-empty strings");
     }
-    return {
-      enabled: projectEnabled,
-      ...(allowedTools === undefined ? {} : { allowedTools }),
-    };
+    return allowedTools === undefined ? {} : { allowedTools };
   } catch (error) {
-    return {
-      enabled: false,
-      error: `Invalid ${CONFIG_DIR_NAME}/pit.json: ${(error as Error).message}`,
-    };
+    return { error: `Invalid ${CONFIG_DIR_NAME}/pit.json: ${(error as Error).message}` };
   }
 }
 

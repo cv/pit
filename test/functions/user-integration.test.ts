@@ -28,15 +28,7 @@ async function writeUserFunction(name: string, source: string): Promise<void> {
   await writeFile(join(directory, `${name}.ts`), source);
 }
 
-async function enableProjectFunctions(): Promise<void> {
-  await mkdir(join(cwd, ".pi"), { recursive: true });
-  await writeFile(
-    join(cwd, ".pi", "pit.json"),
-    JSON.stringify({
-      projectFunctions: { enabled: true },
-    }),
-  );
-}
+async function enableProjectFunctions(): Promise<void> {}
 
 async function writeProjectFunction(name: string, source: string): Promise<void> {
   const directory = join(cwd, ".pi", "functions");

@@ -13,7 +13,7 @@ import {
 } from "../../src/functions/persistent-functions.js";
 import { getPersistentFunctionMetadata } from "../../src/functions/source.js";
 import {
-  loadProjectFunctionConfig,
+  loadPitProjectConfig,
   loadProjectFunctions,
   removeProjectFunction,
   saveProjectFunction,
@@ -112,37 +112,33 @@ afterEach(async () => {
 });
 
 describe("project function storage", () => {
-  it("reads an explicit, strictly typed project opt-in", async () => {
-    expect(await loadProjectFunctionConfig(ctx())).toEqual({ enabled: false });
+  it("reads only a trusted project's configuration and reports invalid files", async () => {
+    expect(await loadPitProjectConfig(ctx())).toEqual({});
     await mkdir(join(cwd, ".pi"), { recursive: true });
     await writeFile(
       join(cwd, ".pi/pit.json"),
-      JSON.stringify({ projectFunctions: { enabled: true }, futureSetting: true }),
+      JSON.stringify({ allowedTools: ["goal_*"], futureSetting: true }),
     );
-    expect(await loadProjectFunctionConfig(ctx())).toEqual({ enabled: true });
-    expect(await loadProjectFunctionConfig(ctx(false))).toEqual({ enabled: false });
+    expect(await loadPitProjectConfig(ctx())).toEqual({ allowedTools: ["goal_*"] });
+    expect(await loadPitProjectConfig(ctx(false))).toEqual({});
 
-    await writeFile(join(cwd, ".pi/pit.json"), JSON.stringify({ futureSetting: true }));
-    expect(await loadProjectFunctionConfig(ctx())).toEqual({ enabled: false });
-    await writeFile(join(cwd, ".pi/pit.json"), JSON.stringify({ projectFunctions: {} }));
-    expect(await loadProjectFunctionConfig(ctx())).toEqual({ enabled: false });
+    // A file from before the flag was removed still loads; the key is ignored.
+    await writeFile(
+      join(cwd, ".pi/pit.json"),
+      JSON.stringify({ projectFunctions: { enabled: false } }),
+    );
+    expect(await loadPitProjectConfig(ctx())).toEqual({});
 
-    for (const invalid of [
-      "not json",
-      "[]",
-      JSON.stringify({ projectFunctions: true }),
-      JSON.stringify({ projectFunctions: { enabled: "yes" } }),
-    ]) {
+    for (const invalid of ["not json", "[]", JSON.stringify({ allowedTools: "goal_*" })]) {
       await writeFile(join(cwd, ".pi/pit.json"), invalid);
-      expect(await loadProjectFunctionConfig(ctx())).toMatchObject({
-        enabled: false,
+      expect(await loadPitProjectConfig(ctx())).toEqual({
         error: expect.stringContaining("Invalid .pi/pit.json"),
       });
     }
 
     await rm(join(cwd, ".pi/pit.json"));
     await mkdir(join(cwd, ".pi/pit.json"));
-    await expect(loadProjectFunctionConfig(ctx())).rejects.toThrow();
+    await expect(loadPitProjectConfig(ctx())).rejects.toThrow();
   });
 
   it("saves, replaces, and removes files", async () => {

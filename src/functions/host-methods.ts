@@ -1,8 +1,4 @@
-import {
-  CONFIG_DIR_NAME,
-  type ExtensionAPI,
-  type ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import { terminationError } from "../shared/termination-errors.js";
@@ -200,11 +196,6 @@ export function createFunctionHostMethods({
   const requireProjectAccess = (): void => {
     if (!ctx.isProjectTrusted()) {
       throw new Error("Project functions require a trusted project");
-    }
-    if (!functionState.projectEnabled) {
-      throw new Error(
-        `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
-      );
     }
   };
 
