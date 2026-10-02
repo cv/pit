@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-02
+
 ### Added
 
 - `.pi/pit.json` accepts `paths.project` and `paths.user`, the directories Pit loads saved functions from and promotes them to. They default to `.pi/functions` and `$PI_CODING_AGENT_DIR/functions` (`~/.pi/agent/functions`). Relative paths resolve against the project root and `~` expands to the home directory; either may point outside the project, for example to a separate repository of functions or to one collection of user functions per language.
@@ -368,7 +370,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/cv/pit/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/cv/pit/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/cv/pit/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/cv/pit/compare/v0.23.1...v0.24.0
