@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-02
+
 ### Added
 
 - `session.elide` also accepts assistant entries with tool calls. It replaces each call's arguments with a stub that points to `session.inspectEntry` and keeps the entry's text, thinking, and each call's ID and name. In a long coding session, tool-call arguments were 93% of the assistant side of context, and elide could not shrink them. Provider replay probes through Anthropic Messages (Bedrock) and OpenAI Responses accepted stubbed arguments, including next to signed thinking, and kept the prompt cache up to the first edited entry (#222).
@@ -17,7 +19,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
   - project and user function catalogs list each function's signature and first sentence, with parameter documentation available from `functions.get(name)`;
   - the `[Session functions: ...]` notice appears only when the list changes, instead of on every result.
 
-  Pit's fixed prompt text falls from about 6,580 to 5,350 characters, and this repository's project catalog from 11,650 to about 6,600.
+  Pit's fixed prompt text falls from about 6,580 to 5,350 characters, and this repository's project catalog from 11,650 to about 6,600. Pi still adds `<rules>` for its built-in tools, whose declarations Pit hides, and a skills hint naming the `read` tool; that needs a Pi change ([earendil-works/pi#10343](https://github.com/earendil-works/pi/issues/10343)).
 
 ## [0.24.1] - 2026-10-01
 
@@ -358,7 +360,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/cv/pit/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/cv/pit/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/cv/pit/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/cv/pit/compare/v0.23.0...v0.23.1
