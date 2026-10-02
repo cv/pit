@@ -1,13 +1,12 @@
 # Pit agent workflow
 
-## Hashed edits
+## Edits
 
-- Use only revisions and anchors returned by the immediately preceding `workspace.read` or `workspace.search`.
-- A successful edit or formatter run invalidates every previous anchor for that file. Re-read before another mutation.
-- Never guess a line hash or reuse one from an older result.
+Pit's tool description covers fresh anchors and re-reading after edits. In this repository also:
+
 - Prefer `workspace.search` for a single edit target and `workspace.batch` for independent multi-file reads.
 - Put multiline, regex-heavy, or quote-heavy patch content in top-level `params` on the first attempt.
-- After one malformed tool submission, simplify it. After two failures of the same class, split the operation instead of varying the same construction.
+- After two failures of the same class, split the operation instead of varying the same construction.
 
 ## Tool selection
 
@@ -18,8 +17,7 @@
 
 ## Parallelism and ordering
 
-- Use `Promise.all` or `workspace.batch` for independent probes.
-- Keep same-file mutations, Git mutations, and dependent state transitions sequential.
+- Keep Git mutations and dependent state transitions sequential.
 - Do not run the full test and coverage suites concurrently.
 - Format only files changed by the task; never run a broad fixer with unrelated modifications.
 
