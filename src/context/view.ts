@@ -26,6 +26,8 @@ export const NOTE_TYPE = "pit.note";
 export const NOTICE_TYPE = "pit.context-pressure";
 export const PROVENANCE_TYPE = "pit.context-edit";
 export const ELIDED_PREFIX = "[Elided by the model";
+/** Starts the stub that replaces an elided assistant entry's tool-call arguments. */
+export const ELIDED_ARGUMENTS_PREFIX = "[Pit: these arguments were elided to save context";
 export const SUMMARY_PREFIX = "[Model summary of ";
 
 export type ContextRole =
@@ -66,6 +68,8 @@ export interface ProvenanceOperation {
   key?: string;
   action?: "created" | "replaced" | "removed";
   reason?: string;
+  /** Elide: how many targets were assistant entries whose tool-call arguments it stubbed. */
+  toolCallEntries?: number;
   tokensFreed: number;
   reprefillTokens: number;
 }
@@ -136,11 +140,25 @@ export function originalContent(entry: SessionEntry): EditableContent {
   return (entry as { message: { content: EditableContent } }).message.content;
 }
 
+/** Whether replacement content is an assistant message whose every tool call carries the stub. */
+function elidedArguments(content: EditableContent): boolean {
+  if (typeof content === "string") return false;
+  const calls = content.filter((block) => block.type === "toolCall");
+  return (
+    calls.length > 0 &&
+    calls.every((block) => {
+      const stub = (block as { arguments?: { elided?: unknown } }).arguments?.elided;
+      return typeof stub === "string" && stub.startsWith(ELIDED_ARGUMENTS_PREFIX);
+    })
+  );
+}
+
 function stateOf(entry: SessionEntry, edit: ContextEditEntry | undefined): ContextState {
   if (!edit?.replacement) return "original";
   const { content } = edit.replacement;
   const text = firstText(content);
   if (text.startsWith(ELIDED_PREFIX)) return "elided";
+  if (elidedArguments(content)) return "elided";
   if (text.startsWith(SUMMARY_PREFIX)) return "summarized";
   return JSON.stringify(content) === JSON.stringify(originalContent(entry))
     ? "original"

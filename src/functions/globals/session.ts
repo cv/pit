@@ -72,7 +72,7 @@ export const sessionFunctions = [
     declaration:
       "elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;",
     documentation:
-      "session.elide(ids, options?) stages replacing tool results with stubs that point to session.inspectEntry; applied after the current turn if the call succeeds",
+      "session.elide(ids, options?) stages replacing tool results, or the arguments of assistant tool calls, with stubs that point to session.inspectEntry; applied after the current turn if the call succeeds",
     minimumArguments: 1,
     maximumArguments: 2,
   }),
