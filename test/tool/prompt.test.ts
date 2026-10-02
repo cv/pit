@@ -19,7 +19,7 @@ describe("emitted Pit prompt", () => {
   });
 
   it("documents the workspace image call in the emitted tool description", () => {
-    expect(tool.description).toContain("workspace.viewImage(file)");
+    expect(tool.description).toMatch(/^workspace: .*viewImage\(file\) attaches up to 8 images/m);
   });
 
   it("declares a JSON type for every kind of params value", () => {
@@ -69,7 +69,7 @@ describe("emitted Pit prompt", () => {
   it("budgets all fixed prose without adding the schema twice", () => {
     const size = measurePrompt(tool);
     // A growth ratchet, not a model limit: raise it deliberately when a capability needs prose.
-    expect(size.fixed.characters).toBeLessThanOrEqual(6_600);
+    expect(size.fixed.characters).toBeLessThanOrEqual(5_700);
     expect(size.fixed.bytes).toBeGreaterThanOrEqual(size.fixed.characters);
     expect(
       measurePrompt({
