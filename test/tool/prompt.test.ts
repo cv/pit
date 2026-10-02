@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { getNamedFunctionName } from "../../src/functions/source.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
+import { PROMPT_GUIDELINES, proseSize } from "../../src/tool/metadata.js";
 import { cleanupHarness, setupHarness, tool } from "../support/extension-fixture.js";
 import { measurePrompt, schemaDescriptions } from "../support/prompt-metadata.js";
 
@@ -48,6 +49,21 @@ describe("emitted Pit prompt", () => {
     });
     expect(Value.Check(tool.parameters, args)).toBe(true);
     expect(args).toEqual({ code: "async () => 1", params });
+  });
+
+  // #210: the 50 KB output budget was read as a limit on data a program reads.
+  it("states both budgets a program works within, from the live limits", () => {
+    expect(PROMPT_GUIDELINES.join("\n")).toContain(
+      "raw reads and command output can reach 4 MB, but only the returned value reaches you, within 50 KB",
+    );
+  });
+
+  it.each([
+    { bytes: 4_000_000, text: "4 MB" },
+    { bytes: 51_200, text: "50 KB" },
+    { bytes: 1_000_000, text: "1 MB" },
+  ])("writes $bytes bytes as $text", ({ bytes, text }) => {
+    expect(proseSize(bytes)).toBe(text);
   });
 
   it("budgets all fixed prose without adding the schema twice", () => {
