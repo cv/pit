@@ -246,6 +246,31 @@ describe("session.elide", () => {
     expect(view.original.original.text).toContain("src/parse.ts");
   });
 
+  // Live acceptance found elide stubbing a summary carrier: the assistant entry that holds a
+  // summary keeps its first tool call so the result still answers it.
+  it("refuses a summary carrier, whose content already stands in for its turns", async () => {
+    const session = new SessionBuilder();
+    session.user("Fix the failing build");
+    const first = session.turn("bash", LOG, { command: "npm test" });
+    const second = session.turn("read", LOG, { path: "a.ts" });
+    session.current();
+    await call(
+      session,
+      `async ({ session: { summarize } }) => summarize({ from: ${JSON.stringify(first.assistant)}, to: ${JSON.stringify(second.result)}, summary: "Ran the tests and read a.ts." })`,
+    );
+    await endTurn(session);
+    session.current();
+
+    await expect(
+      run(
+        `async ({ session: { elide } }) => elide([${JSON.stringify(first.assistant)}])`,
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow(
+      `Cannot elide: ${first.assistant} is summarized; elide edits only original entries`,
+    );
+  });
+
   it("elides tool results and tool calls in one batch and names both in the receipt", async () => {
     const session = new SessionBuilder();
     session.user("Fix the failing build");

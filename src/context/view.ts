@@ -158,8 +158,9 @@ function stateOf(entry: SessionEntry, edit: ContextEditEntry | undefined): Conte
   const { content } = edit.replacement;
   const text = firstText(content);
   if (text.startsWith(ELIDED_PREFIX)) return "elided";
-  if (elidedArguments(content)) return "elided";
+  // A summary carrier stays summarized even if its tool call was later stubbed.
   if (text.startsWith(SUMMARY_PREFIX)) return "summarized";
+  if (elidedArguments(content)) return "elided";
   return JSON.stringify(content) === JSON.stringify(originalContent(entry))
     ? "original"
     : "replaced";

@@ -72,6 +72,9 @@ function elisionProblem(item: ContextItem, stubSize: number): string | undefined
     return `${item.id} is a ${item.role} entry; elide accepts tool results and assistant entries with tool calls, and session.summarize replaces assistant turns`;
   }
   if (item.state === "elided") return `${item.id} is already elided`;
+  // A summary carrier or another edited entry already stands in for its original.
+  if (item.state !== "original")
+    return `${item.id} is ${item.state}; elide edits only original entries`;
   return stubSize >= item.tokens ? `${item.id} is no larger than its elision stub` : undefined;
 }
 
