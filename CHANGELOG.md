@@ -8,6 +8,17 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 - `session.elide` also accepts assistant entries with tool calls. It replaces each call's arguments with a stub that points to `session.inspectEntry` and keeps the entry's text, thinking, and each call's ID and name. In a long coding session, tool-call arguments were 93% of the assistant side of context, and elide could not shrink them. Provider replay probes through Anthropic Messages (Bedrock) and OpenAI Responses accepted stubbed arguments, including next to signed thinking, and kept the prompt cache up to the first edited entry (#222).
 
+### Changed
+
+- Pit's system prompt is shorter and states each rule once:
+  - seven plain guidelines replace eight, and the data guideline gives both budgets, 4 MB for what a program reads and 50 KB for what it returns;
+  - the tool description drops repeated injection and anchor rules and says the 50 KB limit applies to returned values;
+  - the global function list uses one summary per namespace and now names `runtime.completedCalls`;
+  - project and user function catalogs list each function's signature and first sentence, with parameter documentation available from `functions.get(name)`;
+  - the `[Session functions: ...]` notice appears only when the list changes, instead of on every result.
+
+  Pit's fixed prompt text falls from about 6,580 to 5,350 characters, and this repository's project catalog from 11,650 to about 6,600.
+
 ## [0.24.1] - 2026-10-01
 
 ### Fixed
