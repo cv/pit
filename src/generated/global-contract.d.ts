@@ -486,7 +486,6 @@ interface PitContextFunctions {
     userFunctions: string[];
     projectFunctions: string[];
     sessionFunctions: string[];
-    projectFunctionsEnabled: boolean;
   }>;
 }
 

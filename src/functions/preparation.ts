@@ -1,5 +1,3 @@
-import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
-
 import { validateTypeScript } from "../sandbox/validation.js";
 import {
   type FunctionRegistry,
@@ -54,11 +52,6 @@ function prepareProjectFunction(
 ): PreparedRegistries {
   if (!request.context.isProjectTrusted()) {
     throw new Error("Project functions require a trusted project");
-  }
-  if (!state.projectEnabled) {
-    throw new Error(
-      `Project functions are disabled. Enable them in ${CONFIG_DIR_NAME}/pit.json with {"projectFunctions":{"enabled":true}}`,
-    );
   }
   validateRegistryCapacity(state.effective, name, request.source);
   const candidateProject = new Map(state.project);

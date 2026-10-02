@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -234,11 +234,6 @@ describe("namespaced session definitions", () => {
   it.each<{ scope: "project" | "user" }>([{ scope: "project" }, { scope: "user" }])(
     "preserves canonical identity when promoting to $scope storage",
     async ({ scope }) => {
-      await mkdir(join(cwd, ".pi"), { recursive: true });
-      await writeFile(
-        join(cwd, ".pi/pit.json"),
-        JSON.stringify({ projectFunctions: { enabled: true } }),
-      );
       await sessionStart({}, context());
       await define("async function check({}) { return 42; }", "company.check", { saveOnly: true });
       await expect(

@@ -37,11 +37,6 @@ vi.mock("../../src/functions/storage/project.js", async (importOriginal) => {
 beforeEach(async () => {
   projectFunctionTestHooks.beforeRemove = undefined;
   await setupHarness();
-  await mkdir(join(cwd, ".pi"), { recursive: true });
-  await writeFile(
-    join(cwd, ".pi/pit.json"),
-    JSON.stringify({ projectFunctions: { enabled: true } }),
-  );
   await sessionStart({}, context());
 });
 afterEach(cleanupHarness);
@@ -643,41 +638,27 @@ async function brokenProject({}) { throw new Error("project failure"); }`),
     expect(oneError.ui.notify).toHaveBeenCalledWith(expect.not.stringContaining("more"), "warning");
   });
 
-  it("is disabled unless the project explicitly opts in", async () => {
+  it("loads project functions in a trusted project without configuration", async () => {
     await writeProjectFunction(
       "keptProject",
-      "/** Kept while disabled. */ async function keptProject({}) { return true; }",
+      "/** Loads without opt-in. */ async function keptProject({}) { return true; }",
     );
-    await sessionStart({}, context());
-    await rm(join(cwd, ".pi/pit.json"));
     await sessionStart({}, context());
 
-    await expect(
-      run("/** Disabled helper. */ async function disabledProject({}) { return true; }"),
-    ).resolves.toMatchObject({
-      details: { functions: [{ action: "set", name: "disabledProject" }] },
-    });
-    await expect(
-      run(
-        "async ({ functions: { list: functionList, promote, remove: removeProject } }) => functionList()",
-      ),
-    ).rejects.toThrow("Project functions are disabled");
-    await expect(
-      readFile(join(cwd, ".pi/functions/disabledProject.ts"), "utf8"),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(join(cwd, ".pi/functions/keptProject.ts"), "utf8")).resolves.toContain(
-      "Kept while disabled",
-    );
-    await expect(run("async ({ keptProject }) => keptProject()")).rejects.toThrow(
-      /Property 'keptProject' does not exist/,
-    );
+    await expect(value("async ({ keptProject }) => keptProject()")).resolves.toBe(true);
     expect(await value("async ({ context: { get } }) => get()")).toMatchObject({
-      projectFunctionsEnabled: false,
-      projectFunctions: [],
+      projectFunctions: ["keptProject"],
     });
+    expect(await value("async ({ context: { get } }) => get()")).not.toHaveProperty(
+      "projectFunctionsEnabled",
+    );
   });
 
-  it("warns and stays disabled when project configuration is invalid", async () => {
+  it("warns about invalid project configuration and still loads project functions", async () => {
+    await writeProjectFunction(
+      "stillLoaded",
+      "/** Loads despite invalid config. */ async function stillLoaded({}) { return 1; }",
+    );
     await writeFile(join(cwd, ".pi/pit.json"), "not json");
     const ctx = context();
     await sessionStart({}, ctx);
@@ -685,9 +666,7 @@ async function brokenProject({}) { throw new Error("project failure"); }`),
       expect.stringContaining("Invalid .pi/pit.json"),
       "warning",
     );
-    expect(await value("async ({ context: { get } }) => get()", ctx)).toMatchObject({
-      projectFunctionsEnabled: false,
-    });
+    await expect(value("async ({ stillLoaded }) => stillLoaded()", ctx)).resolves.toBe(1);
   });
 
   it("requires project trust only for explicit persistent operations", async () => {

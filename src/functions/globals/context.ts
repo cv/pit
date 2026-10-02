@@ -14,10 +14,9 @@ export const contextFunctions = [
   userFunctions: string[];
   projectFunctions: string[];
   sessionFunctions: string[];
-  projectFunctionsEnabled: boolean;
 }>;`,
     documentation:
-      "context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions, globalFunctions, userFunctions, projectFunctions, sessionFunctions, projectFunctionsEnabled",
+      "context.get() -> cwd, mode, model, thinkingLevel, sessionFile, savedFunctions, globalFunctions, userFunctions, projectFunctions, sessionFunctions",
     minimumArguments: 0,
     maximumArguments: 0,
   }),

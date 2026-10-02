@@ -8,7 +8,7 @@ import { userFunctionCatalog, projectFunctionCatalog } from "./persistent-functi
 import type { SavedFunctionService } from "./service.js";
 import type { FunctionState } from "./state.js";
 import { reconcileFunctionState, resetFunctionUsage, stateFunctionEnvironment } from "./state.js";
-import { loadProjectFunctionConfig, loadProjectFunctions } from "./storage/project.js";
+import { loadPitProjectConfig, loadProjectFunctions } from "./storage/project.js";
 import { userFunctionDirectory, userFunctionPath, loadUserFunctions } from "./storage/user.js";
 import {
   activatePitTools,
@@ -104,31 +104,25 @@ function registerFunctionLifecycle(
 ): void {
   pi.on("session_start", async (_event, ctx) => {
     resetFunctionUsage(functionState);
-    const projectConfig = await loadProjectFunctionConfig(ctx);
-    functionState.projectEnabled = projectConfig.enabled;
+    const projectConfig = await loadPitProjectConfig(ctx);
     const errors = await loadUserFunctions(
       functionState.user,
       functionState.userMetadata,
       functionState.invalidUser,
     );
-    if (projectConfig.enabled) {
-      errors.push(
-        ...(await loadProjectFunctions(
-          ctx,
-          functionState.projectCandidates,
-          functionState.candidateMetadata,
-          {
-            user: functionState.user,
-            invalidDefinitions: functionState.invalidProject,
-            invalidUser: functionState.invalidUser,
-          },
-        )),
-      );
-    } else {
-      functionState.invalidProject.clear();
-      functionState.projectCandidates.clear();
-      functionState.candidateMetadata.clear();
-    }
+    // Project functions load in every trusted project; loadProjectFunctions checks trust.
+    errors.push(
+      ...(await loadProjectFunctions(
+        ctx,
+        functionState.projectCandidates,
+        functionState.candidateMetadata,
+        {
+          user: functionState.user,
+          invalidDefinitions: functionState.invalidProject,
+          invalidUser: functionState.invalidUser,
+        },
+      )),
+    );
     reconstructFunctions(
       functionState.session,
       ctx.sessionManager.getBranch(),

@@ -41,11 +41,6 @@ function define(code: string, functionId = "company.calculate", params?: unknown
 
 beforeEach(async () => {
   await setupHarness();
-  await mkdir(join(cwd, ".pi"), { recursive: true });
-  await writeFile(
-    join(cwd, ".pi/pit.json"),
-    JSON.stringify({ projectFunctions: { enabled: true } }),
-  );
 });
 afterEach(cleanupHarness);
 

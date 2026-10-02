@@ -5,10 +5,7 @@ import { loadSkillsFromDir, type ExtensionContext } from "@earendil-works/pi-cod
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { createFunctionState, reconcileFunctionState } from "../../src/functions/state.js";
-import {
-  loadProjectFunctionConfig,
-  loadProjectFunctions,
-} from "../../src/functions/storage/project.js";
+import { loadPitProjectConfig, loadProjectFunctions } from "../../src/functions/storage/project.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
 
@@ -32,12 +29,11 @@ for (const skill of skills) {
 }
 
 const state = createFunctionState();
-let config: Awaited<ReturnType<typeof loadProjectFunctionConfig>>;
+let config: Awaited<ReturnType<typeof loadPitProjectConfig>>;
 let errors: string[];
 beforeAll(async () => {
   const ctx = { cwd: process.cwd(), isProjectTrusted: () => true } as ExtensionContext;
-  config = await loadProjectFunctionConfig(ctx);
-  state.projectEnabled = config.enabled;
+  config = await loadPitProjectConfig(ctx);
   errors = await loadProjectFunctions(ctx, state.projectCandidates, state.candidateMetadata, {
     user: state.user,
   });
@@ -46,7 +42,7 @@ beforeAll(async () => {
 
 describe("project agent workflow resources", () => {
   it("discovers and type-checks the trusted project's complete workflow graph", () => {
-    expect(config).toMatchObject({ enabled: true });
+    expect(config.allowedTools).toEqual(["goal_*"]);
     expect(config.error).toBeUndefined();
     expect(errors).toEqual([]);
     expect(state.project.size).toBeGreaterThan(0);
@@ -59,9 +55,14 @@ describe("project agent workflow resources", () => {
     // Full graph validation can pass 15 s on contended CI runners with coverage enabled.
   });
 
-  it("does not enable repository workflows without project trust", async () => {
+  it("does not load repository workflows without project trust", async () => {
     const ctx = { cwd: process.cwd(), isProjectTrusted: () => false } as ExtensionContext;
-    expect(await loadProjectFunctionConfig(ctx)).toMatchObject({ enabled: false });
+    const untrusted = createFunctionState();
+    expect(await loadPitProjectConfig(ctx)).toEqual({});
+    expect(
+      await loadProjectFunctions(ctx, untrusted.projectCandidates, untrusted.candidateMetadata),
+    ).toEqual([]);
+    expect(untrusted.projectCandidates.size).toBe(0);
   });
 
   it("discovers usable workflow skills and executable examples without pinning prose or inventory", () => {
