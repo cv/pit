@@ -135,16 +135,29 @@ describe("recovering a failed program's completed calls", () => {
   it("does not count a call that cancellation interrupted as completed", async () => {
     const ctx = context();
     const controller = new AbortController();
+    // Cancel only once the call is in flight; a fixed delay raced process start on slow CI.
+    let markRunning!: () => void;
+    const callRunning = new Promise<void>((resolve) => {
+      markRunning = resolve;
+    });
     const running = tool.execute(
       "cancelled",
       {
         code: 'async ({ shell: { execFile } }) => execFile("sleep", ["30"], { timeoutMs: 120000 })',
       },
       controller.signal,
-      () => undefined,
+      (update: { details?: { traces?: Array<{ method: string; status: string }> } }) => {
+        if (
+          update.details?.traces?.some(
+            (trace) => trace.method === "execFile" && trace.status === "running",
+          )
+        ) {
+          markRunning();
+        }
+      },
       ctx,
     );
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await callRunning;
     controller.abort();
     await expect(running).rejects.toThrow("cancelled while 1 host call was still running");
 
