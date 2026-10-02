@@ -2,16 +2,20 @@ import { globalFunctionGroups, type GlobalNamespace } from "./globals.js";
 
 // Optional prompt compression; function membership and full docs come from global definitions.
 const NAMESPACE_SUMMARIES: Partial<Record<GlobalNamespace, string>> = {
-  git: "git.status, git.diff, git.log, git.add, git.commit, git.show, git.push, and git.tag accept optional argument arrays and shell.execFile options; results are bounded",
-  npm: "npm.run, npm.test, npm.install, npm.audit, npm.outdated, and npm.pack provide typed bounded npm workflows",
-  gh: "typed bounded issue/PR/run/release workflows with selectable JSON fields, common list filters, and argument-safe extra args; api is the escape hatch",
+  workspace:
+    'read(file, { format?: "hashed" | "raw", offset?, limit? }); search(query, { path?, glob?, regex?, caseSensitive?, contextLines?: 0..10, limit?: 1..500, ignore?, dot? }) returns edit-ready anchors and revisions; edit(file, { revision, changes }), where replace/delete take start and optional end, insertBefore/insertAfter take anchor, and replaceFile/deleteFile take none; batch runs reads [{ kind: "read", file, options? }] with { failure?: "fail-fast" | "settled" }, or edits [{ kind: "edit", file, changes }], and returns ordered { results }; glob(patterns?, { limit?, dot?, onlyFiles?, ignore? }) -> { entries, truncated }; list(path?); stat(path); viewImage(file) attaches up to 8 images to a successful result',
+  git: "status, diff, log, add, commit, show, push, and tag take an argument array and shell options",
+  npm: "run, test, install, audit, outdated, and pack",
+  gh: "issue, PR, run, and release workflows with selectable JSON fields and list filters; api(endpoint) for the rest",
+  shell:
+    'execFile(program, args, options?) runs without a shell; exec(command, options?) runs /bin/sh. Options: cwd, timeoutMs, raise, maxBytes, maxLines, truncate: "head" | "tail". They return { stdout, stderr, code, truncated }; a nonzero exit is data unless raise: true',
   session:
-    "info/name/compact; outline(options?) lists model-visible entries with tokens, reprefillTokens, and state; inspectEntry(id) reads originals; elide(ids, {reason?}), summarize({from, to, summary}), and setNote(key, content|null) stage branch-local edits that apply after this turn if the call succeeds; notes()",
+    "outline(options?) lists model-visible entries with tokens and state; inspectEntry(id) reads an original; elide(ids, { reason? }), summarize({ from, to, summary }), and setNote(key, content | null) stage edits that apply after this turn if the call succeeds; notes(), info, getName/setName, compact",
   commands: "list",
-  models: "current/list/set",
-  runtime: "runtime status",
+  models: "current, list, set",
+  runtime: "status(); completedCalls(toolCallId) returns what a failed program's calls returned",
   functions:
-    'list/get/remove: project; listUser/getUser/removeUser: user. listAll({scope?, allDefinitions?, offset?, limit?}?) -> {functions, total, offset, nextOffset?}; limit 1–200, default 50. Effective by default; scope includes shadowed entries; allDefinitions: every layer. getSaved(name, scope?) -> native/source/invalid metadata (signature, dependencies, chain, next, effects); source only for kind: "source". promote(name, summary, {to: "user"}) persists session to user after confirmation; default target: project. planRemoval(name, scope?) previews blockers; removeSession(name, {cascade: true}) explicitly removes dependents',
+    'list, get, remove (project); listUser, getUser, removeUser (user); listAll({ scope?, allDefinitions?, offset?, limit? }); getSaved(name) for a signature, dependencies, and source; promote(name, summary, { to?: "user" }) saves a session function to the project or user after confirmation; planRemoval(name) and removeSession(name, { cascade: true })',
 };
 
 export function globalFunctionDocumentation(): string[] {
