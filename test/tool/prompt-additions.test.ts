@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  firstSentence,
   projectFunctionCatalog,
   userFunctionCatalog,
 } from "../../src/functions/persistent-functions.js";
@@ -35,9 +36,9 @@ const userDocs = new Map<string, PersistentFunctionMetadata>([
 describe("dynamic prompt additions", () => {
   it.each<{ name: string; user: boolean; project: boolean; headings: number; budget: number }>([
     { name: "no catalogs", user: false, project: false, headings: 0, budget: 0 },
-    { name: "project catalog", user: false, project: true, headings: 1, budget: 150 },
-    { name: "user catalog", user: true, project: false, headings: 1, budget: 150 },
-    { name: "both catalogs", user: true, project: true, headings: 2, budget: 300 },
+    { name: "project catalog", user: false, project: true, headings: 1, budget: 130 },
+    { name: "user catalog", user: true, project: false, headings: 1, budget: 130 },
+    { name: "both catalogs", user: true, project: true, headings: 2, budget: 260 },
   ])("measures $name without repeated tutorials", ({ user, project, headings, budget }) => {
     const parts = [
       userFunctionCatalog(user ? userDocs : new Map(), new Map(), new Map()),
@@ -46,9 +47,31 @@ describe("dynamic prompt additions", () => {
     const text = parts.join("\n\n");
     expect(parts).toHaveLength(headings);
     expect(textSize(text).bytes).toBeLessThanOrEqual(budget);
-    expect(text.includes("company.check(input: { value: number })")).toBe(project);
-    expect(text.includes("input.value: Value to check.")).toBe(project);
-    expect(text.includes("value: Name to format.")).toBe(user);
+    expect(text.includes("company.check(input: { value: number }) — Checks a value.")).toBe(
+      project,
+    );
+    expect(text.includes("format(value: string) — Formats café names.")).toBe(user);
+    // Parameter documentation is one functions.get call away, not in every prompt.
+    expect(text).not.toContain("Value to check.");
+    expect(text).not.toContain("Name to format.");
+  });
+
+  it.each([
+    { name: "a single sentence", summary: "Checks a value.", first: "Checks a value." },
+    {
+      name: "two sentences",
+      summary: "Waits for a run. Fails on timeout.",
+      first: "Waits for a run.",
+    },
+    {
+      name: "an abbreviation",
+      summary: "Uses tools, e.g. jq. Then stops.",
+      first: "Uses tools, e.g. jq.",
+    },
+    { name: "a code span", summary: "Reads `a. B` safely. More.", first: "Reads `a. B` safely." },
+    { name: "no sentence end", summary: "Formats   names", first: "Formats names" },
+  ])("keeps the first sentence of $name", ({ summary, first }) => {
+    expect(firstSentence(summary)).toBe(first);
   });
 
   it("keeps canonical IDs and effective overrides without stale parameter docs", () => {

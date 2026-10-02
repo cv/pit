@@ -535,7 +535,9 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     expect(catalog).toContain(
       "projectGreeting(input?: { name?: string }) — Greets someone using the project convention.",
     );
-    expect(catalog).toContain("input.name: Name to greet.");
+    // Parameter documentation stays out of the prompt; functions.get returns it.
+    expect(catalog).not.toContain("Name to greet.");
+    expect(catalog).toContain("Parameter docs: functions.get(name).");
 
     const differentlyShaped = projectFunctionCatalog(
       docs,
@@ -545,7 +547,6 @@ async function projectGreeting({}, input: { name?: string } = {}) {
       "projectGreeting() — Session override of project function.",
     );
     expect(differentlyShaped).not.toContain("Greets someone using the project convention.");
-    expect(differentlyShaped).not.toContain("input.name: Name to greet.");
 
     const sameShaped = projectFunctionCatalog(
       docs,
@@ -560,7 +561,6 @@ async function projectGreeting({}, input: { name?: string } = {}) {
       "projectGreeting(input?: { name?: string }) — Session override of project function.",
     );
     expect(sameShaped).not.toContain("Greets someone using the project convention.");
-    expect(sameShaped).not.toContain("input.name: Name to greet.");
   });
 
   it("formats empty, documented, and bounded catalogs", () => {
@@ -579,15 +579,13 @@ async function projectGreeting({}, input: { name?: string } = {}) {
     ]);
     const catalog = projectFunctionCatalog(docs);
     expect(catalog).toContain("alpha(input: { raw: string }) — Alpha helper");
-    expect(catalog).toContain("input: value to use");
-    expect(catalog).toContain("input.raw");
+    expect(catalog).not.toContain("value to use");
     expect(catalog).toContain("1 more; use functions.list()");
 
     const unparsableOverride = projectFunctionCatalog(docs, new Map([["alpha", "not a function"]]));
     expect(unparsableOverride).toContain("- alpha — Session override of project function.");
     expect(unparsableOverride).not.toContain("alpha(");
     expect(unparsableOverride).not.toContain("Alpha helper");
-    expect(unparsableOverride).not.toContain("input: value to use");
 
     const missingOverrideSource = new Map([["alpha", "placeholder"]]);
     missingOverrideSource.get = () => undefined;
@@ -597,6 +595,7 @@ async function projectGreeting({}, input: { name?: string } = {}) {
 
     const userCatalog = userFunctionCatalog(docs, new Map(), new Map());
     expect(userCatalog).toContain("## User functions");
+    expect(userCatalog).toContain("Parameter docs: functions.getUser(name).");
     expect(userCatalog).toContain("1 more; use functions.listUser()");
     expect(userFunctionCatalog(docs, new Map([["alpha", "project"]]), new Map())).not.toContain(
       "alpha(input",
