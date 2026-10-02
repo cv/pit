@@ -253,10 +253,12 @@ function buildToolResult(input: {
       ? `\n[Saved ${input.projectFunction ? "project " : ""}function "${input.namedFunction}" without executing it${invocationGuidance}]`
       : `\n[Saved ${input.projectFunction ? "project " : ""}function "${input.namedFunction}"${invocationGuidance}]`
     : "";
+  // The session-function list repeats only when it changed since a result last showed it.
+  const catalog = savedFunctionCatalogNotice(input.functionState.session);
+  const catalogNotice = catalog === input.functionState.announcedSessionCatalog ? "" : catalog;
+  input.functionState.announcedSessionCatalog = catalog;
   const notices =
-    savedNotice +
-    promotionSuggestionNotice(input.promotionSuggestions) +
-    savedFunctionCatalogNotice(input.functionState.session);
+    savedNotice + promotionSuggestionNotice(input.promotionSuggestions) + catalogNotice;
   // The result gets the budget the notices leave, so the complete text stays within Pi's limit.
   const attachmentText =
     input.imageMetadata.map(({ file, note }) => `\nImage: ${file}\n${note}`).join("") +

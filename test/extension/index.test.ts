@@ -392,6 +392,23 @@ describe("pit extension", () => {
     expect(branchEntries.some((entry) => entry.data?.name === "broken")).toBe(false);
   });
 
+  // The list repeated on every result: about 900 times in one long session.
+  it("shows the session-function list only when it changes", async () => {
+    const first = await run("async function listed({}) { return 1; }");
+    expect(first.content[0].text).toContain("[Session functions: listed()]");
+
+    const unchanged = await run("async ({ listed }) => listed()");
+    expect(unchanged.content[0].text).not.toContain("[Session functions:");
+
+    const added = await run("async function second({}) { return 2; }");
+    expect(added.content[0].text).toContain("[Session functions: listed(), second()]");
+
+    // A new session starts without the list in context.
+    await sessionStart({}, context());
+    const resumed = await run("async ({ second }) => second()");
+    expect(resumed.content[0].text).toContain("[Session functions: listed(), second()]");
+  });
+
   it("saves named functions without executing them", async () => {
     const source = `async function deferred({ shell: { execFile } }) {
       return execFile("node", ["--version"]);
