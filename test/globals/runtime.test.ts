@@ -130,6 +130,56 @@ describe("recovering a failed program's completed calls", () => {
     );
   });
 
+  // v0.24.0 journaled a call that cancellation interrupted: the process runner settles an aborted
+  // command with exit 130, so a cancelled program claimed one recoverable call it never received.
+  it("does not count a call that cancellation interrupted as completed", async () => {
+    const ctx = context();
+    const controller = new AbortController();
+    const running = tool.execute(
+      "cancelled",
+      {
+        code: 'async ({ shell: { execFile } }) => execFile("sleep", ["30"], { timeoutMs: 120000 })',
+      },
+      controller.signal,
+      () => undefined,
+      ctx,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    controller.abort();
+    await expect(running).rejects.toThrow("cancelled while 1 host call was still running");
+
+    const cancelled = await toolResult({
+      toolName: "typescript",
+      toolCallId: "cancelled",
+      isError: true,
+    });
+    expect(cancelled.content[0].text).not.toContain("Recoverable");
+    expect(cancelled.details).not.toHaveProperty("recoverable");
+  });
+
+  it("does not count Pit's internal saved-function calls as recoverable", async () => {
+    const { ctx } = feedContext();
+    await tool.execute(
+      "define",
+      {
+        code: 'async function parseChunk({}, text: string) { throw new Error("bad chunk: " + text); }',
+        saveOnly: true,
+      },
+      undefined,
+      undefined,
+      ctx,
+    );
+    const code = "async ({ tools: { feed_next }, parseChunk }) => parseChunk(await feed_next())";
+    await expect(
+      tool.execute("feed-then-saved", { code }, undefined, undefined, ctx),
+    ).rejects.toThrow("bad chunk");
+    const recovered = await value(
+      'async ({ runtime: { completedCalls } }) => completedCalls("feed-then-saved")',
+      ctx,
+    );
+    expect(recovered.calls.map((call: { call: string }) => call.call)).toEqual(["tools.feed_next"]);
+  });
+
   it("keeps nothing for a successful program or a failure with no completed calls", async () => {
     const { ctx } = feedContext();
     await tool.execute(
