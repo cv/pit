@@ -17,8 +17,8 @@
   "license": "MIT",
   "scripts": {
     "check": "npm run globals:check && npm run structure:check && tsc --noEmit && npm run lint && npm run format:check",
-    "globals:check": "tsx scripts/generate-global-contract.ts --check",
-    "globals:generate": "tsx scripts/generate-global-contract.ts",
+    "globals:check": "node --import ./scripts/typescript-resolve.mjs scripts/generate-global-contract.ts --check",
+    "globals:generate": "node --import ./scripts/typescript-resolve.mjs scripts/generate-global-contract.ts",
     "structure:check": "node scripts/check-structure.mjs",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
@@ -52,7 +52,6 @@
     "@vitest/coverage-v8": "^5.0.3",
     "esbuild": "^0.28.2",
     "oxlint": "1.86.0",
-    "tsx": "^4.23.15",
     "typebox": "^1.3.34",
     "vitest": "^5.0.3"
   },

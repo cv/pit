@@ -33,11 +33,16 @@ export class WorkspaceReadScanner {
   #totalLines = 1;
   #pendingCarriageReturn = false;
 
+  private readonly offset: number;
+  private readonly maximumCaptureCharacters: number;
+
   constructor(
-    private readonly offset: number,
+    offset: number,
     limit: number,
-    private readonly maximumCaptureCharacters = LIMITS.result.maxBytes + 1,
+    maximumCaptureCharacters = LIMITS.result.maxBytes + 1,
   ) {
+    this.offset = offset;
+    this.maximumCaptureCharacters = maximumCaptureCharacters;
     this.#selectionEnd = offset + limit - 1;
   }
 

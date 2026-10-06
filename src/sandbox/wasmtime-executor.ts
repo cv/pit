@@ -87,12 +87,17 @@ class GuestExecution {
   // Whether stopping reached the guest; a guest that failed on its own keeps its error.
   #affected = false;
 
+  private readonly addon: WasmtimeAddon;
+  private readonly options: FunctionExecutionOptions;
+
   constructor(
-    private readonly addon: WasmtimeAddon,
+    addon: WasmtimeAddon,
     handler: HostCallHandler,
     effects: Iterable<string>,
-    private readonly options: FunctionExecutionOptions,
+    options: FunctionExecutionOptions,
   ) {
+    this.addon = addon;
+    this.options = options;
     this.signal = executionSignal(options);
     this.#dispatcher = new HostCallDispatcher({
       handler,

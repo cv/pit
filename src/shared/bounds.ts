@@ -263,10 +263,13 @@ export class TextCapture {
   #newlines = 0;
   #dropped = false;
 
-  constructor(
-    private readonly budget: TextBudget,
-    private readonly keep: SliceKeep,
-  ) {}
+  private readonly budget: TextBudget;
+  private readonly keep: SliceKeep;
+
+  constructor(budget: TextBudget, keep: SliceKeep) {
+    this.budget = budget;
+    this.keep = keep;
+  }
 
   /** Adds raw bytes and returns their decoded text, holding back an incomplete character. */
   push(chunk: Buffer): string {

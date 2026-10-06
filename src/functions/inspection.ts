@@ -88,10 +88,10 @@ export class FunctionInspector {
   readonly #projectDirectory: string;
   readonly #userDirectory: string;
 
-  constructor(
-    state: FunctionInspectionState,
-    private readonly cwd: string,
-  ) {
+  private readonly cwd: string;
+
+  constructor(state: FunctionInspectionState, cwd: string) {
+    this.cwd = cwd;
     this.#projectDirectory = state.projectDirectory || defaultProjectFunctionDirectory(cwd);
     this.#userDirectory = userFunctionDirectory(state.userDirectory);
     this.#registry = functionRegistry({

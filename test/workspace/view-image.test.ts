@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -177,10 +178,11 @@ describe("workspace image collector", () => {
          catch (error) { if (!String(error).includes("regular file")) throw error; console.log("FIFO rejected"); }
          finally { clearTimeout(deadline); }`,
       );
-      const output = execFileSync(process.execPath, ["--import", "tsx", probe], {
+      const resolveHook = pathToFileURL(join(process.cwd(), "scripts/typescript-resolve.mjs")).href;
+      const output = execFileSync(process.execPath, ["--import", resolveHook, probe], {
         cwd: process.cwd(),
         encoding: "utf8",
-        // Cold tsx/Pi imports are outside the two-second FIFO operation deadline.
+        // Cold TypeScript/Pi imports are outside the two-second FIFO operation deadline.
         timeout: 25_000,
         killSignal: "SIGKILL",
       });

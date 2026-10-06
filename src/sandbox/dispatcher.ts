@@ -42,7 +42,11 @@ export class HostCallDispatcher {
   #callCount = 0;
   #activeCalls = 0;
 
-  constructor(private readonly options: HostCallDispatcherOptions) {}
+  private readonly options: HostCallDispatcherOptions;
+
+  constructor(options: HostCallDispatcherOptions) {
+    this.options = options;
+  }
 
   pending(): Promise<void>[] {
     return [...this.#inFlight];
