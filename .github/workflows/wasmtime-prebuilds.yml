@@ -83,7 +83,7 @@ jobs:
       - name: Prepare smoke program and adapter
         run: |
           mkdir -p smoke
-          npx tsx native/wasmtime-executor/prepare-smoke.mts smoke/prepared-program.json
+          node --import ./scripts/typescript-resolve.mjs native/wasmtime-executor/prepare-smoke.mts smoke/prepared-program.json
           npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=smoke/wasmtime-adapter.cjs
       - name: Upload smoke-test inputs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

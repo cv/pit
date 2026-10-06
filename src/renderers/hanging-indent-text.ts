@@ -30,10 +30,13 @@ export class HangingIndentText implements Component {
   private cachedWidth: number | undefined;
   private cachedLines: string[] | undefined;
 
-  constructor(
-    private readonly text: string,
-    private readonly hangingIndents: Readonly<Record<number, number>> = {},
-  ) {}
+  private readonly text: string;
+  private readonly hangingIndents: Readonly<Record<number, number>>;
+
+  constructor(text: string, hangingIndents: Readonly<Record<number, number>> = {}) {
+    this.text = text;
+    this.hangingIndents = hangingIndents;
+  }
 
   render(width: number): string[] {
     if (this.cachedLines && this.cachedWidth === width) {

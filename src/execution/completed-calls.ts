@@ -36,10 +36,16 @@ export class CompletedCallJournal {
   #bytes = 0;
   #omitted = 0;
 
+  private readonly maxCalls: number;
+  private readonly maxBytes: number;
+
   constructor(
-    private readonly maxCalls: number = MAX_JOURNAL_CALLS,
-    private readonly maxBytes: number = LIMITS.programData.maxBytes,
-  ) {}
+    maxCalls: number = MAX_JOURNAL_CALLS,
+    maxBytes: number = LIMITS.programData.maxBytes,
+  ) {
+    this.maxCalls = maxCalls;
+    this.maxBytes = maxBytes;
+  }
 
   record(sequence: number | undefined, call: string, value: unknown): void {
     let json: string | undefined;
@@ -86,7 +92,11 @@ export class CompletedCallJournal {
 export class RecoverableCallStore {
   readonly #journals = new Map<string, CompletedCallJournal>();
 
-  constructor(private readonly maxPrograms: number = MAX_RECOVERABLE_PROGRAMS) {}
+  private readonly maxPrograms: number;
+
+  constructor(maxPrograms: number = MAX_RECOVERABLE_PROGRAMS) {
+    this.maxPrograms = maxPrograms;
+  }
 
   /** Keeps a failed program's journal, evicting the oldest kept program. */
   retain(toolCallId: string, journal: CompletedCallJournal): void {

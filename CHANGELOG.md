@@ -7,6 +7,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 ### Changed
 
 - Pit compiles submitted TypeScript with TypeScript's own `transpileModule` instead of esbuild, and esbuild is now only a development dependency for bundling the Wasmtime smoke adapter. Installing Pit no longer downloads esbuild's native binary or runs its postinstall script, which npm's `allow-scripts` check reports as unapproved. Compiling a typical program takes about as long as before, roughly 1 ms.
+- Development scripts and the Wasmtime prebuild workflow run TypeScript with Node's built-in type stripping and a small resolve hook, `scripts/typescript-resolve.mjs`, instead of `tsx`, which is removed. `tsconfig.json` enables `erasableSyntaxOnly` so every source stays runnable this way, and constructor parameter properties became explicit fields. `npm run globals:check` takes about 0.2 s instead of 0.5 s.
 
 ### Security
 

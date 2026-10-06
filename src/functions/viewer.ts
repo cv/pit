@@ -25,11 +25,14 @@ export class FunctionViewer {
   private lines: string[] = [];
   private omitted = 0;
 
-  constructor(
-    private readonly definition: FunctionInspection,
-    private readonly theme: Theme,
-    private readonly close: () => void,
-  ) {
+  private readonly definition: FunctionInspection;
+  private readonly theme: Theme;
+  private readonly close: () => void;
+
+  constructor(definition: FunctionInspection, theme: Theme, close: () => void) {
+    this.definition = definition;
+    this.theme = theme;
+    this.close = close;
     this.rebuildHighlighting();
   }
 

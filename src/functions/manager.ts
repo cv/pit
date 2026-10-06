@@ -49,10 +49,12 @@ class SavedFunctionManager {
   readonly #userFunctions: FunctionRegistry;
   readonly #projectFunctions: FunctionRegistry;
 
-  constructor(
-    private readonly savedFunctions: FunctionRegistry,
-    private readonly options: FunctionManagerOptions,
-  ) {
+  private readonly savedFunctions: FunctionRegistry;
+  private readonly options: FunctionManagerOptions;
+
+  constructor(savedFunctions: FunctionRegistry, options: FunctionManagerOptions) {
+    this.savedFunctions = savedFunctions;
+    this.options = options;
     this.#userFunctions = options.userFunctions ?? new Map<string, string>();
     this.#projectFunctions = options.projectFunctions ?? new Map<string, string>();
   }
