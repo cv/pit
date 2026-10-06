@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 
 import {
   boundedIntegerValue as boundedInteger,
@@ -84,23 +84,16 @@ async function discoverSearchFiles(request: SearchRequest): Promise<string[]> {
     "**/node_modules/**",
     ...(Array.isArray(request.options.ignore) ? request.options.ignore.map(String) : []),
   ];
-  const discovered: string[] = [];
-  const stream = fg.stream(patterns, {
+  const discovered = await glob(patterns, {
     cwd: request.searchPath,
     dot: Boolean(request.options.dot),
     onlyFiles: true,
     ignore,
     followSymbolicLinks: false,
     absolute: true,
+    expandDirectories: false,
   });
-  for await (const entry of stream) {
-    discovered.push(String(entry));
-    /* v8 ignore next -- the hard file cap is impractical to exercise in unit fixtures. */
-    if (discovered.length === MAX_SEARCH_FILES) {
-      break;
-    }
-  }
-  return discovered.sort((a, b) => a.localeCompare(b));
+  return discovered.sort((a, b) => a.localeCompare(b)).slice(0, MAX_SEARCH_FILES);
 }
 
 function literalMatchColumns(input: {

@@ -374,6 +374,8 @@ describe("workspace discovery", () => {
     await writeFile(join(cwd, "second.txt"), "two", "utf8");
     await symlink(join(cwd, "existing.txt"), join(cwd, "link.txt"));
     await mkdir(join(cwd, "nested"));
+    await mkdir(join(cwd, "folder"));
+    await writeFile(join(cwd, "folder", "inside.txt"), "three", "utf8");
     const result =
       await value(`async ({ workspace: { batch: workspaceBatch, edit: workspaceEdit, glob: workspaceGlob, list: workspaceList, read: workspaceRead, search: workspaceSearch, stat: workspaceStat } }) => ({
       list: await workspaceList(),
@@ -381,6 +383,7 @@ describe("workspace discovery", () => {
       glob: await workspaceGlob("**/*.txt", { onlyFiles: true, limit: 1 }),
       defaultGlob: await workspaceGlob(),
       filteredGlob: await workspaceGlob(["**/*.txt"], { ignore: ["second.txt"] }),
+      directoryGlob: await workspaceGlob("folder"),
       stat: await workspaceStat("existing.txt"),
     })`);
     expect(result.list).toEqual(
@@ -394,6 +397,7 @@ describe("workspace discovery", () => {
     expect(result.glob).toMatchObject({ entries: ["existing.txt"], truncated: true });
     expect(result.defaultGlob.entries).toEqual(expect.arrayContaining(["existing.txt", "nested"]));
     expect(result.filteredGlob.entries).not.toContain("second.txt");
+    expect(result.directoryGlob).toEqual({ entries: ["folder"], truncated: false });
     expect(result.stat).toMatchObject({ size: 3, file: true, directory: false });
   });
 
