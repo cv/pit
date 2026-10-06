@@ -20,7 +20,7 @@ Pi extension host
 │  ├─ Oxfmt source canonicalization
 │  ├─ TypeScript semantic validation
 │  ├─ layered function graph and grant resolution
-│  └─ esbuild compilation
+│  └─ TypeScript transpilation
 │
 ├─ in-process native boundary
 │  ├─ fresh Wasmtime store + restricted WASI context
@@ -138,7 +138,7 @@ Only direct declared dependencies are injected. The trusted host grants the reso
 
 ### Compilation
 
-After validation and scope resolution, esbuild transforms the generated TypeScript expression to ES2022 JavaScript with an inline source map. Compilation has a separate bounded 128-entry cache. Validation, compilation, and dependency caches can be cleared together for tests and diagnostics.
+After validation and scope resolution, TypeScript's `transpileModule` erases types from the generated expression and emits ES2022 JavaScript with an inline source map. It treats the expression as a module with preserved syntax, so the output gains no `"use strict"` prologue or `export {}` marker. Compilation has a separate bounded 128-entry cache. Validation, compilation, and dependency caches can be cleared together for tests and diagnostics.
 
 ## Sandbox and RPC boundary
 

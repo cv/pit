@@ -1,9 +1,9 @@
-import { transform } from "esbuild";
 import { describe, expect, it } from "vitest";
 
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
 import { resolveFunctionGraph } from "../../src/functions/resolved-graph.js";
 import { unifiedRuntimeProgram } from "../../src/functions/unified-runtime.js";
+import { transpileTypeScriptExpression } from "../../src/sandbox/transpile.js";
 import { sourceFunctionDefinition } from "../support/function-definitions.js";
 
 async function execute(
@@ -14,9 +14,9 @@ async function execute(
 ) {
   const graph = resolveFunctionGraph(source, createLayeredFunctionRegistry(definitions));
   const generated = unifiedRuntimeProgram(source, graph);
-  const compiled = await transform(`(${generated})`, { loader: "ts", target: "es2022" });
+  const compiled = transpileTypeScriptExpression(generated);
   // oxlint-disable-next-line no-eval -- execute generated sandbox source in the unit test.
-  const main = (0, eval)(compiled.code) as (
+  const main = (0, eval)(compiled) as (
     dependencies: (context: unknown) => object,
     input: unknown,
     runSaved: (
