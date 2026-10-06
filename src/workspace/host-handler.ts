@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promi
 import { dirname } from "node:path";
 
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 
 import {
   boundedIntegerValue as boundedInteger,
@@ -223,25 +223,22 @@ async function globWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
     fallback: MAX_GLOB_RESULTS,
   });
 
-  const entries: string[] = [];
-  let truncated = false;
-  const stream = fg.stream(patterns, {
+  const matches = await glob(patterns, {
     cwd,
     dot: Boolean(options.dot),
     onlyFiles: options.onlyFiles === undefined ? false : Boolean(options.onlyFiles),
     ignore: Array.isArray(options.ignore) ? options.ignore.map(String) : [],
     followSymbolicLinks: false,
+    // Match only the named entry for a literal directory pattern, not its contents.
+    expandDirectories: false,
+    ...(signal ? { signal } : {}),
   });
-  for await (const entry of stream) {
-    checkAbort(signal);
-    if (entries.length === limit) {
-      truncated = true;
-      break;
-    }
-    entries.push(String(entry));
-  }
-  entries.sort((a, b) => a.localeCompare(b));
-  return { entries, truncated };
+  checkAbort(signal);
+  // tinyglobby marks directories with a trailing slash; workspace entries are bare paths.
+  const entries = matches
+    .map((entry) => (entry.length > 1 && entry.endsWith("/") ? entry.slice(0, -1) : entry))
+    .sort((a, b) => a.localeCompare(b));
+  return { entries: entries.slice(0, limit), truncated: entries.length > limit };
 }
 
 export interface WorkspaceHost {
