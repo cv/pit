@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Security
+
+- Pit's runtime dependencies no longer include `braces`. `fast-glob` is replaced by `tinyglobby`, which matches with `picomatch`, so `npm audit --omit=dev` no longer reports [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), a stack-exhaustion denial of service from deeply nested brace patterns that has no patched `braces` release. `workspace.glob` and `workspace.search` return the same entries, with two exceptions: a pattern that leaves the working directory and comes back into it returns the shorter equivalent path, such as `../package.json` for `../../pit/package.json`; and a `workspace.glob` truncated at `limit` keeps the first entries in sorted order rather than discovery order.
+
 ## [0.26.0] - 2026-10-02
 
 ### Added

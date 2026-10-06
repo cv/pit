@@ -42,8 +42,8 @@
   "dependencies": {
     "@earendil-works/pi-codemode": "^0.99.2",
     "esbuild": "^0.28.1",
-    "fast-glob": "^3.3.3",
     "oxfmt": "0.71.0",
+    "tinyglobby": "^0.2.17",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
