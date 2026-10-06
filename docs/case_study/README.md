@@ -1,6 +1,6 @@
 # I Wasn't Trying to Build an App
 
-> How asking an agent for a playlist grew into an adaptive music-recommendation system—and why Pit made the software-building step disappear.
+> How asking an agent for a playlist grew into an adaptive music-recommendation system—and why Pit made the software-building step optional.
 
 _About a 20-minute read._
 
@@ -32,7 +32,7 @@ From there I asked for ten artists with a similar sound. Then I asked for roughl
 
 By the end of the session, the repository contained 18 project functions, nine recommendation manifests, 334 tracks from 99 credited artists, 63 explicit feedback records, a recency-weighted taste profile, a visual journal, and a guarded publication workflow. The session had produced 22 commits.
 
-That list makes this sound like an ambitious coding project. It did not feel like one. I was mostly talking about music.
+That list makes this sound like an ambitious coding project. It did not feel like one. It felt like a conversation about music.
 
 ## The productization step
 
@@ -62,9 +62,9 @@ compose it into larger operations
 keep pursuing the original goal
 ```
 
-I wrote Pit, so none of those mechanisms surprised me individually. What was reassuring was the better-than-the-sum-of-the-parts effect. I had expected saved TypeScript functions to reduce repeated work. I had not expected them to remove almost all of the psychological shift from using software to building it.
+I wrote Pit, so none of those mechanisms surprised me individually. What surprised me was how they combined. I had expected saved TypeScript functions to reduce repeated work. I had not expected them to remove almost all of the psychological shift from using software to building it.
 
-The application emerged without a productization meeting, even an internal one.
+The application emerged without a productization meeting, not even an internal one.
 
 ## When every tool call is a program
 
@@ -88,7 +88,7 @@ async ({ workspace, git }) => {
 
 This is more than changing the syntax of a tool call. The model can use normal programming constructs inside the boundary: concurrency, loops, conditionals, maps, parsing, filtering, aggregation, and explicit sequencing. Intermediate data stays in the restricted process. Only the returned value enters the model's context.
 
-That property mattered immediately in the music experiment. The playback investigation combined a bounded log query, a Python parser, catalog lookups, deduplication, and summary calculations. The Apple catalog searches handled many albums and tracks but returned only plausible matches. Playlist verification reduced the contents of Music to counts, duration, order, and duplicates. The model did not need every raw log line or HTTP response in its conversation.
+That property mattered immediately in the music experiment. The playback investigation combined a log query, a Python parser, catalog lookups, deduplication, and summary calculations. The Apple catalog searches handled many albums and tracks but returned only plausible matches. Playlist verification reduced the contents of Music to counts, duration, order, and duplicates. The model did not need every raw log line or HTTP response in its conversation.
 
 Under the covers, a Pit call takes this path:
 
@@ -112,9 +112,9 @@ bounded result
 
 Pit builds an in-memory TypeScript program containing the generated capability contract, declarations for available saved functions, the submitted source, and any top-level input. It reports semantic errors with source locations before execution.
 
-The validated program is compiled and sent to a fresh Node process started with the permission model enabled. The child cannot directly read the workspace, access the network, or launch subprocesses. When code invokes `workspace.read`, `http.request`, or `shell.execFile`, a lazy proxy sends a bounded request to the trusted Pit extension process, which validates and performs the operation.
+The validated program is compiled and sent to a fresh Node process started with the permission model enabled. The child process cannot directly read the workspace, access the network, or launch subprocesses. When code invokes `workspace.read`, `http.request`, or `shell.execFile`, a lazy proxy sends a request to the trusted Pit extension process, which validates and performs the operation.
 
-This is not an approval boundary. Host capabilities can still change files, run commands, and operate applications with the permissions of Pi. I was using a trusted project and a model I was comfortable allowing to act on my computer. The restriction is nevertheless useful: submitted code cannot bypass the capability layer, and its effects remain attributable and bounded.
+This is not an approval boundary. Host capabilities can still change files, run commands, and operate applications with Pi's permissions. I was using a trusted project and a model I was comfortable allowing to act on my computer. The restriction is nevertheless useful: submitted code cannot bypass the capability layer, and its effects remain attributable and bounded.
 
 The crucial implementation detail for this story is what happens after execution. The tool adapter effectively does this:
 
@@ -158,7 +158,7 @@ const history = await getAppleMusicListeningHistory({
 
 Session functions are stored as branch-local entries in Pi's session tree. Navigating to another branch reconstructs the function registry for that branch. A function can remain experimental there, override an existing project function, or disappear when the branch changes.
 
-When a function has survived representative use, it can be promoted. Project functions are written as ordinary documented TypeScript files under `.pi/functions/` and checked into Git; their location determines scope. Their signatures and summaries are added to future agent prompts, while their full source is injected only when referenced.
+When a function has survived representative use, it can be promoted. Project functions are written as ordinary documented TypeScript files under `.pi/functions/` and checked into Git. Their directory determines their scope. Their signatures and summaries are added to future agent prompts, while their full source is injected only when referenced.
 
 This creates a ratchet:
 
@@ -171,9 +171,9 @@ explore
           → promote
 ```
 
-The listening-history function went through this sequence in miniature. The first attempt used the wrong persistence marker. The next was saved as a session function without execution. A real invocation exposed an error in macOS date handling. The duration calculation was then improved: instead of using the highest playback position, it accumulated plausible wall-clock and playback-position advances between nearby log samples. The final test reported 113 starts and 28,579 sampled playback seconds across two sessions.
+The listening-history function went through this sequence in miniature. An early version was saved as a session function without execution. A real invocation exposed an error in macOS date handling. The duration calculation was then improved: instead of using the highest playback position, it accumulated plausible wall-clock and playback-position advances between nearby log samples. The final test reported 113 starts and 28,579 sampled playback seconds across two sessions.
 
-Project functions were disabled at the beginning, intentionally. Enabling them required an explicit trusted-project configuration and a reload. Only then did the four initial Apple Music functions move from session state into source files and Git.
+Project functions were intentionally disabled at the start. Enabling them required an explicit trusted-project configuration and a reload. Only then did the four initial Apple Music functions move from session state into source files and Git.
 
 Pit also understands dependencies between saved functions. It uses TypeScript's symbol analysis rather than text matching, computes direct and transitive references, and generates a runtime containing only the required closure. Scope constrains what may be referenced: global functions can use global dependencies, project functions can use project and global dependencies, and session functions can use all three scopes.
 
@@ -231,7 +231,7 @@ set sg to first UI element of front window whose role is "AXSplitGroup"
 
 That was more resilient, but it was still automating a menu separately for every track. A later edition exposed the deeper weakness. Music opened with a Lyrics pane, album pages rendered differently, operations timed out after several minutes, and the agent eventually restarted the application while trying to recover.
 
-A reflection pass compared the repeated failures with the function registry. Rather than adding another population helper, it replaced the implementation of the existing intent.
+A reflection pass compared the repeated failures with the function registry. Rather than adding another population helper, it rewrote the existing function behind the same name and interface.
 
 The new strategy used the UI only where Music offered no better interface:
 
@@ -310,7 +310,7 @@ I kept detailed tool output collapsed with `Ctrl+O`. I mostly followed Pit's sho
 
 I did not review the generated TypeScript. I did not intervene in its implementation choices. A few times Music itself crashed and macOS displayed a dialog asking permission to restart it; I clicked the button. Otherwise my attention stayed on the playlist and the conversation.
 
-I talked about how repetition can feel static in one track and propulsive in another. I said that Tortoise was experimental but still felt composed, unlike a jam where everyone brought a different idea. I explained that Nala Sinephro after This Heat felt like a warm bath after working outside in the snow. I mentioned records I owned and concerts I had attended. Halfway through one playlist I impulse-bought a Maserati record on vinyl.
+I talked about how repetition can feel static in one track and propulsive in another. I said that Tortoise was experimental but still felt composed, unlike a jam where everyone brought a different idea. I explained that Nala Sinephro after This Heat felt like a warm bath after working outside in the snow. I mentioned records I owned and concerts I had attended. Halfway through one playlist I impulse-bought a vinyl record by the band Maserati.
 
 The agent was doing substantial programming behind these exchanges, but I was not in a coding frame of mind. The high-level descriptions gave me enough visibility to know what kind of action was happening without requiring me to inspect its mechanics.
 
@@ -408,13 +408,13 @@ The output was similarly replaceable. The 255-character limit on Apple Music des
 
 A newsletter could become another renderer and publisher. Preparing a radio programme might add scripts, timings, and spoken links. Becoming a DJ might add energy and tempo transitions. Asking for an all-Japanese lineup for a trip is a new editorial premise, not necessarily a feature request requiring an application release.
 
-This flexibility comes from the semantic level at which the saved functions accumulated. The system grew around what I was trying to accomplish, while Apple Music and HTML remained replaceable implementation choices.
+This flexibility comes from where the saved functions accumulated: around intent, not around Apple Music. The system grew around what I was trying to accomplish, while Apple Music and HTML remained replaceable implementation choices.
 
 ## Where it still broke
 
 This was an experience report, not a controlled benchmark, and the resulting system was not magically reliable.
 
-The main session contained 26 Pit calls that threw errors: nine TypeScript or capability-contract failures, six execution timeouts, four configuration or precondition failures, two host-application failures, one domain-data failure, and four other data or catalog failures. That count does not include every AppleScript operation that returned a non-zero result and was handled inside an otherwise successful TypeScript call.
+The main session contained 26 Pit calls that threw errors: nine TypeScript or capability-contract failures, six execution timeouts, four configuration or precondition failures, two host-application failures, and five data or catalog failures. That count does not include every AppleScript operation that returned a non-zero result and was handled inside an otherwise successful TypeScript call.
 
 Music's accessibility hierarchy changed with open panes. Catalog pages sometimes stopped rendering. The application crashed. An album visible through Apple's API could refuse to enter the local library. Exact historical recordings were not always available. Local macOS logs could not account for listening on another device, so zero observed plays could not be interpreted as dislike.
 
