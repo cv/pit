@@ -1,5 +1,3 @@
-import { transform } from "esbuild";
-
 import type { ExecutionTimingRecorder } from "../execution/timings.js";
 import {
   type FunctionEnvironment,
@@ -10,6 +8,7 @@ import {
   getSavedFunctionDependencyGraphCacheStats,
 } from "../functions/graph.js";
 import { unifiedRuntimeProgram } from "../functions/unified-runtime.js";
+import { transpileTypeScriptExpression } from "./transpile.js";
 import {
   clearValidationCache,
   getValidationCacheStats,
@@ -17,7 +16,7 @@ import {
 } from "./validation.js";
 
 const MAX_CACHE_ENTRIES = 128;
-const compilationCache = new Map<string, Promise<string>>();
+const compilationCache = new Map<string, string>();
 let compilationCacheHits = 0;
 
 function cacheSet<T>(cache: Map<string, T>, key: string, value: T): void {
@@ -46,25 +45,15 @@ export function getSandboxCacheStats() {
   };
 }
 
-async function compileTypeScript(source: string): Promise<string> {
+function compileTypeScript(source: string): string {
   const cached = compilationCache.get(source);
-  if (cached) {
+  if (cached !== undefined) {
     compilationCacheHits++;
     return cached;
   }
-  const compilation = transform(`(${source})`, {
-    loader: "ts",
-    target: "es2022",
-    sourcemap: "inline",
-  }).then((result) => result.code);
-  cacheSet(compilationCache, source, compilation);
-  try {
-    return await compilation;
-  } catch (error) {
-    /* v8 ignore next -- malformed submissions fail semantic validation before compilation. */
-    compilationCache.delete(source);
-    throw error;
-  }
+  const compiled = transpileTypeScriptExpression(source);
+  cacheSet(compilationCache, source, compiled);
+  return compiled;
 }
 
 export interface SandboxProgramOptions extends FunctionEnvironment {
@@ -90,7 +79,7 @@ export async function prepareSandboxProgram(
   });
   options.timings?.enter("compilation");
   return {
-    compiled: await compileTypeScript(unifiedRuntimeProgram(source, graph)),
+    compiled: compileTypeScript(unifiedRuntimeProgram(source, graph)),
     effects: graph.effects,
   };
 }
