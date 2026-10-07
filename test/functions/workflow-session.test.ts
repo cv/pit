@@ -363,8 +363,8 @@ describe("sessions.analyzeRecent", () => {
       limit: 10000,
     });
     expect(analyzeSession.mock.calls.map(([input]) => input)).toEqual([
-      { file: `${directory}/c\nnew.jsonl`, examples: 3 },
-      { file: `${directory}/b.jsonl`, examples: 3 },
+      { file: `${directory}/c\nnew.jsonl`, examples: 3, cacheLifetimeSeconds: 300 },
+      { file: `${directory}/b.jsonl`, examples: 3, cacheLifetimeSeconds: 300 },
     ]);
     expect(result).toMatchObject({
       sessions: 2,
@@ -453,6 +453,11 @@ describe("sessions.analyzeRecent", () => {
       notices: { shown: 1, byLevel: { "50%": 1 }, followed: 1, followWindowTurns: 3 },
       churn: { inspectedRemovedEntries: 1, reeditedEntries: 0 },
       sessionCalls: { outline: 1 },
+      cache: {
+        lifetimeSeconds: 300,
+        longestHitGapSeconds: peak / 10,
+        nearFullRewrites: { requests: 1, cacheWrite: peak },
+      },
     });
     const contexts: Record<string, ReturnType<typeof context>> = {
       a: context(800, "elide", 0.1),
@@ -487,11 +492,16 @@ describe("sessions.analyzeRecent", () => {
       notices: { shown: 2, byLevel: { "50%": 2 }, followed: 2, followWindowTurns: 3 },
       churn: { inspectedRemovedEntries: 2, reeditedEntries: 0 },
       sessionCalls: { outline: 2 },
+      cache: {
+        lifetimeSeconds: 300,
+        longestHitGapSeconds: 80,
+        nearFullRewrites: { requests: 2, cacheWrite: 1100 },
+      },
     });
     expect(result.perSession).toMatchObject([
-      { file: "c", contextEdits: 0, contextNotices: 0, compactions: 0 },
-      { file: "b", contextEdits: 1, contextNotices: 1, compactions: 1 },
-      { file: "a", contextEdits: 1, contextNotices: 1, compactions: 1 },
+      { file: "c", contextEdits: 0, contextNotices: 0, compactions: 0, nearFullRewriteTokens: 0 },
+      { file: "b", contextEdits: 1, contextNotices: 1, compactions: 1, nearFullRewriteTokens: 300 },
+      { file: "a", contextEdits: 1, contextNotices: 1, compactions: 1, nearFullRewriteTokens: 800 },
     ]);
   });
 });

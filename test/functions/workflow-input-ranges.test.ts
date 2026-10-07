@@ -27,6 +27,12 @@ describe("workflow numeric inputs", () => {
       error: "examples must be an integer between 1 and 30",
     },
     {
+      name: "sessions.analyze fractional cacheLifetimeSeconds",
+      fn: "sessions.analyze",
+      input: { file: "session.jsonl", cacheLifetimeSeconds: 0.5 },
+      error: "cacheLifetimeSeconds must be an integer between 1 and 86400",
+    },
+    {
       name: "sessions.analyzeRecent limit of 0",
       fn: "sessions.analyzeRecent",
       input: { limit: 0 },

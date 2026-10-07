@@ -5,10 +5,12 @@
  * @param input.limit - Maximum sessions to inspect (1-20). The default is 12.
  * @param input.examples - Repeated failure labels retained per session (1-30, validated by
  *   sessions.analyze). The default is 5.
+ * @param input.cacheLifetimeSeconds - Prompt-cache lifetime passed to sessions.analyze, which
+ *   validates it. The default is 300.
  */
 async function analyzeRecent(
   { context: { get }, workspace: { glob }, sessions: { analyze } },
-  input: { limit?: number; examples?: number } = {},
+  input: { limit?: number; examples?: number; cacheLifetimeSeconds?: number } = {},
 ) {
   const limit = input.limit ?? 12;
   if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
@@ -33,7 +35,15 @@ async function analyzeRecent(
   for (let offset = 0; offset < files.length; offset += 4) {
     const batch = files.slice(offset, offset + 4);
     audits.push(
-      ...(await Promise.all(batch.map((file) => analyze({ file, examples: input.examples ?? 5 })))),
+      ...(await Promise.all(
+        batch.map((file) =>
+          analyze({
+            file,
+            examples: input.examples ?? 5,
+            cacheLifetimeSeconds: input.cacheLifetimeSeconds ?? 300,
+          }),
+        ),
+      )),
     );
   }
   const categories = new Map<string, number>();
@@ -59,7 +69,12 @@ async function analyzeRecent(
   // Sums each numeric leaf of the per-session context reports. Peaks and fixed parameters take
   // the maximum. Null-prototype nodes keep recorded names such as "__proto__" as plain keys.
   type Tree = { [key: string]: number | Tree };
-  const MAXIMA = new Set(["peakPromptTokens", "followWindowTurns"]);
+  const MAXIMA = new Set([
+    "peakPromptTokens",
+    "followWindowTurns",
+    "lifetimeSeconds",
+    "longestHitGapSeconds",
+  ]);
   const merge = (total: Tree, add: Tree): Tree => {
     for (const [key, value] of Object.entries(add)) {
       const current = total[key];
@@ -85,8 +100,10 @@ async function analyzeRecent(
       Object.create(null),
     ),
   );
-  if (recommendations.size > 1)
-    recommendations.delete("No recurring workflow failure needs action.");
+  // Every session reports this when it has no failure advice, so keep it only if all did.
+  const NO_FAILURE_ADVICE = "No recurring workflow failure needs action.";
+  if (audits.some((audit) => !(audit.recommendations ?? []).includes(NO_FAILURE_ADVICE)))
+    recommendations.delete(NO_FAILURE_ADVICE);
   const total = (
     field: "toolCalls" | "failures" | "workflowFailures" | "gateFailures" | "expectedFailures",
   ) => audits.reduce((sum, audit) => sum + audit[field], 0);
@@ -118,6 +135,8 @@ async function analyzeRecent(
       contextEdits: audit.context?.edits.total ?? 0,
       contextNotices: audit.context?.notices.shown ?? 0,
       compactions: audit.context?.compactions.total ?? 0,
+      cacheWrite: audit.context?.usage.cacheWrite ?? 0,
+      nearFullRewriteTokens: audit.context?.cache?.nearFullRewrites.cacheWrite ?? 0,
     })),
   };
 }
