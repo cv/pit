@@ -47,6 +47,7 @@ async ({ tests: { runTargeted } }, input: { files: string[]; testNamePattern?: s
 - Use `delivery.auditCodeQuality()` for broad feature or refactor work where maintainability risk matters.
 - `delivery.format()` formats only changed supported files and invalidates their anchors. Re-read every written file before another mutation. It cannot see committed files, so run it after the last edit and before `delivery.commit()`.
 - Use `sessions.analyze()` for one session and `sessions.analyzeRecent()` for project-wide workflow trends. These diagnose agent workflow; they do not replace code validation.
+- To judge a context or prompt change by its real cost, read `context.cache`. It attributes each request's prompt-cache writes to a cause: steady growth, a context edit, a system-prompt update, an idle expiry during a run or between turns, a compaction, a model change, or something else. `contextEdits` sets Pit's re-prefill estimate against what providers rewrote. `rewritten` counts cached tokens written again; dollars appear only when Pi recorded a cost for the model. Pass `cacheLifetimeSeconds` when the provider's cache outlives or expires before the default 300 s; `longestHitGapSeconds` shows the longest observed gap that still hit.
 
 When every change in the worktree belongs to one commit, include deletions from the listing instead of adding deleted paths by hand:
 

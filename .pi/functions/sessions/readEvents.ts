@@ -1,8 +1,9 @@
 /**
  * Projects one page of session JSONL into compact tool-call, failure, and context events using jq.
  * Skips malformed lines and non-message data; never returns full code, images, or successful tool output.
- * Context events carry provider usage, successful `session.*` calls, `pit.context-edit` operations,
- * `pit.context-pressure` notices, and compactions.
+ * Context events carry provider usage with request timing and model, user turns, system-prompt
+ * updates, `usage` entries such as cache refreshes, successful `session.*` calls,
+ * `pit.context-edit` operations, `pit.context-pressure` notices, and compactions.
  *
  * @param input.afterLine - Exclusive physical-line cursor, initially 0.
  * @param input.limit - Physical lines per page (1-500), default 200. Pages also end early after
@@ -55,7 +56,18 @@ def failure($message; $parts):
      failureKind: ($failure.kind | if type == "string" then . else null end)}
   else null end;
 def context($entry; $message):
-  if $entry.type == "message" and $message.role == "assistant" then {request: ($message.usage | usage)}
+  if $entry.type == "message" and $message.role == "assistant" then
+    {request: (($message.usage | usage) + {start: ($message.timestamp | num), at: ($entry.timestamp | text | clip(40)),
+      model: ((($message.provider | text) + "/" + ($message.model | text)) | clip(200)),
+      cacheWriteCost: ($message.usage | object | .cost | object | .cacheWrite | num)})}
+  elif $entry.type == "message" and $message.role == "user" then {user: true}
+  elif $entry.type == "message" and $message.role == "system" then
+    {system: ([($message.sections | object | keys[]),
+      ($message | keys[] | select(startswith("tools")) as $key | $message[$key] |
+        select(type == "array" and length > 0) | "tools")] | unique | map(clip(64)) | .[0:32])}
+  elif $entry.type == "usage" then
+    {usageEntry: {kind: ($entry.kind | text | clip(32)), at: ($entry.timestamp | text | clip(40)),
+      cacheRead: ($entry.usage | object | .cacheRead | num), cost: ($entry.usage | object | .cost | object | .total | num)}}
   elif $entry.type == "message" and $message.role == "toolResult" then
     ([$message.details | object | .traces | items | object |
       select(.namespace == "session" and .status == "succeeded") | .method | text | clip(64)] | .[0:64]) as $calls |
@@ -120,7 +132,22 @@ def context($entry; $message):
   };
   type Context = {
     /** One assistant message: a provider request and its usage. */
-    request?: Usage;
+    request?: Usage & {
+      /** Request start in epoch milliseconds; 0 when unrecorded. */
+      start: number;
+      /** The entry's ISO timestamp, written when the response completed. */
+      at: string;
+      /** `provider/model`. */
+      model: string;
+      /** Recorded dollars for the request's cache writes. */
+      cacheWriteCost: number;
+    };
+    /** A user message. */
+    user?: true;
+    /** A system-prompt update: the changed section names, plus `tools` when tools changed. */
+    system?: string[];
+    /** A usage entry outside the conversation, such as a `cache_warm` refresh. */
+    usageEntry?: { kind: string; at: string; cacheRead: number; cost: number };
     /** Successful `session.*` method names traced in one tool result. */
     sessionCalls?: string[];
     edits?: EditOperation[];

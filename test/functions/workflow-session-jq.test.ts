@@ -172,7 +172,11 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
       '{"unfinished":',
     ];
     await writeFile(file, lines.join("\n") + "\n");
-    expect(await events({ file, limit: 3 })).toEqual({ hasMore: true, nextLine: 3, events: [] });
+    expect(await events({ file, limit: 3 })).toEqual({
+      hasMore: true,
+      nextLine: 3,
+      events: [{ calls: [], failure: null, context: { user: true } }],
+    });
     const second = await events({ file, limit: 3, afterLine: 3 });
     expect(second).toMatchObject({
       hasMore: true,
@@ -349,7 +353,121 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
       notices: { shown: 2, byLevel: { "50%": 1, "200K": 1 }, followed: 0, followWindowTurns: 3 },
       churn: { inspectedRemovedEntries: 3, reeditedEntries: 0 },
       sessionCalls: { elide: 1 },
+      cache: expect.any(Object),
     });
+  });
+
+  it("attributes prompt-cache writes to edits, system updates, expiries, and other causes", async () => {
+    const { analyze } = await workflows();
+    const file = join(directory, "cache.jsonl");
+    const base = Date.parse("2026-10-01T00:00:00.000Z");
+    const at = (seconds: number) => new Date(base + seconds * 1000).toISOString();
+    const entry = (value: Record<string, unknown>) => JSON.stringify(value);
+    const request = (
+      seconds: number,
+      [cacheRead, cacheWrite]: [number, number],
+      { model = "m", cacheWriteCost = 0 } = {},
+    ) =>
+      message({
+        role: "assistant",
+        provider: "p",
+        model,
+        timestamp: base + seconds * 1000,
+        usage: {
+          input: 10,
+          output: 5,
+          cacheRead,
+          cacheWrite,
+          cost: { cacheWrite: cacheWriteCost, total: cacheWriteCost },
+        },
+        content: [],
+      });
+    const edit = (...operations: Array<Record<string, unknown>>) =>
+      entry({ type: "custom", customType: "pit.context-edit", data: { operations } });
+    const user = message({ role: "user", content: "next" });
+    const warm = (seconds: number) =>
+      entry({
+        type: "usage",
+        kind: "cache_warm",
+        timestamp: at(seconds),
+        usage: { cacheRead: 10_510, cost: { total: 0.001 } },
+      });
+    const lines = [
+      request(0, [0, 10_000]),
+      request(10, [10_000, 500]),
+      // Pit estimated 2,000 tokens; the provider rewrote 8,310.
+      edit(
+        { operation: "elide", targets: ["e1"], tokensFreed: 300, reprefillTokens: 2000 },
+        { operation: "note", action: "created", targets: ["n"], reprefillTokens: 500 },
+      ),
+      request(20, [2000, 8300], { cacheWriteCost: 0.01 }),
+      message({
+        role: "system",
+        content: "",
+        sections: { pit_project_functions: "<pit_project_functions>" },
+        toolsAdded: [{ name: "typescript" }],
+      }),
+      request(30, [1000, 9400]),
+      user,
+      request(430, [0, 10_500], { cacheWriteCost: 0.02 }),
+      // A refresh 250 s before the next request keeps its cache alive...
+      warm(680),
+      request(930, [10_510, 100]),
+      // ...but not 400 s before the one after.
+      warm(1030),
+      request(1430, [0, 10_700]),
+      // An expired cache outranks the edit made in the same gap.
+      user,
+      edit({ operation: "note", action: "replaced", targets: ["n"], reprefillTokens: 50 }),
+      request(2030, [0, 10_800]),
+      entry({ type: "compaction", summary: "s", tokensBefore: 10_000 }),
+      request(2040, [0, 3000]),
+      request(2050, [0, 3100], { model: "other" }),
+      // A request that failed without usage observes nothing about the cache.
+      message({ role: "assistant", content: [] }),
+      request(2060, [1000, 2200], { model: "other" }),
+    ];
+    await writeFile(file, lines.join("\n") + "\n");
+    const result = (await analyze({ file })) as {
+      context: { cache: unknown };
+      recommendations: string[];
+    };
+    const bucket = (requests: number, cacheWrite: number, rewritten: number, cost = 0) => ({
+      requests,
+      misses: rewritten > 1024 ? requests : 0,
+      cacheWrite,
+      rewritten,
+      cost,
+    });
+    expect(result.context.cache).toEqual({
+      lifetimeSeconds: 300,
+      classes: {
+        coldStart: bucket(1, 10_000, 0),
+        steady: bucket(2, 600, 10),
+        contextEdit: bucket(1, 8300, 8310, 0.01),
+        systemUpdate: bucket(1, 9400, 9310),
+        idleInRun: bucket(1, 10_700, 10_620),
+        idleBetweenTurns: bucket(2, 21_300, 21_120, 0.02),
+        compaction: bucket(1, 3000, 3010),
+        modelChange: bucket(1, 3100, 3010),
+        other: bucket(1, 2200, 2110),
+      },
+      nearFullRewrites: { requests: 7, cacheWrite: 55_000 },
+      contextEdits: {
+        "elide+note:created": {
+          ...bucket(1, 8300, 8310, 0.01),
+          estimatedReprefill: 2000,
+          tokensFreed: 300,
+        },
+      },
+      contextEditKindsOmitted: 0,
+      systemSections: { pit_project_functions: 1, tools: 1 },
+      warming: { refreshes: 2, cacheRead: 21_020, cost: 0.002, missesAfterRefresh: 1 },
+      longestHitGapSeconds: 250,
+    });
+    expect(result.recommendations).toContainEqual(
+      expect.stringContaining("expired between turns 2 times (21120 tokens rewritten)"),
+    );
   });
 
   it("ends dense pages at the byte budget without losing or duplicating calls", async () => {
