@@ -7,7 +7,8 @@
  *
  * @param input.files - Repository-relative file paths to commit (1-100), including deletions.
  * @param input.message - Commit message (1-5000 characters).
- * @param input.push - Push the current branch, setting its upstream on the first push. The default
+ * @param input.push - Push the current branch, setting its upstream on the first push or when it
+ *   tracks a branch with another name. The default
  *   is false. A push to a branch whose pull requests are all merged or closed fails before anything
  *   is staged, since its commits would never reach the base branch.
  * @param input.allowClosedPullRequest - Push even when the branch's pull request is merged or
@@ -108,7 +109,8 @@ async function commit(
       throw new Error(`Created ${sha}, but cannot push from a detached HEAD`);
     }
     const current = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], false);
-    if (current.code === 0) {
+    // A branch created from origin/main tracks main; push it under its own name instead.
+    if (current.code === 0 && current.stdout.trim().endsWith(`/${branch}`)) {
       await push([], { raise: true });
       upstream = current.stdout.trim();
     } else {

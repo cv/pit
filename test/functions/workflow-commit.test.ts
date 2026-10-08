@@ -238,6 +238,13 @@ describe("delivery.commit", () => {
       args: ["-u", "origin", "feature"],
       expected: "origin/feature",
     },
+    {
+      // Branching from origin/main leaves the new branch tracking main; a bare push would fail.
+      name: "its own name when it tracks another branch",
+      upstream: "origin/main",
+      args: ["-u", "origin", "feature"],
+      expected: "origin/feature",
+    },
   ])("pushes the current branch to $name", async ({ upstream, args, expected }) => {
     const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], upstream });
