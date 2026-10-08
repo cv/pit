@@ -35,7 +35,10 @@ function recordedSession(idleSeconds: number) {
   session.manager.appendMessage({
     role: "system",
     content: "",
-    sections: { pit_project_functions: OLD_CATALOG },
+    // Pi records an extension section wrapped in its tag.
+    sections: {
+      pit_project_functions: `<pit_project_functions>\n${OLD_CATALOG}\n</pit_project_functions>`,
+    },
     timestamp: Date.now() - 600_000,
   } as any);
   session.user("Keep going");
