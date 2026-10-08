@@ -98,12 +98,7 @@ describe("session.outline", () => {
         state: "original",
       },
     ]);
-    // Changing an entry re-prefills it and everything after it.
-    const entries = result.entries as Array<{ tokens: number; reprefillTokens: number }>;
-    entries.forEach((entry, index) => {
-      expect(entry.reprefillTokens).toBe(entry.tokens + (entries[index + 1]?.reprefillTokens ?? 0));
-    });
-    expect(entries[0]?.reprefillTokens).toBe(result.estimatedTokens);
+
     expect(result).toMatchObject({
       leafId: current,
       contextTokens: 1234,
@@ -111,6 +106,85 @@ describe("session.outline", () => {
       omitted: 0,
     });
     expect(result.nextAfter).toBeUndefined();
+  });
+
+  it.each<{ name: string; model: Record<string, unknown> | undefined; mode: string }>([
+    {
+      name: "OpenAI Responses reuses the unchanged prefix",
+      model: { api: "openai-responses", provider: "openai", id: "gpt" },
+      mode: "prefix",
+    },
+    {
+      name: "Chat Completions reuses the unchanged prefix",
+      model: { api: "openai-completions", provider: "local", id: "llama" },
+      mode: "prefix",
+    },
+    {
+      name: "Anthropic Messages caches at breakpoints",
+      model: { api: "anthropic-messages", provider: "anthropic", id: "claude" },
+      mode: "breakpoints",
+    },
+    {
+      name: "Bedrock Converse caches at breakpoints",
+      model: { api: "bedrock-converse-stream", provider: "amazon-bedrock", id: "claude" },
+      mode: "breakpoints",
+    },
+    {
+      name: "OpenRouter's Anthropic models cache at breakpoints",
+      model: { api: "openai-completions", provider: "openrouter", id: "anthropic/claude" },
+      mode: "breakpoints",
+    },
+    {
+      name: "an Anthropic-style cache_control compat flag caches at breakpoints",
+      model: {
+        api: "openai-completions",
+        provider: "proxy",
+        id: "claude",
+        compat: { cacheControlFormat: "anthropic" },
+      },
+      mode: "breakpoints",
+    },
+    {
+      name: "an unlisted API gets the upper bound",
+      model: { api: "google-generative-ai", provider: "google", id: "gemini" },
+      mode: "unknown",
+    },
+    { name: "no model gets the upper bound", model: undefined, mode: "unknown" },
+  ])("estimates each entry's re-prefill when $name", async ({ model, mode }) => {
+    const { session } = longTask();
+    const result = await value(
+      "async ({ session: { outline } }) => outline()",
+      // Without measured usage, the whole conversation is Pit's own estimate.
+      context({ sessionManager: session.manager, model, getContextUsage: () => undefined }),
+    );
+    const entries = result.entries as Array<{ tokens: number; reprefillTokens: number }>;
+    expect(result.cacheMode).toBe(mode);
+    // A prefix cache re-prefills from the changed entry to the leaf; other caches, everything.
+    const expected =
+      mode === "prefix"
+        ? entries.map((_, index) =>
+            entries.slice(index).reduce((sum, entry) => sum + entry.tokens, 0),
+          )
+        : entries.map(() => result.estimatedTokens);
+    expect(entries.map((entry) => entry.reprefillTokens)).toEqual(expected);
+  });
+
+  it.each<{ name: string; usage: number; whole: (estimated: number) => number }>([
+    { name: "above Pit's estimate replaces it", usage: 50_000, whole: () => 50_000 },
+    { name: "below Pit's estimate does not lower it", usage: 10, whole: (estimated) => estimated },
+  ])("measured context usage $name as the whole conversation", async ({ usage, whole }) => {
+    const { session } = longTask();
+    const result = await value(
+      "async ({ session: { outline } }) => outline()",
+      context({
+        sessionManager: session.manager,
+        model: { api: "anthropic-messages", provider: "anthropic", id: "claude" },
+        getContextUsage: () => ({ tokens: usage, contextWindow: 200_000, percent: 1 }),
+      }),
+    );
+    expect(result.entries.map((entry: any) => entry.reprefillTokens)).toEqual(
+      result.entries.map(() => whole(result.estimatedTokens)),
+    );
   });
 
   it("pages with a cursor and counts the entries it omitted", async () => {

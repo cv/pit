@@ -40,6 +40,49 @@ const modelText = (session: SessionBuilder, id: string) => {
   return (projected?.messages[0] as any)?.content?.[0]?.text;
 };
 
+describe("re-prefill estimates", () => {
+  it.each<{ name: string; model: Record<string, unknown>; mode: string; whole: boolean }>([
+    {
+      name: "a prefix cache counts from the edited entry",
+      model: { api: "openai-responses", provider: "openai", id: "gpt" },
+      mode: "prefix",
+      whole: false,
+    },
+    {
+      name: "a breakpoint cache counts the whole conversation",
+      model: { api: "anthropic-messages", provider: "anthropic", id: "claude" },
+      mode: "breakpoints",
+      whole: true,
+    },
+    {
+      name: "an unknown cache counts the whole conversation as an upper bound",
+      model: { provider: "test", id: "model" },
+      mode: "unknown",
+      whole: true,
+    },
+  ])("$name", async ({ model, mode, whole }) => {
+    const { session, logs } = longTask();
+    const ask = (code: string) => value(code, context({ sessionManager: session.manager, model }));
+    const outline = await ask("async ({ session: { outline } }) => outline()");
+    const target = outline.entries.find((entry: any) => entry.id === logs.result);
+    const receipt = await ask(
+      `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}])`,
+    );
+    // The receipt agrees with the outline; only a prefix cache spares the entries before it.
+    expect(target.reprefillTokens < outline.entries[0].reprefillTokens).toBe(!whole);
+    expect(receipt).toMatchObject({
+      cacheMode: mode,
+      estimatedReprefillTokens: target.reprefillTokens - receipt.estimatedTokensFreed,
+    });
+    const entries = await endTurn(session);
+    expect(entries[1]).toMatchObject({
+      data: {
+        operations: [{ cacheMode: mode, reprefillTokens: receipt.estimatedReprefillTokens }],
+      },
+    });
+  });
+});
+
 describe("session.elide", () => {
   it("stages stubs until the turn ends, then shows them to the model", async () => {
     const { session, logs } = longTask();

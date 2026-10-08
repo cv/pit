@@ -6,7 +6,7 @@ import {
   type SessionBoundaryDraft,
 } from "@earendil-works/pi-coding-agent";
 
-import { formatTokens, type PlannedEdit, reprefillAfter } from "./planning.js";
+import { type CacheBasis, formatTokens, type PlannedEdit, reprefillAfter } from "./planning.js";
 import {
   buildContextView,
   type ContextItem,
@@ -74,11 +74,16 @@ export function listNotes(
   };
 }
 
-function removal(key: string, previous: ContextItem[], view: ContextView): PlannedEdit {
+function removal(
+  key: string,
+  previous: ContextItem[],
+  view: ContextView,
+  basis: CacheBasis,
+): PlannedEdit {
   if (previous.length === 0) throw new Error(`No live note has key "${key}"`);
   const ids = previous.map((item) => item.id);
   const tokensFreed = previous.reduce((sum, item) => sum + item.tokens, 0);
-  const reprefillTokens = reprefillAfter(view, ids, tokensFreed);
+  const reprefillTokens = reprefillAfter(view, ids, tokensFreed, basis);
   return {
     operation: "note",
     // A note conflicts by key: its entries are reachable only through setNote.
@@ -95,11 +100,17 @@ function removal(key: string, previous: ContextItem[], view: ContextView): Plann
 
 /**
  * Plans creating, replacing, or removing a keyed note. A replacement appends the new note at
- * the tail and omits the previous one, so frequent updates re-prefill only recent context.
+ * the tail and omits the previous one. A prefix cache then re-prefills only context after the old
+ * note; a breakpoint cache rewrites the whole conversation.
  */
 export function planNote(
   view: ContextView,
-  input: { key: string; content: string | null; contextWindow: number | undefined },
+  input: {
+    key: string;
+    content: string | null;
+    contextWindow: number | undefined;
+    basis: CacheBasis;
+  },
 ): PlannedEdit {
   const { key, content } = input;
   if (!NOTE_KEY.test(key)) {
@@ -109,7 +120,7 @@ export function planNote(
   }
   const notes = liveNotes(view);
   const previous = notes.filter((item) => item.noteKey === key);
-  if (content === null) return removal(key, previous, view);
+  if (content === null) return removal(key, previous, view, input.basis);
   if (content.trim() === "") {
     throw new Error("Note content must not be empty; pass null to remove the note");
   }
@@ -128,7 +139,8 @@ export function planNote(
   }
   const ids = previous.map((item) => item.id);
   const tokensFreed = previous.reduce((sum, item) => sum + item.tokens, 0) - tokens;
-  const reprefillTokens = ids.length > 0 ? reprefillAfter(view, ids, tokensFreed) : tokens;
+  const reprefillTokens =
+    ids.length > 0 ? reprefillAfter(view, ids, tokensFreed, input.basis) : tokens;
   const action = ids.length > 0 ? "replaced" : "created";
   const drafts: SessionBoundaryDraft[] = ids.map((targetId) => ({
     type: "context_edit",

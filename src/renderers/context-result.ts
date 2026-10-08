@@ -1,10 +1,16 @@
 import { Type } from "typebox";
 
-import { formatTokens } from "../context/planning.js";
+import { CACHE_BASIS, formatTokens } from "../context/planning.js";
 import { CLOSED, shapeGuard } from "../shared/shape-guard.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { elidedTargets, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
+
+const CACHE_MODE = Type.Union([
+  Type.Literal("breakpoints"),
+  Type.Literal("prefix"),
+  Type.Literal("unknown"),
+]);
 
 const isReceipt = shapeGuard(
   Type.Object(
@@ -24,6 +30,8 @@ const isReceipt = shapeGuard(
       summarizedEntries: Type.Optional(Type.Number()),
       summaryTokens: Type.Optional(Type.Number()),
       toolCallEntries: Type.Optional(Type.Number()),
+      // Optional: receipts recorded before the estimate named its caching mode still render.
+      cacheMode: Type.Optional(CACHE_MODE),
     },
     CLOSED,
   ),
@@ -36,6 +44,7 @@ const isOutline = shapeGuard(
       contextTokens: Type.Union([Type.Number(), Type.Null()]),
       contextWindow: Type.Union([Type.Number(), Type.Null()]),
       estimatedTokens: Type.Number(),
+      cacheMode: Type.Optional(CACHE_MODE),
       entries: Type.Array(
         Type.Object(
           {
@@ -125,7 +134,12 @@ export function renderContextReceipt(
     summary: `${subject} · ${tokens} · applies after this turn`,
     detailLines: [
       ...(value.targets.length > 0 ? [`targets: ${clean(value.targets.join(", "))}`] : []),
-      `re-prefill: ~${formatTokens(value.estimatedReprefillTokens)} tokens`,
+      `re-prefill: ~${formatTokens(value.estimatedReprefillTokens)} tokens${
+        // A new note only appends, so the estimate is its own size whatever the cache.
+        value.cacheMode && !(value.operation === "note" && value.action === "created")
+          ? ` · ${CACHE_BASIS[value.cacheMode]}`
+          : ""
+      }`,
       ...(value.summaryTokens === undefined
         ? []
         : [`summary: ~${formatTokens(value.summaryTokens)} tokens`]),
@@ -164,6 +178,9 @@ export function renderContextOutline(
     ];
   });
   detailLines.push(theme.fg("dim", `leaf: ${value.leafId ?? "none"}`));
+  if (value.cacheMode) {
+    detailLines.push(theme.fg("dim", `re-prefill: ${CACHE_BASIS[value.cacheMode]}`));
+  }
   if (value.nextAfter) {
     detailLines.push(theme.fg("dim", `next page: after ${value.nextAfter}`));
   }

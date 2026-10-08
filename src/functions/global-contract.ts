@@ -233,6 +233,8 @@ type PitContextRole =
   | "summary";
 type PitContextState = "original" | "elided" | "summarized" | "replaced";
 type PitContextOperation = "elide" | "summarize" | "note";
+/** How the provider caches the prompt: what an edit's re-prefill estimate assumes. */
+type PitContextCacheMode = "breakpoints" | "prefix" | "unknown";
 
 type PitContextOutlineEntry = {
   id: string;
@@ -253,6 +255,7 @@ type PitContextOutline = {
   contextTokens: number | null;
   contextWindow: number | null;
   estimatedTokens: number;
+  cacheMode: PitContextCacheMode;
   entries: PitContextOutlineEntry[];
   nextAfter?: string;
   omitted: number;
@@ -275,6 +278,7 @@ type PitContextEditReceipt = {
   targets: string[];
   estimatedTokensFreed: number;
   estimatedReprefillTokens: number;
+  cacheMode: PitContextCacheMode;
 };
 
 type PitContextSummaryInput = { from: string; to: string; summary: string };

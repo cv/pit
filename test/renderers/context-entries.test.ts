@@ -204,6 +204,38 @@ describe("context edit provenance renderer", () => {
     );
   });
 
+  it.each<{ name: string; operation: Record<string, unknown>; line: string }>([
+    {
+      name: "an edit under a prefix cache",
+      operation: { ...OPERATIONS[0], cacheMode: "prefix" },
+      line: "   re-prefill: ~30.1K tokens · from the edited entry (prefix cache)",
+    },
+    {
+      name: "a new note, which only appends",
+      operation: {
+        toolCallId: "c",
+        operation: "note",
+        targets: [],
+        key: "k",
+        action: "created",
+        tokensFreed: -20,
+        reprefillTokens: 20,
+        cacheMode: "breakpoints",
+      },
+      line: "   re-prefill: ~20 tokens",
+    },
+    {
+      name: "an unrecognized mode",
+      operation: { ...OPERATIONS[0], cacheMode: "bogus" },
+      line: "   re-prefill: ~30.1K tokens",
+    },
+  ])("names the re-prefill basis of $name", ({ operation, line }) => {
+    const expanded = rows(
+      renderProvenance(provenance([operation as any]), { expanded: true }, theme),
+    );
+    expect(expanded.at(-1)).toBe(line);
+  });
+
   it("lists entry IDs and re-prefill cost when expanded", () => {
     const expanded = rows(
       renderProvenance(provenance(OPERATIONS.slice(0, 1)), { expanded: true }, theme),
