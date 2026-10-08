@@ -366,25 +366,37 @@ describe("runInSandbox", () => {
       ],
       ["ci.findRun", "async function findRun({}) { return { found: false }; }"],
     ]);
-    const failure = (source: string) => {
+    const failure = (source: string, checkAll?: boolean) => {
       try {
-        validateTypeScript(source, functions);
+        // Execution checks only referenced definitions, so an unknown method's namespace is undeclared.
+        validateTypeScript(source, new Map(), undefined, {
+          environment: { sessionFunctions: new Map(), projectFunctions: functions } as any,
+          ...(checkAll === undefined ? {} : { checkAll }),
+        });
       } catch (error) {
         return String((error as Error).message);
       }
       throw new Error("expected validation to fail");
     };
 
+    it.each<{ name: string; checkAll: boolean }>([
+      { name: "every definition is checked", checkAll: true },
+      { name: "only referenced definitions are checked, as at execution", checkAll: false },
+    ])("suggests the method for a misspelled one when $name", ({ checkAll }) => {
+      const message = failure(
+        "async ({ tests: { runTargetd } }) => runTargetd({ files: [] })",
+        checkAll,
+      );
+      expect(message.split("\n").at(-1)).toBe(
+        "Did you mean: tests.runTargeted? tests has: inspectCoverageGaps, runTargeted.",
+      );
+    });
+
     it.each<{ name: string; source: string; hint: string }>([
-      {
-        name: "a misspelled method",
-        source: "async ({ tests: { runTargetd } }) => runTargetd({ files: [] })",
-        hint: "Did you mean: tests.runTargeted? tests has: inspectCoverageGaps, runTargeted.",
-      },
       {
         name: "a misspelled namespace",
         source: "async ({ testz: { runTargeted } }) => runTargeted({ files: [] })",
-        hint: "Did you mean: tests?",
+        hint: "Did you mean: tests.runTargeted?",
       },
       {
         name: "a namespace used without injecting it",

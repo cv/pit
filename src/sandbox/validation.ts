@@ -167,8 +167,23 @@ function programFunction(file: ts.SourceFile): ts.SignatureDeclaration | undefin
   return found;
 }
 
-/** The dotted injection path of the binding key at `position`, such as `tests.runTargeted`. */
-function injectionPath(
+/** A binding key's name: a quoted key names the same injection; a computed one matches none. */
+function keyText(element: ts.BindingElement): string {
+  return (element.propertyName ?? element.name).getText().replace(/^(["'])(.*)\1$/, "$2");
+}
+
+/** Every dotted path a binding pattern destructures down to its leaves, such as `tests.find`. */
+function leafPaths(name: ts.BindingName, path: string[]): string[] {
+  if (!ts.isObjectBindingPattern(name)) return [path.join(".")];
+  return name.elements.flatMap((element) => leafPaths(element.name, [...path, keyText(element)]));
+}
+
+/**
+ * The dotted injection paths an error at `position` concerns. An error on a namespace key, which
+ * TypeScript reports when no function of the namespace was declared, concerns the functions
+ * destructured from it.
+ */
+function injectionPaths(
   name: ts.BindingName,
   position: number,
   path: string[] = [],
@@ -176,30 +191,32 @@ function injectionPath(
   if (!ts.isObjectBindingPattern(name)) return undefined;
   for (const element of name.elements) {
     const key = element.propertyName ?? element.name;
-    // A quoted key names the same injection; a computed one matches no function.
-    const text = key.getText().replace(/^(["'])(.*)\1$/, "$2");
-    if (position >= key.getStart() && position < key.end) return [...path, text];
-    const inner = injectionPath(element.name, position, [...path, text]);
+    const here = [...path, keyText(element)];
+    if (position >= key.getStart() && position < key.end) return leafPaths(element.name, here);
+    const inner = injectionPaths(element.name, position, here);
     if (inner) return inner;
   }
   return undefined;
 }
 
 /**
- * The name an injection error could not resolve: a destructured namespace or function in the
- * program's first parameter, or an undeclared identifier. Property errors on values the program
- * computes are not injection errors.
+ * The names an injection error could not resolve: functions destructured in the program's first
+ * parameter that do not exist, or an undeclared identifier. Property errors on values the
+ * program computes are not injection errors.
  */
-function unresolvedInjection(diagnostic: ts.Diagnostic): string | undefined {
+function unresolvedInjections(diagnostic: ts.Diagnostic, names: readonly string[]): string[] {
   const file = diagnostic.file;
-  if (file?.fileName !== PROGRAM_FILE || diagnostic.start === undefined) return undefined;
+  if (file?.fileName !== PROGRAM_FILE || diagnostic.start === undefined) return [];
   if (diagnostic.code === 2304) {
     const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
-    return /^Cannot find name '([^']+)'/.exec(message)?.[1];
+    /* v8 ignore next -- TS2304 always reads "Cannot find name 'x'." */
+    return /^Cannot find name '([^']+)'/.exec(message)?.slice(1) ?? [];
   }
-  if (diagnostic.code !== 2339 && diagnostic.code !== 2551) return undefined;
+  if (diagnostic.code !== 2339 && diagnostic.code !== 2551) return [];
   const parameter = programFunction(file)?.parameters[0];
-  return parameter ? injectionPath(parameter.name, diagnostic.start)?.join(".") : undefined;
+  const paths = parameter ? (injectionPaths(parameter.name, diagnostic.start) ?? []) : [];
+  // Destructured functions that exist are fine; only the rest are unresolved.
+  return paths.filter((path) => !names.includes(path));
 }
 
 function boundedList(items: readonly string[], limit: number): string {
@@ -281,7 +298,7 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
     ? `\n${JSON_RESULT_HINT}`
     : "";
   const injectionHints = [
-    ...new Set(diagnostics.flatMap((diagnostic) => unresolvedInjection(diagnostic) ?? [])),
+    ...new Set(diagnostics.flatMap((diagnostic) => unresolvedInjections(diagnostic, names))),
   ]
     .slice(0, MAX_INJECTION_HINTS)
     .map((name) => `\n${injectionHint(name, names)}`)
