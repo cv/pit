@@ -88,7 +88,7 @@ describe("re-prefill estimates", () => {
 });
 
 describe("session.elide", () => {
-  it("stages stubs until the turn ends, then shows them to the model", async () => {
+  it("stages stubs until the run ends, then shows them to the model", async () => {
     const { session, logs } = longTask();
 
     const receipt = await call(
@@ -97,7 +97,7 @@ describe("session.elide", () => {
     );
     expect(receipt).toMatchObject({
       status: "staged",
-      appliesAt: "turn_end",
+      appliesAt: "run_end",
       operation: "elide",
       targets: [logs.result],
     });
@@ -492,7 +492,7 @@ describe("deferred context edits", () => {
     {
       name: "an elision",
       code: ({ logs }) =>
-        `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "end" })`,
+        `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}])`,
       targets: ({ logs }) => [logs.result],
     },
     {
@@ -507,7 +507,7 @@ describe("deferred context edits", () => {
     const receipt = await call(session, code(task));
     expect(receipt).toMatchObject({ status: "staged", appliesAt: "run_end" });
 
-    expect(edited(await endTurn(session))).toEqual([]);
+    expect(edited(await endTurn(session, { settle: false }))).toEqual([]);
     // Still pending: a second edit of the same entry is refused until the run ends.
     await expect(
       run(
@@ -523,6 +523,16 @@ describe("deferred context edits", () => {
     expect(await settleRun(session)).toEqual([]);
   });
 
+  it('applies an edit passed when: "now" at the turn\'s end', async () => {
+    const { session, logs } = longTask();
+    const receipt = await call(
+      session,
+      `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "now" })`,
+    );
+    expect(receipt).toMatchObject({ appliesAt: "turn_end" });
+    expect(edited(await endTurn(session, { settle: false }))).toEqual([logs.result]);
+  });
+
   it("applies deferred edits at the next turn once context reaches 50% of the window", async () => {
     const { session, logs } = longTask();
     await call(
@@ -532,16 +542,19 @@ describe("deferred context edits", () => {
     const pressed = {
       getContextUsage: () => ({ tokens: 550_000, contextWindow: 1_000_000, percent: 55 }),
     };
-    expect(edited(await endTurn(session, { ctx: pressed }))).toEqual([logs.result]);
+    expect(edited(await endTurn(session, { ctx: pressed, settle: false }))).toEqual([logs.result]);
     expect(await settleRun(session)).toEqual([]);
   });
 
   it.each<{ name: string; end: (session: SessionBuilder) => Promise<unknown> }>([
-    { name: "its call failed", end: (session) => endTurn(session, { isError: true }) },
+    {
+      name: "its call failed",
+      end: (session) => endTurn(session, { isError: true, settle: false }),
+    },
     {
       name: "the session tree changed",
       end: async (session) => {
-        await endTurn(session);
+        await endTurn(session, { settle: false });
         await emit(
           "session_tree",
           { type: "session_tree" },
