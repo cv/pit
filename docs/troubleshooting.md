@@ -34,7 +34,7 @@ A function marked `(unavailable)` injects a tool that isn't callable now. The er
 
 ### A tool is missing from `tools`
 
-Search for it with `toolIndex.search`: its identifier may differ from the tool name, or it may be one of the [tools Pit doesn't bind](usage.md#results). Check that the extension or MCP server providing it is enabled, for example with `/mcp`. With Pi 0.99.2 or newer, MCP servers without `direct` tools connect in the background after Pi starts, so a call in the first moments of a session can miss their tools; retrying after the server connects works ([#207](https://github.com/cv/pit/issues/207)).
+Search for it with `toolIndex.search`: its identifier may differ from the tool name, or it may be one of the [tools Pit doesn't bind](usage.md#results). Check that the extension or MCP server providing it is enabled, for example with `/mcp`. MCP servers without `direct` tools connect in the background after Pi starts, so a call in the first moments of a session can miss their tools; retrying after the server connects works ([#207](https://github.com/cv/pit/issues/207)).
 
 ### Pit loads, but TypeScript reports a missing runtime
 

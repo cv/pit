@@ -199,4 +199,4 @@ Output is bounded. Read metadata uses sparse defaults:
 - The sandbox is an application boundary, not a container or virtual machine. See the [security model](security.md) for trust boundaries and [architecture](architecture.md#sandbox-and-rpc-boundary) for internal resource budgets.
 - Saved-function source quotas, nesting, and scope rules are described in [saved functions](saved-functions.md).
 - `tools` omits Pit's own `typescript` tool, Pi's `codemode` and `tool_search` tools, Pi's file and shell built-ins, and tools whose identifiers collide. It doesn't return a non-MCP tool's `details`, or MCP content other than text and images.
-- With Pi 0.99.2 or newer, MCP servers without `direct` tools connect in the background, and their tools are missing from `tools` until they connect ([#207](https://github.com/cv/pit/issues/207)).
+- MCP servers without `direct` tools connect in the background, and their tools are missing from `tools` until they connect ([#207](https://github.com/cv/pit/issues/207)).
