@@ -472,6 +472,8 @@ describe("saved functions that inject tools", () => {
     return {
       declared,
       callable: [],
+      // Pi 1.1 reports each tool's promptGuidelines; these fixtures declare none.
+      getPromptGuidelines: () => [],
       registered: declared,
       getExposure: () => "model-only",
       getNamespace: () => undefined,
@@ -646,6 +648,8 @@ describe("typescript's description", () => {
     return {
       declared: tools,
       callable: tools,
+      // Pi 1.1 reports each tool's promptGuidelines; these fixtures declare none.
+      getPromptGuidelines: () => [],
       registered: tools,
       getExposure: (name) => (name === "typescript" ? "model-only" : "direct"),
       getNamespace: () => undefined,

@@ -4,6 +4,19 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- The native runtime is built with Wasmtime 49.0.2 (from 49.0.1) and Rust 1.99.0 (from 1.98.1). It also uses `napi` 3.14.2, `napi-derive` 3.6.12, and `napi-build` 2.6.0, with updated compatible crates (#242). The smoke-test builder image is `rust:1.99-trixie`.
+- Pit depends on `@earendil-works/pi-codemode` 1.1.0 and `oxfmt` 0.72.0.
+- Development and CI use:
+  - Pi 1.1.0 (`pi-coding-agent`, `pi-tui`);
+  - `typebox` 1.3.36, `oxlint` 1.87.0, and `@types/node` 26.6.4;
+  - the latest `actions/setup-node`, `actions/upload-artifact`, and `actions/download-artifact` releases (#240, #244).
+
+### Fixed
+
+- Hashed file results keep their syntax highlighting on every line of a multi-line token, such as a block comment, under Pi 1.x. Each highlighted line now closes the styles it leaves open, without a full reset, so the background behind tool results survives.
+
 ## [0.27.0] - 2026-10-08
 
 ### Added
