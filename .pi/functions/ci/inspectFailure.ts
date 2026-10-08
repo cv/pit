@@ -105,11 +105,16 @@ async function inspectFailure(
           .filter((step) => step.status === "completed" && !passing.has(step.conclusion))
           .map((step) => `${step.number}. ${step.name} (${step.conclusion})`),
       };
-      const log = await api(`repos/${input.repo}/actions/jobs/${job.databaseId}/logs`, [], {
-        raise: false,
-        maxBytes: 51200,
-        truncate: "tail",
-      });
+      // gh refuses to print colored logs without the flag; every line is cleaned before use.
+      const log = await api(
+        `repos/${input.repo}/actions/jobs/${job.databaseId}/logs`,
+        ["--allow-escape-sequences"],
+        {
+          raise: false,
+          maxBytes: 51200,
+          truncate: "tail",
+        },
+      );
       if (log.code !== 0) {
         return Object.assign(summary, {
           step: null,
