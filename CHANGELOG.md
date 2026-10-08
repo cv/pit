@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `session.info()` and `session.outline()` report the prompt-cache state (#247): `warm` or `cold` from the idle time since the last request or Pi `cache_warm` refresh against the model's `promptCache` lifetime for the retention tier Pi requests, or `unknown` without one. A compaction or a request by another model leaves the cache cold. The expanded outline states it, for example `cache: warm · idle 45s of 4m 30s`.
+
 ### Changed
 
 - Context-edit re-prefill estimates follow how the active model's provider caches the prompt (#246). Anthropic Messages, Bedrock Converse, and OpenAI-compatible APIs with Anthropic-style `cache_control` cache only at breakpoints after the system prompt and the last user message, so changing an earlier entry is now estimated as rewriting the whole conversation, sized from Pi's reported context usage, with the freed tokens scaled to match. OpenAI Responses and other Chat Completions APIs keep the estimate from the edited entry to the leaf; other APIs get the whole-conversation estimate as an upper bound. Edit receipts, `session.outline()`, and `pit.context-edit` records report the assumption as `cacheMode`, and the transcript names it. In a recorded 1,127-request session on a breakpoint provider, requests after context edits rewrote 21.7M cached tokens against the previous estimate of 3.1M.

@@ -1,3 +1,4 @@
+import { cacheState } from "../../context/cache-state.js";
 import {
   INSPECT_LIMITS,
   inspectContextEntry,
@@ -63,6 +64,7 @@ export function createSessionContextHandlers({
         ...(selectedRoles === undefined ? {} : { roles: selectedRoles }),
         ...(contextEdits ? { pending: contextEdits.pending() } : {}),
         basis: cacheBasis(ctx.model, current, usage?.tokens),
+        cache: cacheState(ctx.sessionManager.getBranch(), ctx.model),
         limit: boundedInteger(options.limit, "options.limit", OUTLINE_LIMITS.limit),
         previewChars: boundedInteger(options.previewChars, "options.previewChars", {
           minimum: 0,

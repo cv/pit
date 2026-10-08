@@ -163,6 +163,32 @@ describe("context result rendering", () => {
     ]);
   });
 
+  it.each<{ name: string; cache: Record<string, unknown>; line: string }>([
+    {
+      name: "a warm cache",
+      cache: { state: "warm", idleSeconds: 45, ttlSeconds: 270, refreshedBy: "request" },
+      line: "cache: warm · idle 45s of 4m 30s",
+    },
+    {
+      name: "a cache that expired after Pi refreshed it",
+      cache: { state: "cold", idleSeconds: 400, ttlSeconds: 300, refreshedBy: "warming" },
+      line: "cache: cold · idle 6m 40s of 5m since Pi refreshed it",
+    },
+    {
+      name: "an unknown lifetime",
+      cache: { state: "unknown", idleSeconds: 7260, ttlSeconds: null, refreshedBy: "request" },
+      line: "cache: unknown lifetime · idle 2h 1m",
+    },
+    {
+      name: "nothing cached since a compaction, a model change, or the session start",
+      cache: { state: "cold", idleSeconds: null, ttlSeconds: 300, refreshedBy: null },
+      line: "cache: cold · nothing cached yet",
+    },
+  ])("states the outline's prompt-cache state for $name", ({ cache, line }) => {
+    const rows = render({ ...OUTLINE, cache }, true);
+    expect(rows.find((row) => row.includes("cache:"))?.trim()).toBe(line);
+  });
+
   it("summarizes an outline and lists one row per entry when expanded", () => {
     expect(render(OUTLINE, false).join("\n")).toContain(
       "Context: 3 entries · ~2.2K tokens listed · 7.3K of 128K in context · 3 more",

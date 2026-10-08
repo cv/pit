@@ -1,3 +1,4 @@
+import { cacheState } from "../../context/cache-state.js";
 import { stringValue as string } from "../../shared/argument-values.js";
 import { createSessionContextHandlers, type SessionContextServices } from "./session-context.js";
 import { createSessionEditHandlers } from "./session-edits.js";
@@ -27,6 +28,7 @@ export function createSessionHostHandler(services: SessionContextServices): Sess
         contextTokens: usage?.tokens,
         contextWindow: usage?.contextWindow,
         contextPercent: usage?.percent,
+        cache: cacheState(ctx.sessionManager.getBranch(), ctx.model),
       };
     }
     if (method === "getName") {

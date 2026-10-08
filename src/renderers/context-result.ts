@@ -6,6 +6,29 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { elidedTargets, plural } from "./shared.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
+/** For example `warm · idle 45s of 4m 30s` or `unknown lifetime · idle 2m`. */
+function describeCache(cache: {
+  state: "warm" | "cold" | "unknown";
+  idleSeconds: number | null;
+  ttlSeconds: number | null;
+  refreshedBy: "request" | "warming" | null;
+}): string {
+  const state = cache.state === "unknown" ? "unknown lifetime" : cache.state;
+  if (cache.idleSeconds === null) return `${state} · nothing cached yet`;
+  const of = cache.ttlSeconds === null ? "" : ` of ${seconds(cache.ttlSeconds)}`;
+  const by = cache.refreshedBy === "warming" ? " since Pi refreshed it" : "";
+  return `${state} · idle ${seconds(cache.idleSeconds)}${of}${by}`;
+}
+
+function seconds(total: number): string {
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = Math.round(total % 60);
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  if (minutes > 0) return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
+  return `${rest}s`;
+}
+
 const CACHE_MODE = Type.Union([
   Type.Literal("breakpoints"),
   Type.Literal("prefix"),
@@ -45,6 +68,14 @@ const isOutline = shapeGuard(
       contextWindow: Type.Union([Type.Number(), Type.Null()]),
       estimatedTokens: Type.Number(),
       cacheMode: Type.Optional(CACHE_MODE),
+      cache: Type.Optional(
+        Type.Object({
+          state: Type.Union([Type.Literal("warm"), Type.Literal("cold"), Type.Literal("unknown")]),
+          idleSeconds: Type.Union([Type.Number(), Type.Null()]),
+          ttlSeconds: Type.Union([Type.Number(), Type.Null()]),
+          refreshedBy: Type.Union([Type.Literal("request"), Type.Literal("warming"), Type.Null()]),
+        }),
+      ),
       entries: Type.Array(
         Type.Object(
           {
@@ -181,6 +212,7 @@ export function renderContextOutline(
   if (value.cacheMode) {
     detailLines.push(theme.fg("dim", `re-prefill: ${CACHE_BASIS[value.cacheMode]}`));
   }
+  if (value.cache) detailLines.push(theme.fg("dim", `cache: ${describeCache(value.cache)}`));
   if (value.nextAfter) {
     detailLines.push(theme.fg("dim", `next page: after ${value.nextAfter}`));
   }

@@ -235,6 +235,16 @@ type PitContextState = "original" | "elided" | "summarized" | "replaced";
 type PitContextOperation = "elide" | "summarize" | "note";
 /** How the provider caches the prompt: what an edit's re-prefill estimate assumes. */
 type PitContextCacheMode = "breakpoints" | "prefix" | "unknown";
+/**
+ * Whether the provider likely still holds the prompt cache: idle seconds since the last request or
+ * cache_warm refresh, against the model's promptCache lifetime; unknown without one.
+ */
+type PitContextCacheState = {
+  state: "warm" | "cold" | "unknown";
+  idleSeconds: number | null;
+  ttlSeconds: number | null;
+  refreshedBy: "request" | "warming" | null;
+};
 
 type PitContextOutlineEntry = {
   id: string;
@@ -256,6 +266,7 @@ type PitContextOutline = {
   contextWindow: number | null;
   estimatedTokens: number;
   cacheMode: PitContextCacheMode;
+  cache: PitContextCacheState;
   entries: PitContextOutlineEntry[];
   nextAfter?: string;
   omitted: number;
@@ -504,6 +515,7 @@ interface PitSessionFunctions {
     contextTokens: number | null | undefined;
     contextWindow: number | undefined;
     contextPercent: number | null | undefined;
+    cache: PitContextCacheState;
   }>;
 
   getName(): Promise<string | undefined>;
