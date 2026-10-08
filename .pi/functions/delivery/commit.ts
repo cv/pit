@@ -8,11 +8,14 @@
  * @param input.files - Repository-relative file paths to commit (1-100), including deletions.
  * @param input.message - Commit message (1-5000 characters).
  * @param input.push - Push the current branch, setting its upstream on the first push. The default
- *   is false.
+ *   is false. A push to a branch whose pull requests are all merged or closed fails before anything
+ *   is staged, since its commits would never reach the base branch.
+ * @param input.allowClosedPullRequest - Push even when the branch's pull request is merged or
+ *   closed. The default is false.
  */
 async function commit(
-  { shell: { execFile }, git: { commit: gitCommit, push } },
-  input: { files: string[]; message: string; push?: boolean },
+  { shell: { execFile }, git: { commit: gitCommit, push }, gh: { prList } },
+  input: { files: string[]; message: string; push?: boolean; allowClosedPullRequest?: boolean },
 ) {
   const files = [...new Set(input.files.map((file) => file.replace(/^\.\//, "")))];
   if (files.length === 0 || files.length > 100) {
@@ -42,6 +45,28 @@ async function commit(
   };
   const stagedPaths = () => paths(["diff", "--cached", "--name-only", "--no-renames", "-z"]);
   const requested = new Set(files);
+  // A merged or closed pull request's branch is a dead end: commits pushed there never reach the
+  // base branch, as happened when PR #272 merged while more commits were on their way.
+  if (input.push && input.allowClosedPullRequest !== true) {
+    const branch = (await git(["rev-parse", "--abbrev-ref", "HEAD"])).stdout.trim();
+    if (branch !== "HEAD") {
+      const listed = await prList({
+        head: branch,
+        state: "all",
+        json: ["number", "state"],
+        limit: 10,
+        raise: true,
+      });
+      const prs = JSON.parse(listed.stdout || "[]") as Array<{ number: number; state: string }>;
+      const finished = prs.filter((pr) => pr.state === "MERGED" || pr.state === "CLOSED");
+      if (finished.length > 0 && !prs.some((pr) => pr.state === "OPEN")) {
+        const [pr] = finished;
+        throw new Error(
+          `Branch ${branch} belongs to pull request #${pr!.number}, which is ${pr!.state.toLowerCase()}, so pushed commits would not reach its base. Create a new branch from origin/main (git switch -c <name> origin/main) and cherry-pick onto it, or pass allowClosedPullRequest: true. Nothing was staged or committed.`,
+        );
+      }
+    }
+  }
 
   const alreadyStaged = new Set(await stagedPaths());
   const unrelated = [...alreadyStaged].filter((file) => !requested.has(file));

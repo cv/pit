@@ -8,6 +8,7 @@ function repository(options: {
   staged?: string[];
   ignored?: string[];
   upstream?: string | null;
+  prs?: Array<{ number: number; state: string }>;
 }) {
   const staged = new Set(options.staged ?? []);
   const calls: string[][] = [];
@@ -46,6 +47,9 @@ function repository(options: {
             ? processResult({ stdout: `${options.upstream}\n` })
             : processResult({ code: 128, stderr: "no upstream" });
         }
+        if (command.join(" ") === "rev-parse --abbrev-ref HEAD") {
+          return processResult({ stdout: "feature\n" });
+        }
         return processResult({ stdout: "abc123\nfeature\n" });
       default:
         throw new Error(`unexpected git ${command.join(" ")}`);
@@ -53,10 +57,82 @@ function repository(options: {
   });
   const commit = vi.fn().mockResolvedValue(processResult());
   const push = vi.fn().mockResolvedValue(processResult());
-  return { dependencies: { shell: { execFile }, git: { commit, push } }, calls, commit, push };
+  const prList = vi.fn(async () => processResult({ stdout: JSON.stringify(options.prs ?? []) }));
+  return {
+    dependencies: { shell: { execFile }, git: { commit, push }, gh: { prList } },
+    calls,
+    commit,
+    push,
+    prList,
+  };
 }
 
 describe("delivery.commit", () => {
+  it.each([
+    { name: "a merged pull request", prs: [{ number: 272, state: "MERGED" }], refused: true },
+    { name: "a closed pull request", prs: [{ number: 9, state: "CLOSED" }], refused: true },
+    {
+      name: "an open pull request that reuses a merged one's branch",
+      prs: [
+        { number: 12, state: "OPEN" },
+        { number: 9, state: "MERGED" },
+      ],
+      refused: false,
+    },
+    { name: "no pull request", prs: [], refused: false },
+  ])("checks the branch's pull request before pushing: $name", async ({ prs, refused }) => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({
+      tracked: ["a.ts"],
+      changed: ["a.ts"],
+      upstream: "origin/feature",
+      prs,
+    });
+    const pending = commitChanges(repo.dependencies, {
+      files: ["a.ts"],
+      message: "fix: thing",
+      push: true,
+    });
+    if (refused) {
+      await expect(pending).rejects.toThrow(
+        new RegExp(
+          `Branch feature belongs to pull request #${prs[0]!.number}[\\s\\S]*Nothing was staged or committed`,
+        ),
+      );
+      expect(repo.calls.map((call) => call[0])).not.toContain("add");
+      expect(repo.commit).not.toHaveBeenCalled();
+      expect(repo.push).not.toHaveBeenCalled();
+    } else {
+      await expect(pending).resolves.toMatchObject({ pushed: true });
+      expect(repo.push).toHaveBeenCalledOnce();
+    }
+    expect(repo.prList).toHaveBeenCalledWith(
+      expect.objectContaining({ head: "feature", state: "all" }),
+    );
+  });
+
+  it.each([
+    { name: "the override", push: true, allowClosedPullRequest: true },
+    { name: "a commit without a push", push: false, allowClosedPullRequest: false },
+  ])("skips the pull request check for $name", async ({ push, allowClosedPullRequest }) => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({
+      tracked: ["a.ts"],
+      changed: ["a.ts"],
+      upstream: "origin/feature",
+      prs: [{ number: 272, state: "MERGED" }],
+    });
+    await expect(
+      commitChanges(repo.dependencies, {
+        files: ["a.ts"],
+        message: "fix: thing",
+        push,
+        allowClosedPullRequest,
+      }),
+    ).resolves.toMatchObject({ pushed: push });
+    expect(repo.prList).not.toHaveBeenCalled();
+  });
+
   it("stages tracked edits with -u and new files normally, then commits exactly them", async () => {
     const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({
