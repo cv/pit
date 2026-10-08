@@ -27,13 +27,43 @@ export type EditChange =
 export interface EditChangeSpec {
   revision: string | null;
   changes: EditChange[];
+  /** Lines of context to return around each change, as hashed ranges. */
+  context?: number;
+}
+
+/** Hashed lines of the edited file, which a follow-up edit can anchor to without a read. */
+export interface EditRange {
+  start: number;
+  end: number;
+  content: string;
 }
 
 export interface PreparedEdit {
   next?: string;
   deleted: boolean;
   applied: number;
+  ranges?: EditRange[];
+  rangesTruncated?: true;
 }
+
+/** Most context lines an edit may ask for on each side of a change. */
+export const MAX_EDIT_CONTEXT = 20;
+/** Lines the returned ranges may hold for one edit, or for every edit in one batch. */
+export const EDIT_RANGE_LINES = { edit: 200, batch: 400 } as const;
+const EDIT_RANGE_CHARS = 32_000;
+
+/** What returned ranges may still use; a batch shares one budget across its edits. */
+export interface RangeBudget {
+  lines: number;
+  chars: number;
+}
+
+export function rangeBudget(lines: number): RangeBudget {
+  return { lines, chars: EDIT_RANGE_CHARS };
+}
+
+/** Character spans of the new file that changes wrote, in file order. */
+type Spans = ReadonlyArray<readonly [number, number]>;
 
 interface Replacement {
   start: number;
@@ -150,7 +180,80 @@ function parseSpec(raw: unknown): EditChangeSpec {
         throw new Error(`Unknown edit change kind: ${kind}`);
     }
   });
-  return { revision: value.revision, changes } as EditChangeSpec;
+  const { context } = value;
+  if (
+    context !== undefined &&
+    !(
+      Number.isInteger(context) &&
+      (context as number) >= 0 &&
+      (context as number) <= MAX_EDIT_CONTEXT
+    )
+  ) {
+    throw new TypeError(`changes.context must be an integer from 0 to ${MAX_EDIT_CONTEXT}`);
+  }
+  return {
+    revision: value.revision,
+    changes,
+    ...(context === undefined ? {} : { context }),
+  } as EditChangeSpec;
+}
+
+/** The index of the last line that starts at or before a character offset. */
+function lineIndexAt(lines: readonly FileLine[], offset: number): number {
+  let low = 0;
+  let high = lines.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    if (lines[middle]!.start <= offset) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
+
+/**
+ * The edited file's hashed lines around each change, merged where they meet and bounded by the
+ * budget. They carry the same anchors a read would return.
+ */
+function editRanges(
+  next: string,
+  spans: Spans,
+  context: number,
+  budget: RangeBudget,
+): Pick<PreparedEdit, "ranges" | "rangesTruncated"> {
+  const lines = parseFileLines(next);
+  const windows: Array<[number, number]> = [];
+  for (const [start, end] of spans) {
+    const first = lineIndexAt(lines, start);
+    // A deletion writes nothing; show the line now in its place.
+    const last = end > start ? lineIndexAt(lines, end - 1) : first;
+    const from = Math.max(0, first - context);
+    const to = Math.min(lines.length - 1, last + context);
+    const previous = windows.at(-1);
+    if (previous && from <= previous[1] + 1) previous[1] = Math.max(previous[1], to);
+    else windows.push([from, to]);
+  }
+  const ranges: EditRange[] = [];
+  let truncated = false;
+  for (const [from, to] of windows) {
+    const kept: string[] = [];
+    for (let index = from; index <= to; index++) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      const line = lines[index]!;
+      const text = `${line.anchor}|${line.content}`;
+      if (budget.lines < 1 || budget.chars < text.length) {
+        truncated = true;
+        break;
+      }
+      budget.lines--;
+      budget.chars -= text.length + 1;
+      kept.push(text);
+    }
+    if (kept.length > 0)
+      ranges.push({ start: from + 1, end: from + kept.length, content: kept.join("\n") });
+    if (truncated) break;
+  }
+  return { ranges, ...(truncated ? { rangesTruncated: true as const } : {}) };
 }
 
 function resolveAnchor(lines: readonly FileLine[], anchor: string, label: string): FileLine {
@@ -190,7 +293,10 @@ function replacementsConflict(a: Replacement, b: Replacement): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
-function prepareAnchoredEdit(contents: string, changes: EditChange[]): PreparedEdit {
+function prepareAnchoredEdit(
+  contents: string,
+  changes: EditChange[],
+): { next: string; spans: Spans } {
   const lines = parseFileLines(contents);
   const separator = dominantSeparator(lines);
   const replacements = changes.map((change, index): Replacement => {
@@ -258,15 +364,40 @@ function prepareAnchoredEdit(contents: string, changes: EditChange[]): PreparedE
       }
     }
   }
+  // Where each change lands in the new file: earlier changes shift later ones.
+  let shift = 0;
+  const spans = [...replacements]
+    .sort((a, b) => a.start - b.start)
+    .map((replacement) => {
+      const start = replacement.start + shift;
+      shift += replacement.content.length - (replacement.end - replacement.start);
+      return [start, start + replacement.content.length] as const;
+    });
   let next = contents;
   for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
     next = next.slice(0, replacement.start) + replacement.content + next.slice(replacement.end);
   }
-  return { next, deleted: false, applied: changes.length };
+  return { next, spans };
 }
 
-export function prepareEdit(current: string | undefined, raw: unknown): PreparedEdit {
+/**
+ * Validates and applies an edit in memory. With `context` in the spec and a budget, the result
+ * carries hashed ranges of the new file around each change.
+ */
+export function prepareEdit(
+  current: string | undefined,
+  raw: unknown,
+  budget?: RangeBudget,
+): PreparedEdit {
   const spec = parseSpec(raw);
+  const written = (next: string, spans: Spans, applied: number): PreparedEdit => ({
+    next,
+    deleted: false,
+    applied,
+    ...(spec.context === undefined || budget === undefined
+      ? {}
+      : editRanges(next, spans, spec.context, budget)),
+  });
   if (current === undefined) {
     if (spec.revision !== null) {
       throw new Error("file is missing; use revision: null to create it");
@@ -274,7 +405,8 @@ export function prepareEdit(current: string | undefined, raw: unknown): Prepared
     if (spec.changes.length !== 1 || spec.changes[0]?.kind !== "replaceFile") {
       throw new Error("creating a file requires exactly one replaceFile change");
     }
-    return { next: spec.changes[0].content, deleted: false, applied: 1 };
+    const { content } = spec.changes[0];
+    return written(content, [[0, content.length]], 1);
   }
   const revision = fileRevision(current);
   if (spec.revision !== revision) {
@@ -291,9 +423,10 @@ export function prepareEdit(current: string | undefined, raw: unknown): Prepared
     }
     const [change] = spec.changes;
     if (change?.kind === "replaceFile") {
-      return { next: change.content, deleted: false, applied: 1 };
+      return written(change.content, [[0, change.content.length]], 1);
     }
     return { deleted: true, applied: 1 };
   }
-  return prepareAnchoredEdit(current, spec.changes);
+  const { next, spans } = prepareAnchoredEdit(current, spec.changes);
+  return written(next, spans, spec.changes.length);
 }

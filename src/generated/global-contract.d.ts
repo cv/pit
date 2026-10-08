@@ -86,7 +86,12 @@ type PitEditChange =
 type PitEditChangeSpec = {
   revision: string | null;
   changes: [PitEditChange, ...PitEditChange[]];
+  /** Return hashed ranges with this many lines (0-20) around each change. */
+  context?: number;
 };
+
+/** Hashed lines of the edited file, with anchors a follow-up edit accepts. */
+type PitEditRange = { start: number; end: number; content: string };
 
 type PitReadResult = {
   file: string;
@@ -106,6 +111,10 @@ type PitEditResult = {
   applied: number;
   bytes: number;
   deleted: boolean;
+  /** With context: the changed lines and their surroundings, merged where they meet. */
+  ranges?: PitEditRange[];
+  /** The ranges stopped at their budget: 200 lines per edit, 400 per batch. */
+  rangesTruncated?: true;
 };
 
 type PitWorkspaceEntry = {
