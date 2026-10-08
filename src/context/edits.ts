@@ -8,16 +8,15 @@ import {
   reprefillAfter,
   type CacheBasis,
 } from "./planning.js";
+import { callEdits, type ResultEdits } from "./result-edits.js";
 import {
   type AgentMessage,
   type AssistantMessage,
-  callEdits,
   type ContextItem,
   type ContextView,
   ELIDED_ARGUMENTS_PREFIX,
   ELIDED_PREFIX,
   type EditableContent,
-  type ResultEdits,
 } from "./view.js";
 
 export const MAX_REASON_CHARS = 200;

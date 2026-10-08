@@ -6,8 +6,8 @@ import type { CacheState } from "./cache-state.js";
 import { argumentTokens } from "./edits.js";
 import { staleNoteGroups } from "./notes.js";
 import type { CacheBasis } from "./planning.js";
+import { callEdits } from "./result-edits.js";
 import {
-  callEdits,
   entryRole,
   isModelMessage,
   toolsOf,
