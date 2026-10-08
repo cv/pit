@@ -41,6 +41,15 @@ function isCatalogSection(name: string): name is CatalogSection {
   return (CATALOG_SECTIONS as readonly string[]).includes(name);
 }
 
+/** Pi records an extension section wrapped in its tag; Pit sets and compares the bare content. */
+function unwrap(name: CatalogSection, value: string): string {
+  const open = `<${name}>\n`;
+  const close = `\n</${name}>`;
+  return value.startsWith(open) && value.endsWith(close)
+    ? value.slice(open.length, -close.length)
+    : value;
+}
+
 /** Replays the active branch's system patches and announcements, as Pi replays its prompt. */
 export function recordedCatalogs(branch: SessionEntry[], leafId: string | null): RecordedCatalogs {
   const system = new Map<CatalogSection, string>();
@@ -54,8 +63,8 @@ export function recordedCatalogs(branch: SessionEntry[], leafId: string | null):
             system.delete(name);
             seen.delete(name);
           } else {
-            system.set(name, value);
-            seen.set(name, value);
+            system.set(name, unwrap(name, value));
+            seen.set(name, unwrap(name, value));
           }
         }
       } else if (message.role === "custom" && message.customType === CATALOG_UPDATE_TYPE) {
