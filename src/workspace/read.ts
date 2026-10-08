@@ -4,6 +4,7 @@ import { createReadStream } from "node:fs";
 import { recordValue as object } from "../shared/argument-values.js";
 import { LIMITS, sliceText } from "../shared/bounds.js";
 import { resolveWorkspacePath, workspaceResultPath } from "./paths.js";
+import { takeRanges } from "./ranges.js";
 
 export type WorkspaceReadFormat = "hashed" | "raw";
 
@@ -262,30 +263,15 @@ async function readRanges(
   const past = requested.find(([start]) => start > totalLines);
   if (past)
     throw new Error(`A range starts at line ${past[0]}, but ${file} has ${totalLines} lines`);
-  let lines: number = LIMITS.result.maxLines;
-  let bytes: number = LIMITS.result.maxBytes;
-  let truncated = false;
-  const ranges: Array<{ start: number; end: number; content: string }> = [];
-  for (const [index, scan] of scans.entries()) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    const start = requested[index]![0];
-    const sliced = sliceText(
-      hashedContent(scan, start),
-      { maxBytes: Math.max(0, bytes), maxLines: Math.max(0, lines) },
-      "head",
-      { partialLine: false },
-    );
-    if (sliced.text !== "") {
-      const count = sliced.text.split("\n").length;
-      ranges.push({ start, end: start + count - 1, content: sliced.text });
-      lines -= count;
-      bytes -= Buffer.byteLength(sliced.text) + 1;
-    }
-    if (sliced.truncated || scan.selectionTruncated) {
-      truncated = true;
-      break;
-    }
-  }
+  // The ranges share one hashed read's line and byte budget.
+  const { ranges, truncated } = takeRanges(
+    scans.map((scan, index) => {
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      const start = requested[index]![0];
+      return { start, lines: hashedContent(scan, start).split("\n"), cut: scan.selectionTruncated };
+    }),
+    { lines: LIMITS.result.maxLines, bytes: LIMITS.result.maxBytes },
+  );
   return {
     file,
     format: "hashed" as const,
