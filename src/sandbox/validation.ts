@@ -23,6 +23,7 @@ const GLOBAL_CONTRACT = readFileSync(
   "utf8",
 );
 const CONTRACT_FILE = "/pit/global-contract.d.ts";
+const DECLARATIONS_FILE = "/pit/declarations.d.ts";
 const PROGRAM_FILE = "/pit/program.ts";
 const SIGNATURES_FILE = "/pit/saved-signatures.ts";
 const EXPRESSION_PREFIX = "const program: PitProgram = async (__pit_hostCalls) => await (\n";
@@ -41,6 +42,40 @@ interface ValidatedSource {
 }
 const validationCache = new Map<string, ValidatedSource>();
 let validationCacheHits = 0;
+
+// TypeScript's library declarations don't change while Pit runs. Parsing them is most of a
+// validation's cost, so each one is parsed once and shared by every program. Every program
+// uses the same compiler options, so the file name alone identifies a parse.
+const libraryFiles = new Map<string, ts.SourceFile | undefined>();
+
+function librarySourceFile(
+  host: ts.CompilerHost,
+  fileName: string,
+  languageVersion: ts.ScriptTarget | ts.CreateSourceFileOptions,
+  onError: ((message: string) => void) | undefined,
+): ts.SourceFile | undefined {
+  if (!libraryFiles.has(fileName)) {
+    libraryFiles.set(fileName, host.getSourceFile(fileName, languageVersion, onError));
+  }
+  return libraryFiles.get(fileName);
+}
+
+// The global contract and sandbox globals are fixed too, so they get one cached file; each
+// program's model and tool declarations go in a second file that merges with it.
+const CONTRACT_SOURCE =
+  GLOBAL_CONTRACT.replace("interface PitDependencies {", "interface PitGlobalFunctions {") +
+  SANDBOX_GLOBALS;
+let contractFile: ts.SourceFile | undefined;
+
+function contractSourceFile(): ts.SourceFile {
+  contractFile ??= ts.createSourceFile(
+    CONTRACT_FILE,
+    CONTRACT_SOURCE,
+    ts.ScriptTarget.ES2022,
+    true,
+  );
+  return contractFile;
+}
 
 function cacheSet(key: string, value: ValidatedSource): void {
   validationCache.delete(key);
@@ -417,11 +452,8 @@ function validateSource(
   };
   const baseHost = ts.createCompilerHost(options, true);
   const sources = new Map([
-    [
-      CONTRACT_FILE,
-      `${GLOBAL_CONTRACT.replace("interface PitDependencies {", "interface PitGlobalFunctions {") + SANDBOX_GLOBALS}
-${model.declarations}${tools?.declarations ?? ""}`,
-    ],
+    [CONTRACT_FILE, CONTRACT_SOURCE],
+    [DECLARATIONS_FILE, `${model.declarations}${tools?.declarations ?? ""}`],
     [PROGRAM_FILE, wrapped],
     [SIGNATURES_FILE, model.signatures],
   ]);
@@ -429,14 +461,19 @@ ${model.declarations}${tools?.declarations ?? ""}`,
     ...baseHost,
     fileExists: (fileName) => sources.has(fileName) || baseHost.fileExists(fileName),
     readFile: (fileName) => sources.get(fileName) ?? baseHost.readFile(fileName),
-    getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    getSourceFile: (fileName, languageVersion, onError) => {
+      if (fileName === CONTRACT_FILE) return contractSourceFile();
       const contents = sources.get(fileName);
       return contents === undefined
-        ? baseHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile)
+        ? librarySourceFile(baseHost, fileName, languageVersion, onError)
         : ts.createSourceFile(fileName, contents, languageVersion, true);
     },
   };
-  const program = ts.createProgram([CONTRACT_FILE, SIGNATURES_FILE, PROGRAM_FILE], options, host);
+  const program = ts.createProgram(
+    [CONTRACT_FILE, DECLARATIONS_FILE, SIGNATURES_FILE, PROGRAM_FILE],
+    options,
+    host,
+  );
   const diagnostics = programDiagnostics(program);
   if (diagnostics.length > 0) {
     const error = validationError(diagnostics, names);
