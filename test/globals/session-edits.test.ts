@@ -69,10 +69,14 @@ describe("re-prefill estimates", () => {
       `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}])`,
     );
     // The receipt agrees with the outline; only a prefix cache spares the entries before it.
+    // A whole-conversation estimate is measured, so the freed estimate is scaled to match it.
     expect(target.reprefillTokens < outline.entries[0].reprefillTokens).toBe(!whole);
+    const scale = whole ? target.reprefillTokens / outline.estimatedTokens : 1;
     expect(receipt).toMatchObject({
       cacheMode: mode,
-      estimatedReprefillTokens: target.reprefillTokens - receipt.estimatedTokensFreed,
+      estimatedReprefillTokens: Math.round(
+        target.reprefillTokens - receipt.estimatedTokensFreed * scale,
+      ),
     });
     const entries = await endTurn(session);
     expect(entries[1]).toMatchObject({

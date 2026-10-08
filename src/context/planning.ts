@@ -98,11 +98,14 @@ export function reprefillAfter(
   const earliest = view.items.findIndex((item) => changed.has(item.id));
   /* v8 ignore next -- every edit changes at least one model-visible entry. */
   if (earliest < 0) return 0;
-  const before =
-    basis.mode === "prefix"
-      ? view.items.slice(earliest).reduce((sum, item) => sum + item.tokens, 0)
-      : basis.conversationTokens;
-  return Math.max(0, before - tokensFreed);
+  if (basis.mode === "prefix") {
+    const suffix = view.items.slice(earliest).reduce((sum, item) => sum + item.tokens, 0);
+    return Math.max(0, suffix - tokensFreed);
+  }
+  // The conversation is measured but the freed tokens are Pit's estimates, which undercount
+  // alike, so scale them to the measurement before subtracting.
+  const scale = view.tokens > 0 ? basis.conversationTokens / view.tokens : 1;
+  return Math.max(0, Math.round(basis.conversationTokens - tokensFreed * scale));
 }
 
 /** Why an ID has no model-visible contribution. */
