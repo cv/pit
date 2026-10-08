@@ -582,6 +582,16 @@ describe("result renderers", () => {
       line: "\u001b[31mred\u001b[0m after",
       closed: "\u001b[31mred\u001b[0m after",
     },
+    {
+      name: "an empty reset",
+      line: "\u001b[31mred\u001b[m after",
+      closed: "\u001b[31mred\u001b[m after",
+    },
+    {
+      name: "a parameter that opens no tracked style",
+      line: "\u001b[5mblink",
+      closed: "\u001b[5mblink",
+    },
   ])("closes only the styles left open by $name", ({ line, closed }) => {
     // A full reset would also clear the background Pi draws behind tool results.
     expect(closeOpenStyles(line)).toBe(closed);

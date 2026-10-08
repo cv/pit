@@ -124,29 +124,31 @@ export function languageForFile(file: string): string {
 // oxlint-disable-next-line no-control-regex
 const SGR_SEQUENCE = /\u001b\[([0-9;]*)m/g;
 
-/** SGR resets for the styles a line can leave open, keyed by what each opening parameter sets. */
-const STYLE_RESETS = {
-  fg: "39",
-  bg: "49",
-  intensity: "22",
-  italic: "23",
-  underline: "24",
-  inverse: "27",
-  strike: "29",
-} as const;
-type OpenStyle = keyof typeof STYLE_RESETS;
+type OpenStyle = "fg" | "bg" | "intensity" | "italic" | "underline" | "inverse" | "strike";
 
-function styleOf(code: number): OpenStyle | "reset" | undefined {
-  if (code === 0) return "reset";
-  if (code === 1 || code === 2) return "intensity";
-  if (code === 3) return "italic";
-  if (code === 4) return "underline";
-  if (code === 7) return "inverse";
-  if (code === 9) return "strike";
-  if ((code >= 30 && code <= 38) || (code >= 90 && code <= 97)) return "fg";
-  if ((code >= 40 && code <= 48) || (code >= 100 && code <= 107)) return "bg";
-  return undefined;
-}
+const range = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => from + i);
+/** The style each SGR parameter opens. 38 and 48 take extended-color parameters. */
+const OPENED = new Map<number, OpenStyle>([
+  ...[1, 2].map((code) => [code, "intensity"] as const),
+  [3, "italic"],
+  [4, "underline"],
+  [7, "inverse"],
+  [9, "strike"],
+  ...[...range(30, 38), ...range(90, 97)].map((code) => [code, "fg"] as const),
+  ...[...range(40, 48), ...range(100, 107)].map((code) => [code, "bg"] as const),
+]);
+/** The reset for each style, which is also the parameter that closes it. */
+const RESET: Record<OpenStyle, number> = {
+  fg: 39,
+  bg: 49,
+  intensity: 22,
+  italic: 23,
+  underline: 24,
+  inverse: 27,
+  strike: 29,
+};
+const CLOSED = new Map(Object.entries(RESET).map(([style, code]) => [code, style as OpenStyle]));
 
 /**
  * Closes the styles a highlighted line leaves open, such as a block comment's color that
@@ -158,22 +160,21 @@ function styleOf(code: number): OpenStyle | "reset" | undefined {
 export function closeOpenStyles(line: string): string {
   const open = new Set<OpenStyle>();
   for (const match of line.matchAll(SGR_SEQUENCE)) {
-    const codes = (match[1] ?? "").split(";").map((part) => (part === "" ? 0 : Number(part)));
+    // An empty parameter, as in ESC[m, means 0: reset everything.
+    const codes = (match[1] as string).split(";").map(Number);
     for (let index = 0; index < codes.length; index++) {
       const code = codes[index] as number;
-      // Extended colors carry their own parameters: 38;5;n or 38;2;r;g;b.
+      if (code === 0) open.clear();
+      const closed = CLOSED.get(code);
+      if (closed) open.delete(closed);
+      const opened = OPENED.get(code);
+      if (opened) open.add(opened);
+      // Skip an extended color's own parameters: 38;5;n or 38;2;r;g;b.
       if (code === 38 || code === 48) index += codes[index + 1] === 5 ? 2 : 4;
-      const closed = (Object.entries(STYLE_RESETS) as [OpenStyle, string][]).find(
-        ([, reset]) => Number(reset) === code,
-      );
-      if (closed) open.delete(closed[0]);
-      const style = styleOf(code);
-      if (style === "reset") open.clear();
-      else if (style) open.add(style);
     }
   }
   if (open.size === 0) return line;
-  return `${line}\u001b[${[...open].map((style) => STYLE_RESETS[style]).join(";")}m`;
+  return `${line}\u001b[${[...open].map((style) => RESET[style]).join(";")}m`;
 }
 
 export function renderHashedFile(
