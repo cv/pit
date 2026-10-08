@@ -4,15 +4,29 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-08
+
 ### Added
 
 - `session.info()` and `session.outline()` report the prompt-cache state (#247): `warm` or `cold` from the idle time since the last request or Pi `cache_warm` refresh against the model's `promptCache` lifetime for the retention tier Pi requests, or `unknown` without one. A compaction or a request by another model leaves the cache cold. The expanded outline states it, for example `cache: warm · idle 45s of 4m 30s`.
+- `workspace.edit` and edit batches accept `context: n` (0-20) and return `ranges`. These are the edited file's hashed lines around each change, with `n` lines either side, merged where they meet. They match a hashed read of those lines, so a follow-up edit there needs no read: in a recorded session, 71 of 141 rereads came right after the agent's own edit (#251). Ranges are capped at 200 lines per edit and 400 per batch, and `rangesTruncated` marks a cut. Without `context`, results are unchanged.
+- `workspace.read(file, { ranges: [[start, end], ...] })` reads up to 20 line ranges in one pass. They come back hashed, sorted, and merged where they meet, with one revision for all of them, and share a hashed read's 2,000-line and 50 KB budget (#253). Range reads and edit results use the same `PitLineRange` shape, and the transcript shows each range with a gap marker between them.
+- `session.outline()` entries for assistant tool calls report `argumentTokens`. When their calls applied file edits, they also report `edits`: in a recorded session, program arguments were 1.2 MB against 1.8 MB of results (#252). A successful `typescript` result records the edits its program applied in `details.edits`: file, revision, change count, and deletion, for up to 32 edits. Eliding an edit call's arguments names those files and revisions in the stub, for example `applied: src/parse.ts @ rev1 (3 changes)`.
 
 ### Changed
 
+- **Behavior change:** `session.elide` and `session.summarize` apply when the run ends by default, instead of after the current turn (#262). Mid-run the prompt cache is always warm, so an edit there always rewrites it. The next prompt's request often comes after the cache has expired, and rewrites the conversation anyway: about half of replies did in the audited sessions. Pass `when: "now"` to apply an edit after the current turn, for a cleanup early in a long run. Receipts report `appliesAt: "run_end"` or `"turn_end"`. Deferred edits apply at the next turn end once context reaches 50% of the window, and the context-pressure notice is skipped while they wait. A failed call, a tree change, a new session, or a reload discards them.
+- `session.setNote` only appends (#248). A replacement is a new `<model-note key="…" version="n" replaces="earlier">` entry, and `null` appends a `removed` entry, so note changes no longer rewrite the cached prefix. `session.notes()` lists each key's newest version, and `session.outline()` marks older ones `superseded`. Older versions drop beside an elide or summarize, or when every visible version would exceed the note budget. In a live session, a replace and a removal appended 309 and 30 tokens, and the next request read 198,841 cached tokens and wrote 932.
+- Saved-function catalog changes no longer patch the system prompt mid-session (#250). Providers that fold system updates into the leading prompt rewrote the whole cached conversation for each change. Pit now keeps the recorded catalogs, and announces the change in a short `pit.catalog-update` message, until a session start, a tree change, a compaction, or an expired cache rewrites the prompt anyway. Providers that keep mid-conversation system messages still get the update at once.
+- The guideline and the context-pressure notice state what context edits cost: elide and summarize together in one call, and an immediate edit pays back after about 15 × `estimatedReprefillTokens` ÷ `estimatedTokensFreed` requests (#247). The tool description names edits with `context` and range reads as anchor sources.
 - Context-edit re-prefill estimates follow how the active model's provider caches the prompt (#246). Anthropic Messages, Bedrock Converse, and OpenAI-compatible APIs with Anthropic-style `cache_control` cache only at breakpoints after the system prompt and the last user message, so changing an earlier entry is now estimated as rewriting the whole conversation, sized from Pi's reported context usage, with the freed tokens scaled to match. OpenAI Responses and other Chat Completions APIs keep the estimate from the edited entry to the leaf; other APIs get the whole-conversation estimate as an upper bound. Edit receipts, `session.outline()`, and `pit.context-edit` records report the assumption as `cacheMode`, and the transcript names it. In a recorded 1,127-request session on a breakpoint provider, requests after context edits rewrote 21.7M cached tokens against the previous estimate of 3.1M.
 - Pit compiles submitted TypeScript with TypeScript's own `transpileModule` instead of esbuild, and esbuild is now only a development dependency for bundling the Wasmtime smoke adapter. Installing Pit no longer downloads esbuild's native binary or runs its postinstall script, which npm's `allow-scripts` check reports as unapproved. Compiling a typical program takes about as long as before, roughly 1 ms.
 - Development scripts and the Wasmtime prebuild workflow run TypeScript with Node's built-in type stripping and a small resolve hook, `scripts/typescript-resolve.mjs`, instead of `tsx`, which is removed. `tsconfig.json` enables `erasableSyntaxOnly` so every source stays runnable this way, and constructor parameter properties became explicit fields. `npm run globals:check` takes about 0.2 s instead of 0.5 s.
+- When an injected function can't be resolved, the TypeScript validation error suggests up to three close names and lists the functions in that namespace, instead of appending every available function (#254).
+
+### Fixed
+
+- A `typescript` call whose only argument is a copied elision stub, `{ elided: "[Pit: these arguments were elided …]" }`, gets an error that names the mistake instead of Pi's schema error for a missing `code`.
 
 ### Security
 
@@ -384,7 +398,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/cv/pit/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/cv/pit/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/cv/pit/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/cv/pit/compare/v0.24.0...v0.24.1

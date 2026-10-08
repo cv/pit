@@ -36,7 +36,7 @@ Want to see what that looks like over time? [I Wasn't Trying to Build an App](do
 
 ## Install and update
 
-Pit needs Node 22.19 or newer and Pi 0.99 or newer, and is tested with Pi 0.99.2. Prebuilt runtimes are available for Linux, macOS, and Windows on ARM64 or x64.
+Pit needs Node 22.19 or newer and Pi 0.99 or newer, and is tested with Pi 0.99.2 and 1.0.4. Prebuilt runtimes are available for Linux, macOS, and Windows on ARM64 or x64.
 
 Install the latest version:
 
@@ -50,7 +50,7 @@ This tracks `main`, where changes land after CI passes. To update:
 pi update git:github.com/cv/pit
 ```
 
-Run `/reload` after source-only updates; restart Pi after a native runtime update. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.26.0` instead; package updates won't move a pinned install.
+Run `/reload` after source-only updates; restart Pi after a native runtime update. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.27.0` instead; package updates won't move a pinned install.
 
 For a one-session trial or a project-only install, see [installation options](docs/configuration.md#installation-scope). Pit is distributed from GitHub, not npm; [releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) cover what's new.
 
