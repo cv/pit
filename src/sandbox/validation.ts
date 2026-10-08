@@ -124,6 +124,133 @@ function withoutSignatureRepeats(diagnostics: readonly ts.Diagnostic[]): ts.Diag
   );
 }
 
+const MAX_INJECTION_HINTS = 3;
+const MAX_SUGGESTIONS = 3;
+const MAX_LISTED_METHODS = 8;
+const MAX_HINT_CHARACTERS = 320;
+
+/** Levenshtein distance, ignoring case, between two identifiers. */
+function editDistance(left: string, right: string): number {
+  const a = left.toLowerCase();
+  const b = right.toLowerCase();
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        (previous[j] as number) + 1,
+        (current[j - 1] as number) + 1,
+        (previous[j - 1] as number) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length] as number;
+}
+
+/** The program's own function: the first function-like node in the wrapped program file. */
+function programFunction(file: ts.SourceFile): ts.SignatureDeclaration | undefined {
+  let found: ts.SignatureDeclaration | undefined;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (
+      ts.isArrowFunction(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isFunctionDeclaration(node)
+    ) {
+      found = node;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
+}
+
+/** The dotted injection path of the binding key at `position`, such as `tests.runTargeted`. */
+function injectionPath(
+  name: ts.BindingName,
+  position: number,
+  path: string[] = [],
+): string[] | undefined {
+  if (!ts.isObjectBindingPattern(name)) return undefined;
+  for (const element of name.elements) {
+    const key = element.propertyName ?? element.name;
+    // A quoted key names the same injection; a computed one matches no function.
+    const text = key.getText().replace(/^(["'])(.*)\1$/, "$2");
+    if (position >= key.getStart() && position < key.end) return [...path, text];
+    const inner = injectionPath(element.name, position, [...path, text]);
+    if (inner) return inner;
+  }
+  return undefined;
+}
+
+/**
+ * The name an injection error could not resolve: a destructured namespace or function in the
+ * program's first parameter, or an undeclared identifier. Property errors on values the program
+ * computes are not injection errors.
+ */
+function unresolvedInjection(diagnostic: ts.Diagnostic): string | undefined {
+  const file = diagnostic.file;
+  if (file?.fileName !== PROGRAM_FILE || diagnostic.start === undefined) return undefined;
+  if (diagnostic.code === 2304) {
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+    return /^Cannot find name '([^']+)'/.exec(message)?.[1];
+  }
+  if (diagnostic.code !== 2339 && diagnostic.code !== 2551) return undefined;
+  const parameter = programFunction(file)?.parameters[0];
+  return parameter ? injectionPath(parameter.name, diagnostic.start)?.join(".") : undefined;
+}
+
+function boundedList(items: readonly string[], limit: number): string {
+  const shown = items.slice(0, limit).join(", ");
+  return items.length > limit ? `${shown}, … ${items.length - limit} more` : shown;
+}
+
+/** Closest injectable names for an unresolved one, and the methods of a namespace it names. */
+function injectionHint(name: string, names: readonly string[]): string {
+  const segments = name.split(".");
+  const leaf = segments.at(-1) as string;
+  const namespace = segments.slice(0, -1).join(".");
+  const namespaces = [
+    ...new Set(names.flatMap((id) => (id.includes(".") ? [id.slice(0, id.lastIndexOf("."))] : []))),
+  ];
+  if (segments.length === 1 && (names.includes(name) || namespaces.includes(name))) {
+    return `"${name}" is injectable: destructure it in the first parameter, such as ({ ${name} }).`;
+  }
+  const candidates = [...names, ...namespaces];
+  const threshold = Math.max(2, Math.floor(leaf.length / 3));
+  const ranked = candidates
+    .map((id) => {
+      const idLeaf = id.slice(id.lastIndexOf(".") + 1);
+      return { id, distance: Math.min(editDistance(name, id), editDistance(leaf, idLeaf)) };
+    })
+    .filter((candidate) => candidate.distance <= threshold)
+    .sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id))
+    .slice(0, MAX_SUGGESTIONS)
+    .map((candidate) => candidate.id);
+  const methods = namespaces.includes(namespace)
+    ? names.filter(
+        (id) => id.startsWith(`${namespace}.`) && !id.slice(namespace.length + 1).includes("."),
+      )
+    : [];
+  const parts = [
+    ranked.length > 0
+      ? `Did you mean: ${ranked.join(", ")}?`
+      : `No injectable function is named "${name}"; functions.listAll() lists them.`,
+    ...(methods.length > 0
+      ? [
+          `${namespace} has: ${boundedList(
+            methods.map((id) => id.slice(namespace.length + 1)),
+            MAX_LISTED_METHODS,
+          )}.`,
+        ]
+      : []),
+  ];
+  const hint = parts.join(" ");
+  return hint.length > MAX_HINT_CHARACTERS ? `${hint.slice(0, MAX_HINT_CHARACTERS - 1)}…` : hint;
+}
+
 function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly string[]): string {
   const unique = [
     ...new Map(
@@ -153,17 +280,18 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
   })
     ? `\n${JSON_RESULT_HINT}`
     : "";
-  const savedHint =
-    diagnostics.some((diagnostic) => diagnostic.code === 2304 || diagnostic.code === 2339) &&
-    names.length > 0
-      ? `\nAvailable functions: ${names.join(", ")}`
-      : "";
+  const injectionHints = [
+    ...new Set(diagnostics.flatMap((diagnostic) => unresolvedInjection(diagnostic) ?? [])),
+  ]
+    .slice(0, MAX_INJECTION_HINTS)
+    .map((name) => `\n${injectionHint(name, names)}`)
+    .join("");
   return (
     `TypeScript validation failed:\n- ${messages.join("\n- ")}` +
     (omitted > 0 ? `\n… ${omitted} more diagnostic${omitted === 1 ? "" : "s"} omitted` : "") +
     savedFunctionHint +
     jsonResultHint +
-    savedHint
+    injectionHints
   );
 }
 
