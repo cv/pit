@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { endTurn, SessionBuilder } from "../support/context-session.js";
+import { endRun, SessionBuilder } from "../support/context-session.js";
 import {
   cleanupHarness,
   context,
@@ -39,7 +39,7 @@ describe("context pressure notices", () => {
   it("notices once when usage crosses 50% and again at 75%", async () => {
     const session = agentRun();
 
-    const first = await endTurn(session, { ctx: usage(52) });
+    const first = await endRun(session, { ctx: usage(52) });
     expect(first).toEqual([
       {
         type: "custom_message",
@@ -58,9 +58,9 @@ describe("context pressure notices", () => {
     ]);
 
     session.current();
-    expect(await endTurn(session, { ctx: usage(60) })).toEqual([]);
+    expect(await endRun(session, { ctx: usage(60) })).toEqual([]);
     session.current();
-    await endTurn(session, { ctx: usage(76.4) });
+    await endRun(session, { ctx: usage(76.4) });
 
     // Earlier notices stay: omitting one mid-context would re-prefill what follows it.
     expect(notices(session)).toEqual([50, 75]);
@@ -98,7 +98,7 @@ describe("context pressure notices", () => {
     const session = agentRun();
     await setup(session);
 
-    const entries = await endTurn(session, { ctx, ...(outcome ? { outcome } : {}) });
+    const entries = await endRun(session, { ctx, ...(outcome ? { outcome } : {}) });
 
     expect(entries.filter((entry) => entry.type === "custom_message")).toEqual([]);
   });
@@ -114,9 +114,9 @@ describe("context pressure notices", () => {
       }),
     });
 
-    expect(await endTurn(session, { ctx: large(199_000) })).toEqual([]);
+    expect(await endRun(session, { ctx: large(199_000) })).toEqual([]);
     session.current();
-    const [first] = await endTurn(session, { ctx: large(210_000) });
+    const [first] = await endRun(session, { ctx: large(210_000) });
     expect(first).toMatchObject({
       content: expect.stringMatching(/^\[Pit\] Context is 20% full \(~210K of 1\.1M tokens\)/),
       details: {
@@ -128,11 +128,11 @@ describe("context pressure notices", () => {
       },
     });
     session.current();
-    expect(await endTurn(session, { ctx: large(400_000) })).toEqual([]);
+    expect(await endRun(session, { ctx: large(400_000) })).toEqual([]);
     session.current();
-    await endTurn(session, { ctx: large(530_000) });
+    await endRun(session, { ctx: large(530_000) });
     session.current();
-    await endTurn(session, { ctx: large(800_000) });
+    await endRun(session, { ctx: large(800_000) });
 
     expect(notices(session)).toEqual([19, 50, 75]);
   });
@@ -150,7 +150,7 @@ describe("context pressure notices", () => {
       }),
     };
 
-    expect(await endTurn(session, { ctx })).toEqual([]);
+    expect(await endRun(session, { ctx })).toEqual([]);
   });
 
   it("counts a notice from before thresholds were recorded at its percentage", async () => {
@@ -173,17 +173,17 @@ describe("context pressure notices", () => {
     };
 
     // The visible 50% notice already covers the lower 200K threshold.
-    expect(await endTurn(session, { ctx })).toEqual([]);
+    expect(await endRun(session, { ctx })).toEqual([]);
   });
 
   it("notices again once a compaction removes the earlier notice", async () => {
     const session = agentRun();
-    await endTurn(session, { ctx: usage(52) });
+    await endRun(session, { ctx: usage(52) });
     const kept = session.user("Continue");
     session.manager.appendCompaction("summary", kept, 100_000);
     session.current();
 
-    await endTurn(session, { ctx: usage(55) });
+    await endRun(session, { ctx: usage(55) });
 
     expect(notices(session)).toEqual([50]);
     expect(
@@ -198,7 +198,7 @@ describe("context pressure notices", () => {
     session.user("Optimize the solver");
     const first = session.turn("bash", OUTPUT);
     session.current();
-    await endTurn(session, { ctx: usage(52) });
+    await endRun(session, { ctx: usage(52) });
     const second = session.turn("bash", OUTPUT);
     session.current();
 
@@ -207,13 +207,13 @@ describe("context pressure notices", () => {
       { from: first.assistant, to: second.result },
       context({ sessionManager: session.manager }),
     );
-    await endTurn(session);
+    await endRun(session);
 
     expect(notices(session)).toEqual([]);
 
     // An omitted notice no longer counts, so its level can notice again.
     session.current();
-    const entries = await endTurn(session, { ctx: usage(53) });
+    const entries = await endRun(session, { ctx: usage(53) });
     expect(entries.map((entry: any) => entry.customType)).toEqual(["pit.context-pressure"]);
   });
 });
