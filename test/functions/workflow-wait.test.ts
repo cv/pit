@@ -57,7 +57,7 @@ describe("ci.waitForRun behavior", () => {
     ).toMatchObject({ status: "completed", conclusion: "failure" });
   });
 
-  it("stays within the tool's time budget and reports how many requested polls fit", async () => {
+  it("stops at its time limit and reports how many requested polls it made", async () => {
     const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const started = Date.now();
@@ -73,22 +73,25 @@ describe("ci.waitForRun behavior", () => {
       },
     );
     await vi.runAllTimersAsync();
-    // After the 120 s delay, 165 s of budget fits the first check and five 30 s intervals.
+    // After the 120 s delay, the default 240 s limit leaves room for checks at 120, 150, 180, 210,
+    // and 240 s; a sixth would start past the limit.
     expect(await pending).toEqual({
       status: "timed_out",
       id: 42,
-      attempts: 6,
+      attempts: 5,
       requestedAttempts: 120,
+      timeoutMs: 240_000,
+      elapsedMs: 240_000,
       lastStatus: "in_progress",
       url: "https://example.invalid/runs/42",
       jobs: [],
     });
-    expect(runView).toHaveBeenCalledTimes(6);
-    expect(Date.now() - started).toBeLessThan(300_000);
+    expect(runView).toHaveBeenCalledTimes(5);
+    expect(Date.now() - started).toBeLessThanOrEqual(240_000);
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("names the polling budget when it cut a failed wait short", async () => {
+  it("names the time limit when it cut a failed wait short", async () => {
     const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const failure = wait({ gh: { runView } }, { id: 42, repo: "cv/pit", attempts: 20 }).then(
@@ -96,9 +99,9 @@ describe("ci.waitForRun behavior", () => {
       (error: Error) => error.message,
     );
     await vi.runAllTimersAsync();
-    expect(await failure).toContain("did not complete after 12 checks");
-    expect(await failure).toContain("20 were requested, but only 12 fit the 285 s polling budget");
-    expect(runView).toHaveBeenCalledTimes(12);
+    expect(await failure).toContain("did not complete after 9 checks in 240 s");
+    expect(await failure).toContain("it stopped at its 240 s time limit with 11 checks unused");
+    expect(runView).toHaveBeenCalledTimes(9);
   });
 
   it("reports the last observed run state and unfinished jobs when a wait times out", async () => {
