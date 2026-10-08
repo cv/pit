@@ -64,8 +64,10 @@ const dependencies = chosen.map(name => {
   };
 });
 const omitted = names.length - chosen.length;
+// Packages whose install would make local gates test something other than the lockfile.
+const stale = dependencies.filter(item => item.issues.includes("installed-version-mismatch") || item.issues.includes("manifest-lock-mismatch") || (item.issues.includes("not-installed") && !item.optional)).map(item => item.name);
 console.log(JSON.stringify({
-  total: names.length, inspected: chosen.length, omitted, complete: omitted === 0,
+  total: names.length, inspected: chosen.length, omitted, complete: omitted === 0, stale,
   matchesLock: omitted || !supported ? null : dependencies.every(item => item.matchesLock === true),
   lockfileVersion: typeof lock.value?.lockfileVersion === "number" ? lock.value.lockfileVersion : null,
   lockError: lock.error ?? (supported ? null : "Requires package-lock.json version 2 or 3"),
@@ -89,6 +91,8 @@ console.log(JSON.stringify({
     inspected: number;
     omitted: number;
     complete: boolean;
+    /** Direct dependencies whose install differs from the lockfile, or required ones not installed. */
+    stale: string[];
     matchesLock: boolean | null;
     lockfileVersion: number | null;
     lockError: string | null;

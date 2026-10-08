@@ -11,7 +11,68 @@ function deferredResult() {
   return { promise, finish: () => resolve(processResult()) };
 }
 
+// Installed dependencies that match the lockfile, so only the gates under test decide.
+const clean = {
+  delivery: { inspectDependencies: async () => ({ stale: [], dependencies: [] }) },
+};
+
 describe("delivery.validate workflow behavior", () => {
+  it.each([
+    {
+      name: "a stale install",
+      issues: ["installed-version-mismatch"],
+      optional: false,
+      fails: true,
+    },
+    {
+      name: "a manifest the lockfile doesn't match",
+      issues: ["manifest-lock-mismatch"],
+      optional: false,
+      fails: true,
+    },
+    { name: "a missing required package", issues: ["not-installed"], optional: false, fails: true },
+    { name: "a missing optional package", issues: ["not-installed"], optional: true, fails: false },
+  ])("checks installed dependencies first: $name", async ({ issues, optional, fails }) => {
+    const validate = await loadWorkflowFunction("delivery.validate");
+    const run = vi.fn(async (_script: string) => processResult());
+    const test = vi.fn(async () => processResult());
+    const dependency = {
+      name: "@earendil-works/pi-coding-agent",
+      declared: "^1.0.2",
+      lockedVersion: "1.0.2",
+      installedVersion: "0.99.2",
+      optional,
+      issues,
+    };
+    const delivery = {
+      inspectDependencies: async () => ({
+        stale: fails ? [dependency.name] : [],
+        dependencies: [dependency],
+      }),
+    };
+    const pending = validate({ delivery, npm: { run, test } });
+    if (fails) {
+      await expect(pending).rejects.toThrow(
+        /npm ci[\s\S]*@earendil-works\/pi-coding-agent: declared \^1\.0\.2, locked 1\.0\.2, installed 0\.99\.2/,
+      );
+      expect(run).not.toHaveBeenCalled();
+      expect(test).not.toHaveBeenCalled();
+    } else {
+      await expect(pending).resolves.toMatchObject({ check: 0, tests: 0 });
+    }
+  });
+
+  it("skips the dependency check for an intentional local override", async () => {
+    const validate = await loadWorkflowFunction("delivery.validate");
+    const inspectDependencies = vi.fn();
+    const run = vi.fn(async (_script: string) => processResult());
+    const test = vi.fn(async () => processResult());
+    await expect(
+      validate({ delivery: { inspectDependencies }, npm: { run, test } }, { dependencies: false }),
+    ).resolves.toMatchObject({ check: 0, tests: 0 });
+    expect(inspectDependencies).not.toHaveBeenCalled();
+  });
+
   it("starts independent gates together, then waits before coverage and packaging", async () => {
     const validate = await loadWorkflowFunction("delivery.validate");
     const check = deferredResult();
@@ -30,7 +91,10 @@ describe("delivery.validate workflow behavior", () => {
       started.push("tests");
       return tests.promise;
     });
-    const pending = validate({ npm: { run, test } }, { coverage: true, packageCheck: true });
+    const pending = validate(
+      { ...clean, npm: { run, test } },
+      { coverage: true, packageCheck: true },
+    );
     await vi.waitFor(() => expect(started).toEqual(expect.arrayContaining(["check", "tests"])));
     expect(started).not.toContain("coverage");
     check.finish();
@@ -56,7 +120,7 @@ describe("delivery.validate workflow behavior", () => {
       const validate = await loadWorkflowFunction("delivery.validate");
       const run = vi.fn(async (_script: string) => processResult());
       const test = vi.fn(async () => processResult());
-      const output = await validate({ npm: { run, test } }, { coverage, packageCheck });
+      const output = await validate({ ...clean, npm: { run, test } }, { coverage, packageCheck });
       expect(run.mock.calls.map(([script]) => script).sort()).toEqual(
         [
           "check",
@@ -97,6 +161,7 @@ describe("delivery.validate workflow behavior", () => {
       try {
         await validate(
           {
+            ...clean,
             npm: {
               run: (name: string, _args: string[], options: { raise?: boolean }) =>
                 execute(name, options),

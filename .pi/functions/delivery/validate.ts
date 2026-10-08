@@ -1,10 +1,27 @@
 /**
- * Runs Pit's standard static, test, coverage, and package gates.
+ * Runs Pit's standard static, test, coverage, and package gates, after checking that installed
+ * direct dependencies match package-lock.json.
  */
 async function validate(
-  { npm: { run, test } },
-  input: { coverage?: boolean; packageCheck?: boolean } = {},
+  { npm: { run, test }, delivery: { inspectDependencies } },
+  input: { coverage?: boolean; packageCheck?: boolean; dependencies?: boolean } = {},
 ) {
+  // A stale node_modules runs the gates against different packages than CI and the lockfile.
+  if (input.dependencies !== false) {
+    const report = await inspectDependencies({ limit: 30 });
+    const stale = report.dependencies.filter((dependency) =>
+      report.stale.includes(dependency.name),
+    );
+    if (stale.length > 0) {
+      const lines = stale.map(
+        (dependency) =>
+          `- ${dependency.name}: declared ${dependency.declared ?? "?"}, locked ${dependency.lockedVersion ?? "none"}, installed ${dependency.installedVersion ?? "none"}`,
+      );
+      throw new Error(
+        `Installed dependencies don't match package-lock.json. Run npm ci (or npm install after changing package.json), or pass dependencies: false for an intentional local override:\n${lines.join("\n")}`,
+      );
+    }
+  }
   type GateResult = { name: string; code: number; stdout: string; stderr: string };
   const gate = (
     name: string,
