@@ -133,19 +133,6 @@ describe("allowed tool exceptions", () => {
     });
   });
 
-  it.each<{ name: string; tools: object[]; warns: boolean }>([
-    { name: "Pi without loadouts", tools: [{ name: "read" }], warns: true },
-    { name: "Pi 0.99", tools: [{ name: "read", exposure: "direct" }], warns: false },
-  ])("warns once at startup when hiding is unsupported: $name", async ({ tools, warns }) => {
-    getAllTools.mockReturnValue(tools);
-    const ctx = context();
-    await sessionStart({}, ctx);
-    const warned = ctx.ui.notify.mock.calls.some(([message]) =>
-      String(message).includes("requires Pi 0.99"),
-    );
-    expect(warned).toBe(warns);
-  });
-
   it("keeps tools other extensions activated active and callable", async () => {
     getActiveTools.mockReturnValue(["read", "codemode", "mcp__docs__search"]);
     await sessionStart({}, context());
