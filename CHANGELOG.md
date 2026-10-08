@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-08
+
 ### Changed
 
 - The native runtime is built with Wasmtime 49.0.2 (from 49.0.1) and Rust 1.99.0 (from 1.98.1). It also uses `napi` 3.14.2, `napi-derive` 3.6.12, and `napi-build` 2.6.0, with updated compatible crates (#242). The smoke-test builder image is `rust:1.99-trixie`.
@@ -411,7 +413,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.27.1...HEAD
+[0.27.1]: https://github.com/cv/pit/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/cv/pit/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/cv/pit/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/cv/pit/compare/v0.24.1...v0.25.0
