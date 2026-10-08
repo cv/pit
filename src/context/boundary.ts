@@ -91,6 +91,7 @@ function prunedNotes(
       tokensFreed: items.reduce((total, item) => total + item.tokens, 0),
       // The rewrite that made these free already pays for the re-prefill.
       reprefillTokens: 0,
+      cacheMode: first.cacheMode,
     },
   };
 }

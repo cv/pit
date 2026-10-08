@@ -28,6 +28,7 @@ const receipt = (overrides: Record<string, unknown> = {}) => ({
   targets: ["a1b2c3d4"],
   estimatedTokensFreed: 2_040,
   estimatedReprefillTokens: 5_100,
+  cacheMode: "breakpoints",
   ...overrides,
 });
 
@@ -302,7 +303,7 @@ describe("context result rendering", () => {
 
   it("leaves near-miss shapes to the faithful generic view", () => {
     expect(render({ ...receipt(), extra: "EXTRA_SENTINEL" }, false).join("\n")).toContain(
-      "Returned 7 fields",
+      "Returned 8 fields",
     );
     expect(render({ ...receipt(), extra: "EXTRA_SENTINEL" }, true).join("\n")).toContain(
       "EXTRA_SENTINEL",

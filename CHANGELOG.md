@@ -6,6 +6,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Changed
 
+- **Breaking:** sessions recorded by older Pit versions are no longer supported. Pit no longer interprets their old-format records: pressure notices without a recorded threshold, `restore` provenance from before #202, edit records and receipts without a `cacheMode`, and results whose applied edits were only countable from traces. Such records are ignored or render as unrecognized, and resuming an old session may misjudge its context.
 - Pit supports only the Pi version it pins in `package-lock.json`, currently Pi 1.1.0. CI no longer tests against Pi 0.99.2 (#282), and the README, contributing guide, and reference no longer promise older versions.
 
 ## [0.27.1] - 2026-10-08

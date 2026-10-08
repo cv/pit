@@ -315,8 +315,8 @@ function renderCompletedToolResult(input: {
 const Duration = Type.Number({ minimum: 0 });
 
 /**
- * The execution metadata the renderer reads before trusting details. Pi supplies unknown details,
- * including replayed entries from older sessions; any other shape uses the lossless raw fallback.
+ * The execution metadata the renderer reads before trusting details. Pi supplies unknown details;
+ * any other shape uses the lossless raw fallback.
  */
 const hasRenderableMetadata = shapeGuard(
   Type.Object({

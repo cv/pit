@@ -54,8 +54,7 @@ const isReceipt = shapeGuard(
       summaryTokens: Type.Optional(Type.Number()),
       toolCallEntries: Type.Optional(Type.Number()),
       droppedEntries: Type.Optional(Type.Number()),
-      // Optional: receipts recorded before the estimate named its caching mode still render.
-      cacheMode: Type.Optional(CACHE_MODE),
+      cacheMode: CACHE_MODE,
     },
     CLOSED,
   ),

@@ -7,7 +7,7 @@ export interface PlannedEdit {
   operation: ContextOperation;
   targets: string[];
   drafts: SessionBoundaryDraft[];
-  records: Array<Omit<ProvenanceOperation, "toolCallId">>;
+  records: Array<Omit<ProvenanceOperation, "toolCallId" | "cacheMode">>;
   tokensFreed: number;
   reprefillTokens: number;
   /** Operation-specific receipt fields. */

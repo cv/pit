@@ -144,7 +144,7 @@ function noteSummary(operation: ProvenanceOperation, count: number): string {
   const entries = plural(count, "old note entry", "old note entries");
   if (operation.action === "pruned") return `dropped ${entries}`;
   const dropped = count > 0 ? `, dropping ${entries}` : "";
-  return `note "${operation.key ?? "?"}" ${operation.action ?? "changed"}${dropped}`;
+  return `note "${operation.key}" ${operation.action}${dropped}`;
 }
 
 function operationSummary(operation: ProvenanceOperation): string {
@@ -154,8 +154,6 @@ function operationSummary(operation: ProvenanceOperation): string {
       return `elided ${elidedTargets(count, operation.toolCallEntries)}`;
     case "summarize":
       return `summarized ${plural(operation.covers?.length ?? count, "entry", "entries")}`;
-    case "restore":
-      return `restored ${plural(count, "entry", "entries")}`;
     default:
       return noteSummary(operation, count);
   }
@@ -184,12 +182,8 @@ function operationLines(operation: ProvenanceOperation, expanded: boolean, theme
     if (operation.targets.length > 0) {
       lines.push(theme.fg("dim", `  entries: ${clean(operation.targets.join(", "))}`));
     }
-    // Older records lack the mode, and a new note has no targets: its estimate is its own size.
-    const mode = operation.cacheMode;
-    const basis =
-      mode && Object.hasOwn(CACHE_BASIS, mode) && operation.targets.length > 0
-        ? ` · ${CACHE_BASIS[mode]}`
-        : "";
+    // A new note has no targets: its estimate is its own size.
+    const basis = operation.targets.length > 0 ? ` · ${CACHE_BASIS[operation.cacheMode]}` : "";
     lines.push(
       theme.fg("dim", `  re-prefill: ~${formatTokens(operation.reprefillTokens)} tokens${basis}`),
     );

@@ -4,12 +4,9 @@ import type { AppliedEdit } from "../execution/completed-calls.js";
 
 /** File edits that one or more programs applied. */
 export interface ResultEdits {
-  /** The edits the results recorded; none for results from before Pit recorded them. */
+  /** The edits the results recorded. */
   readonly files: readonly AppliedEdit[];
-  /**
-   * How many edits were applied: the recorded ones plus any past the cap. Older results count
-   * their succeeded `workspace.edit` and `workspace.batch` calls instead.
-   */
+  /** How many edits were applied: the recorded ones plus any past the cap. */
   readonly count: number;
 }
 
@@ -28,15 +25,6 @@ function isAppliedEdit(value: unknown): value is AppliedEdit {
   );
 }
 
-function succeededEditCall(value: unknown): boolean {
-  const trace = record(value);
-  return (
-    trace?.namespace === "workspace" &&
-    (trace.method === "edit" || trace.method === "batch") &&
-    trace.status === "succeeded"
-  );
-}
-
 /** Edits a tool result's program applied, read from the original entry, never its stub. */
 export function resultEdits(
   entry: Extract<SessionEntry, { type: "message" }>,
@@ -45,11 +33,7 @@ export function resultEdits(
   if (!details) return undefined;
   const files = Array.isArray(details.edits) ? details.edits.filter(isAppliedEdit) : [];
   const omitted = typeof details.editsOmitted === "number" ? details.editsOmitted : 0;
-  if (files.length > 0) return { files, count: files.length + omitted };
-  const traced = Array.isArray(details.traces)
-    ? details.traces.filter(succeededEditCall).length
-    : 0;
-  return traced > 0 ? { files: [], count: traced } : undefined;
+  return files.length > 0 ? { files, count: files.length + omitted } : undefined;
 }
 
 /**

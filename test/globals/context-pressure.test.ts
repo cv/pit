@@ -153,29 +153,6 @@ describe("context pressure notices", () => {
     expect(await endRun(session, { ctx })).toEqual([]);
   });
 
-  it("counts a notice from before thresholds were recorded at its percentage", async () => {
-    const session = agentRun();
-    // Pit 0.23 recorded only the percentage level.
-    session.manager.appendCustomMessageEntry(
-      "pit.context-pressure",
-      "[Pit] Context is 51% full.",
-      true,
-      {
-        level: 50,
-        percent: 51,
-        tokens: 535_000,
-        contextWindow: 1_050_000,
-      },
-    );
-    session.current();
-    const ctx = {
-      getContextUsage: () => ({ tokens: 560_000, contextWindow: 1_050_000, percent: 53 }),
-    };
-
-    // The visible 50% notice already covers the lower 200K threshold.
-    expect(await endRun(session, { ctx })).toEqual([]);
-  });
-
   it("notices again once a compaction removes the earlier notice", async () => {
     const session = agentRun();
     await endRun(session, { ctx: usage(52) });

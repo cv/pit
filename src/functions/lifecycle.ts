@@ -229,8 +229,8 @@ function registerFunctionLifecycle(
     const additions = [skills, catalogs.pit_user_functions, catalogs.pit_project_functions].filter(
       Boolean,
     );
-    // An earlier handler replaced the prompt, or Pi predates prompt sections (0.86). Pi then sends
-    // only the replacement text, so Pit's additions must extend it.
+    // An earlier handler replaced the prompt, so Pi sends only the replacement text and Pit's
+    // additions must extend it.
     if (additions.length > 0) {
       return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
     }

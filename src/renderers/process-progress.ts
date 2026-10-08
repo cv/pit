@@ -5,7 +5,10 @@ import { omissionMarker } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { ResultTheme } from "./types.js";
 
-/** Join only explicit host identities. Coincidentally equal legacy IDs are not a relationship. */
+/**
+ * Joins each process to its host call by sequence. A call without a trace, or one missing from
+ * the retained traces, leaves its process unlinked.
+ */
 export function linkedProcessProgress(details: ExecutionProgressSnapshot | undefined) {
   const sequences = new Set(
     (details?.traces ?? [])

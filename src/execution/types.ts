@@ -14,7 +14,7 @@ export type ShellProgressEvent = HostShellProgressEvent & {
 
 export interface ShellProgress {
   id: number;
-  /** Host-call sequence owning this process; absent in legacy sessions. */
+  /** Host-call sequence owning this process; absent when the call had no trace. */
   traceSequence?: number;
   command: string;
   status: "running" | "done";
