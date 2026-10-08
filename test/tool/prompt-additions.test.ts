@@ -7,7 +7,7 @@ import {
 } from "../../src/functions/persistent-functions.js";
 import type { PersistentFunctionMetadata } from "../../src/functions/source.js";
 import { formatPitSkillsForPrompt } from "../../src/skill-prompt.js";
-import { savedFunctionCatalogNotice } from "../../src/tool/typescript.js";
+import { savedFunctionCatalogNotice } from "../../src/tool/result.js";
 import { textSize } from "../support/prompt-metadata.js";
 
 const projectDocs = new Map<string, PersistentFunctionMetadata>([
