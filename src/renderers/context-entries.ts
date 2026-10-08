@@ -14,6 +14,7 @@ import {
   PROVENANCE_TYPE,
   type ProvenanceOperation,
 } from "../context/view.js";
+import { CATALOG_UPDATE_TYPE, type CatalogUpdateDetails } from "../functions/catalog-sections.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { elidedTargets } from "./shared.js";
 
@@ -101,6 +102,35 @@ export function renderNotice(
     : "Context pressure notice";
   const lines = [theme.fg("warning", `▲ ${summary}`)];
   if (options.expanded || !details) lines.push(theme.fg("dim", clean(messageText(message))));
+  return new Text(lines.join("\n"), 1, 0);
+}
+
+/** Saved-function changes the system prompt does not list yet: counts, then each change. */
+export function renderCatalogUpdate(
+  message: CustomMessage,
+  options: { expanded: boolean },
+  theme: Theme,
+): Component {
+  const details = message.details as Partial<CatalogUpdateDetails> | undefined;
+  const counts = [
+    details?.added ? `+${details.added}` : "",
+    details?.removed ? `−${details.removed}` : "",
+  ].filter(Boolean);
+  const summary = [
+    "Saved functions changed",
+    ...(counts.length > 0 ? [counts.join(" ")] : []),
+    "the system prompt lists them when the cache expires",
+  ].join(" · ");
+  const lines = [theme.fg("accent", summary)];
+  if (options.expanded) {
+    // The first line is the model-facing explanation the summary already gives.
+    lines.push(
+      ...clean(messageText(message))
+        .split("\n")
+        .slice(1)
+        .map((line) => theme.fg("dim", line)),
+    );
+  }
   return new Text(lines.join("\n"), 1, 0);
 }
 
@@ -192,5 +222,6 @@ export function renderProvenance(
 export function registerContextRenderers(pi: ExtensionAPI): void {
   pi.registerMessageRenderer(NOTE_TYPE, renderNote);
   pi.registerMessageRenderer(NOTICE_TYPE, renderNotice);
+  pi.registerMessageRenderer(CATALOG_UPDATE_TYPE, renderCatalogUpdate);
   pi.registerEntryRenderer(PROVENANCE_TYPE, renderProvenance);
 }

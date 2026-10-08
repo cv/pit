@@ -1,7 +1,12 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { renderNote, renderNotice, renderProvenance } from "../../src/renderers/context-entries.js";
+import {
+  renderCatalogUpdate,
+  renderNote,
+  renderNotice,
+  renderProvenance,
+} from "../../src/renderers/context-entries.js";
 import { elidedTargets } from "../../src/renderers/shared.js";
 import { cleanupHarness, renderers, setupHarness } from "../support/extension-fixture.js";
 
@@ -210,6 +215,37 @@ describe("context pressure renderer", () => {
       " ▲ Context pressure notice",
       " [Pit] Context is 52% full. Use session.outline().",
     ]);
+  });
+});
+
+describe("catalog update renderer", () => {
+  const update = {
+    role: "custom" as const,
+    customType: "pit.catalog-update",
+    content:
+      "[Pit] Saved functions changed.\nProject functions:\n+ new.fn() — Does a new thing.\n- old.fn (removed)",
+    display: true,
+    details: { sections: {}, added: 1, removed: 1 },
+    timestamp: 0,
+  };
+
+  it("counts the changes on one row and lists them when expanded", () => {
+    const summary =
+      " Saved functions changed · +1 −1 · the system prompt lists them when the cache expires";
+    expect(rows(renderCatalogUpdate(update, { expanded: false }, theme), 120)).toEqual([summary]);
+    expect(rows(renderCatalogUpdate(update, { expanded: true }, theme), 120)).toEqual([
+      summary,
+      " Project functions:",
+      " + new.fn() — Does a new thing.",
+      " - old.fn (removed)",
+    ]);
+    // Without readable counts, the row still says what happened.
+    expect(
+      rows(
+        renderCatalogUpdate({ ...update, details: undefined } as any, { expanded: false }, theme),
+        120,
+      ),
+    ).toEqual([" Saved functions changed · the system prompt lists them when the cache expires"]);
   });
 });
 
