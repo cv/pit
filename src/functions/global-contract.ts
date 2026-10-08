@@ -251,6 +251,8 @@ type PitContextOutlineEntry = {
   role: PitContextRole;
   tool?: string;
   key?: string;
+  /** A superseded note version or removed key, kept unchanged until a rewrite drops it. */
+  superseded?: boolean;
   tokens: number;
   reprefillTokens: number;
   state: PitContextState;
@@ -302,11 +304,15 @@ type PitContextSummaryReceipt = PitContextEditReceipt & {
 type PitContextNoteReceipt = PitContextEditReceipt & {
   key: string;
   action: "created" | "replaced" | "removed";
+  /** Superseded note entries this change also drops, once every version would exceed the budget. */
+  droppedEntries?: number;
 };
 
 type PitContextNotes = {
   notes: Array<{ key: string; entryId: string; tokens: number; pending?: boolean }>;
   tokens: number;
+  /** Superseded versions and removals still in context; they count against the budget. */
+  supersededTokens: number;
   budgetTokens: number;
   maxNotes: number;
 };`;

@@ -6,10 +6,16 @@ import type {
   TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 
-import { registerNoteRecovery } from "./notes.js";
+import { registerNoteRecovery, staleNoteGroups } from "./notes.js";
 import { pressureNotice } from "./notices.js";
 import type { ContextEditQueue, StagedEdit } from "./queue.js";
-import { PROVENANCE_TYPE, type ProvenanceData } from "./view.js";
+import {
+  buildContextView,
+  type ContextItem,
+  PROVENANCE_TYPE,
+  type ProvenanceData,
+  type ProvenanceOperation,
+} from "./view.js";
 
 /** Mirrors Pi's `appendContextEdit` target rule, so one stale edit cannot void the boundary. */
 function editable(entry: SessionEntry | undefined): boolean {
@@ -41,6 +47,53 @@ function reportDiscarded(ctx: ExtensionContext, failed: number, stale: number): 
   ctx.ui.notify(`Pit discarded staged context edits: ${reasons.join("; ")}.`, "warning");
 }
 
+/**
+ * Superseded note entries that an elide or summarize in the same batch makes free to drop. A
+ * breakpoint or unknown cache rewrites the whole conversation after any earlier change; a prefix
+ * cache rewrites only from the earliest changed entry, so only entries after it are free. A removed
+ * key's entries drop together, since dropping only its removal would revive an older version.
+ */
+function prunedNotes(
+  applied: readonly StagedEdit[],
+  ctx: ExtensionContext,
+): { drafts: SessionBoundaryDraft[]; record: ProvenanceOperation } | undefined {
+  const rewrites = applied
+    .flatMap((edit) => edit.records)
+    .filter((record) => record.operation === "elide" || record.operation === "summarize");
+  const first = rewrites[0];
+  if (!first) return undefined;
+  const view = buildContextView(ctx.sessionManager);
+  const position = new Map(view.items.map((item, index) => [item.id, index]));
+  const changed = rewrites.flatMap((record) => [...record.targets, ...(record.covers ?? [])]);
+  const earliest = rewrites.every((record) => record.cacheMode === "prefix")
+    ? Math.min(...changed.map((id) => position.get(id) ?? Number.POSITIVE_INFINITY))
+    : 0;
+  const targeted = new Set(
+    applied.flatMap((edit) =>
+      edit.drafts.flatMap((draft) => (draft.type === "context_edit" ? [draft.targetId] : [])),
+    ),
+  );
+  const free = (item: ContextItem) =>
+    (position.get(item.id) as number) >= earliest && !targeted.has(item.id);
+  const items = staleNoteGroups(view).flatMap((group) =>
+    group.removed ? (group.items.every(free) ? group.items : []) : group.items.filter(free),
+  );
+  if (items.length === 0) return undefined;
+  return {
+    drafts: items.map((item) => ({ type: "context_edit", targetId: item.id, replacement: null })),
+    record: {
+      toolCallId: first.toolCallId,
+      operation: "note",
+      targets: items.map((item) => item.id),
+      action: "pruned",
+      tokensFreed: items.reduce((total, item) => total + item.tokens, 0),
+      // The rewrite that made these free already pays for the re-prefill.
+      reprefillTokens: 0,
+      ...(first.cacheMode ? { cacheMode: first.cacheMode } : {}),
+    },
+  };
+}
+
 /** The entries this turn's successful session.* calls staged, followed by their provenance. */
 export function contextBoundaryEntries(
   event: Pick<TurnEndEvent, "outcome" | "toolResults">,
@@ -61,11 +114,15 @@ export function contextBoundaryEntries(
     reportDiscarded(ctx, staged.length - completed.length, completed.length - applied.length);
   }
   if (applied.length === 0) return [];
+  const pruned = prunedNotes(applied, ctx);
   const provenance: ProvenanceData = {
     version: 1,
-    operations: applied.flatMap((edit) => edit.records),
+    operations: [...applied.flatMap((edit) => edit.records), ...(pruned ? [pruned.record] : [])],
   };
-  const drafts: SessionBoundaryDraft[] = applied.flatMap((edit) => edit.drafts);
+  const drafts: SessionBoundaryDraft[] = [
+    ...applied.flatMap((edit) => edit.drafts),
+    ...(pruned?.drafts ?? []),
+  ];
   drafts.push({ type: "custom", customType: PROVENANCE_TYPE, data: provenance });
   return drafts;
 }

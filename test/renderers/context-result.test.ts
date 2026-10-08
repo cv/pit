@@ -156,6 +156,49 @@ describe("context result rendering", () => {
     expect(rows.find((row) => row.includes("re-prefill:"))?.trim()).toBe(line);
   });
 
+  it("names the old note entries a change drops, and its basis, only when it drops some", () => {
+    const dropping = render(
+      receipt({
+        cacheMode: "breakpoints",
+        operation: "note",
+        targets: ["note:k"],
+        key: "k",
+        action: "replaced",
+        droppedEntries: 2,
+      }),
+      true,
+    );
+    expect(dropping.join("\n")).toContain('note "k" replaced, dropping 2 old note entries');
+    expect(dropping.find((row) => row.includes("re-prefill:"))).toContain("whole conversation");
+    const appending = render(
+      receipt({
+        cacheMode: "breakpoints",
+        operation: "note",
+        targets: ["note:k"],
+        key: "k",
+        action: "replaced",
+      }),
+      true,
+    );
+    expect(appending.find((row) => row.includes("re-prefill:"))?.trim()).toBe(
+      "re-prefill: ~5.1K tokens",
+    );
+  });
+
+  it("marks superseded notes in the outline", () => {
+    const outline = {
+      ...OUTLINE,
+      entries: OUTLINE.entries.map((entry: any) =>
+        entry.role === "note" ? { ...entry, superseded: true } : entry,
+      ),
+    };
+    expect(render(outline, true)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('9a9a9a9a note "progress" superseded · 27 tokens'),
+      ]),
+    );
+  });
+
   it("names the outline's re-prefill basis once, below its entries", () => {
     const rows = render({ ...OUTLINE, cacheMode: "breakpoints" }, true);
     expect(rows.filter((row) => row.includes("whole conversation"))).toEqual([
@@ -246,6 +289,10 @@ describe("context result rendering", () => {
     expect(rows).toContain("progress · 9a9a9a9a · ~27 tokens · change staged");
     expect(rows).toContain("plan · 8b8b8b8b · ~93 tokens");
     expect(rows).toContain("limit: 32 notes");
+    // Superseded versions count against the same budget.
+    expect(render({ ...listing, supersededTokens: 600 }, false).join("\n")).toContain(
+      "Context: 2 live notes · ~120 + ~600 superseded of ~12.8K note tokens",
+    );
   });
 
   it("leaves near-miss shapes to the faithful generic view", () => {

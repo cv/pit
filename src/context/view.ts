@@ -74,11 +74,12 @@ export interface ProvenanceOperation {
   /** Summarize: every entry the summary replaced, including the carrier. */
   covers?: string[];
   key?: string;
-  action?: "created" | "replaced" | "removed";
+  /** Note: `pruned` drops superseded note entries in the same batch as a rewrite. */
+  action?: "created" | "replaced" | "removed" | "pruned";
   reason?: string;
-  /** Elide: how many targets were assistant entries whose tool-call arguments it stubbed. */
   /** The caching mode the estimate assumed; absent in sessions recorded before it was. */
   cacheMode?: CacheMode;
+  /** Elide: how many targets were assistant entries whose tool-call arguments it stubbed. */
   toolCallEntries?: number;
   tokensFreed: number;
   reprefillTokens: number;
@@ -101,6 +102,10 @@ export interface ContextItem {
   readonly tools: readonly string[];
   readonly toolCallIds: readonly string[];
   readonly noteKey?: string;
+  /** Notes: the version this entry carries; 1 when the entry predates versions. */
+  readonly noteVersion?: number;
+  /** Notes: the entry records the key's removal. */
+  readonly noteRemoved?: boolean;
   readonly noticeLevel?: number;
   /** Why the model may never elide or summarize this entry. */
   readonly protectedReason?: string;
@@ -238,7 +243,13 @@ function contextItem(
     tokens: messages.reduce((sum, message) => sum + estimateTokens(message), 0),
     state: stateOf(entry, edit),
     ...toolsOf(messages),
-    ...(role === "note" && typeof details?.key === "string" ? { noteKey: details.key } : {}),
+    ...(role === "note" && typeof details?.key === "string"
+      ? {
+          noteKey: details.key,
+          noteVersion: typeof details.version === "number" ? details.version : 1,
+          ...(details.removed === true ? { noteRemoved: true } : {}),
+        }
+      : {}),
     ...(role === "notice" && typeof details?.level === "number"
       ? { noticeLevel: details.level }
       : {}),
