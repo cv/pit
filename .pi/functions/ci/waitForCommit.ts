@@ -47,22 +47,31 @@ async function waitForCommit(
   const timeoutMs = integerInput("timeoutMs", input.timeoutMs, 240000, 1000, 285000);
   const deadline = Date.now() + timeoutMs;
   let match: Awaited<ReturnType<typeof findRun>>["matches"][number] | undefined;
+  let slowestFindMs = 0;
+  let stoppedEarly = false;
   for (let attempt = 1; attempt <= discoveryAttempts; attempt++) {
+    const started = Date.now();
     const found = await findRun({
       repo: input.repo,
       sha: input.sha,
       limit: input.limit,
       runName: input.runName,
     });
+    slowestFindMs = Math.max(slowestFindMs, Date.now() - started);
     match = found.matches[0];
     if (match) break;
     if (attempt < discoveryAttempts) {
+      // Stop looking once another wait and lookup would overrun the deadline.
+      if (Date.now() + discoveryIntervalMs + slowestFindMs > deadline) {
+        stoppedEarly = true;
+        break;
+      }
       await new Promise<void>((resolve) => setTimeout(resolve, discoveryIntervalMs));
     }
   }
   if (!match) {
     throw new Error(
-      `No${input.runName ? ` ${JSON.stringify(input.runName)}` : ""} GitHub Actions run found for ${input.sha}`,
+      `No${input.runName ? ` ${JSON.stringify(input.runName)}` : ""} GitHub Actions run found for ${input.sha}${stoppedEarly ? ` before its ${timeoutMs / 1000} s time limit` : ""}`,
     );
   }
   const run = await waitForRun({

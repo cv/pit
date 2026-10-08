@@ -217,6 +217,34 @@ describe("ci.waitForCommit composition", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  // Live acceptance found discovery taking 57 s against a 20 s limit.
+  it("stops looking for a run at its time limit", async () => {
+    const wait = await loadWorkflowFunction("ci.waitForCommit");
+    const findRun = vi.fn().mockResolvedValue({ found: false, matches: [] });
+    const waitForRun = vi.fn();
+    const pending = wait(
+      { ci: { findRun, waitForRun } },
+      {
+        repo: "cv/pit",
+        sha,
+        runName: "CI",
+        discoveryAttempts: 12,
+        discoveryIntervalMs: 5000,
+        timeoutMs: 12000,
+      },
+    );
+    const settled = pending.then(
+      () => "resolved",
+      (error: Error) => error.message,
+    );
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await settled).toBe(
+      `No "CI" GitHub Actions run found for ${sha} before its 12 s time limit`,
+    );
+    // Lookups at 0, 5, and 10 s; a fourth at 15 s would overrun the 12 s limit.
+    expect(findRun).toHaveBeenCalledTimes(3);
+    expect(waitForRun).not.toHaveBeenCalled();
+  });
   it("stops discovery at once when GitHub rejects the workflow filter", async () => {
     const find = await loadWorkflowFunction("ci.findRun");
     const wait = await loadWorkflowFunction("ci.waitForCommit");
