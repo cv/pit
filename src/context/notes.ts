@@ -125,8 +125,9 @@ export function listNotes(
 
 /**
  * Appends the note's new entry without changing any earlier entry, so the provider keeps its
- * cached prefix. Once every visible version would exceed the budget, the same edit also drops the
- * superseded versions, which rewrites the prefix once.
+ * cached prefix. Once every visible version would exceed the budget, a new version also drops the
+ * superseded entries, which rewrites the prefix once. A removal always appends: it is a few tokens,
+ * and the next new version applies the budget.
  */
 function appendNote(
   view: ContextView,
@@ -142,20 +143,20 @@ function appendNote(
   },
 ): PlannedEdit {
   const { key, action } = input;
-  const removal = action === "removed";
   const supersededTokens = sum(input.superseded);
-  const prune = input.liveTokens + supersededTokens + input.entryTokens > input.budget;
-  // Dropping every entry of a removed key needs no removal entry.
+  const prune =
+    action !== "removed" && input.liveTokens + supersededTokens + input.entryTokens > input.budget;
   const ids = prune ? input.superseded.map((item) => item.id) : [];
   const drafts: SessionBoundaryDraft[] = ids.map((targetId) => ({
     type: "context_edit",
     targetId,
     replacement: null,
   }));
-  if (!(prune && removal)) drafts.push(input.entry);
-  const added = prune && removal ? 0 : input.entryTokens;
-  const tokensFreed = (prune ? supersededTokens : 0) - added;
-  const reprefillTokens = prune ? reprefillAfter(view, ids, tokensFreed, input.basis) : added;
+  drafts.push(input.entry);
+  const tokensFreed = (prune ? supersededTokens : 0) - input.entryTokens;
+  const reprefillTokens = prune
+    ? reprefillAfter(view, ids, tokensFreed, input.basis)
+    : input.entryTokens;
   return {
     operation: "note",
     // A note conflicts by key: its entries are reachable only through setNote.
@@ -271,7 +272,7 @@ export function registerNoteRecovery(pi: ExtensionAPI): void {
           customType: NOTE_TYPE,
           content: message.content,
           display: true,
-          details: message.details ?? { key: note.noteKey },
+          details: message.details,
         },
         { triggerTurn: false },
       );

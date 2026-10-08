@@ -349,6 +349,18 @@ describe("superseded notes beside a rewrite", () => {
     );
   });
 
+  it("drops v1 when a note change and an elide share the batch", async () => {
+    const { session, targets } = await layout("v2");
+
+    await setNote(session, "next", "profile the parser");
+    await elideWith(session, targets.late, BREAKPOINTS);
+
+    expect(noteMessages(session).map((message) => message.content.split("\n")[1])).toEqual([
+      "v2",
+      "profile the parser",
+    ]);
+  });
+
   it.each<{ name: string; model: unknown; notes: number }>([
     { name: "a breakpoint cache drops the removed key entirely", model: BREAKPOINTS, notes: 0 },
     {
