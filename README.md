@@ -36,7 +36,7 @@ Want to see what that looks like over time? [I Wasn't Trying to Build an App](do
 
 ## Install and update
 
-Pit needs Node 22.19 or newer and Pi 0.99 or newer, and is tested with Pi 0.99.2 and 1.1.0. Prebuilt runtimes are available for Linux, macOS, and Windows on ARM64 or x64.
+Pit needs Node 22.19 or newer. It supports the Pi version it pins in `package-lock.json`, currently Pi 1.1.0; other Pi versions are not supported. Prebuilt runtimes are available for Linux, macOS, and Windows on ARM64 or x64.
 
 Install the latest version:
 

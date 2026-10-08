@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- Pit supports only the Pi version it pins in `package-lock.json`, currently Pi 1.1.0. CI no longer tests against Pi 0.99.2 (#282), and the README, contributing guide, and reference no longer promise older versions.
+
 ## [0.27.1] - 2026-10-08
 
 ### Changed

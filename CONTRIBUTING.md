@@ -6,7 +6,7 @@ Thank you for helping improve Pit. Participation is governed by [CODE_OF_CONDUCT
 
 - Node.js 22.19 or newer
 - npm 11.17.0
-- Pi 0.99.0 for interactive testing
+- Pi 1.1.0 for interactive testing, the version `package-lock.json` pins
 - jq on `PATH` for the saved-function query tests, which are skipped locally without it and
   required in CI
 
