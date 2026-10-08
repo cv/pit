@@ -45,18 +45,18 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libclang-dev
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install 1.98.1 --profile minimal
-          rustup target add wasm32-wasip2 --toolchain 1.98.1
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup target add wasm32-wasip2 --toolchain 1.99.0
       - name: Build QuickJS component
         env:
           BINDGEN_EXTRA_CLANG_ARGS: -isystem /usr/lib/llvm-18/lib/clang/18/include
-        run: cargo +1.98.1 build --manifest-path native/wasmtime-executor/queued-guest/Cargo.toml --target wasm32-wasip2 --release --locked
+        run: cargo +1.99.0 build --manifest-path native/wasmtime-executor/queued-guest/Cargo.toml --target wasm32-wasip2 --release --locked
       - name: Stage component
         run: |
           mkdir -p dist
           cp native/wasmtime-executor/queued-guest/target/wasm32-wasip2/release/pit_queued_quickjs_guest.wasm dist/pit-queued-quickjs-guest.wasm
       - name: Upload component
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wasmtime-guest
           path: dist/pit-queued-quickjs-guest.wasm
@@ -70,7 +70,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -86,7 +86,7 @@ jobs:
           node --import ./scripts/typescript-resolve.mjs native/wasmtime-executor/prepare-smoke.mts smoke/prepared-program.json
           npx esbuild src/sandbox/wasmtime-executor.ts --bundle --platform=node --format=cjs --outfile=smoke/wasmtime-adapter.cjs
       - name: Upload smoke-test inputs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # Not wasmtime-*: the release job publishes every artifact matching that pattern.
           name: smoke-inputs
@@ -124,12 +124,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Install Rust toolchain
         shell: bash
-        run: rustup toolchain install 1.98.1 --profile minimal
+        run: rustup toolchain install 1.99.0 --profile minimal
       - name: Cache Rust addon build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -141,14 +141,14 @@ jobs:
           restore-keys: wasmtime-addon-${{ matrix.target }}-
       - name: Build native addon
         shell: bash
-        run: cargo +1.98.1 build --manifest-path native/wasmtime-executor/Cargo.toml --release --locked
+        run: cargo +1.99.0 build --manifest-path native/wasmtime-executor/Cargo.toml --release --locked
       - name: Download QuickJS component
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasmtime-guest
           path: dist
       - name: Download smoke-test inputs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: smoke-inputs
           path: dist
@@ -163,7 +163,7 @@ jobs:
         shell: bash
         run: cd dist && node smoke.cjs
       - name: Upload native addon
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wasmtime-${{ matrix.target }}
           path: dist/pit-wasmtime-${{ matrix.target }}.node
@@ -180,7 +180,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -189,7 +189,7 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci --ignore-scripts
       - name: Download freshly built runtime
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: wasmtime-{guest,linux-x64}
           path: dist

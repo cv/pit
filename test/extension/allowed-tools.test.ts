@@ -54,6 +54,8 @@ function loadout(tools: LoadoutTool[]): ToolLoadout {
   return {
     declared: agentTools,
     callable: agentTools,
+    // Pi 1.1 reports each tool's promptGuidelines; these fixtures declare none.
+    getPromptGuidelines: () => [],
     registered: agentTools,
     getExposure: (name) => byName.get(name)?.exposure ?? "direct",
     getNamespace: (name) => {
