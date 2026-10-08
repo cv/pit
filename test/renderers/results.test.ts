@@ -7,6 +7,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { closeOpenStyles } from "../../src/renderers/shared.js";
 import { display } from "../../src/shared/json-budget.js";
 import { cleanupHarness, setupHarness, tool } from "../support/extension-fixture.js";
 
@@ -557,6 +558,33 @@ describe("result renderers", () => {
     expect(
       stripTerminalSequences(rendered.find((line) => line.includes("123:ccccc|")) ?? "").trimEnd(),
     ).toBe("123:ccccc|one hundred twenty-three");
+  });
+
+  it.each<{ name: string; line: string; closed: string }>([
+    { name: "a line with no styles", line: "plain", closed: "plain" },
+    {
+      name: "a line that closes its color",
+      line: "\u001b[31mred\u001b[39m",
+      closed: "\u001b[31mred\u001b[39m",
+    },
+    {
+      name: "a 24-bit color left open, as a block comment's first line",
+      line: "\u001b[38;2;157;165;169m/* first",
+      closed: "\u001b[38;2;157;165;169m/* first\u001b[39m",
+    },
+    {
+      name: "open bold and a 256-color background",
+      line: "\u001b[1m\u001b[48;5;22mbold",
+      closed: "\u001b[1m\u001b[48;5;22mbold\u001b[22;49m",
+    },
+    {
+      name: "a full reset",
+      line: "\u001b[31mred\u001b[0m after",
+      closed: "\u001b[31mred\u001b[0m after",
+    },
+  ])("closes only the styles left open by $name", ({ line, closed }) => {
+    // A full reset would also clear the background Pi draws behind tool results.
+    expect(closeOpenStyles(line)).toBe(closed);
   });
 
   it("syntax highlights hashed contents independently from their line prefixes", () => {

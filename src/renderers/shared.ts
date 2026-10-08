@@ -121,6 +121,61 @@ export function languageForFile(file: string): string {
   const extension = file.toLowerCase().split(".").pop() ?? "";
   return FILE_LANGUAGE_OVERRIDES[extension] ?? getLanguageFromPath(file) ?? "text";
 }
+// oxlint-disable-next-line no-control-regex
+const SGR_SEQUENCE = /\u001b\[([0-9;]*)m/g;
+
+/** SGR resets for the styles a line can leave open, keyed by what each opening parameter sets. */
+const STYLE_RESETS = {
+  fg: "39",
+  bg: "49",
+  intensity: "22",
+  italic: "23",
+  underline: "24",
+  inverse: "27",
+  strike: "29",
+} as const;
+type OpenStyle = keyof typeof STYLE_RESETS;
+
+function styleOf(code: number): OpenStyle | "reset" | undefined {
+  if (code === 0) return "reset";
+  if (code === 1 || code === 2) return "intensity";
+  if (code === 3) return "italic";
+  if (code === 4) return "underline";
+  if (code === 7) return "inverse";
+  if (code === 9) return "strike";
+  if ((code >= 30 && code <= 38) || (code >= 90 && code <= 97)) return "fg";
+  if ((code >= 40 && code <= 48) || (code >= 100 && code <= 107)) return "bg";
+  return undefined;
+}
+
+/**
+ * Closes the styles a highlighted line leaves open, such as a block comment's color that
+ * continues onto the next line. pi-tui 1.x carries an open style into the next row ahead of its
+ * line prefix and then drops the style the line reopens after the prefix, which left later lines
+ * of a multi-line token unhighlighted. Only the open styles are reset, so a surrounding
+ * background survives.
+ */
+export function closeOpenStyles(line: string): string {
+  const open = new Set<OpenStyle>();
+  for (const match of line.matchAll(SGR_SEQUENCE)) {
+    const codes = (match[1] ?? "").split(";").map((part) => (part === "" ? 0 : Number(part)));
+    for (let index = 0; index < codes.length; index++) {
+      const code = codes[index] as number;
+      // Extended colors carry their own parameters: 38;5;n or 38;2;r;g;b.
+      if (code === 38 || code === 48) index += codes[index + 1] === 5 ? 2 : 4;
+      const closed = (Object.entries(STYLE_RESETS) as [OpenStyle, string][]).find(
+        ([, reset]) => Number(reset) === code,
+      );
+      if (closed) open.delete(closed[0]);
+      const style = styleOf(code);
+      if (style === "reset") open.clear();
+      else if (style) open.add(style);
+    }
+  }
+  if (open.size === 0) return line;
+  return `${line}\u001b[${[...open].map((style) => STYLE_RESETS[style]).join(";")}m`;
+}
+
 export function renderHashedFile(
   content: string,
   file: string,
@@ -150,7 +205,7 @@ export function renderHashedFile(
   );
   const hangingIndents: Record<number, number> = {};
   const lines = parsed.map((line, index) => {
-    const highlightedContent = highlighted[index] ?? line.content;
+    const highlightedContent = closeOpenStyles(highlighted[index] ?? line.content);
     if (line.prefix === undefined) {
       return highlightedContent;
     }
