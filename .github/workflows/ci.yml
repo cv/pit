@@ -84,8 +84,15 @@ jobs:
           npm install --no-save --no-audit --no-fund
           "@earendil-works/pi-coding-agent@${{ matrix.pi }}"
           "@earendil-works/pi-tui@${{ matrix.pi }}"
-      - name: Report the Pi under test
-        run: npm ls @earendil-works/pi-coding-agent @earendil-works/pi-tui --depth=0
+      - name: Check the Pi under test
+        # npm ls would flag these as invalid against package.json's ranges, so read the installed
+        # versions directly and fail unless the override took effect.
+        run: >-
+          node -e 'const fs = require("fs");
+          for (const name of ["pi-coding-agent", "pi-tui"]) {
+          const { version } = JSON.parse(fs.readFileSync(`node_modules/@earendil-works/${name}/package.json`, "utf8"));
+          console.log(`${name} ${version}`);
+          if (version !== process.argv[1]) process.exit(1); }' "${{ matrix.pi }}"
       - name: Check jq for workflow query tests
         run: jq --version
       # Vitest only: Pit's test fixtures use the lockfile Pi's types, so tsc would fail on 0.99's.
