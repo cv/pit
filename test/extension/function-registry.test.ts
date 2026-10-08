@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconstructFunctions, validateRegistryCapacity } from "../../src/functions/core.js";
 import { registerFunctionManager } from "../../src/functions/manager.js";
 import { effectiveRegistry } from "../../src/functions/state.js";
-import {
-  promotionSuggestionNotice,
-  savedFunctionCatalogNotice,
-} from "../../src/tool/typescript.js";
+import { promotionSuggestionNotice, savedFunctionCatalogNotice } from "../../src/tool/result.js";
 import { cleanupHarness, context, setupHarness } from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
