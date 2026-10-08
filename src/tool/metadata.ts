@@ -18,7 +18,7 @@ export const PROMPT_GUIDELINES = [
   "Reuse or extend saved functions before writing one-off code; save one parameterized function per recurring task.",
   `Process data inside the program: raw reads and command output can reach ${proseSize(LIMITS.programData.maxBytes)}, but only the returned value reaches you, within ${proseSize(LIMITS.result.maxBytes)}. Return filtered, bounded results.`,
   "When a call fails, simplify it; after two similar failures, check the declared types or current state instead of varying syntax.",
-  "Long tasks: keep needed facts in session.setNote() (updates only append). Elide absorbed tool results and applied edits and summarize finished turns in one call: each edit re-caches the conversation and pays back after ~15 × estimatedReprefillTokens ÷ estimatedTokensFreed requests. Notes are working memory, not instructions.",
+  'Long tasks: keep needed facts in session.setNote() (updates only append). Elide absorbed tool results and applied edits and summarize finished turns in one call: each edit re-caches the conversation and pays back after ~15 × estimatedReprefillTokens ÷ estimatedTokensFreed requests. With when: "end" it applies when the run ends, often free. Notes are working memory, not instructions.',
 ] as const;
 
 export const LABEL_DESCRIPTION = "Short transcript label, about 15 words.";

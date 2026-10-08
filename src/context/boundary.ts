@@ -7,7 +7,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { registerNoteRecovery, staleNoteGroups } from "./notes.js";
-import { pressureNotice } from "./notices.js";
+import { NOTICE_LEVELS, pressureNotice } from "./notices.js";
 import type { ContextEditQueue, StagedEdit } from "./queue.js";
 import {
   buildContextView,
@@ -95,24 +95,19 @@ function prunedNotes(
   };
 }
 
-/** The entries this turn's successful session.* calls staged, followed by their provenance. */
-export function contextBoundaryEntries(
-  event: Pick<TurnEndEvent, "outcome" | "toolResults">,
+/** Deferred edits apply at once from this share of the window, where notices ask for cleanup. */
+export const DEFERRED_PRESSURE_PERCENT = Math.min(...NOTICE_LEVELS);
+
+/** Entries for edits whose calls succeeded and whose targets remain, then their provenance. */
+function editEntries(
+  edits: readonly StagedEdit[],
   ctx: ExtensionContext,
-  queue: ContextEditQueue,
+  failed: number,
 ): SessionBoundaryDraft[] {
-  const staged = queue.take();
-  if (staged.length === 0) return [];
-  const succeeded = new Set(
-    event.outcome === "completed"
-      ? event.toolResults.filter((result) => !result.isError).map((result) => result.toolCallId)
-      : [],
-  );
-  const completed = staged.filter((edit) => succeeded.has(edit.toolCallId));
   const branch = new Map(ctx.sessionManager.getBranch().map((entry) => [entry.id, entry]));
-  const applied = completed.filter((edit) => applicable(edit, branch));
-  if (applied.length < staged.length) {
-    reportDiscarded(ctx, staged.length - completed.length, completed.length - applied.length);
+  const applied = edits.filter((edit) => applicable(edit, branch));
+  if (failed > 0 || applied.length < edits.length) {
+    reportDiscarded(ctx, failed, edits.length - applied.length);
   }
   if (applied.length === 0) return [];
   const pruned = prunedNotes(applied, ctx);
@@ -126,6 +121,45 @@ export function contextBoundaryEntries(
   ];
   drafts.push({ type: "custom", customType: PROVENANCE_TYPE, data: provenance });
   return drafts;
+}
+
+/**
+ * The entries this turn's successful session.* calls staged, followed by their provenance.
+ * Deferred edits wait for the run to end, unless context has reached the pressure threshold.
+ */
+export function contextBoundaryEntries(
+  event: Pick<TurnEndEvent, "outcome" | "toolResults">,
+  ctx: ExtensionContext,
+  queue: ContextEditQueue,
+): SessionBoundaryDraft[] {
+  const staged = queue.take();
+  const succeeded = new Set(
+    event.outcome === "completed"
+      ? event.toolResults.filter((result) => !result.isError).map((result) => result.toolCallId)
+      : [],
+  );
+  const completed = staged.filter((edit) => succeeded.has(edit.toolCallId));
+  const failed = staged.length - completed.length;
+  const percent = ctx.getContextUsage()?.percent;
+  const urgent = typeof percent === "number" && percent >= DEFERRED_PRESSURE_PERCENT;
+  const later = completed.filter((edit) => edit.when === "end");
+  const now = completed.filter((edit) => edit.when !== "end");
+  if (urgent) now.unshift(...queue.takeDeferred(), ...later);
+  else queue.defer(later);
+  if (now.length === 0) {
+    if (failed > 0) reportDiscarded(ctx, failed, 0);
+    return [];
+  }
+  return editEntries(now, ctx, failed);
+}
+
+/** Deferred edits, applied when the run ends so their rewrite lands on the next prompt. */
+export function deferredBoundaryEntries(
+  ctx: ExtensionContext,
+  queue: ContextEditQueue,
+): SessionBoundaryDraft[] {
+  const deferred = queue.takeDeferred();
+  return deferred.length === 0 ? [] : editEntries(deferred, ctx, 0);
 }
 
 export function registerContextBoundary(pi: ExtensionAPI, queue: ContextEditQueue): void {
@@ -148,6 +182,11 @@ export function registerContextBoundary(pi: ExtensionAPI, queue: ContextEditQueu
       entries.push(...pressureNotice(ctx));
     }
     // Boundary handlers chain: keep the entries earlier handlers proposed.
+    return entries.length === 0 ? undefined : { entries: [...event.entries, ...entries] };
+  });
+  // The next request after the run follows the user's reply, often after the cache expired.
+  pi.on("agent_before_settle", (event, ctx) => {
+    const entries = deferredBoundaryEntries(ctx, queue);
     return entries.length === 0 ? undefined : { entries: [...event.entries, ...entries] };
   });
 }

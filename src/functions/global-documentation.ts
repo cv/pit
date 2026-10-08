@@ -10,7 +10,7 @@ const NAMESPACE_SUMMARIES: Partial<Record<GlobalNamespace, string>> = {
   shell:
     'execFile(program, args, options?) runs without a shell; exec(command, options?) runs /bin/sh. Options: cwd, timeoutMs, raise, maxBytes, maxLines, truncate: "head" | "tail". They return { stdout, stderr, code, truncated }; a nonzero exit is data unless raise: true',
   session:
-    "outline(options?) lists model-visible entries with tokens and state; inspectEntry(id) reads an original; elide(ids, { reason? }), summarize({ from, to, summary }), and setNote(key, content | null) stage edits that apply after this turn if the call succeeds; notes(), info, getName/setName, compact",
+    "outline(options?) lists model-visible entries with tokens and state; inspectEntry(id) reads an original; elide(ids, { reason?, when? }), summarize({ from, to, summary, when? }), and setNote(key, content | null) stage edits that apply after this turn if the call succeeds; notes(), info, getName/setName, compact",
   commands: "list",
   models: "current, list, set",
   runtime: "status(); completedCalls(toolCallId) returns what a failed program's calls returned",

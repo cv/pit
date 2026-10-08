@@ -10,18 +10,22 @@ export interface StagedEdit {
   readonly targets: readonly string[];
   readonly drafts: readonly SessionBoundaryDraft[];
   readonly records: readonly ProvenanceOperation[];
+  /** `end`: hold the edit until the run ends, so its rewrite lands on the next prompt's request. */
+  readonly when?: "end";
 }
 
 /**
  * Context edits staged by the running turn. Pi applies them at `turn_end` when the call that
- * staged them succeeded; a tree change or session start discards them.
+ * staged them succeeded, except deferred edits, which wait for the run to end. A tree change or
+ * session start discards both.
  */
 export class ContextEditQueue {
   #staged: StagedEdit[] = [];
+  #deferred: StagedEdit[] = [];
 
   pending(): Map<string, ContextOperation> {
     const pending = new Map<string, ContextOperation>();
-    for (const edit of this.#staged) {
+    for (const edit of [...this.#deferred, ...this.#staged]) {
       for (const target of edit.targets) pending.set(target, edit.operation);
     }
     return pending;
@@ -43,14 +47,26 @@ export class ContextEditQueue {
     this.#staged.push(edit);
   }
 
-  /** Removes and returns every staged edit. */
+  /** Removes and returns every edit the running turn staged. */
   take(): StagedEdit[] {
     const staged = this.#staged;
     this.#staged = [];
     return staged;
   }
 
+  /** Holds edits from succeeded calls until the run ends. */
+  defer(edits: readonly StagedEdit[]): void {
+    this.#deferred.push(...edits);
+  }
+
+  /** Removes and returns every deferred edit. */
+  takeDeferred(): StagedEdit[] {
+    const deferred = this.#deferred;
+    this.#deferred = [];
+    return deferred;
+  }
+
   clear(): number {
-    return this.take().length;
+    return this.take().length + this.takeDeferred().length;
   }
 }

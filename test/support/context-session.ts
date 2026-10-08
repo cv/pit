@@ -113,6 +113,31 @@ export function applyBoundary(manager: SessionManager, drafts: SessionBoundaryDr
   }
 }
 
+/**
+ * Ends the agent run as Pi does: runs `agent_before_settle` handlers and commits the entries
+ * they return.
+ */
+export async function settleRun(
+  session: SessionBuilder,
+  options: { ctx?: Record<string, unknown> } = {},
+): Promise<SessionBoundaryDraft[]> {
+  const results = await emit(
+    "agent_before_settle",
+    {
+      type: "agent_before_settle",
+      entries: [],
+      continue: false,
+      context: {},
+      outcome: "completed",
+    },
+    context({ sessionManager: session.manager, ...options.ctx }),
+  );
+  const returned = results.find(Boolean) as { entries?: SessionBoundaryDraft[] } | undefined;
+  const entries = returned?.entries ?? [];
+  applyBoundary(session.manager, entries);
+  return entries;
+}
+
 export interface EndTurnOptions {
   isError?: boolean;
   outcome?: "completed" | "aborted" | "error";
