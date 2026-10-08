@@ -85,7 +85,8 @@ describe("ci.inspectFailure", () => {
     expect(api).toHaveBeenCalledOnce();
     expect(api).toHaveBeenCalledWith(
       "repos/cv/pit/actions/jobs/7/logs",
-      [],
+      // gh 2.101 refuses to print a log with escape sequences without this flag.
+      ["--allow-escape-sequences"],
       expect.objectContaining({ truncate: "tail" }),
     );
   });
