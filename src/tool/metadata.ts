@@ -58,7 +58,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "Lookup: session, project, user, global. User functions load automatically; project functions need trust and enablement. A saved function may override a global one except functions.*; inject $next to call what it overrides.",
     "",
     "EDITS",
-    "Use the revision and line:hash anchors from the latest read or search of the file; never guess them, and read again after any edit or formatter run:",
+    "Use the revision and line:hash anchors from the latest read, search, or edit with context: n; never guess them, and reread after a formatter run:",
     "```ts",
     'async ({ workspace: { edit } }) => edit("src/file.ts", {',
     '  revision: "revision-from-read",',

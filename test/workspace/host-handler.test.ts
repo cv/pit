@@ -176,6 +176,97 @@ describe("workspace read and edit", () => {
     expect(result.details.editsOmitted).toBe(2);
   });
 
+  // #251: 71 of 141 rereads in session 01a0f528 came right after the agent's own edit.
+  it.each([
+    { name: "LF", separator: "\n" },
+    { name: "CRLF", separator: "\r\n" },
+  ])(
+    "returns ranges that match a read and anchor a follow-up edit ($name)",
+    async ({ separator }) => {
+      const original = Array.from({ length: 30 }, (_, index) => `line${index + 1}`).join(separator);
+      await writeFile(join(cwd, "ranges.txt"), original, "utf8");
+      const result = await value(`async ({ workspace: { edit, read } }) => {
+        const before = await read("ranges.txt");
+        const anchor = (line: number) => before.content.split("\\n")[line - 1]!.split("|")[0] as \`\${number}:\${string}\`;
+        const edited = await edit("ranges.txt", {
+          revision: before.revision,
+          context: 1,
+          changes: [
+            { kind: "replace", start: anchor(5), content: "five-a\\nfive-b" },
+            { kind: "replace", start: anchor(8), content: "eight" },
+            { kind: "insertAfter", anchor: anchor(20), content: "twenty-x" },
+            { kind: "delete", start: anchor(25) },
+          ],
+        });
+        const ranges = edited.ranges ?? [];
+        const reads = await Promise.all(
+          ranges.map((range) => read("ranges.txt", { offset: range.start, limit: range.end - range.start + 1 })),
+        );
+        const stale = await edit("ranges.txt", {
+          revision: edited.revision,
+          changes: [{ kind: "replace", start: anchor(21), content: "x" }],
+        }).then(() => "accepted", (error: Error) => error.message);
+        const fresh = ranges[1]!.content.split("\\n")[0]!.split("|")[0] as \`\${number}:\${string}\`;
+        const followUp = await edit("ranges.txt", {
+          revision: edited.revision ?? "",
+          changes: [{ kind: "replace", start: fresh, content: "twenty-one" }],
+        });
+        return { edited, reads: reads.map((read) => read.content), stale, followUp: followUp.applied };
+      }`);
+      // The replaced line 5 is now lines 5-6, and old line 8 is line 9, so their windows merge.
+      // The insertion after old line 20 is line 22, and the deleted old line 25 leaves old line
+      // 26 at line 27.
+      expect(
+        result.edited.ranges.map(({ start, end }: { start: number; end: number }) => [start, end]),
+      ).toEqual([
+        [4, 10],
+        [21, 23],
+        [26, 28],
+      ]);
+      expect(result.edited.ranges.map(({ content }: { content: string }) => content)).toEqual(
+        result.reads,
+      );
+      expect(result.edited).not.toHaveProperty("rangesTruncated");
+      expect(result.stale).toMatch(/^Anchor mismatch at line 21/);
+      expect(result.followUp).toBe(1);
+    },
+  );
+
+  it("bounds returned ranges per edit and per batch", async () => {
+    const content = Array.from({ length: 300 }, (_, index) => `row${index}`).join("\n");
+    const result = await value(`async ({ workspace: { batch, edit } }) => {
+      const content = ${JSON.stringify(content)};
+      const single = await edit("one.txt", { revision: null, context: 0, changes: [{ kind: "replaceFile", content }] });
+      const many = await batch([
+        { kind: "edit", file: "a.txt", changes: { revision: null, context: 0, changes: [{ kind: "replaceFile", content }] } },
+        { kind: "edit", file: "b.txt", changes: { revision: null, context: 0, changes: [{ kind: "replaceFile", content }] } },
+        { kind: "edit", file: "c.txt", changes: { revision: null, context: 0, changes: [{ kind: "replaceFile", content }] } },
+      ]);
+      const long = await edit("long.txt", { revision: null, context: 0, changes: [{ kind: "replaceFile", content: "x".repeat(40000) }] });
+      const plain = await edit("plain.txt", { revision: null, changes: [{ kind: "replaceFile", content }] });
+      const invalid = await edit("bad.txt", { revision: null, context: 21, changes: [{ kind: "replaceFile", content }] })
+        .then(() => "accepted", (error: Error) => error.message);
+      return { single, many: many.results.map((item) => item.value), long, plain, invalid };
+    }`);
+    const spans = (edit: {
+      ranges?: Array<{ start: number; end: number }>;
+      rangesTruncated?: true;
+    }) => [
+      (edit.ranges ?? []).map(({ start, end }) => [start, end]),
+      edit.rangesTruncated ?? false,
+    ];
+    expect(spans(result.single)).toEqual([[[1, 200]], true]);
+    // The batch shares one 400-line budget.
+    expect(result.many.map(spans)).toEqual([
+      [[[1, 300]], false],
+      [[[1, 100]], true],
+      [[], true],
+    ]);
+    expect(spans(result.long)).toEqual([[], true]);
+    expect(result.plain).not.toHaveProperty("ranges");
+    expect(result.invalid).toBe("changes.context must be an integer from 0 to 20");
+  });
+
   it("creates, anchors, rewrites, and deletes through one edit method", async () => {
     const original = "one\ntwo\nthree";
     const created =

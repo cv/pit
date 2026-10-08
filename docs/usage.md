@@ -134,7 +134,7 @@ File creation requires `revision: null` and one `replaceFile` change. A rewrite 
 
 Pit validates all anchors against the supplied revision. It rejects overlapping changes. It applies compatible changes from the bottom of the file to the top. It converts inserted `\n` characters to the dominant line ending and preserves untouched bytes.
 
-A successful edit invalidates all earlier revisions and anchors for that file. Read or search the file again before the next edit.
+A successful edit invalidates all earlier revisions and anchors for that file. Read or search the file again before the next edit, or ask the edit for fresh anchors: with `context: n` (0–20), its result carries `ranges`, the hashed lines around each change with `n` lines either side, merged where they meet. They match what a read of those lines returns, so a follow-up edit there can use them with the result's `revision`. Edit elsewhere only after a new read. Ranges are capped at 200 lines per edit and 400 per batch; `rangesTruncated: true` marks a cut.
 
 A read batch supports `fail-fast` and `settled` failure handling. An edit batch must target unique files. Pit validates every edit before the first write. If a later write fails, Pit makes a best-effort attempt to restore files that it already changed. A multi-file edit batch is not an atomic filesystem transaction.
 

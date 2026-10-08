@@ -9,7 +9,13 @@ import {
   recordValue as object,
   stringValue as string,
 } from "../shared/argument-values.js";
-import { fileRevision, prepareEdit } from "./hashline.js";
+import {
+  EDIT_RANGE_LINES,
+  fileRevision,
+  type PreparedEdit,
+  prepareEdit,
+  rangeBudget,
+} from "./hashline.js";
 import { checkAbort, resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { readWorkspace } from "./read.js";
 import { searchWorkspace } from "./search.js";
@@ -17,12 +23,24 @@ import type { ImageCollector } from "./view-image.js";
 
 const MAX_GLOB_RESULTS = 10_000;
 
+/** The hashed ranges an edit with `context` returns, and whether the budget cut them short. */
+function rangeFields(edit: PreparedEdit) {
+  return {
+    ...(edit.ranges ? { ranges: edit.ranges } : {}),
+    ...(edit.rangesTruncated ? { rangesTruncated: true as const } : {}),
+  };
+}
+
 function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
   return withFileMutationQueue(path, async () => {
     checkAbort(signal);
     const snapshot = await readSnapshot(path);
-    const prepared = prepareEdit(snapshot.existed ? snapshot.contents : undefined, args[1]);
+    const prepared = prepareEdit(
+      snapshot.existed ? snapshot.contents : undefined,
+      args[1],
+      rangeBudget(EDIT_RANGE_LINES.edit),
+    );
     checkAbort(signal);
     if (prepared.deleted) {
       await unlink(path);
@@ -44,6 +62,7 @@ function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
       applied: prepared.applied,
       bytes: Buffer.byteLength(next),
       deleted: false,
+      ...rangeFields(prepared),
     };
   });
 }
@@ -127,6 +146,8 @@ function batchEdits(
       const snapshots = new Map(
         await Promise.all(paths.map(async (path) => [path, await readSnapshot(path)] as const)),
       );
+      // One budget for the whole batch, so many small edits cannot return a whole repository.
+      const budget = rangeBudget(EDIT_RANGE_LINES.batch);
       const prepared = targets.map((target) => {
         // oxlint-disable-next-line typescript/no-non-null-assertion
         const snapshot = snapshots.get(target.path)!;
@@ -135,7 +156,11 @@ function batchEdits(
           changes: target.changes,
           index: target.index,
           snapshot,
-          edit: prepareEdit(snapshot.existed ? snapshot.contents : undefined, target.changes),
+          edit: prepareEdit(
+            snapshot.existed ? snapshot.contents : undefined,
+            target.changes,
+            budget,
+          ),
         };
       });
       const committed: typeof prepared = [];
@@ -179,6 +204,7 @@ function batchEdits(
               applied: target.edit.applied,
               bytes: target.edit.deleted ? 0 : Buffer.byteLength(next),
               deleted: target.edit.deleted,
+              ...rangeFields(target.edit),
             },
           };
         }),
