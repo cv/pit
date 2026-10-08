@@ -26,10 +26,10 @@ function entryIds(value: unknown): string[] {
   return ids;
 }
 
-/** When a staged elide or summary applies: after this turn, or when the run ends. */
+/** When a staged elide or summary applies: when the run ends by default, or after this turn. */
 function timing(value: unknown, label: string): "end" | undefined {
-  if (value === undefined || value === "now") return undefined;
-  if (value === "end") return "end";
+  if (value === undefined || value === "end") return "end";
+  if (value === "now") return undefined;
   throw new Error(`${label} must be "now" or "end"`);
 }
 

@@ -144,11 +144,14 @@ export interface EndTurnOptions {
   /** Entries earlier boundary handlers proposed. */
   entries?: SessionBoundaryDraft[];
   ctx?: Record<string, unknown>;
+  /** Whether this is the run's last turn, so agent_before_settle follows (the default). */
+  settle?: boolean;
 }
 
 /**
  * Finishes the harness tool call's turn as Pi does: persists its result, runs `turn_end`
- * handlers, and commits the entries they return.
+ * handlers, and commits the entries they return. By default it is the run's last turn, so it
+ * then settles the run, which applies deferred edits.
  */
 export async function endTurn(
   session: SessionBuilder,
@@ -185,5 +188,6 @@ export async function endTurn(
   const returned = results.find(Boolean) as { entries?: SessionBoundaryDraft[] } | undefined;
   const entries = returned?.entries ?? options.entries ?? [];
   applyBoundary(session.manager, entries);
-  return entries;
+  if (options.settle === false) return entries;
+  return [...entries, ...(await settleRun(session, options.ctx ? { ctx: options.ctx } : {}))];
 }

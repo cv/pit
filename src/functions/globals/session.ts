@@ -76,7 +76,7 @@ export const sessionFunctions = [
   options?: { reason?: string; when?: "now" | "end" },
 ): Promise<PitContextEditReceipt>;`,
     documentation:
-      'session.elide(ids, options?) stages replacing tool results, or the arguments of assistant tool calls, with stubs that point to session.inspectEntry; applied after the current turn if the call succeeds, or when the run ends with when: "end"',
+      'session.elide(ids, options?) stages replacing tool results, or the arguments of assistant tool calls, with stubs that point to session.inspectEntry; applied when the run ends if the call succeeds, or after the current turn with when: "now"',
     minimumArguments: 1,
     maximumArguments: 2,
   }),

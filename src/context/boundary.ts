@@ -176,6 +176,7 @@ export function registerContextBoundary(pi: ExtensionAPI, queue: ContextEditQueu
     // Nudge only when the model can act on it and is not already editing its context.
     if (
       entries.length === 0 &&
+      !queue.hasDeferred() &&
       event.outcome === "completed" &&
       pi.getActiveTools().includes("typescript")
     ) {

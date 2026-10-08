@@ -59,6 +59,11 @@ export class ContextEditQueue {
     this.#deferred.push(...edits);
   }
 
+  /** Whether edits are waiting for the run to end. */
+  hasDeferred(): boolean {
+    return this.#deferred.length > 0;
+  }
+
   /** Removes and returns every deferred edit. */
   takeDeferred(): StagedEdit[] {
     const deferred = this.#deferred;

@@ -311,7 +311,7 @@ type PitContextEntry = {
 
 type PitContextEditReceipt = {
   status: "staged";
-  /** "run_end": deferred with when: "end", so the rewrite lands on the next prompt's request. */
+  /** "run_end" by default, so the rewrite lands on the next prompt's request; "turn_end" with when: "now". */
   appliesAt: "turn_end" | "run_end";
   operation: PitContextOperation;
   targets: string[];
