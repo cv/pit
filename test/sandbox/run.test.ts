@@ -350,8 +350,93 @@ describe("runInSandbox", () => {
       validateTypeScript("async ({ answer }) => answer()", savedFunctions),
     ).not.toThrow();
     expect(() => validateTypeScript("async ({ missing }) => missing()", savedFunctions)).toThrow(
-      /Property 'missing' does not exist[\s\S]*Available functions: answer/,
+      /Property 'missing' does not exist[\s\S]*No injectable function is named "missing"; functions\.listAll\(\) lists them\./,
     );
+  });
+
+  describe("hints for unresolved injections", () => {
+    const functions = new Map([
+      [
+        "tests.runTargeted",
+        "async function runTargeted({}, input: { files: string[] }) { return { files: input.files }; }",
+      ],
+      [
+        "tests.inspectCoverageGaps",
+        "async function inspectCoverageGaps({}) { return { gaps: [] as string[] }; }",
+      ],
+      ["ci.findRun", "async function findRun({}) { return { found: false }; }"],
+    ]);
+    const failure = (source: string) => {
+      try {
+        validateTypeScript(source, functions);
+      } catch (error) {
+        return String((error as Error).message);
+      }
+      throw new Error("expected validation to fail");
+    };
+
+    it.each<{ name: string; source: string; hint: string }>([
+      {
+        name: "a misspelled method",
+        source: "async ({ tests: { runTargetd } }) => runTargetd({ files: [] })",
+        hint: "Did you mean: tests.runTargeted? tests has: inspectCoverageGaps, runTargeted.",
+      },
+      {
+        name: "a misspelled namespace",
+        source: "async ({ testz: { runTargeted } }) => runTargeted({ files: [] })",
+        hint: "Did you mean: tests?",
+      },
+      {
+        name: "a namespace used without injecting it",
+        source: "async () => tests.runTargeted({ files: [] })",
+        hint: '"tests" is injectable: destructure it in the first parameter, such as ({ tests }).',
+      },
+      {
+        name: "an undeclared call to a namespaced method",
+        source: "async () => runTargeted({ files: [] })",
+        hint: "Did you mean: tests.runTargeted?",
+      },
+    ])("suggests the closest names for $name", ({ source, hint }) => {
+      expect(failure(source).split("\n").at(-1)).toBe(hint);
+    });
+
+    it.each<{ name: string; source: string }>([
+      {
+        name: "a returned value",
+        source: "async ({ tests: { runTargeted } }) => (await runTargeted({ files: [] })).counts",
+      },
+      {
+        name: "a value in a program without injections",
+        source: "async () => ({ files: [] as string[] }).counts",
+      },
+    ])("adds no hint to a property error on $name", ({ source }) => {
+      const message = failure(source);
+      expect(message).toContain("Property 'counts' does not exist on type");
+      expect(message).not.toMatch(/Did you mean|No injectable function|has:|Available functions/);
+    });
+
+    it("bounds the hint however many functions a namespace has", () => {
+      const many = new Map(
+        Array.from({ length: 60 }, (_, index) => [
+          `tests.verifyEveryRepositoryInvariant${index}`,
+          `async function verifyEveryRepositoryInvariant${index}({}) { return ${index}; }`,
+        ]),
+      );
+      let message = "";
+      try {
+        validateTypeScript(
+          "async ({ tests: { verifyEveryRepositoryInvariant } }) => verifyEveryRepositoryInvariant()",
+          many,
+        );
+      } catch (error) {
+        message = String((error as Error).message);
+      }
+      const hint = message.split("\n").at(-1) as string;
+      expect(hint).toMatch(
+        /^Did you mean: tests\.verifyEveryRepositoryInvariant\d+, .*\? tests has: /,
+      );
+      expect(hint.length).toBeLessThanOrEqual(320);
+    });
   });
 
   it.each<{ name: string; source: string }>([
