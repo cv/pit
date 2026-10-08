@@ -319,23 +319,6 @@ describe("session.elide", () => {
       applied: `applied: ${Array.from({ length: 6 }, (_, index) => `f${index}.ts @ r${index} (1 change)`).join(", ")}, +4 more`,
     },
     {
-      name: "a count of edit calls for results that predate recorded edits",
-      details: {
-        traces: [
-          { namespace: "workspace", method: "edit", status: "succeeded" },
-          { namespace: "workspace", method: "batch", status: "succeeded" },
-          { namespace: "workspace", method: "batch", status: "failed" },
-          { namespace: "workspace", method: "read", status: "succeeded" },
-        ],
-      },
-      applied: "2 successful workspace edit or batch calls",
-    },
-    {
-      name: "a single edit call for an older result",
-      details: { traces: [{ namespace: "workspace", method: "edit", status: "succeeded" }] },
-      applied: "1 successful workspace edit or batch call",
-    },
-    {
       name: "the end of a long path",
       details: { edits: [{ file: `${"d/".repeat(70)}parse.ts`, revision: "rev1", applied: 2 }] },
       applied: `applied: …${`${"d/".repeat(70)}parse.ts`.slice(-120)} @ rev1 (2 changes)`,

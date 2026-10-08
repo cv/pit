@@ -18,12 +18,9 @@ export interface NoticeDetails {
   percent: number;
   tokens: number;
   contextWindow: number;
-  /**
-   * The threshold that fired, such as "50%" or "200K", and its context tokens. Absent in notices
-   * from before Pit 0.24, which had only percentage levels.
-   */
-  threshold?: string;
-  thresholdTokens?: number;
+  /** The threshold that fired, such as "50%" or "200K", and its context tokens. */
+  threshold: string;
+  thresholdTokens: number;
 }
 
 interface Threshold {
@@ -55,18 +52,13 @@ export function noticeText(details: NoticeDetails): string {
 }
 
 /** The highest threshold, in tokens, among notices still visible on the active branch. */
-function visibleThreshold(ctx: ExtensionContext, contextWindow: number): number {
+function visibleThreshold(ctx: ExtensionContext): number {
   let highest = 0;
   for (const { sourceEntry, messages } of ctx.sessionManager.buildSessionProjection().entries) {
     if (sourceEntry.type !== "custom_message" || sourceEntry.customType !== NOTICE_TYPE) continue;
     if (messages.length === 0) continue;
     const details = sourceEntry.details as Partial<NoticeDetails> | undefined;
-    // Notices from before Pit 0.24 record only a percentage level.
-    const tokens =
-      typeof details?.thresholdTokens === "number"
-        ? details.thresholdTokens
-        : ((details?.level ?? 0) / 100) * (details?.contextWindow ?? contextWindow);
-    highest = Math.max(highest, tokens);
+    highest = Math.max(highest, details?.thresholdTokens ?? 0);
   }
   return highest;
 }
@@ -80,7 +72,7 @@ export function pressureNotice(ctx: ExtensionContext): SessionBoundaryDraft[] {
   if (typeof usage?.percent !== "number" || typeof usage.tokens !== "number") return [];
   const { tokens, contextWindow } = usage;
   const crossed = thresholds(contextWindow).find((threshold) => tokens >= threshold.tokens);
-  if (crossed === undefined || crossed.tokens <= visibleThreshold(ctx, contextWindow)) return [];
+  if (crossed === undefined || crossed.tokens <= visibleThreshold(ctx)) return [];
   const details: NoticeDetails = {
     level: crossed.level,
     percent: Math.round(usage.percent),

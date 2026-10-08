@@ -46,9 +46,6 @@ const MAX_STUB_PATH_CHARS = 120;
 
 /** Which files an elided call's edits changed, so the trail stays readable without its payload. */
 function appliedEdits(edits: ResultEdits): string {
-  if (edits.files.length === 0) {
-    return `${edits.count} successful workspace edit or batch call${edits.count === 1 ? "" : "s"}`;
-  }
   const shown = edits.files.slice(0, MAX_STUB_FILES).map((edit) => {
     const file =
       edit.file.length > MAX_STUB_PATH_CHARS

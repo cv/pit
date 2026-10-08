@@ -48,6 +48,7 @@ const OPERATIONS = [
     reason: "stale build logs",
     tokensFreed: 12_400,
     reprefillTokens: 30_100,
+    cacheMode: "breakpoints",
   },
   {
     toolCallId: "call-1",
@@ -57,13 +58,7 @@ const OPERATIONS = [
     covers: Array.from({ length: 14 }, (_, index) => `id${index}`),
     tokensFreed: 20_000,
     reprefillTokens: 9_000,
-  },
-  {
-    toolCallId: "call-1",
-    operation: "restore",
-    targets: ["f6"],
-    tokensFreed: -8_000,
-    reprefillTokens: 8_500,
+    cacheMode: "breakpoints",
   },
   {
     toolCallId: "call-1",
@@ -73,6 +68,7 @@ const OPERATIONS = [
     action: "removed",
     tokensFreed: 120,
     reprefillTokens: 400,
+    cacheMode: "breakpoints",
   },
 ];
 
@@ -289,7 +285,6 @@ describe("context edit provenance renderer", () => {
       [
         " Context edit · elided 3 tool results · ~12.4K tokens freed · reason: stale build logs",
         " Context edit · summarized 14 entries · ~20K tokens freed",
-        " Context edit · restored 1 entry · ~8K tokens added",
         // Before #248, a removal omitted the note entry itself.
         ' Context edit · note "progress" removed, dropping 1 old note entry · ~120 tokens freed',
       ],
@@ -316,11 +311,6 @@ describe("context edit provenance renderer", () => {
       },
       line: "   re-prefill: ~20 tokens",
     },
-    {
-      name: "an unrecognized mode",
-      operation: { ...OPERATIONS[0], cacheMode: "bogus" },
-      line: "   re-prefill: ~30.1K tokens",
-    },
   ])("names the re-prefill basis of $name", ({ operation, line }) => {
     const expanded = rows(
       renderProvenance(provenance([operation as any]), { expanded: true }, theme),
@@ -336,7 +326,7 @@ describe("context edit provenance renderer", () => {
     expect(expanded).toEqual([
       " Context edit · elided 3 tool results · ~12.4K tokens freed · reason: stale build logs",
       "   entries: a1b2c3d4, b2c3d4e5, c3d4e5f6",
-      "   re-prefill: ~30.1K tokens",
+      "   re-prefill: ~30.1K tokens · whole conversation (breakpoint cache)",
     ]);
   });
 
@@ -354,8 +344,8 @@ describe("context edit provenance renderer", () => {
     const entry = renderers.get("entry:pit.context-edit");
     const noteRenderer = renderers.get("message:pit.note");
     const noticeRenderer = renderers.get("message:pit.context-pressure");
-    expect(rows(entry(provenance(OPERATIONS.slice(2, 3)), { expanded: false }, theme))).toEqual([
-      " Context edit · restored 1 entry · ~8K tokens added",
+    expect(rows(entry(provenance(OPERATIONS.slice(1, 2)), { expanded: false }, theme))).toEqual([
+      " Context edit · summarized 14 entries · ~20K tokens freed",
     ]);
     expect(rows(noteRenderer(note("hello"), { expanded: false }, theme))[1]).toContain(
       "Model note",
@@ -386,26 +376,6 @@ describe("context renderer fallbacks", () => {
       " Model note · ~8 tokens",
       " written by an older Pit",
       " [image]",
-    ]);
-  });
-
-  it("describes records that omit optional fields", () => {
-    const sparse = [
-      {
-        toolCallId: "c",
-        operation: "summarize",
-        targets: ["a", "b"],
-        tokensFreed: 1_500_000,
-        reprefillTokens: 2_000_000,
-      },
-      { toolCallId: "c", operation: "note", targets: [], tokensFreed: 0, reprefillTokens: 0 },
-    ];
-    expect(rows(renderProvenance(provenance(sparse), { expanded: true }, theme), 120)).toEqual([
-      " Context edit · summarized 2 entries · ~1.5M tokens freed",
-      "   entries: a, b",
-      "   re-prefill: ~2M tokens",
-      ' Context edit · note "?" changed · ~0 tokens freed',
-      "   re-prefill: ~0 tokens",
     ]);
   });
 

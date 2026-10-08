@@ -156,7 +156,7 @@ def context($entry; $message):
       percent: number;
       tokens: number;
       contextWindow: number;
-      /** The threshold that fired, such as "50%" or "200K"; null before Pit 0.24. */
+      /** The threshold that fired, such as "50%" or "200K"; null when the notice recorded none. */
       threshold: string | null;
     };
     compaction?: { tokensBefore: number; usage: Usage };

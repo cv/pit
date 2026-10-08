@@ -55,8 +55,6 @@ export const CONTEXT_ROLES: readonly ContextRole[] = [
 export type ContextState = "original" | "elided" | "summarized" | "replaced";
 /** Operations the model can stage. */
 export type ContextOperation = "elide" | "summarize" | "note";
-/** Operations a provenance record can name; `restore` appears in sessions from before #202. */
-export type RecordedOperation = ContextOperation | "restore";
 
 /**
  * How the active model's provider caches the prompt, which decides what an edit re-prefills:
@@ -69,9 +67,9 @@ export type CacheMode = "breakpoints" | "prefix" | "unknown";
 /** One operation recorded in a `pit.context-edit` provenance entry. */
 export interface ProvenanceOperation {
   toolCallId: string;
-  operation: RecordedOperation;
+  operation: ContextOperation;
   targets: string[];
-  /** Summarize, and restores recorded before #202: the entry carrying the summary. */
+  /** Summarize: the entry carrying the summary. */
   carrier?: string;
   /** Summarize: every entry the summary replaced, including the carrier. */
   covers?: string[];
@@ -79,8 +77,8 @@ export interface ProvenanceOperation {
   /** Note: `pruned` drops superseded note entries in the same batch as a rewrite. */
   action?: "created" | "replaced" | "removed" | "pruned";
   reason?: string;
-  /** The caching mode the estimate assumed; absent in sessions recorded before it was. */
-  cacheMode?: CacheMode;
+  /** The caching mode the estimate assumed. */
+  cacheMode: CacheMode;
   /** Elide: how many targets were assistant entries whose tool-call arguments it stubbed. */
   toolCallEntries?: number;
   tokensFreed: number;
@@ -104,7 +102,7 @@ export interface ContextItem {
   readonly tools: readonly string[];
   readonly toolCallIds: readonly string[];
   readonly noteKey?: string;
-  /** Notes: the version this entry carries; 1 when the entry predates versions. */
+  /** Notes: the version this entry carries. */
   readonly noteVersion?: number;
   /** Notes: the entry records the key's removal. */
   readonly noteRemoved?: boolean;
@@ -300,10 +298,6 @@ function recordProvenance(data: unknown, summaries: Map<string, readonly string[
   for (const value of operations) {
     const operation = record(value);
     if (!operation || typeof operation.carrier !== "string") continue;
-    if (operation.operation === "restore") {
-      summaries.delete(operation.carrier);
-      continue;
-    }
     const covers: unknown[] = Array.isArray(operation.covers) ? operation.covers : [];
     summaries.set(
       operation.carrier,

@@ -212,7 +212,9 @@ describe("sessions.analyze", () => {
   ])("scores a pressure notice followed by $name", async ({ turns, operation, followed }) => {
     const analyze = await loadWorkflowFunction("sessions.analyze");
     const events = [
-      contextEvent({ notice: { level: 50, percent: 52, tokens: 520, contextWindow: 1000 } }),
+      contextEvent({
+        notice: { level: 50, threshold: "50%", percent: 52, tokens: 520, contextWindow: 1000 },
+      }),
       ...Array.from({ length: turns }, () => contextEvent({ request: usage(10) })),
       contextEvent({ edits: [edit(operation, ["a"])] }),
     ];
@@ -253,7 +255,6 @@ describe("sessions.analyze", () => {
           contextEvent({
             edits: [edit("summarize", ["c"], { covers: ["a", "c"], tokensFreed: 300 })],
           }),
-          contextEvent({ edits: [edit("restore", ["c"], { tokensFreed: -300 })] }),
           { calls: [{ ...call("reread", "Inspect"), inspectTargets: ["c"] }], failure: null },
           contextEvent({
             compaction: {
@@ -281,13 +282,13 @@ describe("sessions.analyze", () => {
           usage: { cacheWrite: 4000, cost: 0.003 },
         },
         edits: {
-          total: 4,
-          byOperation: { note: 1, elide: 1, summarize: 1, restore: 1 },
+          total: 3,
+          byOperation: { note: 1, elide: 1, summarize: 1 },
           noteActions: { created: 1 },
-          tokensFreed: 380,
+          tokensFreed: 680,
           reprefillTokens: 1020,
         },
-        churn: { inspectedRemovedEntries: 1, reeditedEntries: 1 },
+        churn: { inspectedRemovedEntries: 2, reeditedEntries: 1 },
         sessionCalls: { compact: 1, outline: 2 },
       },
     });

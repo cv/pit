@@ -298,7 +298,14 @@ describe.skipIf(skipWithoutJq)("session queries with real jq", () => {
         customType: "pit.context-pressure",
         content: "[Pit] Context is 51% full",
         display: true,
-        details: { level: 50, percent: 51, tokens: 510, contextWindow: 1000 },
+        details: {
+          level: 50,
+          percent: 51,
+          tokens: 510,
+          contextWindow: 1000,
+          threshold: "50%",
+          thresholdTokens: 500,
+        },
       }),
       // A large window's absolute-token notice, keyed by its threshold rather than its percentage.
       entry({

@@ -49,10 +49,6 @@ describe("session.outline", () => {
       ],
       editsOmitted: 1,
     });
-    const older = session.assistant("", [{ name: "typescript", args: { code: "y".repeat(800) } }]);
-    session.result(older.callIds[0] as string, "typescript", "ok", {
-      traces: [{ namespace: "workspace", method: "edit", status: "succeeded" }],
-    });
     const plain = session.assistant("Let me read the tests first. ".repeat(60), [
       { name: "read", args: { path: "a.ts" } },
     ]);
@@ -72,7 +68,6 @@ describe("session.outline", () => {
     const heavy = byId.get(edit.id);
     expect(heavy.edits).toBe(3);
     expect(heavy.argumentTokens).toBeGreaterThan(0.9 * heavy.tokens);
-    expect(byId.get(older.id).edits).toBe(1);
     const light = byId.get(plain.id);
     expect(light).not.toHaveProperty("edits");
     expect(light.argumentTokens).toBeGreaterThan(0);
@@ -544,41 +539,6 @@ describe("context classification", () => {
       [prompt, "replaced"],
       [image.result, "replaced"],
     ]);
-  });
-
-  it("honors restore records written before session.restore was removed", async () => {
-    const session = new SessionBuilder();
-    session.user("Investigate");
-    const work = session.turn("bash", "output line\n".repeat(40));
-    const covers = [work.assistant, work.result];
-    const record = (operation: unknown) =>
-      session.manager.appendCustomEntry("pit.context-edit", {
-        version: 1,
-        operations: [operation],
-      });
-    record({
-      toolCallId: "c",
-      operation: "summarize",
-      targets: covers,
-      carrier: work.assistant,
-      covers,
-      tokensFreed: 0,
-      reprefillTokens: 0,
-    });
-    session.current();
-    await expect(inspect(session, work.assistant)).resolves.toMatchObject({ covers });
-
-    record({
-      toolCallId: "c",
-      operation: "restore",
-      targets: covers,
-      carrier: work.assistant,
-      tokensFreed: 0,
-      reprefillTokens: 0,
-    });
-    session.current();
-    const restored = await inspect(session, work.assistant);
-    expect(restored.covers).toBeUndefined();
   });
 
   it.each<{ name: string; ctx: Record<string, unknown>; expected: unknown }>([
