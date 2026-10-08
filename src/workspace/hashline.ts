@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
+import { takeRanges, type LineRange, type RangeBudget } from "./ranges.js";
 
 const ANCHOR_PATTERN = /^([1-9][0-9]*):([A-Za-z0-9_-]{5})$/;
 const NEWLINE_PATTERN = /\r\n|\n|\r/g;
@@ -32,17 +33,11 @@ export interface EditChangeSpec {
 }
 
 /** Hashed lines of the edited file, which a follow-up edit can anchor to without a read. */
-export interface EditRange {
-  start: number;
-  end: number;
-  content: string;
-}
-
 export interface PreparedEdit {
   next?: string;
   deleted: boolean;
   applied: number;
-  ranges?: EditRange[];
+  ranges?: LineRange[];
   rangesTruncated?: true;
 }
 
@@ -50,16 +45,11 @@ export interface PreparedEdit {
 export const MAX_EDIT_CONTEXT = 20;
 /** Lines the returned ranges may hold for one edit, or for every edit in one batch. */
 export const EDIT_RANGE_LINES = { edit: 200, batch: 400 } as const;
-const EDIT_RANGE_CHARS = 32_000;
+const EDIT_RANGE_BYTES = 32_000;
 
-/** What returned ranges may still use; a batch shares one budget across its edits. */
-export interface RangeBudget {
-  lines: number;
-  chars: number;
-}
-
+/** A fresh budget for one edit's ranges, or for every edit in one batch. */
 export function rangeBudget(lines: number): RangeBudget {
-  return { lines, chars: EDIT_RANGE_CHARS };
+  return { lines, bytes: EDIT_RANGE_BYTES };
 }
 
 /** Character spans of the new file that changes wrote, in file order. */
@@ -233,26 +223,14 @@ function editRanges(
     if (previous && from <= previous[1] + 1) previous[1] = Math.max(previous[1], to);
     else windows.push([from, to]);
   }
-  const ranges: EditRange[] = [];
-  let truncated = false;
-  for (const [from, to] of windows) {
-    const kept: string[] = [];
-    for (let index = from; index <= to; index++) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      const line = lines[index]!;
-      const text = `${line.anchor}|${line.content}`;
-      if (budget.lines < 1 || budget.chars < text.length) {
-        truncated = true;
-        break;
-      }
-      budget.lines--;
-      budget.chars -= text.length + 1;
-      kept.push(text);
-    }
-    if (kept.length > 0)
-      ranges.push({ start: from + 1, end: from + kept.length, content: kept.join("\n") });
-    if (truncated) break;
+  // Hashes lines lazily, so a whole-file write with context stops at the budget.
+  function* hashed(from: number, to: number): Generator<string> {
+    for (const line of lines.slice(from, to + 1)) yield `${line.anchor}|${line.content}`;
   }
+  const { ranges, truncated } = takeRanges(
+    windows.map(([from, to]) => ({ start: from + 1, lines: hashed(from, to) })),
+    budget,
+  );
   return { ranges, ...(truncated ? { rangesTruncated: true as const } : {}) };
 }
 
