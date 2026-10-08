@@ -16,10 +16,14 @@ export const workspaceFunctions = [
     resultRenderer: "read",
     declaration: `read(
   file: string,
+  options: { ranges: [number, number][]; format?: "hashed" },
+): Promise<PitRangeReadResult>;
+read(
+  file: string,
   options?: { format?: PitReadFormat; offset?: number; limit?: number },
 ): Promise<PitReadResult>;`,
     documentation:
-      'workspace.read(file, { format?: "hashed" | "raw", offset?, limit? }) defaults to hashed line:hash anchors and sparse metadata',
+      'workspace.read(file, { format?: "hashed" | "raw", offset?, limit? } | { ranges: [[start, end], ...] }) defaults to hashed line:hash anchors and sparse metadata; ranges read several parts in one call',
     minimumArguments: 1,
     maximumArguments: 2,
   }),

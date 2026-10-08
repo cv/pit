@@ -90,8 +90,8 @@ type PitEditChangeSpec = {
   context?: number;
 };
 
-/** Hashed lines of the edited file, with anchors a follow-up edit accepts. */
-type PitEditRange = { start: number; end: number; content: string };
+/** Hashed lines of a file, with anchors an edit accepts. */
+type PitLineRange = { start: number; end: number; content: string };
 
 type PitReadResult = {
   file: string;
@@ -105,6 +105,18 @@ type PitReadResult = {
   truncated?: true;
 };
 
+/** A read of line ranges: sorted, merged where they meet, and hashed like a read. */
+type PitRangeReadResult = {
+  file: string;
+  format: "hashed";
+  revision: string;
+  ranges: PitLineRange[];
+  lines: number;
+  totalLines: number;
+  /** The ranges stopped at a read's line or byte budget. */
+  truncated?: true;
+};
+
 type PitEditResult = {
   file: string;
   revision: string | null;
@@ -112,7 +124,7 @@ type PitEditResult = {
   bytes: number;
   deleted: boolean;
   /** With context: the changed lines and their surroundings, merged where they meet. */
-  ranges?: PitEditRange[];
+  ranges?: PitLineRange[];
   /** The ranges stopped at their budget: 200 lines per edit, 400 per batch. */
   rangesTruncated?: true;
 };

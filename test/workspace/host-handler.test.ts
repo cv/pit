@@ -176,6 +176,98 @@ describe("workspace read and edit", () => {
     expect(result.details.editsOmitted).toBe(2);
   });
 
+  // #253: one call reads the parts of a file an edit needs, with one revision.
+  it.each([
+    { name: "LF", separator: "\n" },
+    { name: "CRLF", separator: "\r\n" },
+  ])(
+    "reads merged line ranges that match whole reads and anchor an edit ($name)",
+    async ({ separator }) => {
+      const original = Array.from({ length: 30 }, (_, index) => `line${index + 1}`).join(separator);
+      await writeFile(join(cwd, "parts.txt"), original, "utf8");
+      const result = await value(`async ({ workspace: { edit, read } }) => {
+      const parts = await read("parts.txt", { ranges: [[20, 22], [3, 4], [5, 6], [28, 40]] });
+      const whole = await read("parts.txt");
+      const reads = await Promise.all(
+        parts.ranges.map((range) => read("parts.txt", { offset: range.start, limit: range.end - range.start + 1 })),
+      );
+      const anchor = parts.ranges[1]!.content.split("\\n")[0]!.split("|")[0] as \`\${number}:\${string}\`;
+      const edited = await edit("parts.txt", { revision: parts.revision, changes: [{ kind: "replace", start: anchor, content: "twenty" }] });
+      return { parts, wholeRevision: whole.revision, reads: reads.map((read) => read.content), applied: edited.applied };
+    }`);
+      // [3, 4] and [5, 6] touch, so they merge; [28, 40] stops at the last line.
+      expect(
+        result.parts.ranges.map(({ start, end }: { start: number; end: number }) => [start, end]),
+      ).toEqual([
+        [3, 6],
+        [20, 22],
+        [28, 30],
+      ]);
+      expect(result.parts.ranges.map(({ content }: { content: string }) => content)).toEqual(
+        result.reads,
+      );
+      expect(result.parts).toMatchObject({
+        revision: result.wholeRevision,
+        lines: 10,
+        totalLines: 30,
+      });
+      expect(result.parts).not.toHaveProperty("truncated");
+      expect(result.applied).toBe(1);
+    },
+  );
+
+  it("bounds range reads by a read's line and byte budgets and rejects invalid ranges", async () => {
+    await writeFile(
+      join(cwd, "many.txt"),
+      Array.from({ length: 3000 }, (_, index) => `row${index + 1}`).join("\n"),
+      "utf8",
+    );
+    await writeFile(
+      join(cwd, "wide.txt"),
+      Array.from({ length: 5 }, () => "x".repeat(20_000)).join("\n"),
+      "utf8",
+    );
+    const result = await value(`async ({ workspace: { read } }) => {
+      const rejected = (options: unknown) =>
+        read("many.txt", options as never).then(() => "accepted", (error: Error) => error.message);
+      return {
+        many: await read("many.txt", { ranges: [[1, 1500], [2000, 3000]] }),
+        wide: await read("wide.txt", { ranges: [[1, 2], [4, 5]] }),
+        errors: await Promise.all([
+          rejected({ ranges: [[1, 2]], offset: 3 }),
+          rejected({ ranges: [[1, 2]], format: "raw" }),
+          rejected({ ranges: [[0, 2]] }),
+          rejected({ ranges: [[5, 3]] }),
+          rejected({ ranges: [[1]] }),
+          rejected({ ranges: [] }),
+          rejected({ ranges: Array.from({ length: 21 }, (_, index) => [index + 1, index + 1]) }),
+          rejected({ ranges: [[1, 2], [3001, 3005]] }),
+        ]),
+      };
+    }`);
+    const spans = (read: { ranges: Array<{ start: number; end: number }> }) =>
+      read.ranges.map(({ start, end }) => [start, end]);
+    // The 2,000-line budget is shared: 1,500 lines, then 500 of the second range.
+    expect(spans(result.many)).toEqual([
+      [1, 1500],
+      [2000, 2499],
+    ]);
+    expect(result.many.truncated).toBe(true);
+    // Two 20,000-character lines fit in 50 KB; the next whole line does not.
+    expect(spans(result.wide)).toEqual([[1, 2]]);
+    expect(result.wide.truncated).toBe(true);
+    expect(result.errors).toEqual([
+      "options.ranges cannot be combined with offset or limit",
+      "options.ranges requires the hashed format",
+      "options.ranges[0] must be [start, end] line numbers with 1 <= start <= end",
+      "options.ranges[0] must be [start, end] line numbers with 1 <= start <= end",
+      "options.ranges[0] must be [start, end] line numbers with 1 <= start <= end",
+      "options.ranges must be 1-20 [start, end] line pairs",
+      "options.ranges must be 1-20 [start, end] line pairs",
+      "A range starts at line 3001, but many.txt has 3000 lines",
+    ]);
+  });
+
   // #251: 71 of 141 rereads in session 01a0f528 came right after the agent's own edit.
   it.each([
     { name: "LF", separator: "\n" },

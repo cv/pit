@@ -28,6 +28,23 @@ const isReadResult = shapeGuard(
   ),
 );
 
+const isRangeReadResult = shapeGuard(
+  Type.Object(
+    {
+      file: Type.String(),
+      format: Type.Literal("hashed"),
+      revision: Type.String(),
+      ranges: Type.Array(
+        Type.Object({ start: Type.Number(), end: Type.Number(), content: Type.String() }, CLOSED),
+      ),
+      lines: Type.Number(),
+      totalLines: Type.Number(),
+      truncated: Type.Optional(Type.Literal(true)),
+    },
+    CLOSED,
+  ),
+);
+
 const SearchContextLine = Type.Object(
   { line: Type.Number(), anchor: Type.String(), text: Type.String() },
   CLOSED,
@@ -106,11 +123,52 @@ const isStatResult = shapeGuard(
   ),
 );
 
+type RangeRead = typeof isRangeReadResult extends ((value: unknown) => value is infer T)
+  ? T
+  : never;
+
+/** A read of several line ranges: each is shown like a hashed read, with a gap marker between. */
+function renderRangeRead(value: RangeRead, { theme, details }: RenderContext): RenderedResultValue {
+  const spans = value.ranges.map(({ start, end }) =>
+    start === end ? `${start}` : `${start}-${end}`,
+  );
+  const where =
+    spans.length === 0 ? "no lines" : `lines ${spans.join(", ")} of ${value.totalLines}`;
+  const flags = value.truncated ? "hashed, truncated" : "hashed";
+  const summary = `${value.file}, ${where}, ${flags}`;
+  const outcome = value.truncated ? "warning" : "success";
+  if (details === false) return { kind: "read", summary, outcome, lines: [] };
+  const lines = [
+    `${theme.fg("toolTitle", theme.bold(value.file))} ${theme.fg("dim", `(${where}; ${flags}; rev ${value.revision})`)}`,
+  ];
+  const indents: Record<number, number> = {};
+  value.ranges.forEach((range, index) => {
+    if (index > 0) lines.push(theme.fg("dim", "…"));
+    const rendered = renderHashedFile(range.content, value.file, theme, value.totalLines);
+    Object.assign(
+      indents,
+      offsetHangingIndents(rendered.hangingIndents, { lines: lines.length - 1 }),
+    );
+    lines.push(...rendered.lines);
+  });
+  return {
+    kind: "read",
+    outcome,
+    lines,
+    summary,
+    detailLines: [theme.fg("dim", `revision: ${value.revision}`), ...lines.slice(1)],
+    hangingIndents: offsetHangingIndents(indents, { lines: 1 }),
+    detailHangingIndents: offsetHangingIndents(indents, { lines: 1 }),
+  };
+}
+
 export function renderRead(
   value: unknown,
-  { theme, details }: RenderContext,
+  context: RenderContext,
 ): RenderedResultValue | undefined {
+  if (isRangeReadResult(value)) return renderRangeRead(value, context);
   if (!isReadResult(value)) return undefined;
+  const { theme, details } = context;
 
   const offset = value.offset ?? 1;
   const total = value.totalLines ?? value.lines;
