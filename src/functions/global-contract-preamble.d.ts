@@ -1,0 +1,348 @@
+type PitJsonPrimitive = null | boolean | number | string;
+type PitJsonValue = PitJsonPrimitive | PitJsonValue[] | { [key: string]: PitJsonValue | undefined };
+type PitResult = PitJsonValue | undefined;
+
+type PitProcessOptions = {
+  cwd?: string;
+  timeoutMs?: number;
+  raise?: boolean;
+  maxBytes?: number;
+  maxLines?: number;
+  truncate?: "head" | "tail";
+};
+
+type PitProcessResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+  truncated: boolean;
+};
+
+type PitNpmTestOptions = PitProcessOptions & {
+  args?: string[];
+  coverage?: boolean;
+};
+
+type PitNpmInstallOptions = PitProcessOptions & {
+  dev?: boolean;
+  exact?: boolean;
+  packageLockOnly?: boolean;
+  ignoreScripts?: boolean;
+};
+
+type PitNpmAuditOptions = PitProcessOptions & {
+  omitDev?: boolean;
+};
+
+type PitNpmPackOptions = PitProcessOptions & {
+  dryRun?: boolean;
+};
+
+type PitGhOptions = PitProcessOptions & { repo?: string; args?: string[] };
+type PitGhJsonOptions = PitGhOptions & { json?: string[] };
+type PitGhListOptions = PitGhJsonOptions & {
+  state?: "open" | "closed" | "all";
+  limit?: number;
+  author?: string;
+  assignee?: string;
+  labels?: string[];
+  search?: string;
+};
+type PitGhPrListOptions = Omit<PitGhListOptions, "state"> & {
+  state?: "open" | "closed" | "merged" | "all";
+  base?: string;
+  head?: string;
+  draft?: boolean;
+};
+type PitGhRunListOptions = PitGhJsonOptions & {
+  limit?: number;
+  branch?: string;
+  commit?: string;
+  event?: string;
+  status?: string;
+  user?: string;
+  workflow?: string;
+};
+type PitGhCreateOptions = PitGhOptions & { title: string; body?: string };
+type PitGhPrCreateOptions = PitGhCreateOptions & { base?: string; head?: string; draft?: boolean };
+type PitGhPrMergeOptions = PitGhOptions & {
+  method: "merge" | "squash" | "rebase";
+  deleteBranch?: boolean;
+  auto?: boolean;
+};
+
+type PitReadFormat = "hashed" | "raw";
+type PitLineAnchor = `${number}:${string}`;
+
+type PitEditChange =
+  | { kind: "replace"; start: PitLineAnchor; end?: PitLineAnchor; content: string }
+  | { kind: "delete"; start: PitLineAnchor; end?: PitLineAnchor }
+  | { kind: "insertBefore" | "insertAfter"; anchor: PitLineAnchor; content: string }
+  | { kind: "replaceFile"; content: string }
+  | { kind: "deleteFile" };
+
+type PitEditChangeSpec = {
+  revision: string | null;
+  changes: [PitEditChange, ...PitEditChange[]];
+  /** Return hashed ranges with this many lines (0-20) around each change. */
+  context?: number;
+};
+
+/** Hashed lines of a file, with anchors an edit accepts. */
+type PitLineRange = { start: number; end: number; content: string };
+
+type PitReadResult = {
+  file: string;
+  format: PitReadFormat;
+  content: string;
+  revision: string;
+  offset?: number;
+  lines: number;
+  totalLines?: number;
+  hasMore?: true;
+  truncated?: true;
+};
+
+/** A read of line ranges: sorted, merged where they meet, and hashed like a read. */
+type PitRangeReadResult = {
+  file: string;
+  format: "hashed";
+  revision: string;
+  ranges: PitLineRange[];
+  lines: number;
+  totalLines: number;
+  /** The ranges stopped at a read's line or byte budget. */
+  truncated?: true;
+};
+
+type PitEditResult = {
+  file: string;
+  revision: string | null;
+  applied: number;
+  bytes: number;
+  deleted: boolean;
+  /** With context: the changed lines and their surroundings, merged where they meet. */
+  ranges?: PitLineRange[];
+  /** The ranges stopped at their budget: 200 lines per edit, 400 per batch. */
+  rangesTruncated?: true;
+};
+
+type PitWorkspaceEntry = {
+  name: string;
+  type: "file" | "directory" | "symlink";
+};
+
+type PitBatchReadOperation = {
+  kind: "read";
+  file: string;
+  options?: { format?: PitReadFormat; offset?: number; limit?: number };
+};
+
+type PitBatchEditOperation = { kind: "edit"; file: string; changes: PitEditChangeSpec };
+
+type PitBatchOperation = PitBatchReadOperation | PitBatchEditOperation;
+
+type PitSlashCommand = {
+  name: string;
+  description?: string;
+  source: "extension" | "prompt" | "skill";
+  sourceInfo: {
+    path: string;
+    source: string;
+    scope: "user" | "project" | "temporary";
+    origin: "package" | "top-level";
+    baseDir?: string;
+  };
+};
+
+type PitModelMetadata = {
+  provider: string;
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: string[];
+  contextWindow: number;
+  maxTokens: number;
+  available: boolean;
+  scoped: boolean;
+};
+
+type PitPersistentFunctionMetadata = {
+  name: string;
+  signature: string;
+  summary: string;
+  parameters: Array<{ name: string; description?: string }>;
+};
+
+type PitFunctionScope = "global" | "user" | "project" | "session";
+
+type PitFunctionReference = {
+  name: string;
+  scope: PitFunctionScope;
+  kind: "native" | "source" | "invalid";
+  available: boolean;
+};
+
+type PitFunctionSummary = PitFunctionReference & {
+  effective: boolean;
+  effectiveScope: PitFunctionScope;
+  readOnly: boolean;
+  sealed: boolean;
+  signature: string;
+  summary: string;
+  origin: string;
+  lines: number;
+  bytes: number;
+  directDependencies: string[];
+  directDependents: string[];
+  overridesProject: boolean;
+  overridesUser: boolean;
+  overridesGlobal: boolean;
+  error?: string;
+};
+
+type PitFunctionInspection = PitFunctionSummary & {
+  overrideChain: Array<
+    PitFunctionReference & { origin: string; effective: boolean; sealed: boolean }
+  >;
+  resolvedDependencies: Array<{ name: string; scope?: PitFunctionScope; available: boolean }>;
+  next?: PitFunctionReference;
+  directEffects: string[];
+  effects: string[];
+  documentation: string;
+} & ({ kind: "source"; source: string } | { kind: "native" | "invalid"; source?: never });
+
+type PitFunctionListOptions = {
+  scope?: PitFunctionScope;
+  allDefinitions?: boolean;
+  offset?: number;
+  limit?: number;
+};
+
+type PitFunctionListResult = {
+  functions: PitFunctionSummary[];
+  total: number;
+  offset: number;
+  nextOffset?: number;
+};
+
+type PitSavedFunctionRemovalPlan = {
+  name: string;
+  scope: PitFunctionScope;
+  directDependents: string[];
+  transitiveDependents: string[];
+  removalClosure: string[];
+  requiresCascade: boolean;
+  blocked: boolean;
+};
+
+type PitPromotionOptions = { to?: "user" | "project" };
+
+type PitRemoveOptions = { cascade?: boolean };
+type PitRemoveResult = { name: string; removed: string[] };
+
+type PitContextRole =
+  | "user"
+  | "assistant"
+  | "toolResult"
+  | "note"
+  | "notice"
+  | "custom"
+  | "bash"
+  | "summary";
+type PitContextState = "original" | "elided" | "summarized" | "replaced";
+type PitContextOperation = "elide" | "summarize" | "note";
+/** How the provider caches the prompt: what an edit's re-prefill estimate assumes. */
+type PitContextCacheMode = "breakpoints" | "prefix" | "unknown";
+/**
+ * Whether the provider likely still holds the prompt cache: idle seconds since the last request or
+ * cache_warm refresh, against the model's promptCache lifetime; unknown without one.
+ */
+type PitContextCacheState = {
+  state: "warm" | "cold" | "unknown";
+  idleSeconds: number | null;
+  ttlSeconds: number | null;
+  refreshedBy: "request" | "warming" | null;
+};
+
+type PitContextOutlineEntry = {
+  id: string;
+  role: PitContextRole;
+  tool?: string;
+  key?: string;
+  /** A superseded note version or removed key, kept unchanged until a rewrite drops it. */
+  superseded?: boolean;
+  tokens: number;
+  /** Assistant entries with tool calls: tokens of the calls' arguments, which elide stubs. */
+  argumentTokens?: number;
+  /** Assistant entries: file edits their calls applied; elide's stub keeps files and revisions. */
+  edits?: number;
+  reprefillTokens: number;
+  state: PitContextState;
+  editable: boolean;
+  protectedReason?: string;
+  pending?: PitContextOperation;
+  preview: string;
+};
+
+type PitContextOutline = {
+  leafId: string | null;
+  contextTokens: number | null;
+  contextWindow: number | null;
+  estimatedTokens: number;
+  cacheMode: PitContextCacheMode;
+  cache: PitContextCacheState;
+  entries: PitContextOutlineEntry[];
+  nextAfter?: string;
+  omitted: number;
+};
+
+type PitContextEntry = {
+  id: string;
+  role: PitContextRole;
+  tool?: string;
+  state: PitContextState | "omitted" | "compacted";
+  original: { text: string; offset: number; totalChars: number; truncated: boolean };
+  visible?: { text: string; totalChars: number; truncated: boolean };
+  covers?: string[];
+};
+
+type PitContextEditReceipt = {
+  status: "staged";
+  /** "run_end" by default, so the rewrite lands on the next prompt's request; "turn_end" with when: "now". */
+  appliesAt: "turn_end" | "run_end";
+  operation: PitContextOperation;
+  targets: string[];
+  estimatedTokensFreed: number;
+  estimatedReprefillTokens: number;
+  cacheMode: PitContextCacheMode;
+};
+
+type PitContextSummaryInput = {
+  from: string;
+  to: string;
+  summary: string;
+  /** "end" waits for the run to end, so the rewrite falls on the next prompt; default "now". */
+  when?: "now" | "end";
+};
+
+type PitContextSummaryReceipt = PitContextEditReceipt & {
+  summarizedEntries: number;
+  summaryTokens: number;
+};
+
+type PitContextNoteReceipt = PitContextEditReceipt & {
+  key: string;
+  action: "created" | "replaced" | "removed";
+  /** Superseded note entries this change also drops, once every version would exceed the budget. */
+  droppedEntries?: number;
+};
+
+type PitContextNotes = {
+  notes: Array<{ key: string; entryId: string; tokens: number; pending?: boolean }>;
+  tokens: number;
+  /** Superseded versions and removals still in context; they count against the budget. */
+  supersededTokens: number;
+  budgetTokens: number;
+  maxNotes: number;
+};
