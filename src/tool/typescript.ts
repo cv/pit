@@ -36,7 +36,7 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
-import { omitNullArguments, resolveToolInput } from "./input.js";
+import { omitNullArguments, rejectCopiedElisionStub, resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
   FUNCTION_ID_DESCRIPTION,
@@ -435,7 +435,10 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     promptGuidelines: [...PROMPT_GUIDELINES],
     parameters: TOOL_PARAMETERS,
     // Pi validates the prepared arguments against TOOL_PARAMETERS afterwards.
-    prepareArguments: (args) => omitNullArguments(args) as Static<typeof TOOL_PARAMETERS>,
+    prepareArguments: (args) => {
+      rejectCopiedElisionStub(args);
+      return omitNullArguments(args) as Static<typeof TOOL_PARAMETERS>;
+    },
     // Pit orchestrates the other tools and must not be callable from them, for example from
     // codemode scripts, which would also hide its declaration in codemode's `only` mode.
     exposure: "model-only",
