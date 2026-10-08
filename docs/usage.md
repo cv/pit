@@ -116,6 +116,8 @@ Hashed reads are the default. Each selected line contains a line number, a short
 43:p91Xs|}
 ```
 
+To read only the parts of a file an edit needs, pass `ranges: [[start, end], ...]` to `workspace.read`: one call returns each range hashed, with one revision.
+
 An edit must use the current revision and current line anchors from `workspace.read` or `workspace.search`:
 
 ```ts

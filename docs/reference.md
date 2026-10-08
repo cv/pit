@@ -48,6 +48,7 @@ See [Global function reference](#global-function-reference) for method details.
 ### `workspace`
 
 - `read(file, { format?: "hashed" | "raw", offset?, limit? })` reads a file. Hashed format is the default and includes edit-ready anchors and a whole-file revision; it returns at most 2,000 lines and Pi's 50 KB output budget, marking a shortened read `truncated`. Raw format is data for a program: it returns the whole file, or the lines that `offset` and `limit` select, up to 4,000,000 bytes, and fails rather than return part of a larger selection.
+- `read(file, { ranges: [[start, end], ...] })` reads up to 20 line ranges in one call. They come back hashed, sorted, and merged where they meet, with one revision, and share a hashed read's 2,000-line and 50 KB budget; `truncated` marks a cut.
 - `viewImage(file)` attaches a local image to the successful tool result. See [image viewing and limits](usage.md#view-workspace-images).
 - `edit(file, { revision, changes, context? })` applies revision-checked anchored or file-level changes. With `context: n` (0–20), the result's `ranges` hold the hashed lines around each change, for a follow-up edit without a read; at most 200 lines per edit and 400 per batch, with `rangesTruncated` when cut.
 - `batch(operations, options?)` runs a homogeneous read batch or edit batch and returns ordered `{ results }`. Only read batches accept `{ failure?: "fail-fast" | "settled" }`; mixed batches are rejected.

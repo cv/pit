@@ -12,7 +12,12 @@ interface WorkspaceReadRequest {
   format: WorkspaceReadFormat;
   offset: number;
   limit: number;
+  /** Line ranges to read instead of one window, sorted and merged. */
+  ranges?: Array<[number, number]>;
 }
+
+/** Most line ranges one read may ask for. */
+export const MAX_READ_RANGES = 20;
 
 export interface WorkspaceReadScan {
   selected: string;
@@ -140,6 +145,13 @@ function parseReadRequest(cwd: string, args: unknown[]): WorkspaceReadRequest {
   if (format !== "hashed" && format !== "raw") {
     throw new Error('options.format must be "hashed" or "raw"');
   }
+  if (options.ranges !== undefined) {
+    if (options.offset !== undefined || options.limit !== undefined) {
+      throw new Error("options.ranges cannot be combined with offset or limit");
+    }
+    if (format !== "hashed") throw new Error("options.ranges requires the hashed format");
+    return { path, format, offset: 1, limit: 1, ranges: parseRanges(options.ranges) };
+  }
   const offset = Number(options.offset ?? 1);
   // Raw reads are program data: whole files by default. Hashed reads are bounded for the model.
   const limit = Number(
@@ -149,6 +161,30 @@ function parseReadRequest(cwd: string, args: unknown[]): WorkspaceReadRequest {
     throw new Error("offset and limit must be positive integers");
   }
   return { path, format, offset, limit };
+}
+
+/** Validates `[start, end]` line pairs, then sorts them and merges any that overlap or touch. */
+function parseRanges(raw: unknown): Array<[number, number]> {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_READ_RANGES) {
+    throw new Error(`options.ranges must be 1-${MAX_READ_RANGES} [start, end] line pairs`);
+  }
+  const ranges = raw.map((range: unknown, index) => {
+    const [start, end] = Array.isArray(range) && range.length === 2 ? range : [];
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+      throw new Error(
+        `options.ranges[${index}] must be [start, end] line numbers with 1 <= start <= end`,
+      );
+    }
+    return [start as number, end as number] as [number, number];
+  });
+  ranges.sort((left, right) => left[0] - right[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of ranges) {
+    const last = merged.at(-1);
+    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
 }
 
 function hashedContent(scan: WorkspaceReadScan, offset: number): string {
@@ -202,8 +238,68 @@ function readResult(cwd: string, request: WorkspaceReadRequest, scan: WorkspaceR
   };
 }
 
+/**
+ * Reads several hashed line ranges in one pass, so they all describe one revision. They share
+ * a whole-file read's line and byte budget and keep whole lines.
+ */
+async function readRanges(
+  cwd: string,
+  path: string,
+  requested: Array<[number, number]>,
+  signal?: AbortSignal,
+) {
+  const scanners = requested.map(
+    ([start, end]) => new WorkspaceReadScanner(start, end - start + 1),
+  );
+  const stream = createReadStream(path, { encoding: "utf8", signal });
+  for await (const chunk of stream) {
+    for (const scanner of scanners) scanner.push(String(chunk));
+  }
+  const scans = scanners.map((scanner) => scanner.finish());
+  // oxlint-disable-next-line typescript/no-non-null-assertion
+  const { totalLines, revision } = scans[0]!;
+  const file = workspaceResultPath(cwd, path);
+  const past = requested.find(([start]) => start > totalLines);
+  if (past)
+    throw new Error(`A range starts at line ${past[0]}, but ${file} has ${totalLines} lines`);
+  let lines: number = LIMITS.result.maxLines;
+  let bytes: number = LIMITS.result.maxBytes;
+  let truncated = false;
+  const ranges: Array<{ start: number; end: number; content: string }> = [];
+  for (const [index, scan] of scans.entries()) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    const start = requested[index]![0];
+    const sliced = sliceText(
+      hashedContent(scan, start),
+      { maxBytes: Math.max(0, bytes), maxLines: Math.max(0, lines) },
+      "head",
+      { partialLine: false },
+    );
+    if (sliced.text !== "") {
+      const count = sliced.text.split("\n").length;
+      ranges.push({ start, end: start + count - 1, content: sliced.text });
+      lines -= count;
+      bytes -= Buffer.byteLength(sliced.text) + 1;
+    }
+    if (sliced.truncated || scan.selectionTruncated) {
+      truncated = true;
+      break;
+    }
+  }
+  return {
+    file,
+    format: "hashed" as const,
+    revision,
+    ranges,
+    lines: ranges.reduce((sum, range) => sum + range.end - range.start + 1, 0),
+    totalLines,
+    ...(truncated ? { truncated: true as const } : {}),
+  };
+}
+
 export async function readWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const request = parseReadRequest(cwd, args);
+  if (request.ranges) return readRanges(cwd, request.path, request.ranges, signal);
   const capture = request.format === "raw" ? LIMITS.programData.maxBytes + 1 : undefined;
   const scanner = new WorkspaceReadScanner(request.offset, request.limit, capture);
   const stream = createReadStream(request.path, { encoding: "utf8", signal });

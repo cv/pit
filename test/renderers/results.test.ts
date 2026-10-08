@@ -201,6 +201,38 @@ describe("result renderers", () => {
         lines: 0,
       }),
     ).toContain("Read Makefile, empty, raw");
+    // #253: a range read shows each range like a hashed read, with a gap marker between.
+    const rangeRead = renderValue({
+      file: "src/a.ts",
+      format: "hashed",
+      revision: "rev-5",
+      ranges: [
+        { start: 3, end: 4, content: "3:aaaaa|three\n4:bbbbb|four" },
+        { start: 9, end: 9, content: "9:ccccc|nine" },
+      ],
+      lines: 3,
+      totalLines: 40,
+      truncated: true,
+    });
+    expect(rangeRead).toContain("Read src/a.ts, lines 3-4, 9 of 40, hashed, truncated");
+    const rangeRows = stripTerminalSequences(rangeRead).split("\n");
+    const four = rangeRows.findIndex((row) => row.includes("four"));
+    expect(rangeRows[four + 1]?.trim()).toBe("…");
+    expect(rangeRows[four + 2]).toContain("nine");
+    const singleRange = {
+      file: "b.ts",
+      format: "hashed",
+      revision: "rev-6",
+      ranges: [{ start: 5, end: 5, content: "5:ddddd|five" }],
+      lines: 1,
+      totalLines: 10,
+    };
+    expect(renderValue(singleRange)).toContain("Read b.ts, lines 5 of 10, hashed");
+    expect(renderValue({ ...singleRange, ranges: [], lines: 0, truncated: true })).toContain(
+      "Read b.ts, no lines, hashed, truncated",
+    );
+    // Several reads in one value collapse to their summaries.
+    expect(renderValue([singleRange, singleRange])).toContain("Read 2 files");
 
     expect(
       renderValue({
