@@ -58,11 +58,10 @@ async function commit(
         raise: true,
       });
       const prs = JSON.parse(listed.stdout || "[]") as Array<{ number: number; state: string }>;
-      const finished = prs.filter((pr) => pr.state === "MERGED" || pr.state === "CLOSED");
-      if (finished.length > 0 && !prs.some((pr) => pr.state === "OPEN")) {
-        const [pr] = finished;
+      const pr = prs.find((entry) => entry.state === "MERGED" || entry.state === "CLOSED");
+      if (pr && !prs.some((open) => open.state === "OPEN")) {
         throw new Error(
-          `Branch ${branch} belongs to pull request #${pr!.number}, which is ${pr!.state.toLowerCase()}, so pushed commits would not reach its base. Create a new branch from origin/main (git switch -c <name> origin/main) and cherry-pick onto it, or pass allowClosedPullRequest: true. Nothing was staged or committed.`,
+          `Branch ${branch} belongs to pull request #${pr.number}, which is ${pr.state.toLowerCase()}, so pushed commits would not reach its base. Create a new branch from origin/main (git switch -c <name> origin/main) and cherry-pick onto it, or pass allowClosedPullRequest: true. Nothing was staged or committed.`,
         );
       }
     }
