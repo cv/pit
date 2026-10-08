@@ -17,49 +17,46 @@ const clean = {
 };
 
 describe("delivery.validate workflow behavior", () => {
+  const staleDependency = (issues: string[], optional = false) => ({
+    name: "@earendil-works/pi-coding-agent",
+    declared: "^1.0.2",
+    lockedVersion: "1.0.2",
+    installedVersion: "0.99.2",
+    optional,
+    issues,
+  });
+
   it.each([
-    {
-      name: "a stale install",
-      issues: ["installed-version-mismatch"],
-      optional: false,
-      fails: true,
-    },
-    {
-      name: "a manifest the lockfile doesn't match",
-      issues: ["manifest-lock-mismatch"],
-      optional: false,
-      fails: true,
-    },
-    { name: "a missing required package", issues: ["not-installed"], optional: false, fails: true },
-    { name: "a missing optional package", issues: ["not-installed"], optional: true, fails: false },
-  ])("checks installed dependencies first: $name", async ({ issues, optional, fails }) => {
+    { name: "a stale install", issues: ["installed-version-mismatch"] },
+    { name: "a manifest the lockfile doesn't match", issues: ["manifest-lock-mismatch"] },
+    { name: "a missing required package", issues: ["not-installed"] },
+  ])("fails before any gate on $name", async ({ issues }) => {
     const validate = await loadWorkflowFunction("delivery.validate");
     const run = vi.fn(async (_script: string) => processResult());
     const test = vi.fn(async () => processResult());
-    const dependency = {
-      name: "@earendil-works/pi-coding-agent",
-      declared: "^1.0.2",
-      lockedVersion: "1.0.2",
-      installedVersion: "0.99.2",
-      optional,
-      issues,
-    };
+    const dependency = staleDependency(issues);
     const delivery = {
-      inspectDependencies: async () => ({
-        stale: fails ? [dependency.name] : [],
-        dependencies: [dependency],
-      }),
+      inspectDependencies: async () => ({ stale: [dependency.name], dependencies: [dependency] }),
     };
-    const pending = validate({ delivery, npm: { run, test } });
-    if (fails) {
-      await expect(pending).rejects.toThrow(
-        /npm ci[\s\S]*@earendil-works\/pi-coding-agent: declared \^1\.0\.2, locked 1\.0\.2, installed 0\.99\.2/,
-      );
-      expect(run).not.toHaveBeenCalled();
-      expect(test).not.toHaveBeenCalled();
-    } else {
-      await expect(pending).resolves.toMatchObject({ check: 0, tests: 0 });
-    }
+    await expect(validate({ delivery, npm: { run, test } })).rejects.toThrow(
+      /npm ci[\s\S]*@earendil-works\/pi-coding-agent: declared \^1\.0\.2, locked 1\.0\.2, installed 0\.99\.2/,
+    );
+    expect(run).not.toHaveBeenCalled();
+    expect(test).not.toHaveBeenCalled();
+  });
+
+  it("runs the gates when only an optional package is missing", async () => {
+    const validate = await loadWorkflowFunction("delivery.validate");
+    const run = vi.fn(async (_script: string) => processResult());
+    const test = vi.fn(async () => processResult());
+    const dependency = staleDependency(["not-installed"], true);
+    const delivery = {
+      inspectDependencies: async () => ({ stale: [], dependencies: [dependency] }),
+    };
+    await expect(validate({ delivery, npm: { run, test } })).resolves.toMatchObject({
+      check: 0,
+      tests: 0,
+    });
   });
 
   it("skips the dependency check for an intentional local override", async () => {
