@@ -252,7 +252,9 @@ export async function setupHarness(): Promise<void> {
         sessionTree = callback;
       }
       if (event === "before_agent_start") {
-        beforeAgentStart = (promptEvent, ctx) => runBeforeAgentStart(callback, promptEvent, ctx);
+        // Pi always passes a context; tests that need none get the default fake.
+        beforeAgentStart = (promptEvent, ctx) =>
+          runBeforeAgentStart(callback, promptEvent, ctx ?? context());
       }
       if (event === "tool_result") {
         toolResult = callback;

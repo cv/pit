@@ -2,7 +2,9 @@ import { join } from "node:path";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import { cacheState } from "../context/cache-state.js";
 import { formatPitSkillsForPrompt } from "../skill-prompt.js";
+import { keepsSystemUpdates, planCatalogSections, recordedCatalogs } from "./catalog-sections.js";
 import { reconstructFunctions } from "./core.js";
 import { functionRelativePath } from "./identifier.js";
 import { registerFunctionManager } from "./manager.js";
@@ -109,7 +111,11 @@ function registerFunctionLifecycle(
   functionState: FunctionState,
   selection: PitToolSelection,
 ): void {
+  // The first prompt after a session starts or changes branch sends the current catalogs: its
+  // request rewrites the cached prompt anyway.
+  let refreshCatalogs = true;
   pi.on("session_start", async (_event, ctx) => {
+    refreshCatalogs = true;
     resetFunctionUsage(functionState);
     const projectConfig = await loadPitProjectConfig(ctx);
     // Both directories come from the project's pit.json, so a project can choose its own
@@ -170,6 +176,7 @@ function registerFunctionLifecycle(
     }
   });
   pi.on("session_tree", (_event, ctx) => {
+    refreshCatalogs = true;
     resetFunctionUsage(functionState);
     reconstructFunctions(
       functionState.session,
@@ -188,33 +195,55 @@ function registerFunctionLifecycle(
     // other extensions activated.
     activatePitTools(pi, selection);
   });
-  pi.on("before_agent_start", (event) => {
+  pi.on("before_agent_start", (event, ctx) => {
     // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
     // can replace the prompt entirely, so the rendered prompt is the reliable record.
     const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");
-    const sections = Object.entries({
-      pit_skills: promptAlreadyHasSkills
-        ? ""
-        : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []),
+    const skills = promptAlreadyHasSkills
+      ? ""
+      : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []);
+    const catalogs = {
       pit_user_functions: userFunctionCatalog(
         functionState.userMetadata,
         functionState.project,
         functionState.session,
       ),
       pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
-    }).filter(([, content]) => content);
+    };
     const options = event.systemPromptOptions;
     if (options?.sections && options.forceSystemPrompt === undefined) {
-      // Pi records section changes as transcript deltas, so a catalog change patches one section
-      // and keeps the cached prompt prefix. An empty section stays unset, and Pi records its removal.
-      for (const [name, content] of sections) {
-        options.sections[name] = content;
+      // Pi records section changes as transcript deltas, but unless the provider keeps
+      // mid-conversation system messages, it folds them into the leading system prompt and the
+      // whole cached conversation is written again. A catalog change therefore waits for a request
+      // that rewrites the prompt anyway, and the conversation announces it meanwhile.
+      const branch = ctx.sessionManager.getBranch();
+      const hold =
+        !refreshCatalogs &&
+        !keepsSystemUpdates(ctx.model) &&
+        cacheState(branch, ctx.model).state !== "cold";
+      refreshCatalogs = false;
+      const plan = planCatalogSections(
+        catalogs,
+        recordedCatalogs(branch, ctx.sessionManager.getLeafId()),
+        hold,
+      );
+      // An empty section stays unset, and Pi records its removal.
+      for (const [name, content] of Object.entries({
+        pit_skills: skills || undefined,
+        ...plan.sections,
+      })) {
+        if (content === undefined) delete options.sections[name];
+        else options.sections[name] = content;
       }
-    } else if (sections.length > 0) {
-      // An earlier handler replaced the prompt, or Pi predates prompt sections (0.86). Pi then sends
-      // only the replacement text, so Pit's additions must extend it.
-      const additions = sections.map(([, content]) => content).join("\n\n");
-      return { systemPrompt: `${event.systemPrompt}\n\n${additions}` };
+      return plan.message ? { message: plan.message } : undefined;
+    }
+    const additions = [skills, catalogs.pit_user_functions, catalogs.pit_project_functions].filter(
+      Boolean,
+    );
+    // An earlier handler replaced the prompt, or Pi predates prompt sections (0.86). Pi then sends
+    // only the replacement text, so Pit's additions must extend it.
+    if (additions.length > 0) {
+      return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
     }
   });
 }
