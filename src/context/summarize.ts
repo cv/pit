@@ -14,6 +14,7 @@ import {
   PlanProblems,
   reprefillAfter,
   textTokens,
+  type CacheBasis,
 } from "./planning.js";
 import {
   type AssistantMessage,
@@ -136,7 +137,7 @@ function carrierMessage(item: ContextItem, text: string): AssistantMessage {
 
 export function planSummarize(
   view: ContextView,
-  input: { from: string; to: string; summary: string; capTokens: number },
+  input: { from: string; to: string; summary: string; capTokens: number; basis: CacheBasis },
 ): PlannedEdit {
   const summary = input.summary.trim();
   if (summary === "") throw new Error("Cannot summarize: the summary is empty");
@@ -177,7 +178,7 @@ export function planSummarize(
     );
   }
   const tokensFreed = tokensBefore - tokensAfter;
-  const reprefillTokens = reprefillAfter(view, [carrier.id], tokensFreed);
+  const reprefillTokens = reprefillAfter(view, [carrier.id], tokensFreed, input.basis);
   return {
     operation: "summarize",
     targets: covers,

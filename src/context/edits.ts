@@ -6,6 +6,7 @@ import {
   type PlannedEdit,
   PlanProblems,
   reprefillAfter,
+  type CacheBasis,
 } from "./planning.js";
 import {
   type AgentMessage,
@@ -89,7 +90,12 @@ function replacement(item: ContextItem, stub: string): EditableContent {
   return stubbedAssistant(item.messages[0] as AssistantMessage, stub).content;
 }
 
-export function planElide(view: ContextView, ids: readonly string[], reason?: string): PlannedEdit {
+export function planElide(
+  view: ContextView,
+  ids: readonly string[],
+  reason: string | undefined,
+  basis: CacheBasis,
+): PlannedEdit {
   const problems = new PlanProblems();
   const stubs: Array<{ item: ContextItem; stub: string; tokens: number }> = [];
   for (const id of ids) {
@@ -110,7 +116,7 @@ export function planElide(view: ContextView, ids: readonly string[], reason?: st
       : undefined;
   problems.throwIfAny("elide", retry);
   const tokensFreed = stubs.reduce((sum, { item, tokens }) => sum + item.tokens - tokens, 0);
-  const reprefillTokens = reprefillAfter(view, ids, tokensFreed);
+  const reprefillTokens = reprefillAfter(view, ids, tokensFreed, basis);
   const calls = stubs.filter(({ item }) => item.role === "assistant").length;
   return {
     operation: "elide",

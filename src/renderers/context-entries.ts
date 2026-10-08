@@ -7,7 +7,7 @@ import type {
 import { Box, type Component, Text } from "@earendil-works/pi-tui";
 
 import type { NoticeDetails } from "../context/notices.js";
-import { formatTokens, textTokens } from "../context/planning.js";
+import { CACHE_BASIS, formatTokens, textTokens } from "../context/planning.js";
 import {
   NOTE_TYPE,
   NOTICE_TYPE,
@@ -137,7 +137,15 @@ function operationLines(operation: ProvenanceOperation, expanded: boolean, theme
     if (operation.targets.length > 0) {
       lines.push(theme.fg("dim", `  entries: ${clean(operation.targets.join(", "))}`));
     }
-    lines.push(theme.fg("dim", `  re-prefill: ~${formatTokens(operation.reprefillTokens)} tokens`));
+    // Older records lack the mode, and a new note has no targets: its estimate is its own size.
+    const mode = operation.cacheMode;
+    const basis =
+      mode && Object.hasOwn(CACHE_BASIS, mode) && operation.targets.length > 0
+        ? ` · ${CACHE_BASIS[mode]}`
+        : "";
+    lines.push(
+      theme.fg("dim", `  re-prefill: ~${formatTokens(operation.reprefillTokens)} tokens${basis}`),
+    );
   }
   return lines;
 }

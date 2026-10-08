@@ -124,6 +124,45 @@ describe("context result rendering", () => {
     expect(rows).toContain("summary: ~12 tokens");
   });
 
+  it.each<{ name: string; overrides: Record<string, unknown>; line: string }>([
+    {
+      name: "a breakpoint cache",
+      overrides: { cacheMode: "breakpoints" },
+      line: "re-prefill: ~5.1K tokens · whole conversation (breakpoint cache)",
+    },
+    {
+      name: "a prefix cache",
+      overrides: { cacheMode: "prefix" },
+      line: "re-prefill: ~5.1K tokens · from the edited entry (prefix cache)",
+    },
+    {
+      name: "an unknown cache",
+      overrides: { cacheMode: "unknown" },
+      line: "re-prefill: ~5.1K tokens · upper bound (unknown cache)",
+    },
+    {
+      name: "a new note, which only appends",
+      overrides: {
+        cacheMode: "breakpoints",
+        operation: "note",
+        targets: ["note:k"],
+        key: "k",
+        action: "created",
+      },
+      line: "re-prefill: ~5.1K tokens",
+    },
+  ])("names the re-prefill basis of a receipt for $name", ({ overrides, line }) => {
+    const rows = render(receipt(overrides), true);
+    expect(rows.find((row) => row.includes("re-prefill:"))?.trim()).toBe(line);
+  });
+
+  it("names the outline's re-prefill basis once, below its entries", () => {
+    const rows = render({ ...OUTLINE, cacheMode: "breakpoints" }, true);
+    expect(rows.filter((row) => row.includes("whole conversation"))).toEqual([
+      expect.stringContaining("re-prefill: whole conversation (breakpoint cache)"),
+    ]);
+  });
+
   it("summarizes an outline and lists one row per entry when expanded", () => {
     expect(render(OUTLINE, false).join("\n")).toContain(
       "Context: 3 entries · ~2.2K tokens listed · 7.3K of 128K in context · 3 more",

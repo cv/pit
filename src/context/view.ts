@@ -56,6 +56,14 @@ export type ContextOperation = "elide" | "summarize" | "note";
 /** Operations a provenance record can name; `restore` appears in sessions from before #202. */
 export type RecordedOperation = ContextOperation | "restore";
 
+/**
+ * How the active model's provider caches the prompt, which decides what an edit re-prefills:
+ * `breakpoints` providers cache only at explicit breakpoints after the system prompt and the last
+ * user message, so changing an earlier entry rewrites the whole conversation; `prefix` providers
+ * reuse the longest unchanged prefix; `unknown` uses the breakpoint estimate as an upper bound.
+ */
+export type CacheMode = "breakpoints" | "prefix" | "unknown";
+
 /** One operation recorded in a `pit.context-edit` provenance entry. */
 export interface ProvenanceOperation {
   toolCallId: string;
@@ -69,6 +77,8 @@ export interface ProvenanceOperation {
   action?: "created" | "replaced" | "removed";
   reason?: string;
   /** Elide: how many targets were assistant entries whose tool-call arguments it stubbed. */
+  /** The caching mode the estimate assumed; absent in sessions recorded before it was. */
+  cacheMode?: CacheMode;
   toolCallEntries?: number;
   tokensFreed: number;
   reprefillTokens: number;
@@ -108,6 +118,8 @@ export interface ContextView {
   readonly summaries: ReadonlyMap<string, readonly string[]>;
   readonly summaryOf: ReadonlyMap<string, string>;
   readonly leafId: string | null;
+  /** Estimated tokens of the prompt and tool system messages that precede the conversation. */
+  readonly systemTokens: number;
   readonly tokens: number;
 }
 
@@ -322,5 +334,14 @@ export function buildContextView(
     summaryOf,
     leafId: session.getLeafId(),
     tokens: items.reduce((sum, item) => sum + item.tokens, 0),
+    systemTokens: projection.entries.reduce(
+      (sum, { messages }) =>
+        sum +
+        messages.reduce(
+          (total, message) => total + (message.role === "system" ? estimateTokens(message) : 0),
+          0,
+        ),
+      0,
+    ),
   };
 }

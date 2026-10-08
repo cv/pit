@@ -1,8 +1,13 @@
 import { MAX_REASON_CHARS, planElide } from "../../context/edits.js";
 import { planNote } from "../../context/notes.js";
-import { MAX_EDIT_TARGETS, type PlannedEdit } from "../../context/planning.js";
+import {
+  cacheBasis,
+  type CacheBasis,
+  MAX_EDIT_TARGETS,
+  type PlannedEdit,
+} from "../../context/planning.js";
 import { planSummarize, summaryTokenCap } from "../../context/summarize.js";
-import { buildContextView } from "../../context/view.js";
+import { buildContextView, type ContextView } from "../../context/view.js";
 import {
   recordValue as record,
   stringArrayValue as stringArray,
@@ -39,7 +44,9 @@ export function createSessionEditHandlers({
 }: SessionContextServices): Record<string, ContextMethod> {
   const view = () =>
     buildContextView(ctx.sessionManager, toolCallId === undefined ? {} : { toolCallId });
-  const stage = (planned: PlannedEdit) => {
+  const basisOf = (current: ContextView) =>
+    cacheBasis(ctx.model, current, ctx.getContextUsage()?.tokens);
+  const stage = (planned: PlannedEdit, { mode: cacheMode }: CacheBasis) => {
     if (!contextEdits || toolCallId === undefined) {
       throw new Error("Context edits require a running Pit tool call");
     }
@@ -48,7 +55,7 @@ export function createSessionEditHandlers({
       operation: planned.operation,
       targets: planned.targets,
       drafts: planned.drafts,
-      records: planned.records.map((operation) => ({ toolCallId, ...operation })),
+      records: planned.records.map((operation) => ({ toolCallId, ...operation, cacheMode })),
     });
     return {
       status: "staged",
@@ -57,32 +64,44 @@ export function createSessionEditHandlers({
       targets: planned.targets,
       estimatedTokensFreed: planned.tokensFreed,
       estimatedReprefillTokens: planned.reprefillTokens,
+      cacheMode,
       ...planned.receipt,
     };
   };
   return {
     elide: (args) => {
       const options = args[1] === undefined ? {} : record(args[1], "options");
-      return stage(planElide(view(), entryIds(args[0]), reason(options.reason)));
+      const current = view();
+      const basis = basisOf(current);
+      return stage(planElide(current, entryIds(args[0]), reason(options.reason), basis), basis);
     },
     summarize: (args) => {
       const input = record(args[0], "input");
+      const current = view();
+      const basis = basisOf(current);
       return stage(
-        planSummarize(view(), {
+        planSummarize(current, {
           from: string(input.from, "input.from"),
           to: string(input.to, "input.to"),
           summary: string(input.summary, "input.summary"),
           capTokens: summaryTokenCap(pi.getSettings(), ctx.model),
+          basis,
         }),
+        basis,
       );
     },
-    setNote: (args) =>
-      stage(
-        planNote(view(), {
+    setNote: (args) => {
+      const current = view();
+      const basis = basisOf(current);
+      return stage(
+        planNote(current, {
           key: string(args[0], "note key"),
           content: args[1] === null ? null : string(args[1], "note content"),
           contextWindow: ctx.getContextUsage()?.contextWindow ?? ctx.model?.contextWindow,
+          basis,
         }),
-      ),
+        basis,
+      );
+    },
   };
 }

@@ -2,6 +2,7 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 
 import { clipText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import type { CacheBasis } from "./planning.js";
 import {
   entryRole,
   isModelMessage,
@@ -15,6 +16,7 @@ import {
   type EditableContent,
   type ModelMessage,
   type SessionReader,
+  type CacheMode,
 } from "./view.js";
 
 export const OUTLINE_LIMITS = {
@@ -95,6 +97,8 @@ export interface OutlineInput {
   previewChars: number;
   pending?: ReadonlyMap<string, ContextOperation>;
   usage?: { tokens: number | null; contextWindow: number } | undefined;
+  /** How the provider caches the prompt and how large the conversation is, for re-prefill. */
+  basis: CacheBasis;
 }
 
 export interface OutlineEntry {
@@ -116,6 +120,8 @@ export interface Outline {
   contextTokens: number | null;
   contextWindow: number | null;
   estimatedTokens: number;
+  /** The caching mode the entries' re-prefill estimates assume. */
+  cacheMode: CacheMode;
   entries: OutlineEntry[];
   nextAfter?: string;
   omitted: number;
@@ -156,10 +162,11 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
     throw new Error(`Cursor ${input.after} is not a model-visible entry on the active branch`);
   }
   const reprefill: number[] = [];
+  // A prefix cache re-prefills from the edited entry; other caches rewrite the whole conversation.
   let suffix = 0;
   for (let index = view.items.length - 1; index >= 0; index--) {
     suffix += (view.items[index] as ContextItem).tokens;
-    reprefill[index] = suffix;
+    reprefill[index] = input.basis.mode === "prefix" ? suffix : input.basis.conversationTokens;
   }
   const candidates = view.items
     .map((item, index) => ({ item, index }))
@@ -172,6 +179,7 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
     contextTokens: input.usage?.tokens ?? null,
     contextWindow: input.usage?.contextWindow ?? null,
     estimatedTokens: view.tokens,
+    cacheMode: input.basis.mode,
     entries: page.map(({ item, index }) => outlineEntry(item, reprefill[index] as number, input)),
     ...(last && candidates.length > page.length ? { nextAfter: last.item.id } : {}),
     omitted: candidates.length - page.length,

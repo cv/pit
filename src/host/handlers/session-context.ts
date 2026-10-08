@@ -5,6 +5,7 @@ import {
   outlineContext,
 } from "../../context/inspect.js";
 import { listNotes } from "../../context/notes.js";
+import { cacheBasis } from "../../context/planning.js";
 import type { ContextEditQueue } from "../../context/queue.js";
 import { buildContextView, CONTEXT_ROLES, type ContextRole } from "../../context/view.js";
 import {
@@ -55,11 +56,13 @@ export function createSessionContextHandlers({
       const after = optionalString(options.after, "options.after");
       const tool = optionalString(options.tool, "options.tool");
       const selectedRoles = roles(options.roles);
-      return outlineContext(view(), {
+      const current = view();
+      return outlineContext(current, {
         ...(after === undefined ? {} : { after }),
         ...(tool === undefined ? {} : { tool }),
         ...(selectedRoles === undefined ? {} : { roles: selectedRoles }),
         ...(contextEdits ? { pending: contextEdits.pending() } : {}),
+        basis: cacheBasis(ctx.model, current, usage?.tokens),
         limit: boundedInteger(options.limit, "options.limit", OUTLINE_LIMITS.limit),
         previewChars: boundedInteger(options.previewChars, "options.previewChars", {
           minimum: 0,
