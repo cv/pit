@@ -68,19 +68,7 @@ function repository(options: {
 }
 
 describe("delivery.commit", () => {
-  it.each([
-    { name: "a merged pull request", prs: [{ number: 272, state: "MERGED" }], refused: true },
-    { name: "a closed pull request", prs: [{ number: 9, state: "CLOSED" }], refused: true },
-    {
-      name: "an open pull request that reuses a merged one's branch",
-      prs: [
-        { number: 12, state: "OPEN" },
-        { number: 9, state: "MERGED" },
-      ],
-      refused: false,
-    },
-    { name: "no pull request", prs: [], refused: false },
-  ])("checks the branch's pull request before pushing: $name", async ({ prs, refused }) => {
+  const pushOf = async (prs: Array<{ number: number; state: string }>) => {
     const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({
       tracked: ["a.ts"],
@@ -93,19 +81,40 @@ describe("delivery.commit", () => {
       message: "fix: thing",
       push: true,
     });
-    if (refused) {
-      await expect(pending).rejects.toThrow(
-        new RegExp(
-          `Branch feature belongs to pull request #${prs[0]!.number}[\\s\\S]*Nothing was staged or committed`,
-        ),
-      );
-      expect(repo.calls.map((call) => call[0])).not.toContain("add");
-      expect(repo.commit).not.toHaveBeenCalled();
-      expect(repo.push).not.toHaveBeenCalled();
-    } else {
-      await expect(pending).resolves.toMatchObject({ pushed: true });
-      expect(repo.push).toHaveBeenCalledOnce();
-    }
+    return { repo, pending };
+  };
+
+  it.each([
+    { name: "a merged pull request", prs: [{ number: 272, state: "MERGED" }] },
+    { name: "a closed pull request", prs: [{ number: 9, state: "CLOSED" }] },
+  ])("refuses to push to the branch of $name", async ({ prs }) => {
+    const { repo, pending } = await pushOf(prs);
+    await expect(pending).rejects.toThrow(
+      new RegExp(
+        `Branch feature belongs to pull request #${prs[0]?.number}[\\s\\S]*Nothing was staged or committed`,
+      ),
+    );
+    expect(repo.calls.map((call) => call[0])).not.toContain("add");
+    expect(repo.commit).not.toHaveBeenCalled();
+    expect(repo.push).not.toHaveBeenCalled();
+    expect(repo.prList).toHaveBeenCalledWith(
+      expect.objectContaining({ head: "feature", state: "all" }),
+    );
+  });
+
+  it.each([
+    {
+      name: "an open pull request that reuses a merged one's branch",
+      prs: [
+        { number: 12, state: "OPEN" },
+        { number: 9, state: "MERGED" },
+      ],
+    },
+    { name: "no pull request", prs: [] },
+  ])("pushes a branch with $name", async ({ prs }) => {
+    const { repo, pending } = await pushOf(prs);
+    await expect(pending).resolves.toMatchObject({ pushed: true });
+    expect(repo.push).toHaveBeenCalledOnce();
     expect(repo.prList).toHaveBeenCalledWith(
       expect.objectContaining({ head: "feature", state: "all" }),
     );
