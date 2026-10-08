@@ -158,38 +158,52 @@ describe("Git readiness and review composition", () => {
     diffCode: number;
     truncated: boolean;
     ready: boolean;
+    stale?: string[];
   }>([
     { name: "successful inspection", statusCode: 0, diffCode: 0, truncated: false, ready: true },
+    {
+      name: "stale dependencies",
+      statusCode: 0,
+      diffCode: 0,
+      truncated: false,
+      stale: ["typebox"],
+      ready: false,
+    },
     { name: "status failure", statusCode: 128, diffCode: 0, truncated: false, ready: false },
     { name: "whitespace failure", statusCode: 0, diffCode: 2, truncated: false, ready: false },
     { name: "incomplete inspection", statusCode: 0, diffCode: 0, truncated: true, ready: false },
-  ])("reports $name conservatively", async ({ statusCode, diffCode, truncated, ready }) => {
-    const prepare = await loadWorkflowFunction("delivery.prepare");
-    const status = vi.fn().mockResolvedValue(
-      processResult({
-        code: statusCode,
-        stdout: "branch",
-        stderr: "status diagnostic",
-        truncated,
-      }),
-    );
-    const diff = vi.fn(async (args: string[]) => {
-      if (!args.includes("--check")) return processResult({ stdout: "ordinary diff" });
-      const scope = args.includes("--cached") ? "staged" : "unstaged";
-      return processResult({
-        code: diffCode,
-        stdout: `${scope} check`,
-        stderr: `${scope} diagnostic`,
+  ])(
+    "reports $name conservatively",
+    async ({ statusCode, diffCode, truncated, ready, stale = [] }) => {
+      const prepare = await loadWorkflowFunction("delivery.prepare");
+      const status = vi.fn().mockResolvedValue(
+        processResult({
+          code: statusCode,
+          stdout: "branch",
+          stderr: "status diagnostic",
+          truncated,
+        }),
+      );
+      const diff = vi.fn(async (args: string[]) => {
+        if (!args.includes("--check")) return processResult({ stdout: "ordinary diff" });
+        const scope = args.includes("--cached") ? "staged" : "unstaged";
+        return processResult({
+          code: diffCode,
+          stdout: `${scope} check`,
+          stderr: `${scope} diagnostic`,
+        });
       });
-    });
-    expect(await prepare({ git: { status, diff } })).toEqual({
-      status: "branch\nstatus diagnostic",
-      diffCheck: "unstaged check\nunstaged diagnostic",
-      stagedDiffCheck: "staged check\nstaged diagnostic",
-      truncated,
-      ready,
-    });
-  });
+      const delivery = { inspectDependencies: async () => ({ stale }) };
+      expect(await prepare({ git: { status, diff }, delivery })).toEqual({
+        status: "branch\nstatus diagnostic",
+        diffCheck: "unstaged check\nunstaged diagnostic",
+        stagedDiffCheck: "staged check\nstaged diagnostic",
+        staleDependencies: stale,
+        truncated,
+        ready,
+      });
+    },
+  );
 
   it("reuses readiness exactly once and fetches only the additional review data", async () => {
     const review = await loadWorkflowFunction("delivery.review");

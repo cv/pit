@@ -77,6 +77,7 @@ describe("delivery.inspectDependencies", () => {
     requirement?: string;
     issues: string[];
     matchesLock: boolean | null;
+    stale?: string[];
   }>([
     { name: "matching v3 install", installed: "1.0.0", version: 3, issues: [], matchesLock: true },
     { name: "matching v2 install", installed: "1.0.0", version: 2, issues: [], matchesLock: true },
@@ -86,6 +87,7 @@ describe("delivery.inspectDependencies", () => {
       version: 3,
       issues: ["installed-version-mismatch"],
       matchesLock: false,
+      stale: ["fixture"],
     },
     {
       name: "manifest-lock drift",
@@ -94,8 +96,15 @@ describe("delivery.inspectDependencies", () => {
       requirement: "^2.0.0",
       issues: ["manifest-lock-mismatch"],
       matchesLock: false,
+      stale: ["fixture"],
     },
-    { name: "missing install", version: 3, issues: ["not-installed"], matchesLock: false },
+    {
+      name: "missing install",
+      version: 3,
+      issues: ["not-installed"],
+      matchesLock: false,
+      stale: ["fixture"],
+    },
     {
       name: "malformed installed metadata",
       installed: "{",
@@ -125,7 +134,7 @@ describe("delivery.inspectDependencies", () => {
     },
   ])(
     "reports $name from real package files",
-    async ({ name: _name, issues, matchesLock, ...options }) => {
+    async ({ name: _name, issues, matchesLock, stale = [], ...options }) => {
       await fixture(options);
       const result = await inspect();
       expect(result).toMatchObject({
@@ -133,6 +142,7 @@ describe("delivery.inspectDependencies", () => {
         inspected: 1,
         omitted: 0,
         matchesLock,
+        stale,
         dependencies: [{ name: "fixture", issues }],
       });
     },
