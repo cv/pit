@@ -26,15 +26,6 @@ export function compileToolPatterns(patterns: readonly string[]): RegExp[] {
   );
 }
 
-/**
- * Whether this Pi version supports tool exposure and loadouts (Pi 0.99+). Older versions omit
- * `exposure` from tool info and ignore Pit's `prepareLoadout()` hook, so other tools stay visible.
- */
-export function supportsToolLoadouts(pi: ExtensionAPI): boolean {
-  const tools = pi.getAllTools();
-  return tools.length === 0 || tools.some((tool) => "exposure" in tool);
-}
-
 function isAllowed(selection: PitToolSelection, name: string): boolean {
   return selection.allowedTools.some((pattern) => pattern.test(name));
 }

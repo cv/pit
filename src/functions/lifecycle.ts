@@ -15,12 +15,7 @@ import { reconcileFunctionState, resetFunctionUsage, stateFunctionEnvironment } 
 import { resolveFunctionPaths } from "./storage/paths.js";
 import { loadPitProjectConfig, loadProjectFunctions } from "./storage/project.js";
 import { loadUserFunctions, userFunctionDirectory, userFunctionPath } from "./storage/user.js";
-import {
-  activatePitTools,
-  compileToolPatterns,
-  supportsToolLoadouts,
-  type PitToolSelection,
-} from "./tool-loadout.js";
+import { activatePitTools, compileToolPatterns, type PitToolSelection } from "./tool-loadout.js";
 
 interface FunctionManagerRegistration {
   pi: ExtensionAPI;
@@ -168,12 +163,6 @@ function registerFunctionLifecycle(
     // Resolved at session start; configuration edits apply after /reload.
     selection.allowedTools = compileToolPatterns(projectConfig.allowedTools ?? []);
     activatePitTools(pi, selection);
-    if (ctx.hasUI && !supportsToolLoadouts(pi)) {
-      ctx.ui.notify(
-        "Pit requires Pi 0.99 or newer. This Pi version cannot hide other tools, so the model sees them beside typescript. Update Pi with `pi update`.",
-        "warning",
-      );
-    }
   });
   pi.on("session_tree", (_event, ctx) => {
     refreshCatalogs = true;
