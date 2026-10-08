@@ -287,6 +287,13 @@ function buildToolResult(input: {
   };
 }
 
+/** The file edits a program applied, which `session.elide` names when it stubs the call. */
+function appliedEditDetails(journal: CompletedCallJournal) {
+  const { edits, omitted } = journal.edits();
+  if (edits.length === 0) return {};
+  return { edits, ...(omitted > 0 ? { editsOmitted: omitted } : {}) };
+}
+
 async function executeTypeScriptTool(request: TypeScriptToolExecution) {
   const completedCalls = new CompletedCallJournal();
   const functionActivity: FunctionActivity[] = [];
@@ -355,7 +362,11 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
     return {
       ...result,
       content: [...result.content, ...attached.map(({ image }) => image)],
-      details: { ...result.details, timings: timings.finish() },
+      details: {
+        ...result.details,
+        timings: timings.finish(),
+        ...appliedEditDetails(completedCalls),
+      },
       // A nested tool asked to end the turn, for example pi-goal's goal_complete, and the
       // program that called it succeeded.
       ...(terminate ? { terminate: true } : {}),

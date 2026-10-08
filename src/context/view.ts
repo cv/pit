@@ -6,6 +6,8 @@ import {
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 
+import type { AppliedEdit } from "../execution/completed-calls.js";
+
 export type SessionReader = ExtensionContext["sessionManager"];
 /** The session reads a context view needs, so a view can describe an earlier leaf. */
 export type ContextSource = Pick<
@@ -107,14 +109,29 @@ export interface ContextItem {
   /** Notes: the entry records the key's removal. */
   readonly noteRemoved?: boolean;
   readonly noticeLevel?: number;
+  /** Tool results: the file edits the call's program applied. */
+  readonly edits?: ResultEdits;
   /** Why the model may never elide or summarize this entry. */
   readonly protectedReason?: string;
+}
+
+/** File edits that one or more programs applied. */
+export interface ResultEdits {
+  /** The edits the results recorded; none for results from before Pit recorded them. */
+  readonly files: readonly AppliedEdit[];
+  /**
+   * How many edits were applied: the recorded ones plus any past the cap. Older results count
+   * their succeeded `workspace.edit` and `workspace.batch` calls instead.
+   */
+  readonly count: number;
 }
 
 export interface ContextView {
   /** Model-visible entries in context order, without prompt and tool system messages. */
   readonly items: readonly ContextItem[];
   readonly byId: ReadonlyMap<string, ContextItem>;
+  /** Each visible tool result, by the ID of the call it answers. */
+  readonly results: ReadonlyMap<string, ContextItem>;
   readonly branchIds: ReadonlySet<string>;
   /** Entries the latest compaction keeps in context, whether visible or omitted. */
   readonly contextIds: ReadonlySet<string>;
@@ -224,6 +241,50 @@ function customDetails(entry: SessionEntry): Record<string, unknown> | undefined
   return entry.type === "custom_message" ? record(entry.details) : undefined;
 }
 
+function isAppliedEdit(value: unknown): value is AppliedEdit {
+  const edit = record(value);
+  return (
+    typeof edit?.file === "string" &&
+    typeof edit.applied === "number" &&
+    (typeof edit.revision === "string" || edit.revision === null)
+  );
+}
+
+function succeededEditCall(value: unknown): boolean {
+  const trace = record(value);
+  return (
+    trace?.namespace === "workspace" &&
+    (trace.method === "edit" || trace.method === "batch") &&
+    trace.status === "succeeded"
+  );
+}
+
+/** Edits a tool result's program applied, read from the original entry, never its stub. */
+function resultEdits(entry: Extract<SessionEntry, { type: "message" }>): ResultEdits | undefined {
+  const details = record((entry.message as { details?: unknown }).details);
+  if (!details) return undefined;
+  const files = Array.isArray(details.edits) ? details.edits.filter(isAppliedEdit) : [];
+  const omitted = typeof details.editsOmitted === "number" ? details.editsOmitted : 0;
+  if (files.length > 0) return { files, count: files.length + omitted };
+  const traced = Array.isArray(details.traces)
+    ? details.traces.filter(succeededEditCall).length
+    : 0;
+  return traced > 0 ? { files: [], count: traced } : undefined;
+}
+
+/** The file edits an assistant entry's tool calls applied, from the results that answer them. */
+export function callEdits(view: ContextView, item: ContextItem): ResultEdits | undefined {
+  const files: AppliedEdit[] = [];
+  let count = 0;
+  for (const id of item.toolCallIds) {
+    const edits = view.results.get(id)?.edits;
+    if (!edits) continue;
+    files.push(...edits.files);
+    count += edits.count;
+  }
+  return count > 0 ? { files, count } : undefined;
+}
+
 function contextItem(
   projected: ProjectedSessionEntry,
   edit: ContextEditEntry | undefined,
@@ -235,6 +296,11 @@ function contextItem(
   const role = entryRole(entry);
   const details = customDetails(entry);
   const protectedReason = currentTurn.has(entry.id) ? "current turn" : PROTECTED[role];
+  // A tool result is always a message entry.
+  const edits =
+    role === "toolResult"
+      ? resultEdits(entry as Extract<SessionEntry, { type: "message" }>)
+      : undefined;
   return {
     id: entry.id,
     entry,
@@ -253,6 +319,7 @@ function contextItem(
     ...(role === "notice" && typeof details?.level === "number"
       ? { noticeLevel: details.level }
       : {}),
+    ...(edits ? { edits } : {}),
     ...(protectedReason ? { protectedReason } : {}),
   };
 }
@@ -338,6 +405,11 @@ export function buildContextView(
   return {
     items,
     byId: new Map(items.map((item) => [item.id, item])),
+    results: new Map(
+      items.flatMap((item) =>
+        item.role === "toolResult" ? item.toolCallIds.map((id) => [id, item] as const) : [],
+      ),
+    ),
     branchIds: new Set(branch.map((entry) => entry.id)),
     contextIds,
     latestEdits,

@@ -11,11 +11,13 @@ import {
 import {
   type AgentMessage,
   type AssistantMessage,
+  callEdits,
   type ContextItem,
   type ContextView,
   ELIDED_ARGUMENTS_PREFIX,
   ELIDED_PREFIX,
   type EditableContent,
+  type ResultEdits,
 } from "./view.js";
 
 export const MAX_REASON_CHARS = 200;
@@ -29,12 +31,40 @@ export function elisionStub(id: string, tokens: number, reason?: string): string
  * The arguments that replace an elided tool call's. It reads as an omission, not as code, so a
  * model does not mistake it for a program that ran; recovery probes for #222 showed both.
  */
-export function argumentStub(id: string, tokens: number, reason?: string): string {
+export function argumentStub(
+  id: string,
+  tokens: number,
+  reason?: string,
+  edits?: ResultEdits,
+): string {
   const because = reason ? ` · reason: ${reason}` : "";
-  return `${ELIDED_ARGUMENTS_PREFIX}; this is not the original call · ~${formatTokens(tokens)} tokens${because} · original: session.inspectEntry("${id}")]`;
+  const applied = edits ? ` · ${appliedEdits(edits)}` : "";
+  return `${ELIDED_ARGUMENTS_PREFIX}; this is not the original call · ~${formatTokens(tokens)} tokens${applied}${because} · original: session.inspectEntry("${id}")]`;
 }
 
-function argumentTokens(message: AssistantMessage): number {
+const MAX_STUB_FILES = 6;
+const MAX_STUB_PATH_CHARS = 120;
+
+/** Which files an elided call's edits changed, so the trail stays readable without its payload. */
+function appliedEdits(edits: ResultEdits): string {
+  if (edits.files.length === 0) {
+    return `${edits.count} successful workspace edit or batch call${edits.count === 1 ? "" : "s"}`;
+  }
+  const shown = edits.files.slice(0, MAX_STUB_FILES).map((edit) => {
+    const file =
+      edit.file.length > MAX_STUB_PATH_CHARS
+        ? `…${edit.file.slice(-MAX_STUB_PATH_CHARS)}`
+        : edit.file;
+    if (edit.deleted) return `${file} deleted`;
+    const changes = `${edit.applied} change${edit.applied === 1 ? "" : "s"}`;
+    return `${file} @ ${edit.revision} (${changes})`;
+  });
+  const more = edits.count - shown.length;
+  return `applied: ${shown.join(", ")}${more > 0 ? `, +${more} more` : ""}`;
+}
+
+/** Tokens of an assistant message's tool-call arguments, which elide replaces with a stub. */
+export function argumentTokens(message: AssistantMessage): number {
   const calls = message.content.filter((block) => block.type === "toolCall");
   return calls.reduce((sum, block) => sum + estimateTokens({ ...message, content: [block] }), 0);
 }
@@ -79,10 +109,10 @@ function elisionProblem(item: ContextItem, stubSize: number): string | undefined
   return stubSize >= item.tokens ? `${item.id} is no larger than its elision stub` : undefined;
 }
 
-function stubFor(item: ContextItem, reason?: string): string {
+function stubFor(view: ContextView, item: ContextItem, reason?: string): string {
   if (item.role !== "assistant") return elisionStub(item.id, item.tokens, reason);
   const tokens = argumentTokens(item.messages[0] as AssistantMessage);
-  return argumentStub(item.id, tokens, reason);
+  return argumentStub(item.id, tokens, reason, callEdits(view, item));
 }
 
 function replacement(item: ContextItem, stub: string): EditableContent {
@@ -104,7 +134,7 @@ export function planElide(
       problems.add(describeMissing(view, id));
       continue;
     }
-    const stub = stubFor(item, reason);
+    const stub = stubFor(view, item, reason);
     const tokens = stubTokens(item, stub);
     const problem = elisionProblem(item, tokens);
     if (problem) problems.add(problem);

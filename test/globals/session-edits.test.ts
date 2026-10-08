@@ -293,6 +293,74 @@ describe("session.elide", () => {
     expect(view.original.original.text).toContain("src/parse.ts");
   });
 
+  // #252: once its edits are applied, an edit call's payload is redundant, but its stub keeps
+  // which files changed and at which revision.
+  it.each<{ name: string; details: Record<string, unknown>; applied: string }>([
+    {
+      name: "the files and revisions its recorded edits applied",
+      details: {
+        edits: [
+          { file: "src/parse.ts", revision: "rev1", applied: 3 },
+          { file: "src/old.ts", revision: null, applied: 1, deleted: true },
+        ],
+      },
+      applied: "applied: src/parse.ts @ rev1 (3 changes), src/old.ts deleted",
+    },
+    {
+      name: "the first six files and a count of the rest",
+      details: {
+        edits: Array.from({ length: 8 }, (_, index) => ({
+          file: `f${index}.ts`,
+          revision: `r${index}`,
+          applied: 1,
+        })),
+        editsOmitted: 2,
+      },
+      applied: `applied: ${Array.from({ length: 6 }, (_, index) => `f${index}.ts @ r${index} (1 change)`).join(", ")}, +4 more`,
+    },
+    {
+      name: "a count of edit calls for results that predate recorded edits",
+      details: {
+        traces: [
+          { namespace: "workspace", method: "edit", status: "succeeded" },
+          { namespace: "workspace", method: "batch", status: "succeeded" },
+          { namespace: "workspace", method: "batch", status: "failed" },
+          { namespace: "workspace", method: "read", status: "succeeded" },
+        ],
+      },
+      applied: "2 successful workspace edit or batch calls",
+    },
+    {
+      name: "a single edit call for an older result",
+      details: { traces: [{ namespace: "workspace", method: "edit", status: "succeeded" }] },
+      applied: "1 successful workspace edit or batch call",
+    },
+    {
+      name: "the end of a long path",
+      details: { edits: [{ file: `${"d/".repeat(70)}parse.ts`, revision: "rev1", applied: 2 }] },
+      applied: `applied: …${`${"d/".repeat(70)}parse.ts`.slice(-120)} @ rev1 (2 changes)`,
+    },
+  ])("names in an edit call's stub $name", async ({ details, applied }) => {
+    const session = new SessionBuilder();
+    session.user("Rewrite the parser");
+    const { id, callIds } = session.assistant("", [
+      { name: "typescript", args: { code: "x".repeat(4_000) } },
+    ]);
+    session.result(callIds[0] as string, "typescript", '{"applied":1}', details);
+    session.current();
+
+    await call(session, `async ({ session: { elide } }) => elide([${JSON.stringify(id)}])`);
+    await endTurn(session);
+
+    const projected = session.manager
+      .buildSessionProjection()
+      .entries.find((entry) => entry.sourceEntry.id === id);
+    const message = projected?.messages[0] as unknown as { content: Array<Record<string, any>> };
+    expect(message.content[0]?.arguments.elided).toContain(
+      ` · ${applied} · original: session.inspectEntry(`,
+    );
+  });
+
   // Live acceptance found elide stubbing a summary carrier: the assistant entry that holds a
   // summary keeps its first tool call so the result still answers it.
   it("refuses a summary carrier, whose content already stands in for its turns", async () => {

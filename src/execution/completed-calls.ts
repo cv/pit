@@ -16,6 +16,40 @@ export interface CompletedCallsResult {
 
 /** Most completed calls one program keeps. */
 export const MAX_JOURNAL_CALLS = 128;
+/** Most applied file edits one program's result records. */
+export const MAX_APPLIED_EDITS = 32;
+
+/**
+ * A file edit a program applied: what `session.elide` names when it stubs the arguments of the
+ * call that made it, so the trail says which files changed and at which revision.
+ */
+export interface AppliedEdit {
+  file: string;
+  revision: string | null;
+  applied: number;
+  deleted?: true;
+}
+
+/** What `workspace.edit` returns, and each edit result in a `workspace.batch`. */
+interface EditResult {
+  file: string;
+  revision: string | null;
+  applied: number;
+  deleted: boolean;
+}
+
+function appliedEdit({ file, revision, applied, deleted }: EditResult): AppliedEdit {
+  return { file, revision, applied, ...(deleted ? { deleted: true as const } : {}) };
+}
+
+/** The edits a `workspace.edit` or `workspace.batch` call applied, from Pit's own results. */
+function appliedEdits(call: string, value: unknown): AppliedEdit[] {
+  if (call === "workspace.edit") return [appliedEdit(value as EditResult)];
+  if (call !== "workspace.batch") return [];
+  // Edit batches are atomic, so every edit result in one was applied.
+  const { results } = value as { results: Array<{ kind: string; value: EditResult }> };
+  return results.flatMap((result) => (result.kind === "edit" ? [appliedEdit(result.value)] : []));
+}
 /** Failed programs whose completed calls stay recoverable. */
 export const MAX_RECOVERABLE_PROGRAMS = 8;
 
@@ -33,6 +67,8 @@ interface JournalEntry {
  */
 export class CompletedCallJournal {
   readonly #entries: JournalEntry[] = [];
+  readonly #edits: AppliedEdit[] = [];
+  #editsOmitted = 0;
   #bytes = 0;
   #omitted = 0;
 
@@ -48,6 +84,11 @@ export class CompletedCallJournal {
   }
 
   record(sequence: number | undefined, call: string, value: unknown): void {
+    // Edits are kept apart from the journal's budget, so later large reads cannot evict them.
+    for (const edit of appliedEdits(call, value)) {
+      if (this.#edits.length < MAX_APPLIED_EDITS) this.#edits.push(edit);
+      else this.#editsOmitted++;
+    }
     let json: string | undefined;
     try {
       json = JSON.stringify(value === undefined ? null : value);
@@ -70,6 +111,11 @@ export class CompletedCallJournal {
 
   get size(): number {
     return this.#entries.length;
+  }
+
+  /** File edits the program applied, in order, and how many past the cap were not kept. */
+  edits(): { edits: AppliedEdit[]; omitted: number } {
+    return { edits: this.#edits.map((edit) => ({ ...edit })), omitted: this.#editsOmitted };
   }
 
   get omitted(): number {

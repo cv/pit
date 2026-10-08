@@ -254,6 +254,10 @@ type PitContextOutlineEntry = {
   /** A superseded note version or removed key, kept unchanged until a rewrite drops it. */
   superseded?: boolean;
   tokens: number;
+  /** Assistant entries with tool calls: tokens of the calls' arguments, which elide stubs. */
+  argumentTokens?: number;
+  /** Assistant entries: file edits their calls applied; elide's stub keeps files and revisions. */
+  edits?: number;
   reprefillTokens: number;
   state: PitContextState;
   editable: boolean;

@@ -138,6 +138,44 @@ describe("workspace read and edit", () => {
     expect(errors[4]).toContain("options must be an object");
   });
 
+  // #252: elide names these files and revisions when it stubs the call that changed them.
+  it("records the edits a program applied in its result details", async () => {
+    await writeFile(join(cwd, "kept.txt"), "kept", "utf8");
+    const result = await run(`async ({ workspace: { batch, edit } }) => {
+      await edit("a.txt", { revision: null, changes: [{ kind: "replaceFile", content: "a" }] });
+      await batch([
+        { kind: "edit", file: "b.txt", changes: { revision: null, changes: [{ kind: "replaceFile", content: "b" }] } },
+      ]);
+      await batch([{ kind: "read", file: "kept.txt" }]);
+      await edit("c.txt", { revision: null, changes: [{ kind: "replaceFile", content: "c" }] });
+      await edit("a.txt", { revision: ${JSON.stringify(fileRevision("a"))}, changes: [{ kind: "deleteFile" }] });
+      return "done";
+    }`);
+    expect(result.details.edits).toEqual([
+      { file: "a.txt", revision: fileRevision("a"), applied: 1 },
+      { file: "b.txt", revision: fileRevision("b"), applied: 1 },
+      { file: "c.txt", revision: fileRevision("c"), applied: 1 },
+      { file: "a.txt", revision: null, applied: 1, deleted: true },
+    ]);
+
+    const reads = await run(`async ({ workspace: { read } }) => read("kept.txt")`);
+    expect(reads.details).not.toHaveProperty("edits");
+  });
+
+  it("keeps up to 32 applied edits, even after the journal evicts their calls", async () => {
+    const result = await run(`async ({ workspace: { edit, stat } }) => {
+      for (let index = 0; index < 34; index++) {
+        await edit("f" + index + ".txt", { revision: null, changes: [{ kind: "replaceFile", content: "x" }] });
+      }
+      // More calls than the journal keeps.
+      for (let index = 0; index < 130; index++) await stat("f0.txt");
+      return "done";
+    }`);
+    expect(result.details.edits).toHaveLength(32);
+    expect(result.details.edits.at(-1)).toMatchObject({ file: "f31.txt", applied: 1 });
+    expect(result.details.editsOmitted).toBe(2);
+  });
+
   it("creates, anchors, rewrites, and deletes through one edit method", async () => {
     const original = "one\ntwo\nthree";
     const created =

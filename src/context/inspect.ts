@@ -3,9 +3,11 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { clipText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { CacheState } from "./cache-state.js";
+import { argumentTokens } from "./edits.js";
 import { staleNoteGroups } from "./notes.js";
 import type { CacheBasis } from "./planning.js";
 import {
+  callEdits,
   entryRole,
   isModelMessage,
   toolsOf,
@@ -113,6 +115,13 @@ export interface OutlineEntry {
   /** Notes: a superseded version or removed key, kept unchanged until a rewrite drops it. */
   superseded?: boolean;
   tokens: number;
+  /** Assistant entries with tool calls: tokens of the calls' arguments, which elide stubs. */
+  argumentTokens?: number;
+  /**
+   * Assistant entries: file edits their calls applied. Once applied, the edit payload in the
+   * arguments is redundant, and elide's stub keeps the files and revisions.
+   */
+  edits?: number;
   reprefillTokens: number;
   state: ContextState;
   editable: boolean;
@@ -135,13 +144,21 @@ export interface Outline {
   omitted: number;
 }
 
+/** What every entry on an outline page shares. */
+interface OutlinePage {
+  view: ContextView;
+  input: OutlineInput;
+  superseded: ReadonlySet<string>;
+}
+
 function outlineEntry(
   item: ContextItem,
   reprefillTokens: number,
-  input: OutlineInput,
-  superseded: ReadonlySet<string>,
+  { view, input, superseded }: OutlinePage,
 ): OutlineEntry {
   const pending = input.pending?.get(item.id);
+  const calls = item.role === "assistant" && item.toolCallIds.length > 0;
+  const edits = calls ? callEdits(view, item) : undefined;
   return {
     id: item.id,
     role: item.role,
@@ -149,6 +166,8 @@ function outlineEntry(
     ...(item.noteKey === undefined ? {} : { key: item.noteKey }),
     ...(superseded.has(item.id) ? { superseded: true } : {}),
     tokens: item.tokens,
+    ...(calls ? { argumentTokens: argumentTokens(item.messages[0] as AssistantMessage) } : {}),
+    ...(edits ? { edits: edits.count } : {}),
     reprefillTokens,
     state: item.state,
     editable: item.protectedReason === undefined,
@@ -195,7 +214,7 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
     cacheMode: input.basis.mode,
     cache: input.cache,
     entries: page.map(({ item, index }) =>
-      outlineEntry(item, reprefill[index] as number, input, superseded),
+      outlineEntry(item, reprefill[index] as number, { view, input, superseded }),
     ),
     ...(last && candidates.length > page.length ? { nextAfter: last.item.id } : {}),
     omitted: candidates.length - page.length,

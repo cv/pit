@@ -66,6 +66,7 @@ export class SessionBuilder {
     content:
       | string
       | Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>,
+    details?: Record<string, unknown>,
   ): string {
     return this.manager.appendMessage({
       role: "toolResult",
@@ -74,6 +75,7 @@ export class SessionBuilder {
       content: typeof content === "string" ? [{ type: "text", text: content }] : content,
       isError: false,
       timestamp: Date.now(),
+      ...(details ? { details: details as never } : {}),
     });
   }
 
