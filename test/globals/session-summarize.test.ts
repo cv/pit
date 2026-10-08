@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { endTurn, SessionBuilder } from "../support/context-session.js";
+import { endRun, SessionBuilder } from "../support/context-session.js";
 import {
   cleanupHarness,
   context,
@@ -66,7 +66,7 @@ describe("session.summarize", () => {
     });
     expect(receipt.estimatedTokensFreed).toBeGreaterThan(200);
 
-    await endTurn(session);
+    await endRun(session);
     const messages = llm(session);
     // The carrier keeps its call and its result becomes a stub, so roles still alternate.
     expect(messages.map((message) => message.role)).toEqual([
@@ -115,7 +115,7 @@ describe("session.summarize", () => {
   it("folds an earlier summary into a larger one and lists every entry it covers", async () => {
     const { session, first, second, third } = agentRun();
     await summarize(session, { from: first.assistant, to: second.result, summary: "Inner." });
-    await endTurn(session);
+    await endRun(session);
     session.current();
 
     const receipt = await summarize(session, {
@@ -126,7 +126,7 @@ describe("session.summarize", () => {
     expect(receipt.targets).toEqual(
       expect.arrayContaining([second.assistant, second.result, third.assistant, third.result]),
     );
-    await endTurn(session);
+    await endRun(session);
     session.current();
 
     const texts = llm(session).flatMap((message: any) =>

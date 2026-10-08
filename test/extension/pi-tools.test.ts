@@ -11,6 +11,7 @@ import {
   tool,
   value,
 } from "../support/extension-fixture.js";
+import { toolLoadout } from "../support/tool-loadout.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
@@ -466,18 +467,10 @@ describe("saved functions that inject tools", () => {
 
   /** Pi's loadout before any other tool is callable, as when MCP servers have not connected. */
   function emptyLoadout(): ToolLoadout {
-    const declared = [
-      { name: "typescript", description: "Run TypeScript." },
-    ] as unknown as ToolLoadout["declared"];
-    return {
-      declared,
-      callable: [],
-      // Pi 1.1 reports each tool's promptGuidelines; these fixtures declare none.
-      getPromptGuidelines: () => [],
-      registered: declared,
-      getExposure: () => "model-only",
-      getNamespace: () => undefined,
-    };
+    return toolLoadout(
+      [{ name: "typescript", description: "Run TypeScript.", exposure: "model-only" }],
+      { callable: [] },
+    );
   }
 
   it("saves and runs them, and keeps them when a session resumes before tools are known", async () => {
@@ -641,19 +634,10 @@ describe("saved functions that inject tools", () => {
 
 describe("typescript's description", () => {
   function loadout(names: string[]): ToolLoadout {
-    const tools = [
-      { name: "typescript", description: "Run TypeScript." },
+    return toolLoadout([
+      { name: "typescript", description: "Run TypeScript.", exposure: "model-only" },
       ...TOOLS.filter((entry) => names.includes(entry.name)),
-    ] as unknown as ToolLoadout["declared"];
-    return {
-      declared: tools,
-      callable: tools,
-      // Pi 1.1 reports each tool's promptGuidelines; these fixtures declare none.
-      getPromptGuidelines: () => [],
-      registered: tools,
-      getExposure: (name) => (name === "typescript" ? "model-only" : "direct"),
-      getNamespace: () => undefined,
-    };
+    ]);
   }
 
   it("lists the injectable tools and how to find and call them", () => {

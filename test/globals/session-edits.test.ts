@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { contextBoundaryEntries } from "../../src/context/boundary.js";
 import { ContextEditQueue } from "../../src/context/queue.js";
 import { createSessionHostHandler } from "../../src/host/handlers/session.js";
-import { endTurn, SessionBuilder, settleRun } from "../support/context-session.js";
+import { endRun, endTurn, SessionBuilder, settleRun } from "../support/context-session.js";
 import {
   cleanupHarness,
   context,
@@ -78,7 +78,7 @@ describe("re-prefill estimates", () => {
         target.reprefillTokens - receipt.estimatedTokensFreed * scale,
       ),
     });
-    const entries = await endTurn(session);
+    const entries = await endRun(session);
     expect(entries[1]).toMatchObject({
       data: {
         operations: [{ cacheMode: mode, reprefillTokens: receipt.estimatedReprefillTokens }],
@@ -116,7 +116,7 @@ describe("session.elide", () => {
       pending: "elide",
     });
 
-    const entries = await endTurn(session);
+    const entries = await endRun(session);
     expect(entries.map((entry) => entry.type)).toEqual(["context_edit", "custom"]);
     expect(modelText(session, logs.result)).toBe(
       `[Elided by the model · ~${Math.ceil(LOG.length / 4)} tokens · reason: stale build log · original: session.inspectEntry("${logs.result}")]`,
@@ -159,7 +159,7 @@ describe("session.elide", () => {
     );
     const notify = vi.fn();
 
-    const entries = await endTurn(session, { ...options, ctx: { ui: { notify } } });
+    const entries = await endRun(session, { ...options, ctx: { ui: { notify } } });
 
     expect(entries).toEqual([]);
     expect(modelText(session, logs.result)).toBe(LOG);
@@ -181,7 +181,7 @@ describe("session.elide", () => {
       data: { kept: true },
     };
 
-    const entries = await endTurn(session, { entries: [earlier] });
+    const entries = await endRun(session, { entries: [earlier] });
 
     expect(entries.map((entry) => entry.type)).toEqual(["custom", "context_edit", "custom"]);
     expect(entries[0]).toBe(earlier);
@@ -196,7 +196,7 @@ describe("session.elide", () => {
 
     await emit(event, { type: event }, context({ sessionManager: session.manager }));
 
-    expect(await endTurn(session)).toEqual([]);
+    expect(await endRun(session)).toEqual([]);
     expect(modelText(session, logs.result)).toBe(LOG);
   });
 
@@ -258,7 +258,7 @@ describe("session.elide", () => {
     );
     expect(receipt).toMatchObject({ operation: "elide", targets: [id], toolCallEntries: 1 });
     expect(receipt.estimatedTokensFreed).toBeGreaterThan(500);
-    await endTurn(session);
+    await endRun(session);
 
     const projected = session.manager
       .buildSessionProjection()
@@ -350,7 +350,7 @@ describe("session.elide", () => {
     session.current();
 
     await call(session, `async ({ session: { elide } }) => elide([${JSON.stringify(id)}])`);
-    await endTurn(session);
+    await endRun(session);
 
     const projected = session.manager
       .buildSessionProjection()
@@ -373,7 +373,7 @@ describe("session.elide", () => {
       session,
       `async ({ session: { summarize } }) => summarize({ from: ${JSON.stringify(first.assistant)}, to: ${JSON.stringify(second.result)}, summary: "Ran the tests and read a.ts." })`,
     );
-    await endTurn(session);
+    await endRun(session);
     session.current();
 
     await expect(
@@ -409,7 +409,7 @@ describe("session.elide", () => {
       `${logs.result} already has a staged elide in this turn`,
     );
 
-    await endTurn(session);
+    await endRun(session);
     session.current();
     await expect(run(elide, context({ sessionManager: session.manager }))).rejects.toThrow(
       `${logs.result} is already elided`,
@@ -436,7 +436,7 @@ describe("session.elide", () => {
       { id: logs.result, reason: "  stale\n\u001b[31mbuild\u001b[0m\tlog  " },
       context({ sessionManager: session.manager }),
     );
-    await endTurn(session);
+    await endRun(session);
 
     expect(modelText(session, logs.result)).toContain(" · reason: stale build log · ");
   });
@@ -507,7 +507,7 @@ describe("deferred context edits", () => {
     const receipt = await call(session, code(task));
     expect(receipt).toMatchObject({ status: "staged", appliesAt: "run_end" });
 
-    expect(edited(await endTurn(session, { settle: false }))).toEqual([]);
+    expect(edited(await endTurn(session))).toEqual([]);
     // Still pending: a second edit of the same entry is refused until the run ends.
     await expect(
       run(
@@ -530,7 +530,7 @@ describe("deferred context edits", () => {
       `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "now" })`,
     );
     expect(receipt).toMatchObject({ appliesAt: "turn_end" });
-    expect(edited(await endTurn(session, { settle: false }))).toEqual([logs.result]);
+    expect(edited(await endTurn(session))).toEqual([logs.result]);
   });
 
   it("applies deferred edits at the next turn once context reaches 50% of the window", async () => {
@@ -542,19 +542,19 @@ describe("deferred context edits", () => {
     const pressed = {
       getContextUsage: () => ({ tokens: 550_000, contextWindow: 1_000_000, percent: 55 }),
     };
-    expect(edited(await endTurn(session, { ctx: pressed, settle: false }))).toEqual([logs.result]);
+    expect(edited(await endTurn(session, { ctx: pressed }))).toEqual([logs.result]);
     expect(await settleRun(session)).toEqual([]);
   });
 
   it.each<{ name: string; end: (session: SessionBuilder) => Promise<unknown> }>([
     {
       name: "its call failed",
-      end: (session) => endTurn(session, { isError: true, settle: false }),
+      end: (session) => endTurn(session, { isError: true }),
     },
     {
       name: "the session tree changed",
       end: async (session) => {
-        await endTurn(session, { settle: false });
+        await endTurn(session);
         await emit(
           "session_tree",
           { type: "session_tree" },
@@ -665,7 +665,7 @@ describe("context edit edge cases", () => {
       );
     }
     const notify = vi.fn();
-    await endTurn(session, { isError: true, ctx: { ui: { notify } } });
+    await endRun(session, { isError: true, ctx: { ui: { notify } } });
     expect(notify).toHaveBeenCalledWith(
       "Pit discarded staged context edits: 2 edits whose tool call did not succeed.",
       "warning",
@@ -678,7 +678,7 @@ describe("context edit edge cases", () => {
       context({ sessionManager: session.manager }),
     );
     const quiet = vi.fn();
-    await endTurn(session, { isError: true, ctx: { hasUI: false, ui: { notify: quiet } } });
+    await endRun(session, { isError: true, ctx: { hasUI: false, ui: { notify: quiet } } });
     expect(quiet).not.toHaveBeenCalled();
   });
 
@@ -689,7 +689,7 @@ describe("context edit edge cases", () => {
       results[0],
       context({ sessionManager: session.manager }),
     );
-    await endTurn(session);
+    await endRun(session);
 
     expect(modelText(session, results[0] as string)).not.toContain("reason:");
   });
