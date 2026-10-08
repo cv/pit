@@ -2,6 +2,7 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 
 import { clipText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
+import type { CacheState } from "./cache-state.js";
 import type { CacheBasis } from "./planning.js";
 import {
   entryRole,
@@ -99,6 +100,8 @@ export interface OutlineInput {
   usage?: { tokens: number | null; contextWindow: number } | undefined;
   /** How the provider caches the prompt and how large the conversation is, for re-prefill. */
   basis: CacheBasis;
+  /** Whether the provider likely still holds the prompt cache. */
+  cache: CacheState;
 }
 
 export interface OutlineEntry {
@@ -122,6 +125,8 @@ export interface Outline {
   estimatedTokens: number;
   /** The caching mode the entries' re-prefill estimates assume. */
   cacheMode: CacheMode;
+  /** Whether the provider likely still holds the prompt cache. */
+  cache: CacheState;
   entries: OutlineEntry[];
   nextAfter?: string;
   omitted: number;
@@ -180,6 +185,7 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
     contextWindow: input.usage?.contextWindow ?? null,
     estimatedTokens: view.tokens,
     cacheMode: input.basis.mode,
+    cache: input.cache,
     entries: page.map(({ item, index }) => outlineEntry(item, reprefill[index] as number, input)),
     ...(last && candidates.length > page.length ? { nextAfter: last.item.id } : {}),
     omitted: candidates.length - page.length,

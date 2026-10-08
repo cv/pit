@@ -13,8 +13,10 @@ export const sessionFunctions = [
   contextTokens: number | null | undefined;
   contextWindow: number | undefined;
   contextPercent: number | null | undefined;
+  cache: PitContextCacheState;
 }>;`,
-    documentation: "session.info() returns bounded active-session metadata and context usage",
+    documentation:
+      "session.info() returns bounded active-session metadata, context usage, and prompt-cache state",
     minimumArguments: 0,
     maximumArguments: 0,
   }),
