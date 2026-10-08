@@ -55,3 +55,39 @@ jobs:
       - name: Test
         if: ${{ !matrix.gates }}
         run: npm test
+
+  pi-compat:
+    # README promises Pi 0.99 or newer; the test job covers the lockfile's Pi (Dependabot keeps it
+    # current), so this job runs the suite against the oldest supported release.
+    name: test (Pi ${{ matrix.pi }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        pi: ["0.99.2"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use lockfile-compatible npm
+        run: npm install --global npm@11.17.0
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Pi ${{ matrix.pi }}
+        # Overrides the lockfile's Pi for this job only; --no-save leaves package files unchanged.
+        run: >-
+          npm install --no-save --no-audit --no-fund
+          "@earendil-works/pi-coding-agent@${{ matrix.pi }}"
+          "@earendil-works/pi-tui@${{ matrix.pi }}"
+      - name: Report the Pi under test
+        run: npm ls @earendil-works/pi-coding-agent @earendil-works/pi-tui --depth=0
+      - name: Check jq for workflow query tests
+        run: jq --version
+      # Vitest only: Pit's test fixtures use the lockfile Pi's types, so tsc would fail on 0.99's.
+      - name: Test
+        run: npm test
