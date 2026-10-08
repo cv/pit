@@ -3,6 +3,7 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { clipText } from "../shared/bounds.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import type { CacheState } from "./cache-state.js";
+import { staleNoteGroups } from "./notes.js";
 import type { CacheBasis } from "./planning.js";
 import {
   entryRole,
@@ -109,6 +110,8 @@ export interface OutlineEntry {
   role: ContextRole;
   tool?: string;
   key?: string;
+  /** Notes: a superseded version or removed key, kept unchanged until a rewrite drops it. */
+  superseded?: boolean;
   tokens: number;
   reprefillTokens: number;
   state: ContextState;
@@ -136,6 +139,7 @@ function outlineEntry(
   item: ContextItem,
   reprefillTokens: number,
   input: OutlineInput,
+  superseded: ReadonlySet<string>,
 ): OutlineEntry {
   const pending = input.pending?.get(item.id);
   return {
@@ -143,6 +147,7 @@ function outlineEntry(
     role: item.role,
     ...(item.tools.length > 0 ? { tool: item.tools.join(", ") } : {}),
     ...(item.noteKey === undefined ? {} : { key: item.noteKey }),
+    ...(superseded.has(item.id) ? { superseded: true } : {}),
     tokens: item.tokens,
     reprefillTokens,
     state: item.state,
@@ -168,6 +173,9 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
   }
   const reprefill: number[] = [];
   // A prefix cache re-prefills from the edited entry; other caches rewrite the whole conversation.
+  const superseded = new Set(
+    staleNoteGroups(view).flatMap((group) => group.items.map((item) => item.id)),
+  );
   let suffix = 0;
   for (let index = view.items.length - 1; index >= 0; index--) {
     suffix += (view.items[index] as ContextItem).tokens;
@@ -186,7 +194,9 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
     estimatedTokens: view.tokens,
     cacheMode: input.basis.mode,
     cache: input.cache,
-    entries: page.map(({ item, index }) => outlineEntry(item, reprefill[index] as number, input)),
+    entries: page.map(({ item, index }) =>
+      outlineEntry(item, reprefill[index] as number, input, superseded),
+    ),
     ...(last && candidates.length > page.length ? { nextAfter: last.item.id } : {}),
     omitted: candidates.length - page.length,
   };

@@ -53,6 +53,7 @@ const isReceipt = shapeGuard(
       summarizedEntries: Type.Optional(Type.Number()),
       summaryTokens: Type.Optional(Type.Number()),
       toolCallEntries: Type.Optional(Type.Number()),
+      droppedEntries: Type.Optional(Type.Number()),
       // Optional: receipts recorded before the estimate named its caching mode still render.
       cacheMode: Type.Optional(CACHE_MODE),
     },
@@ -89,6 +90,7 @@ const isOutline = shapeGuard(
             editable: Type.Boolean(),
             protectedReason: Type.Optional(Type.String()),
             pending: Type.Optional(Type.String()),
+            superseded: Type.Optional(Type.Boolean()),
             preview: Type.String(),
           },
           CLOSED,
@@ -116,6 +118,8 @@ const isNoteListing = shapeGuard(
         ),
       ),
       tokens: Type.Number(),
+      // Optional: listings from before old note versions stayed in context still render.
+      supersededTokens: Type.Optional(Type.Number()),
       budgetTokens: Type.Number(),
       maxNotes: Type.Number(),
     },
@@ -138,6 +142,7 @@ function receiptSubject(receipt: {
   action?: string;
   summarizedEntries?: number;
   toolCallEntries?: number;
+  droppedEntries?: number;
 }): string {
   switch (receipt.operation) {
     case "elide":
@@ -145,7 +150,11 @@ function receiptSubject(receipt: {
     case "summarize":
       return `summary of ${plural(receipt.summarizedEntries ?? receipt.targets.length, "entry", "entries")}`;
     default:
-      return `note "${clean(receipt.key ?? "?")}" ${clean(receipt.action ?? "change")}`;
+      return `note "${clean(receipt.key ?? "?")}" ${clean(receipt.action ?? "change")}${
+        receipt.droppedEntries
+          ? `, dropping ${plural(receipt.droppedEntries, "old note entry", "old note entries")}`
+          : ""
+      }`;
   }
 }
 
@@ -166,8 +175,8 @@ export function renderContextReceipt(
     detailLines: [
       ...(value.targets.length > 0 ? [`targets: ${clean(value.targets.join(", "))}`] : []),
       `re-prefill: ~${formatTokens(value.estimatedReprefillTokens)} tokens${
-        // A new note only appends, so the estimate is its own size whatever the cache.
-        value.cacheMode && !(value.operation === "note" && value.action === "created")
+        // A note that only appends re-prefills its own size whatever the cache.
+        value.cacheMode && !(value.operation === "note" && !value.droppedEntries)
           ? ` · ${CACHE_BASIS[value.cacheMode]}`
           : ""
       }`,
@@ -200,7 +209,12 @@ export function renderContextOutline(
       ...(entry.pending ? [`pending ${entry.pending}`] : []),
       ...(entry.protectedReason ? [`protected: ${entry.protectedReason}`] : []),
     ];
-    const label = [entry.role, entry.tool, entry.key === undefined ? undefined : `"${entry.key}"`]
+    const label = [
+      entry.role,
+      entry.tool,
+      entry.key === undefined ? undefined : `"${entry.key}"`,
+      entry.superseded ? "superseded" : undefined,
+    ]
       .filter(Boolean)
       .join(" ");
     return [
@@ -226,13 +240,16 @@ export function renderContextOutline(
   };
 }
 
-/** session.notes(): live notes and how much of the note budget they use. */
+/** session.notes(): live notes and how much of the note budget they and superseded versions use. */
 export function renderNoteListing(
   value: unknown,
   { theme }: RenderContext,
 ): RenderedResultValue | undefined {
   if (!isNoteListing(value)) return undefined;
-  const summary = `${plural(value.notes.length, "live note")} · ~${formatTokens(value.tokens)} of ~${formatTokens(value.budgetTokens)} note tokens`;
+  const superseded = value.supersededTokens
+    ? ` + ~${formatTokens(value.supersededTokens)} superseded`
+    : "";
+  const summary = `${plural(value.notes.length, "live note")} · ~${formatTokens(value.tokens)}${superseded} of ~${formatTokens(value.budgetTokens)} note tokens`;
   return {
     kind: "context",
     lines: [

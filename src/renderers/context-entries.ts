@@ -20,7 +20,7 @@ import { elidedTargets } from "./shared.js";
 type CustomMessage = Parameters<MessageRenderer>[0];
 
 const COLLAPSED_NOTE_LINES = 6;
-const NOTE_FRAME = /^<model-note key="[^"]*">\n([\s\S]*)\n<\/model-note>$/;
+const NOTE_FRAME = /^<model-note key="[^"]*"[^>]*>\n([\s\S]*)\n<\/model-note>$/;
 
 function clean(text: string): string {
   return sanitizeTerminalText(text);
@@ -48,13 +48,23 @@ export function renderNote(
   theme: Theme,
 ): Component {
   const text = messageText(message);
-  const key = (message.details as { key?: unknown } | undefined)?.key;
+  const details = message.details as
+    | { key?: unknown; version?: unknown; removed?: unknown }
+    | undefined;
+  const key = details?.key;
+  const status =
+    details?.removed === true
+      ? "removed"
+      : typeof details?.version === "number" && details.version > 1
+        ? `v${details.version}`
+        : undefined;
   const lines = clean(noteBody(text)).split("\n");
   const shown = options.expanded ? lines : lines.slice(0, COLLAPSED_NOTE_LINES);
   const omitted = lines.length - shown.length;
   const label = [
     theme.fg("customMessageLabel", theme.bold("Model note")),
     ...(typeof key === "string" ? [theme.fg("customMessageText", clean(key))] : []),
+    ...(status ? [theme.fg("dim", status)] : []),
     theme.fg("dim", `~${formatTokens(textTokens(text))} tokens`),
   ].join(theme.fg("dim", " · "));
   const box = new Box(1, 1, (line) => theme.bg("customMessageBg", line));
@@ -100,6 +110,13 @@ function tokensPhrase(tokensFreed: number): string {
     : `~${formatTokens(-tokensFreed)} tokens added`;
 }
 
+function noteSummary(operation: ProvenanceOperation, count: number): string {
+  const entries = plural(count, "old note entry", "old note entries");
+  if (operation.action === "pruned") return `dropped ${entries}`;
+  const dropped = count > 0 ? `, dropping ${entries}` : "";
+  return `note "${operation.key ?? "?"}" ${operation.action ?? "changed"}${dropped}`;
+}
+
 function operationSummary(operation: ProvenanceOperation): string {
   const count = operation.targets.length;
   switch (operation.operation) {
@@ -110,7 +127,7 @@ function operationSummary(operation: ProvenanceOperation): string {
     case "restore":
       return `restored ${plural(count, "entry", "entries")}`;
     default:
-      return `note "${operation.key ?? "?"}" ${operation.action ?? "changed"}`;
+      return noteSummary(operation, count);
   }
 }
 

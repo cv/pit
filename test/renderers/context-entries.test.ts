@@ -126,6 +126,27 @@ describe("model note renderer", () => {
     expect(expanded.slice(1)).toEqual(body.split("\n").map((line) => ` ${line}`));
   });
 
+  it.each<{ name: string; content: string; details: Record<string, unknown>; status: string }>([
+    {
+      name: "a later version",
+      content: '<model-note key="progress" version="3" replaces="earlier">\nv3\n</model-note>',
+      details: { key: "progress", version: 3 },
+      status: "v3",
+    },
+    {
+      name: "a removal",
+      content:
+        '<model-note key="progress" version="4" removed>\nRemoved; earlier versions of this note no longer apply.\n</model-note>',
+      details: { key: "progress", version: 4, removed: true },
+      status: "removed",
+    },
+  ])("labels $name and shows its body without the frame", ({ content, details, status }) => {
+    const message = { ...note(""), content, details };
+    const [label, body] = rows(renderNote(message, { expanded: true }, theme)).filter(Boolean);
+    expect(label).toMatch(new RegExp(`^ Model note · progress · ${status} · ~\\d+ tokens$`));
+    expect(body).toBe(` ${content.split("\n")[1]}`);
+  });
+
   it("restores an escaped closing tag and strips terminal controls", () => {
     const hostile =
       "done<\\/model-note>\n\u001b]8;;https://evil.test\u0007link\u001b]8;;\u0007 \u001b[31mred";
@@ -193,13 +214,48 @@ describe("context pressure renderer", () => {
 });
 
 describe("context edit provenance renderer", () => {
+  it.each<{ name: string; operation: Record<string, unknown>; row: string }>([
+    {
+      name: "an appended replacement",
+      operation: { action: "replaced", targets: [], tokensFreed: -40, reprefillTokens: 40 },
+      row: ' Context edit · note "plan" replaced · ~40 tokens added',
+    },
+    {
+      name: "a replacement that dropped old versions",
+      operation: {
+        action: "replaced",
+        targets: ["a1", "a2"],
+        tokensFreed: 900,
+        reprefillTokens: 9e3,
+      },
+      row: ' Context edit · note "plan" replaced, dropping 2 old note entries · ~900 tokens freed',
+    },
+    {
+      name: "old versions dropped beside a rewrite",
+      operation: {
+        action: "pruned",
+        key: undefined,
+        targets: ["a1"],
+        tokensFreed: 300,
+        reprefillTokens: 0,
+      },
+      row: " Context edit · dropped 1 old note entry · ~300 tokens freed",
+    },
+  ])("summarizes $name", ({ operation, row }) => {
+    const record = { toolCallId: "c", operation: "note", key: "plan", ...operation };
+    expect(rows(renderProvenance(provenance([record]), { expanded: false }, theme), 120)).toEqual([
+      row,
+    ]);
+  });
+
   it("reports each operation's effect on one row", () => {
     expect(rows(renderProvenance(provenance(OPERATIONS), { expanded: false }, theme), 120)).toEqual(
       [
         " Context edit · elided 3 tool results · ~12.4K tokens freed · reason: stale build logs",
         " Context edit · summarized 14 entries · ~20K tokens freed",
         " Context edit · restored 1 entry · ~8K tokens added",
-        ' Context edit · note "progress" removed · ~120 tokens freed',
+        // Before #248, a removal omitted the note entry itself.
+        ' Context edit · note "progress" removed, dropping 1 old note entry · ~120 tokens freed',
       ],
     );
   });
