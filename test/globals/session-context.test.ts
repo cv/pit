@@ -35,6 +35,52 @@ function longTask() {
 }
 
 describe("session.outline", () => {
+  // #252: the arguments the model wrote can be as heavy as the results it read.
+  it("reports each call's argument tokens and the edits it applied", async () => {
+    const session = new SessionBuilder();
+    session.user("Rewrite the parser");
+    const edit = session.assistant("Writing it.", [
+      { name: "typescript", args: { code: "await edit(file, change);\n".repeat(200) } },
+    ]);
+    session.result(edit.callIds[0] as string, "typescript", "ok", {
+      edits: [
+        { file: "a.ts", revision: "r1", applied: 2 },
+        { file: "b.ts", revision: "r2", applied: 1 },
+      ],
+      editsOmitted: 1,
+    });
+    const older = session.assistant("", [{ name: "typescript", args: { code: "y".repeat(800) } }]);
+    session.result(older.callIds[0] as string, "typescript", "ok", {
+      traces: [{ namespace: "workspace", method: "edit", status: "succeeded" }],
+    });
+    const plain = session.assistant("Let me read the tests first. ".repeat(60), [
+      { name: "read", args: { path: "a.ts" } },
+    ]);
+    session.result(plain.callIds[0] as string, "read", "x");
+    const malformed = session.assistant("", [
+      { name: "typescript", args: { code: "z".repeat(800) } },
+    ]);
+    session.result(malformed.callIds[0] as string, "typescript", "ok", {
+      edits: [{ file: 3 }],
+      value: 1,
+    });
+    const reply = session.assistant("Done.").id;
+    session.current();
+
+    const result = await outline(session, { roles: ["assistant"] });
+    const byId = new Map<string, any>(result.entries.map((entry: any) => [entry.id, entry]));
+    const heavy = byId.get(edit.id);
+    expect(heavy.edits).toBe(3);
+    expect(heavy.argumentTokens).toBeGreaterThan(0.9 * heavy.tokens);
+    expect(byId.get(older.id).edits).toBe(1);
+    const light = byId.get(plain.id);
+    expect(light).not.toHaveProperty("edits");
+    expect(light.argumentTokens).toBeGreaterThan(0);
+    expect(light.argumentTokens).toBeLessThan(0.1 * light.tokens);
+    expect(byId.get(malformed.id)).not.toHaveProperty("edits");
+    expect(byId.get(reply)).not.toHaveProperty("argumentTokens");
+  });
+
   it("lists model-visible entries with costs and protection", async () => {
     const { session, prompt, logs, source, current } = longTask();
     const result = await outline(session);
