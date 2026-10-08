@@ -64,9 +64,11 @@ function prunedNotes(
   if (!first) return undefined;
   const view = buildContextView(ctx.sessionManager);
   const position = new Map(view.items.map((item, index) => [item.id, index]));
-  const changed = rewrites.flatMap((record) => [...record.targets, ...(record.covers ?? [])]);
+  const changed = new Set(
+    rewrites.flatMap((record) => [...record.targets, ...(record.covers ?? [])]),
+  );
   const earliest = rewrites.every((record) => record.cacheMode === "prefix")
-    ? Math.min(...changed.map((id) => position.get(id) ?? Number.POSITIVE_INFINITY))
+    ? view.items.findIndex((item) => changed.has(item.id))
     : 0;
   const targeted = new Set(
     applied.flatMap((edit) =>
@@ -89,7 +91,6 @@ function prunedNotes(
       tokensFreed: items.reduce((total, item) => total + item.tokens, 0),
       // The rewrite that made these free already pays for the re-prefill.
       reprefillTokens: 0,
-      ...(first.cacheMode ? { cacheMode: first.cacheMode } : {}),
     },
   };
 }
