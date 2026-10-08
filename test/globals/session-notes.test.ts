@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { endTurn, SessionBuilder } from "../support/context-session.js";
+import { endRun, SessionBuilder } from "../support/context-session.js";
 import {
   cleanupHarness,
   context,
@@ -43,7 +43,7 @@ function task() {
 
 async function withNote(session: SessionBuilder, key: string, content: string) {
   await setNote(session, key, content);
-  await endTurn(session);
+  await endRun(session);
   session.current();
 }
 
@@ -66,7 +66,7 @@ describe("session.setNote", () => {
     expect(receipt.estimatedTokensFreed).toBeLessThan(0);
     expect(receipt.estimatedReprefillTokens).toBe(-receipt.estimatedTokensFreed);
 
-    const entries = await endTurn(session);
+    const entries = await endRun(session);
     expect(entries[0]).toEqual({
       type: "custom_message",
       customType: "pit.note",
@@ -103,7 +103,7 @@ describe("session.setNote", () => {
   it("replaces a note by appending a new version and leaving earlier entries unchanged", async () => {
     const session = task();
     await withNote(session, "progress", "v1");
-    await endTurn(session);
+    await endRun(session);
     session.turn("bash", "after tuning: 9.8s\n".repeat(20));
     session.current();
     const before = modelMessages(session);
@@ -112,7 +112,7 @@ describe("session.setNote", () => {
     expect(receipt).toMatchObject({ action: "replaced", targets: ["note:progress"] });
     expect(receipt).not.toHaveProperty("droppedEntries");
     expect(receipt.estimatedReprefillTokens).toBe(-receipt.estimatedTokensFreed);
-    await endTurn(session);
+    await endRun(session);
 
     // Every earlier message reaches the provider unchanged, so its cached prefix still holds.
     expect(modelMessages(session).slice(0, before.length)).toEqual(before);
@@ -143,7 +143,7 @@ describe("session.setNote", () => {
       action: "removed",
       estimatedTokensFreed: expect.any(Number),
     });
-    await endTurn(session);
+    await endRun(session);
 
     expect(modelMessages(session).slice(0, before.length)).toEqual(before);
     expect(noteMessages(session).map((message) => message.content)).toEqual([
@@ -160,7 +160,7 @@ describe("session.setNote", () => {
     await expect(setNote(session, "progress", "again")).resolves.toMatchObject({
       action: "created",
     });
-    const [entry] = await endTurn(session);
+    const [entry] = await endRun(session);
     expect(entry).toMatchObject({
       content: '<model-note key="progress" version="3" replaces="earlier">\nagain\n</model-note>',
       details: { key: "progress", version: 3 },
@@ -175,14 +175,14 @@ describe("session.setNote", () => {
       await expect(
         setNote(session, "log", `${version}\n${"x".repeat(6_000)}`, small),
       ).resolves.not.toHaveProperty("droppedEntries");
-      await endTurn(session);
+      await endRun(session);
       session.current();
     }
 
     const receipt = await setNote(session, "log", `v3\n${"x".repeat(6_000)}`, small);
     expect(receipt).toMatchObject({ action: "replaced", droppedEntries: 2 });
     expect(receipt.estimatedTokensFreed).toBeGreaterThan(0);
-    await endTurn(session);
+    await endRun(session);
 
     expect(noteMessages(session).map((message) => message.content.split("\n")[1])).toEqual(["v3"]);
     session.current();
@@ -298,7 +298,7 @@ describe("superseded notes beside a rewrite", () => {
     session.current();
     if (newest === null) {
       await setNote(session, "plan", null);
-      await endTurn(session);
+      await endRun(session);
       session.current();
     } else {
       await withNote(session, "plan", newest);
@@ -311,7 +311,7 @@ describe("superseded notes beside a rewrite", () => {
       `async ({ session: { elide } }) => elide([${JSON.stringify(target)}])`,
       context({ sessionManager: session.manager, model }),
     );
-    return endTurn(session);
+    return endRun(session);
   }
 
   it.each<{ name: string; model: unknown; target: "early" | "late"; kept: string[] }>([
@@ -385,11 +385,11 @@ describe("notes after compaction", () => {
     const session = task();
     await withNote(session, "summarized", "older progress");
     await withNote(session, "summarized", "old progress");
-    await endTurn(session);
+    await endRun(session);
     const kept = session.user("Keep going");
     session.current();
     await setNote(session, "retained", "recent progress");
-    await endTurn(session);
+    await endRun(session);
     const compaction = session.manager.appendCompaction("summary", kept, 5_000);
 
     await emit(

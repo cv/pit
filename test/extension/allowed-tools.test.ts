@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ToolExposure, ToolLoadout } from "@earendil-works/pi-coding-agent";
+import type { ToolLoadout } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -16,6 +16,7 @@ import {
   setupHarness,
   tool,
 } from "../support/extension-fixture.js";
+import { toolLoadout, type LoadoutTool } from "../support/tool-loadout.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
@@ -41,28 +42,9 @@ beforeEach(() => {
   getAllTools.mockReturnValue(available.map((name) => ({ name, exposure: "direct" })));
 });
 
-interface LoadoutTool {
-  name: string;
-  exposure: ToolExposure;
-  namespace?: string;
-}
-
 /** A session's active tools as Pi hands them to `prepareLoadout()`. */
 function loadout(tools: LoadoutTool[]): ToolLoadout {
-  const byName = new Map(tools.map((entry) => [entry.name, entry]));
-  const agentTools = tools.map(({ name }) => ({ name })) as unknown as ToolLoadout["declared"];
-  return {
-    declared: agentTools,
-    callable: agentTools,
-    // Pi 1.1 reports each tool's promptGuidelines; these fixtures declare none.
-    getPromptGuidelines: () => [],
-    registered: agentTools,
-    getExposure: (name) => byName.get(name)?.exposure ?? "direct",
-    getNamespace: (name) => {
-      const namespace = byName.get(name)?.namespace;
-      return namespace ? { name: namespace } : undefined;
-    },
-  };
+  return toolLoadout(tools);
 }
 
 const declaredTools: LoadoutTool[] = [
