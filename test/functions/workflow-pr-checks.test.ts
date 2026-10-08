@@ -121,9 +121,18 @@ describe("pr.waitForChecks", () => {
     expect(prView).toHaveBeenCalledTimes(6);
   });
 
-  it("keeps the whole wait inside the polling budget", async () => {
+  it.each([
+    { name: "instant polls", pollMs: 0, attempt: 5 },
+    // Slow polls spend the time limit too, so fewer fit than intervals alone would allow.
+    { name: "slow polls", pollMs: 20_000, attempt: 3 },
+  ])("stops at its time limit with $name", async ({ pollMs, attempt }) => {
     const wait = await loadWorkflowFunction("pr.waitForChecks");
-    const prView = vi.fn().mockResolvedValue(pullRequest([check("test", "QUEUED")]));
+    const prView = vi.fn(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve(pullRequest([check("test", "QUEUED")])), pollMs),
+        ),
+    );
     const started = Date.now();
     const pending = wait(
       { gh: { prView } },
@@ -132,12 +141,13 @@ describe("pr.waitForChecks", () => {
     await vi.runAllTimersAsync();
     expect(await pending).toMatchObject({
       outcome: "timed_out",
-      attempt: 6,
+      attempt,
       requestedAttempts: 120,
+      timeoutMs: 240_000,
       checks: { pending: { names: ["test"] } },
     });
-    expect(prView).toHaveBeenCalledTimes(6);
-    expect(Date.now() - started).toBeLessThan(300_000);
+    expect(prView).toHaveBeenCalledTimes(attempt);
+    expect(Date.now() - started).toBeLessThanOrEqual(240_000);
   });
 
   it.each<{ name: string; input: Record<string, unknown> }>([

@@ -3,10 +3,13 @@
  * It stops early when any check fails. Use ci.waitForCommit for one workflow run.
  *
  * @param input.repo - GitHub owner/name. The default is the current repository.
- * @param input.attempts - Maximum polls (1-120). The default is 12. Polls that would not fit the
- *   285 s budget after the initial delay are skipped.
+ * @param input.attempts - Maximum polls (1-120). The default is 12.
  * @param input.intervalMs - Delay between polls (1000-30000). The default is 15000 ms.
- * @param input.initialDelayMs - Delay before the first poll (0-120000). The default is 0 ms.
+ * @param input.initialDelayMs - Delay before the first poll (0-120000). The default is 0 ms. It
+ *   counts toward timeoutMs.
+ * @param input.timeoutMs - Wall-clock limit for the whole wait (1000-285000). The default is
+ *   240000 ms, safely inside the 300 s tool limit. The wait stops early when another interval plus
+ *   its slowest poll so far would pass it, and a timeout reports timeoutMs and elapsedMs.
  * @param input.raise - Fail when a check fails or checks are still pending. The default is true.
  */
 async function waitForChecks(
@@ -17,6 +20,7 @@ async function waitForChecks(
     attempts?: number;
     intervalMs?: number;
     initialDelayMs?: number;
+    timeoutMs?: number;
     raise?: boolean;
   },
 ) {
@@ -30,6 +34,8 @@ async function waitForChecks(
     outcome: "passed" | "failed" | "pending" | "timed_out";
     attempt: number;
     requestedAttempts: number;
+    timeoutMs?: number;
+    elapsedMs?: number;
     checks: { total: number; passed: number; failed: Names; pending: Names };
     note?: string;
   };
@@ -61,12 +67,10 @@ async function waitForChecks(
   if (input.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(input.repo)) {
     throw new Error("repo must be owner/name");
   }
-  // Keeps the whole wait inside the 300 s tool invocation limit.
-  const POLLING_BUDGET_MS = 285000;
-  const attempts = Math.min(
-    requestedAttempts,
-    Math.floor((POLLING_BUDGET_MS - initialDelayMs) / intervalMs) + 1,
-  );
+  const timeoutMs = integerInput("timeoutMs", input.timeoutMs, 240000, 1000, 285000);
+  // A deadline, not an attempt count: GitHub's response time also spends the tool's 300 s.
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
   const raise = input.raise ?? true;
   const NAME_LIMIT = 20;
   const passing = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
@@ -94,15 +98,20 @@ async function waitForChecks(
   });
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-  if (initialDelayMs > 0) await sleep(initialDelayMs);
+  if (initialDelayMs > 0) await sleep(Math.min(initialDelayMs, Math.max(0, deadline - Date.now())));
   let last: Summary | undefined;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
+  let attempt = 0;
+  let slowestPollMs = 0;
+  while (attempt < requestedAttempts) {
+    attempt++;
+    const pollStarted = Date.now();
     const result = await prView(number, {
       ...(input.repo ? { repo: input.repo } : {}),
       json: ["number", "state", "url", "headRefOid", "mergeStateStatus", "statusCheckRollup"],
       maxBytes: 50000,
       raise: true,
     });
+    slowestPollMs = Math.max(slowestPollMs, Date.now() - pollStarted);
     if (result.truncated) throw new Error(`Pull request #${number} check data was truncated`);
     const pr = JSON.parse(result.stdout) as {
       state: string;
@@ -144,15 +153,21 @@ async function waitForChecks(
       return last;
     }
     if (outcome === "passed") return last;
-    if (attempt < attempts) await sleep(intervalMs);
+    if (attempt >= requestedAttempts || Date.now() + intervalMs + slowestPollMs > deadline) break;
+    await sleep(intervalMs);
   }
   if (!last) throw new Error(`Pull request #${number} was not polled`);
+  const elapsedMs = Date.now() - startedAt;
+  const limitNote =
+    attempt < requestedAttempts ? ` (it stopped at its ${timeoutMs / 1000} s time limit)` : "";
   const note =
     last.checks.total === 0
       ? "no checks were reported"
       : `${last.checks.pending.names.length + last.checks.pending.omitted} checks are still pending`;
   if (raise) {
-    throw new Error(`Pull request #${number} did not settle after ${attempts} polls: ${note}`);
+    throw new Error(
+      `Pull request #${number} did not settle after ${attempt} polls${limitNote}: ${note}`,
+    );
   }
-  return { ...last, outcome: "timed_out", note };
+  return { ...last, outcome: "timed_out", note, timeoutMs, elapsedMs };
 }

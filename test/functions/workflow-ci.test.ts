@@ -105,6 +105,66 @@ describe("ci.findRun", () => {
   });
 });
 
+describe("ci.waitForRun", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  // Each status check takes 20 s, so the 30 s interval plus the check must fit the limit.
+  const slowRunView = () =>
+    vi.fn(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve(
+                processResult({
+                  stdout: JSON.stringify({
+                    status: "in_progress",
+                    url: "url",
+                    jobs: [{ name: "build", status: "in_progress", conclusion: "", url: "job" }],
+                  }),
+                }),
+              ),
+            20_000,
+          ),
+        ),
+    );
+
+  it("stops at its time limit when status checks are slow", async () => {
+    const wait = await loadWorkflowFunction("ci.waitForRun");
+    const runView = slowRunView();
+    const started = Date.now();
+    const pending = wait(
+      { gh: { runView } },
+      { id: 42, repo: "cv/pit", attempts: 120, intervalMs: 30_000, raise: false },
+    );
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({
+      status: "timed_out",
+      attempts: 3,
+      requestedAttempts: 120,
+      timeoutMs: 240_000,
+      lastStatus: "in_progress",
+    });
+    expect(Date.now() - started).toBeLessThanOrEqual(240_000);
+  });
+
+  it("names the time limit when it raises", async () => {
+    const wait = await loadWorkflowFunction("ci.waitForRun");
+    const failure = wait(
+      { gh: { runView: slowRunView() } },
+      { id: 42, repo: "cv/pit", attempts: 120, intervalMs: 30_000, timeoutMs: 180_000 },
+    ).then(
+      () => "resolved",
+      (error: Error) => error.message,
+    );
+    await vi.runAllTimersAsync();
+    expect(await failure).toMatch(
+      /did not complete after 1 checks in 140 s; it stopped at its 180 s time limit with 119 checks unused; last status in_progress, unfinished jobs: build/,
+    );
+  });
+});
+
 describe("ci.waitForCommit composition", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -152,6 +212,8 @@ describe("ci.waitForCommit composition", () => {
         raise: false,
       }),
     );
+    // Discovery waited 1 s, so the run's wait gets the rest of the 240 s default.
+    expect(waitForRun.mock.calls[0]?.[0]?.timeoutMs).toBe(239_000);
     expect(vi.getTimerCount()).toBe(0);
   });
 
