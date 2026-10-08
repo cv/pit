@@ -71,10 +71,12 @@ export const sessionFunctions = [
   }),
   defineNativeFunction("session", "elide", {
     summary: "Elide tool results from context",
-    declaration:
-      "elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;",
+    declaration: `elide(
+  ids: string[],
+  options?: { reason?: string; when?: "now" | "end" },
+): Promise<PitContextEditReceipt>;`,
     documentation:
-      "session.elide(ids, options?) stages replacing tool results, or the arguments of assistant tool calls, with stubs that point to session.inspectEntry; applied after the current turn if the call succeeds",
+      'session.elide(ids, options?) stages replacing tool results, or the arguments of assistant tool calls, with stubs that point to session.inspectEntry; applied after the current turn if the call succeeds, or when the run ends with when: "end"',
     minimumArguments: 1,
     maximumArguments: 2,
   }),
@@ -97,7 +99,7 @@ export const sessionFunctions = [
     summary: "Summarize a range of completed turns",
     declaration: "summarize(input: PitContextSummaryInput): Promise<PitContextSummaryReceipt>;",
     documentation:
-      "session.summarize({ from, to, summary }) stages replacing a closed range of completed assistant turns and tool results with a model-written summary; inspectEntry reads the originals",
+      "session.summarize({ from, to, summary, when? }) stages replacing a closed range of completed assistant turns and tool results with a model-written summary; inspectEntry reads the originals",
     minimumArguments: 1,
     maximumArguments: 1,
   }),

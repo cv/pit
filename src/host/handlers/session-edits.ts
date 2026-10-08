@@ -26,6 +26,13 @@ function entryIds(value: unknown): string[] {
   return ids;
 }
 
+/** When a staged elide or summary applies: after this turn, or when the run ends. */
+function timing(value: unknown, label: string): "end" | undefined {
+  if (value === undefined || value === "now") return undefined;
+  if (value === "end") return "end";
+  throw new Error(`${label} must be "now" or "end"`);
+}
+
 /** One sanitized line: a reason is repeated in each stub the call writes. */
 function reason(value: unknown): string | undefined {
   if (value === undefined) return undefined;
@@ -46,7 +53,7 @@ export function createSessionEditHandlers({
     buildContextView(ctx.sessionManager, toolCallId === undefined ? {} : { toolCallId });
   const basisOf = (current: ContextView) =>
     cacheBasis(ctx.model, current, ctx.getContextUsage()?.tokens);
-  const stage = (planned: PlannedEdit, { mode: cacheMode }: CacheBasis) => {
+  const stage = (planned: PlannedEdit, { mode: cacheMode }: CacheBasis, when?: "end") => {
     if (!contextEdits || toolCallId === undefined) {
       throw new Error("Context edits require a running Pit tool call");
     }
@@ -56,10 +63,11 @@ export function createSessionEditHandlers({
       targets: planned.targets,
       drafts: planned.drafts,
       records: planned.records.map((operation) => ({ toolCallId, ...operation, cacheMode })),
+      ...(when ? { when } : {}),
     });
     return {
       status: "staged",
-      appliesAt: "turn_end",
+      appliesAt: when === "end" ? "run_end" : "turn_end",
       operation: planned.operation,
       targets: planned.targets,
       estimatedTokensFreed: planned.tokensFreed,
@@ -73,7 +81,11 @@ export function createSessionEditHandlers({
       const options = args[1] === undefined ? {} : record(args[1], "options");
       const current = view();
       const basis = basisOf(current);
-      return stage(planElide(current, entryIds(args[0]), reason(options.reason), basis), basis);
+      return stage(
+        planElide(current, entryIds(args[0]), reason(options.reason), basis),
+        basis,
+        timing(options.when, "options.when"),
+      );
     },
     summarize: (args) => {
       const input = record(args[0], "input");
@@ -88,6 +100,7 @@ export function createSessionEditHandlers({
           basis,
         }),
         basis,
+        timing(input.when, "input.when"),
       );
     },
     setNote: (args) => {

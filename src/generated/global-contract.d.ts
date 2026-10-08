@@ -311,7 +311,8 @@ type PitContextEntry = {
 
 type PitContextEditReceipt = {
   status: "staged";
-  appliesAt: "turn_end";
+  /** "run_end": deferred with when: "end", so the rewrite lands on the next prompt's request. */
+  appliesAt: "turn_end" | "run_end";
   operation: PitContextOperation;
   targets: string[];
   estimatedTokensFreed: number;
@@ -319,7 +320,13 @@ type PitContextEditReceipt = {
   cacheMode: PitContextCacheMode;
 };
 
-type PitContextSummaryInput = { from: string; to: string; summary: string };
+type PitContextSummaryInput = {
+  from: string;
+  to: string;
+  summary: string;
+  /** "end" waits for the run to end, so the rewrite falls on the next prompt; default "now". */
+  when?: "now" | "end";
+};
 
 type PitContextSummaryReceipt = PitContextEditReceipt & {
   summarizedEntries: number;
@@ -573,7 +580,10 @@ interface PitSessionFunctions {
 
   inspectEntry(id: string, options?: { offset?: number; limit?: number }): Promise<PitContextEntry>;
 
-  elide(ids: string[], options?: { reason?: string }): Promise<PitContextEditReceipt>;
+  elide(
+    ids: string[],
+    options?: { reason?: string; when?: "now" | "end" },
+  ): Promise<PitContextEditReceipt>;
 
   setNote(key: string, content: string | null): Promise<PitContextNoteReceipt>;
 

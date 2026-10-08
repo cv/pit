@@ -39,7 +39,7 @@ const isReceipt = shapeGuard(
   Type.Object(
     {
       status: Type.Literal("staged"),
-      appliesAt: Type.Literal("turn_end"),
+      appliesAt: Type.Union([Type.Literal("turn_end"), Type.Literal("run_end")]),
       operation: Type.Union([
         Type.Literal("elide"),
         Type.Literal("summarize"),
@@ -166,12 +166,14 @@ export function renderContextReceipt(
   if (!isReceipt(value)) return undefined;
   const subject = receiptSubject(value);
   const tokens = effect(value.estimatedTokensFreed);
+  const when =
+    value.appliesAt === "run_end" ? "applies when the run ends" : "applies after this turn";
   return {
     kind: "staged",
     lines: [
-      `${theme.fg("toolTitle", theme.bold("session"))} staged ${subject} ${theme.fg("dim", `(${tokens} · applies after this turn)`)}`,
+      `${theme.fg("toolTitle", theme.bold("session"))} staged ${subject} ${theme.fg("dim", `(${tokens} · ${when})`)}`,
     ],
-    summary: `${subject} · ${tokens} · applies after this turn`,
+    summary: `${subject} · ${tokens} · ${when}`,
     detailLines: [
       ...(value.targets.length > 0 ? [`targets: ${clean(value.targets.join(", "))}`] : []),
       `re-prefill: ~${formatTokens(value.estimatedReprefillTokens)} tokens${

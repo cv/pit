@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { contextBoundaryEntries } from "../../src/context/boundary.js";
 import { ContextEditQueue } from "../../src/context/queue.js";
 import { createSessionHostHandler } from "../../src/host/handlers/session.js";
-import { endTurn, SessionBuilder } from "../support/context-session.js";
+import { endTurn, SessionBuilder, settleRun } from "../support/context-session.js";
 import {
   cleanupHarness,
   context,
@@ -475,6 +475,98 @@ describe("session.elide", () => {
     expect(() => handler("elide", [[logs.result]])).toThrow(
       "Context edits require a running Pit tool call",
     );
+  });
+});
+
+// #262: an edit made mid-run always rewrites a warm cache. Deferred to the run's end, its
+// rewrite lands on the next prompt's request, which often comes after the cache has expired.
+describe("deferred context edits", () => {
+  const edited = (entries: Array<{ type: string; targetId?: string }>) =>
+    entries.filter((entry) => entry.type === "context_edit").map((entry) => entry.targetId);
+
+  it.each<{
+    name: string;
+    code: (task: ReturnType<typeof longTask>) => string;
+    targets: (task: ReturnType<typeof longTask>) => string[];
+  }>([
+    {
+      name: "an elision",
+      code: ({ logs }) =>
+        `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "end" })`,
+      targets: ({ logs }) => [logs.result],
+    },
+    {
+      name: "a summary",
+      code: ({ logs, source }) =>
+        `async ({ session: { summarize } }) => summarize({ from: ${JSON.stringify(logs.assistant)}, to: ${JSON.stringify(source.result)}, summary: "Ran the tests and read a.ts.", when: "end" })`,
+      targets: ({ logs, source }) => [logs.assistant, logs.result, source.assistant, source.result],
+    },
+  ])("holds $name until the run ends", async ({ code, targets }) => {
+    const task = longTask();
+    const { session, logs } = task;
+    const receipt = await call(session, code(task));
+    expect(receipt).toMatchObject({ status: "staged", appliesAt: "run_end" });
+
+    expect(edited(await endTurn(session))).toEqual([]);
+    // Still pending: a second edit of the same entry is refused until the run ends.
+    await expect(
+      run(
+        `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}])`,
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow(/already has a staged/);
+
+    const settled = await settleRun(session);
+    expect(new Set(edited(settled))).toEqual(new Set(targets(task)));
+    expect(settled.at(-1)).toMatchObject({ type: "custom", customType: "pit.context-edit" });
+    // Applied once: a later run end has nothing left to apply.
+    expect(await settleRun(session)).toEqual([]);
+  });
+
+  it("applies deferred edits at the next turn once context reaches 50% of the window", async () => {
+    const { session, logs } = longTask();
+    await call(
+      session,
+      `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "end" })`,
+    );
+    const pressed = {
+      getContextUsage: () => ({ tokens: 550_000, contextWindow: 1_000_000, percent: 55 }),
+    };
+    expect(edited(await endTurn(session, { ctx: pressed }))).toEqual([logs.result]);
+    expect(await settleRun(session)).toEqual([]);
+  });
+
+  it.each<{ name: string; end: (session: SessionBuilder) => Promise<unknown> }>([
+    { name: "its call failed", end: (session) => endTurn(session, { isError: true }) },
+    {
+      name: "the session tree changed",
+      end: async (session) => {
+        await endTurn(session);
+        await emit(
+          "session_tree",
+          { type: "session_tree" },
+          context({ sessionManager: session.manager }),
+        );
+      },
+    },
+  ])("discards a deferred edit when $name", async ({ end }) => {
+    const { session, logs } = longTask();
+    await call(
+      session,
+      `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "end" })`,
+    );
+    await end(session);
+    expect(await settleRun(session)).toEqual([]);
+  });
+
+  it("rejects an unknown timing", async () => {
+    const { session, logs } = longTask();
+    await expect(
+      run(
+        `async ({ session: { elide } }) => elide([${JSON.stringify(logs.result)}], { when: "later" as never })`,
+        context({ sessionManager: session.manager }),
+      ),
+    ).rejects.toThrow('options.when must be "now" or "end"');
   });
 });
 

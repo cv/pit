@@ -102,6 +102,11 @@ describe("context result rendering", () => {
       }),
       collapsed: 'Staged note "progress" created · ~27 tokens added · applies after this turn',
     },
+    {
+      name: "a deferred elision",
+      value: receipt({ appliesAt: "run_end" }),
+      collapsed: "Staged elide of 1 tool result · ~2K tokens freed · applies when the run ends",
+    },
   ])("says $name is staged, not applied", ({ value, collapsed }) => {
     expect(render(value, false).join("\n")).toContain(collapsed);
   });
