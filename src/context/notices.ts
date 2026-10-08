@@ -51,7 +51,7 @@ function thresholds(contextWindow: number): Threshold[] {
 }
 
 export function noticeText(details: NoticeDetails): string {
-  return `[Pit] Context is ${details.percent}% full (~${formatTokens(details.tokens)} of ${formatTokens(details.contextWindow)} tokens). Use session.outline() to find stale tool results for session.elide() or finished turns for session.summarize(), and keep task state in session.setNote().`;
+  return `[Pit] Context is ${details.percent}% full (~${formatTokens(details.tokens)} of ${formatTokens(details.contextWindow)} tokens), and every request resends it. Use session.outline() to pick absorbed tool results to elide and finished turns to summarize, together in one call, and keep task state in session.setNote(). An edit pays back after about 15 × its estimatedReprefillTokens ÷ estimatedTokensFreed later requests.`;
 }
 
 /** The highest threshold, in tokens, among notices still visible on the active branch. */

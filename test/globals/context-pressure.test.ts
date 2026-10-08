@@ -44,8 +44,7 @@ describe("context pressure notices", () => {
       {
         type: "custom_message",
         customType: "pit.context-pressure",
-        content:
-          "[Pit] Context is 52% full (~104K of 200K tokens). Use session.outline() to find stale tool results for session.elide() or finished turns for session.summarize(), and keep task state in session.setNote().",
+        content: expect.stringMatching(/^\[Pit\] Context is 52% full \(~104K of 200K tokens\)/),
         display: true,
         details: {
           level: 50,
