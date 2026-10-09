@@ -27,8 +27,9 @@ export function elisionStub(id: string, tokens: number, reason?: string): string
 }
 
 /**
- * The arguments that replace an elided tool call's. It reads as an omission, not as code, so a
- * model does not mistake it for a program that ran; recovery probes for #222 showed both.
+ * The note that stands before an elided call's emptied arguments. It reads as an omission, not as
+ * code, so a model does not mistake it for a program that ran; recovery probes for #222 showed
+ * both. It sits in text, not in arguments, where a model copied it as a call (#292).
  */
 export function argumentStub(
   id: string,
@@ -38,7 +39,7 @@ export function argumentStub(
 ): string {
   const because = reason ? ` · reason: ${reason}` : "";
   const applied = edits ? ` · ${appliedEdits(edits)}` : "";
-  return `${ELIDED_ARGUMENTS_PREFIX}; this is not the original call · ~${formatTokens(tokens)} tokens${applied}${because} · original: session.inspectEntry("${id}")]`;
+  return `${ELIDED_ARGUMENTS_PREFIX} · ~${formatTokens(tokens)} tokens${applied}${because} · original: session.inspectEntry("${id}")]`;
 }
 
 const MAX_STUB_FILES = 6;
@@ -66,16 +67,22 @@ export function argumentTokens(message: AssistantMessage): number {
 }
 
 /**
- * An assistant message with each tool call's arguments replaced. Text, thinking, and each call's
- * ID and name stay, so tool results still answer their calls and signed thinking replays.
+ * An assistant message with its tool calls' arguments emptied and the stub as text before the
+ * first call. Text, thinking, and each call's ID and name stay, so tool results still answer their
+ * calls and signed thinking replays.
  */
 function stubbedAssistant(message: AssistantMessage, stub: string): AssistantMessage {
-  return {
-    ...message,
-    content: message.content.map((block) =>
-      block.type === "toolCall" ? { ...block, arguments: { elided: stub } } : block,
-    ),
-  };
+  const content: AssistantMessage["content"] = [];
+  for (const block of message.content) {
+    if (block.type !== "toolCall") {
+      content.push(block);
+      continue;
+    }
+    if (!content.some((kept) => kept.type === "toolCall"))
+      content.push({ type: "text", text: stub });
+    content.push({ ...block, arguments: {} });
+  }
+  return { ...message, content };
 }
 
 function stubbed(message: AgentMessage, stub: string): AgentMessage {

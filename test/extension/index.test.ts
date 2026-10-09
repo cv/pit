@@ -513,15 +513,15 @@ describe("pit extension", () => {
   });
 
   it("names a copied elision stub instead of reporting a missing program", () => {
-    // Elided calls keep `{ elided: "[Pit: these arguments were elided …]" }` in context, and a
-    // model can imitate that shape instead of sending code.
-    const stub = {
-      elided:
-        "[Pit: these arguments were elided to save context; this is not the original call · ~353 tokens]",
-    };
-    expect(() => tool.prepareArguments?.(stub)).toThrow(
-      "These arguments copy an elision stub from context; they are not a program.",
-    );
+    // A model can imitate an elided call, with emptied arguments, or an older placeholder.
+    const stub = { elided: "[Pit: the tool call arguments below were elided to save context]" };
+    for (const copied of [stub, {}]) {
+      expect(() => tool.prepareArguments?.(copied)).toThrow(
+        "These arguments copy an elided call from context; they are not a program.",
+      );
+    }
+    // Other arguments without code are left for schema validation to report.
+    expect(tool.prepareArguments?.({ params: {} })).toEqual({ params: {} });
     expect(tool.prepareArguments?.({ code: "async () => 1", ...stub })).toMatchObject({
       code: "async () => 1",
     });

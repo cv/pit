@@ -20,14 +20,15 @@ export function resolveToolInput(source: string, params: unknown): unknown {
 const OPTIONAL_ARGUMENTS = ["label", "functionId", "params", "saveOnly", "timeoutMs"] as const;
 
 /**
- * Elide replaces a past call's arguments with `{ elided: "[Pit: these arguments were elided …]" }`.
- * A model that copies that shape from context sends no program, so name the mistake instead of
- * letting schema validation report a missing `code`.
+ * Elide empties a past call's arguments and puts a `[Pit: … elided …]` note before it. A model that
+ * imitates an elided call, or an older `{ elided }` placeholder, sends no program, so name the
+ * mistake instead of letting schema validation report a missing `code`.
  */
 export function rejectCopiedElisionStub(args: unknown): void {
-  if (typeof args !== "object" || args === null || "code" in args || !("elided" in args)) return;
+  if (typeof args !== "object" || args === null || "code" in args) return;
+  if (!("elided" in args) && Object.keys(args).length > 0) return;
   throw new Error(
-    "These arguments copy an elision stub from context; they are not a program. Earlier calls' arguments were elided to save context, and each stub only marks one. Send { code } with the program to run.",
+    "These arguments copy an elided call from context; they are not a program. Earlier calls' arguments were elided to save context. Send { code } with the program to run.",
   );
 }
 
