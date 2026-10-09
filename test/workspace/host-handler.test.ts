@@ -92,6 +92,8 @@ describe("workspace read and edit", () => {
     expect(JSON.parse(await readFile(join(cwd, "ledger.json"), "utf8"))).toHaveLength(20_001);
   });
 
+  // A 5 MB file through the sandbox takes about 6 s alone, but parallel workers can starve it past
+  // the 30 s default, so it gets 60 s.
   it("fails a raw read larger than the program-data budget unless it selects a part", async () => {
     await writeFile(join(cwd, "huge.txt"), "x\n".repeat(2_500_000), "utf8");
     const result = await value(`async ({ workspace: { read } }) => {
@@ -110,7 +112,7 @@ describe("workspace read and edit", () => {
       hasMore: true,
     });
     expect(result.part).not.toHaveProperty("truncated");
-  });
+  }, 60_000);
 
   it("validates read arguments and supports @-prefixed paths", async () => {
     await writeFile(join(cwd, "at.txt"), "contents", "utf8");
