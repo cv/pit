@@ -29,8 +29,7 @@ export const NOTICE_TYPE = "pit.context-pressure";
 export const PROVENANCE_TYPE = "pit.context-edit";
 export const ELIDED_PREFIX = "[Elided by the model";
 /** Starts the stub that replaces an elided assistant entry's tool-call arguments. */
-export const ELIDED_ARGUMENTS_PREFIX =
-  "[Pit: the tool call arguments below were elided to save context";
+export const ELIDED_CALLS_PREFIX = "[Pit: elided tool call";
 export const SUMMARY_PREFIX = "[Model summary of ";
 
 export type ContextRole =
@@ -162,16 +161,12 @@ export function originalContent(entry: SessionEntry): EditableContent {
   return (entry as { message: { content: EditableContent } }).message.content;
 }
 
-/** Whether replacement content is an assistant message whose tool calls follow an elision note. */
-function elidedArguments(content: EditableContent): boolean {
+/** Whether replacement content is an assistant message whose tool calls became an elision note. */
+function elidedCalls(content: EditableContent): boolean {
   if (typeof content === "string") return false;
-  return (
-    content.some((block) => block.type === "toolCall") &&
-    content.some(
-      (block) =>
-        block.type === "text" &&
-        (block as { text: string }).text.startsWith(ELIDED_ARGUMENTS_PREFIX),
-    )
+  return content.some(
+    (block) =>
+      block.type === "text" && (block as { text: string }).text.startsWith(ELIDED_CALLS_PREFIX),
   );
 }
 
@@ -182,7 +177,7 @@ function stateOf(entry: SessionEntry, edit: ContextEditEntry | undefined): Conte
   if (text.startsWith(ELIDED_PREFIX)) return "elided";
   // A summary carrier stays summarized even if its tool call was later stubbed.
   if (text.startsWith(SUMMARY_PREFIX)) return "summarized";
-  if (elidedArguments(content)) return "elided";
+  if (elidedCalls(content)) return "elided";
   return JSON.stringify(content) === JSON.stringify(originalContent(entry))
     ? "original"
     : "replaced";

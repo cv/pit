@@ -14,7 +14,7 @@ import {
   type AssistantMessage,
   type ContextItem,
   type ContextView,
-  ELIDED_ARGUMENTS_PREFIX,
+  ELIDED_CALLS_PREFIX,
   ELIDED_PREFIX,
   type EditableContent,
 } from "./view.js";
@@ -26,20 +26,42 @@ export function elisionStub(id: string, tokens: number, reason?: string): string
   return `${ELIDED_PREFIX} · ~${formatTokens(tokens)} tokens${because} · original: session.inspectEntry("${id}")]`;
 }
 
+/** The results that answer an assistant entry's tool calls, in call order. */
+function callResults(view: ContextView, item: ContextItem): ContextItem[] {
+  return item.toolCallIds.flatMap((id) => {
+    const result = view.results.get(id);
+    return result ? [result] : [];
+  });
+}
+
 /**
- * The note that stands before an elided call's emptied arguments. It reads as an omission, not as
- * code, so a model does not mistake it for a program that ran; recovery probes for #222 showed
- * both. It sits in text, not in arguments, where a model copied it as a call (#292).
+ * The note that replaces an elided entry's tool calls and their results. It is plain text, not a
+ * tool call, so a model sees nothing it could copy as a call (#292), and it reads as an omission,
+ * not as code, so a model does not mistake it for a program that ran (#222).
  */
-export function argumentStub(
-  id: string,
-  tokens: number,
-  reason?: string,
-  edits?: ResultEdits,
-): string {
-  const because = reason ? ` · reason: ${reason}` : "";
-  const applied = edits ? ` · ${appliedEdits(edits)}` : "";
-  return `${ELIDED_ARGUMENTS_PREFIX} · ~${formatTokens(tokens)} tokens${applied}${because} · original: session.inspectEntry("${id}")]`;
+function callNote(view: ContextView, item: ContextItem, reason?: string): string {
+  const message = item.messages[0] as AssistantMessage;
+  const names = message.content.flatMap((block) => (block.type === "toolCall" ? [block.name] : []));
+  const results = callResults(view, item);
+  const tokens = argumentTokens(message) + results.reduce((sum, result) => sum + result.tokens, 0);
+  const failed = results.filter(
+    (result) => (result.messages[0] as { isError?: boolean }).isError === true,
+  ).length;
+  const edits = callEdits(view, item);
+  const label =
+    names.length === 1
+      ? `${ELIDED_CALLS_PREFIX}: ${names[0]}`
+      : `${ELIDED_CALLS_PREFIX}s: ${names.join(", ")}`;
+  const withResults =
+    results.length === 0 ? "" : results.length === 1 ? " with its result" : " with their results";
+  const parts = [
+    `${label} · ~${formatTokens(tokens)} tokens${withResults}`,
+    ...(edits ? [appliedEdits(edits)] : []),
+    ...(failed > 0 ? [`${failed} failed`] : []),
+    ...(reason ? [`reason: ${reason}`] : []),
+    `originals: ${[item.id, ...results.map((result) => result.id)].map((id) => `session.inspectEntry("${id}")`).join(", ")}`,
+  ];
+  return `${parts.join(" · ")}]`;
 }
 
 const MAX_STUB_FILES = 6;
@@ -67,27 +89,23 @@ export function argumentTokens(message: AssistantMessage): number {
 }
 
 /**
- * An assistant message with its tool calls' arguments emptied and the stub as text before the
- * first call. Text, thinking, and each call's ID and name stay, so tool results still answer their
- * calls and signed thinking replays.
+ * An assistant message whose tool calls become one note, where the first call was. Text and
+ * thinking stay, so signed thinking still replays; the calls' results are omitted with them, so
+ * every remaining result still answers a call.
  */
-function stubbedAssistant(message: AssistantMessage, stub: string): AssistantMessage {
+function foldedAssistant(message: AssistantMessage, note: string): AssistantMessage {
   const content: AssistantMessage["content"] = [];
   for (const block of message.content) {
-    if (block.type !== "toolCall") {
-      content.push(block);
-      continue;
-    }
-    if (!content.some((kept) => kept.type === "toolCall"))
-      content.push({ type: "text", text: stub });
-    content.push({ ...block, arguments: {} });
+    if (block.type !== "toolCall") content.push(block);
+    else if (!content.some((kept) => kept.type === "text" && kept.text === note))
+      content.push({ type: "text", text: note });
   }
   return { ...message, content };
 }
 
 function stubbed(message: AgentMessage, stub: string): AgentMessage {
   if (message.role === "toolResult") return { ...message, content: [{ type: "text", text: stub }] };
-  return message.role === "assistant" ? stubbedAssistant(message, stub) : message;
+  return message.role === "assistant" ? foldedAssistant(message, stub) : message;
 }
 
 /** Tokens of an entry after elision replaces its result or tool-call arguments with a stub. */
@@ -95,7 +113,7 @@ export function stubTokens(item: ContextItem, stub: string): number {
   return item.messages.reduce((sum, message) => sum + estimateTokens(stubbed(message, stub)), 0);
 }
 
-function elisionProblem(item: ContextItem, stubSize: number): string | undefined {
+function elisionProblem(item: ContextItem, stubSize: number, size: number): string | undefined {
   if (item.protectedReason) return `${item.id} is protected: ${item.protectedReason}`;
   if (item.role === "assistant") {
     if (item.toolCallIds.length === 0) {
@@ -109,18 +127,18 @@ function elisionProblem(item: ContextItem, stubSize: number): string | undefined
   // A summary carrier or another edited entry already stands in for its original.
   if (item.state !== "original")
     return `${item.id} is ${item.state}; elide edits only original entries`;
-  return stubSize >= item.tokens ? `${item.id} is no larger than its elision stub` : undefined;
+  return stubSize >= size ? `${item.id} is no larger than its elision stub` : undefined;
 }
 
 function stubFor(view: ContextView, item: ContextItem, reason?: string): string {
-  if (item.role !== "assistant") return elisionStub(item.id, item.tokens, reason);
-  const tokens = argumentTokens(item.messages[0] as AssistantMessage);
-  return argumentStub(item.id, tokens, reason, callEdits(view, item));
+  return item.role === "assistant"
+    ? callNote(view, item, reason)
+    : elisionStub(item.id, item.tokens, reason);
 }
 
 function replacement(item: ContextItem, stub: string): EditableContent {
   if (item.role !== "assistant") return stub;
-  return stubbedAssistant(item.messages[0] as AssistantMessage, stub).content;
+  return foldedAssistant(item.messages[0] as AssistantMessage, stub).content;
 }
 
 export function planElide(
@@ -130,39 +148,65 @@ export function planElide(
   basis: CacheBasis,
 ): PlannedEdit {
   const problems = new PlanProblems();
-  const stubs: Array<{ item: ContextItem; stub: string; tokens: number }> = [];
+  // Eliding a call folds its results into the call's note, so a targeted result whose call is
+  // also targeted needs no stub of its own.
+  const folded = new Map<string, ContextItem[]>();
   for (const id of ids) {
+    const item = view.byId.get(id);
+    if (item?.role === "assistant") folded.set(id, callResults(view, item));
+  }
+  const foldedIds = new Set([...folded.values()].flat().map((result) => result.id));
+  const stubs: Array<{ item: ContextItem; stub: string; tokens: number; results: ContextItem[] }> =
+    [];
+  for (const id of ids) {
+    if (foldedIds.has(id)) continue;
     const item = view.byId.get(id);
     if (!item) {
       problems.add(describeMissing(view, id));
       continue;
     }
+    const results = folded.get(id) ?? [];
     const stub = stubFor(view, item, reason);
     const tokens = stubTokens(item, stub);
-    const problem = elisionProblem(item, tokens);
+    const size = item.tokens + results.reduce((sum, result) => sum + result.tokens, 0);
+    const problem = elisionProblem(item, tokens, size);
     if (problem) problems.add(problem);
-    else stubs.push({ item, stub, tokens });
+    else stubs.push({ item, stub, tokens, results });
   }
   const retry =
     stubs.length > 0
       ? `These can be elided: ${JSON.stringify(stubs.map(({ item }) => item.id))}`
       : undefined;
   problems.throwIfAny("elide", retry);
-  const tokensFreed = stubs.reduce((sum, { item, tokens }) => sum + item.tokens - tokens, 0);
-  const reprefillTokens = reprefillAfter(view, ids, tokensFreed, basis);
+  const tokensFreed = stubs.reduce(
+    (sum, { item, tokens, results }) =>
+      sum + item.tokens - tokens + results.reduce((total, result) => total + result.tokens, 0),
+    0,
+  );
+  const targets = [
+    ...new Set([...ids, ...stubs.flatMap(({ results }) => results.map((result) => result.id))]),
+  ];
+  const reprefillTokens = reprefillAfter(view, targets, tokensFreed, basis);
   const calls = stubs.filter(({ item }) => item.role === "assistant").length;
-  return {
-    operation: "elide",
-    targets: [...ids],
-    drafts: stubs.map(({ item, stub }) => ({
+  const drafts: PlannedEdit["drafts"] = [];
+  for (const { item, stub, results } of stubs) {
+    drafts.push({
       type: "context_edit",
       targetId: item.id,
       replacement: { content: replacement(item, stub) },
-    })),
+    });
+    // The call's results go with it, so no remaining result lacks its call.
+    for (const result of results)
+      drafts.push({ type: "context_edit", targetId: result.id, replacement: null });
+  }
+  return {
+    operation: "elide",
+    targets,
+    drafts,
     records: [
       {
         operation: "elide",
-        targets: [...ids],
+        targets,
         ...(calls > 0 ? { toolCallEntries: calls } : {}),
         ...(reason ? { reason } : {}),
         tokensFreed,

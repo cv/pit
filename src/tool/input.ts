@@ -20,9 +20,10 @@ export function resolveToolInput(source: string, params: unknown): unknown {
 const OPTIONAL_ARGUMENTS = ["label", "functionId", "params", "saveOnly", "timeoutMs"] as const;
 
 /**
- * Elide empties a past call's arguments and puts a `[Pit: … elided …]` note before it. A model that
- * imitates an elided call, or an older `{ elided }` placeholder, sends no program, so name the
- * mistake instead of letting schema validation report a missing `code`.
+ * Elide folds a past call and its results into a `[Pit: elided tool call …]` text note, so no
+ * placeholder call remains in context. A model that still sends empty arguments, or an older
+ * `{ elided }` placeholder, sends no program, so name the mistake instead of letting schema
+ * validation report a missing `code`.
  */
 export function rejectCopiedElisionStub(args: unknown): void {
   if (typeof args !== "object" || args === null || "code" in args) return;

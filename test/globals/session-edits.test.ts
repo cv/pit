@@ -201,8 +201,8 @@ describe("session.elide", () => {
   });
 
   it("explains every rejected target in one error", async () => {
-    const { session, prompt, logs, reply, current } = longTask();
-    const ids = [prompt, current, reply, logs.assistant, "missing"];
+    const { session, prompt, reply, current } = longTask();
+    const ids = [prompt, current, reply, "missing"];
 
     await expect(
       run(
@@ -210,7 +210,7 @@ describe("session.elide", () => {
         context({ sessionManager: session.manager }),
       ),
     ).rejects.toThrow(
-      `Cannot elide: ${prompt} is protected: user message; ${current} is protected: current turn; ${reply} is an assistant entry without tool calls; elide shrinks tool results and tool-call arguments, and session.summarize replaces assistant turns; ${logs.assistant} is no larger than its elision stub; missing is not on the active branch`,
+      `Cannot elide: ${prompt} is protected: user message; ${current} is protected: current turn; ${reply} is an assistant entry without tool calls; elide shrinks tool results and tool-call arguments, and session.summarize replaces assistant turns; missing is not on the active branch`,
     );
   });
 
@@ -256,7 +256,11 @@ describe("session.elide", () => {
       session,
       `async ({ session: { elide } }) => elide([${JSON.stringify(id)}], { reason: "parser written" })`,
     );
-    expect(receipt).toMatchObject({ operation: "elide", targets: [id], toolCallEntries: 1 });
+    expect(receipt).toMatchObject({
+      operation: "elide",
+      targets: [id, result],
+      toolCallEntries: 1,
+    });
     expect(receipt.estimatedTokensFreed).toBeGreaterThan(500);
     await endRun(session);
 
@@ -272,20 +276,21 @@ describe("session.elide", () => {
       signed,
       { type: "text", text: "Writing the new parser." },
     ]);
-    // The note sits in text before the call, whose arguments are emptied (#292).
-    expect(content[2]).toEqual({
-      type: "text",
-      text: expect.stringMatching(
-        new RegExp(
-          `^\\[Pit: the tool call arguments below were elided to save context · ~[\\d.]+K? tokens · reason: parser written · original: session\\.inspectEntry\\("${id}"\\)\\]$`,
+    // The call and its result become one text note, so no tool call is left to copy (#292).
+    expect(content.slice(2)).toEqual([
+      {
+        type: "text",
+        text: expect.stringMatching(
+          new RegExp(
+            `^\\[Pit: elided tool call: typescript · ~[\\d.]+K? tokens with its result · reason: parser written · originals: session\\.inspectEntry\\("${id}"\\), session\\.inspectEntry\\("${result}"\\)\\]$`,
+          ),
         ),
-      ),
-    });
-    expect(content[3]).toMatchObject({ type: "toolCall", id: callIds[0], name: "typescript" });
-    expect((content[3] as { arguments: unknown }).arguments).toEqual({});
-    // The result still answers the call.
-    expect(modelText(session, result)).toBe('{"applied":1}');
-
+      },
+    ]);
+    const resultEntry = session.manager
+      .buildSessionProjection()
+      .entries.find((entry) => entry.sourceEntry.id === result);
+    expect(resultEntry?.messages ?? []).toEqual([]);
     const view = await call(
       session,
       `async ({ session: { outline, inspectEntry } }) => ({ outline: await outline({ roles: ["assistant"], limit: 5 }), original: await inspectEntry(${JSON.stringify(id)}) })`,
@@ -298,25 +303,37 @@ describe("session.elide", () => {
 
   // #252: once its edits are applied, an edit call's payload is redundant, but its stub keeps
   // which files changed and at which revision.
-  it("puts one note before a message's first elided call and empties every call", async () => {
+  it("folds a message's parallel calls and their results into one note", async () => {
     const session = new SessionBuilder();
     session.user("Read both files");
     const { id, callIds } = session.assistant("", [
       { name: "typescript", args: { code: "a".repeat(2000) } },
       { name: "typescript", args: { code: "b".repeat(2000) } },
     ]);
-    for (const callId of callIds) session.result(callId, "typescript", "ok");
+    const results = callIds.map((callId) => session.result(callId, "typescript", "ok"));
     session.current();
-    await call(session, `async ({ session: { elide } }) => elide([${JSON.stringify(id)}])`);
+    const receipt = await call(
+      session,
+      `async ({ session: { elide } }) => elide([${JSON.stringify(id)}])`,
+    );
+    expect(receipt.targets).toEqual([id, ...results]);
     await endRun(session);
     const projected = session.manager
       .buildSessionProjection()
       .entries.find((entry) => entry.sourceEntry.id === id);
     const message = projected?.messages[0] as unknown as { content: Array<Record<string, any>> };
     const { content } = message;
-    expect(content.map((block) => block.type)).toEqual(["text", "toolCall", "toolCall"]);
-    expect(content[0]?.text).toMatch(/^\[Pit: the tool call arguments below were elided/);
-    expect(content.slice(1).map((block) => block.arguments)).toEqual([{}, {}]);
+    expect(content.map((block) => block.type)).toEqual(["text"]);
+    expect(content[0]?.text).toMatch(
+      /^\[Pit: elided tool calls: typescript, typescript · ~[\d.]+K? tokens with their results/,
+    );
+    const visible = new Set(
+      session.manager
+        .buildSessionProjection()
+        .entries.filter((entry) => entry.messages.length > 0)
+        .map((entry) => entry.sourceEntry.id),
+    );
+    expect(results.filter((result) => visible.has(result))).toEqual([]);
   });
 
   it.each<{ name: string; details: Record<string, unknown>; applied: string }>([
@@ -366,7 +383,7 @@ describe("session.elide", () => {
     const note = message.content.find(
       (block) => block.type === "text" && block.text.startsWith("[Pit:"),
     );
-    expect(note?.text).toContain(` · ${applied} · original: session.inspectEntry(`);
+    expect(note?.text).toContain(` · ${applied} · originals: session.inspectEntry(`);
   });
 
   // Live acceptance found elide stubbing a summary carrier: the assistant entry that holds a
@@ -405,7 +422,10 @@ describe("session.elide", () => {
       session,
       `async ({ session: { elide } }) => elide(${JSON.stringify([logs.result, big.assistant])})`,
     );
-    expect(receipt).toMatchObject({ targets: [logs.result, big.assistant], toolCallEntries: 1 });
+    expect(receipt).toMatchObject({
+      targets: [logs.result, big.assistant, big.result],
+      toolCallEntries: 1,
+    });
   });
 
   it("rejects a second edit of the same target, staged or applied", async () => {
