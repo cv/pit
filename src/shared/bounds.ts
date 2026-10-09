@@ -41,7 +41,7 @@ export const LIMITS = {
 export type SliceKeep = "head" | "tail";
 export type BoundKeep = SliceKeep | "ends";
 
-export interface TextSlice {
+interface TextSlice {
   text: string;
   truncated: boolean;
   /** Lines in `text`, counting a partial edge line as one line. */

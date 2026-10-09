@@ -12,7 +12,7 @@ export interface RangeBudget {
 }
 
 /** One window of hashed lines, starting at a 1-based line number. */
-export interface RangeWindow {
+interface RangeWindow {
   start: number;
   lines: Iterable<string>;
   /** The source was cut after these lines, so the ranges are truncated even within budget. */

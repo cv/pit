@@ -6,7 +6,7 @@ import { LIMITS, sliceText } from "../shared/bounds.js";
 import { resolveWorkspacePath, workspaceResultPath } from "./paths.js";
 import { takeRanges } from "./ranges.js";
 
-export type WorkspaceReadFormat = "hashed" | "raw";
+type WorkspaceReadFormat = "hashed" | "raw";
 
 interface WorkspaceReadRequest {
   path: string;
@@ -18,9 +18,9 @@ interface WorkspaceReadRequest {
 }
 
 /** Most line ranges one read may ask for. */
-export const MAX_READ_RANGES = 20;
+const MAX_READ_RANGES = 20;
 
-export interface WorkspaceReadScan {
+interface WorkspaceReadScan {
   selected: string;
   selectedHashes: string[];
   totalLines: number;

@@ -11,7 +11,7 @@ const usage = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-export interface ToolCallSpec {
+interface ToolCallSpec {
   id?: string;
   name: string;
   args?: Record<string, unknown>;
@@ -97,7 +97,7 @@ export class SessionBuilder {
 }
 
 /** Appends boundary drafts with the same session-manager calls Pi's boundary commit uses. */
-export function applyBoundary(manager: SessionManager, drafts: SessionBoundaryDraft[]): void {
+function applyBoundary(manager: SessionManager, drafts: SessionBoundaryDraft[]): void {
   for (const draft of drafts) {
     if (draft.type === "custom") manager.appendCustomEntry(draft.customType, draft.data);
     else if (draft.type === "custom_message") {
@@ -138,7 +138,7 @@ export async function settleRun(
   return entries;
 }
 
-export interface EndTurnOptions {
+interface EndTurnOptions {
   isError?: boolean;
   outcome?: "completed" | "aborted" | "error";
   /** Entries earlier boundary handlers proposed. */

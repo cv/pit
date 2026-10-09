@@ -16,7 +16,7 @@ interface RenderedComponent {
   invalidate(): void;
 }
 
-export interface RegisteredTool {
+interface RegisteredTool {
   label: string;
   description: string;
   promptSnippet?: string;
@@ -67,7 +67,7 @@ let slashCommands: any[] = [];
 let configuredModels: any[] = [];
 let piSettings: Record<string, unknown> = {};
 const registeredCommands = new Map<string, any>();
-export let sentUserMessages: Array<{ content: string; options: unknown }> = [];
+let sentUserMessages: Array<{ content: string; options: unknown }> = [];
 export let sentMessages: Array<{ message: any; options: unknown }> = [];
 
 interface PromptEvent {
@@ -76,7 +76,7 @@ interface PromptEvent {
 }
 
 /** What a before_agent_start handler contributes, observed the way Pi 0.86+ applies it. */
-export interface PromptContribution {
+interface PromptContribution {
   /** The handler's return value. A `systemPrompt` in it forces an opaque replacement prompt. */
   returned: unknown;
   /** Prompt sections the handler added or changed in `systemPromptOptions`. */

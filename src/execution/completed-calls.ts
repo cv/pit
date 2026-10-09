@@ -1,13 +1,13 @@
 import { LIMITS } from "../shared/bounds.js";
 
 /** One completed host call: its trace sequence, `namespace.method`, and returned value. */
-export interface CompletedCall {
+interface CompletedCall {
   sequence: number;
   call: string;
   value: unknown;
 }
 
-export interface CompletedCallsResult {
+interface CompletedCallsResult {
   toolCallId: string;
   calls: CompletedCall[];
   /** Completed calls the journal did not keep: beyond its entry or byte budget, or unserializable. */
@@ -15,9 +15,9 @@ export interface CompletedCallsResult {
 }
 
 /** Most completed calls one program keeps. */
-export const MAX_JOURNAL_CALLS = 128;
+const MAX_JOURNAL_CALLS = 128;
 /** Most applied file edits one program's result records. */
-export const MAX_APPLIED_EDITS = 32;
+const MAX_APPLIED_EDITS = 32;
 
 /**
  * A file edit a program applied: what `session.elide` names when it stubs the arguments of the
@@ -51,7 +51,7 @@ function appliedEdits(call: string, value: unknown): AppliedEdit[] {
   return results.flatMap((result) => (result.kind === "edit" ? [appliedEdit(result.value)] : []));
 }
 /** Failed programs whose completed calls stay recoverable. */
-export const MAX_RECOVERABLE_PROGRAMS = 8;
+const MAX_RECOVERABLE_PROGRAMS = 8;
 
 interface JournalEntry {
   sequence: number;

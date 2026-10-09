@@ -5,7 +5,7 @@ import {
 } from "../../shared/argument-values.js";
 
 type GhMethod = keyof PitGhFunctions;
-export interface PreparedGhCommand {
+interface PreparedGhCommand {
   args: string[];
   options: Record<string, unknown>;
 }

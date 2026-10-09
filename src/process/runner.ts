@@ -12,7 +12,7 @@ export function formatProcessCommand(program: string, args: string[]): string {
   return [program, ...args.map((argument) => JSON.stringify(argument))].join(" ");
 }
 
-export interface ProcessRequest {
+interface ProcessRequest {
   program: string;
   args: string[];
   options: Record<string, unknown>;
@@ -21,7 +21,7 @@ export interface ProcessRequest {
   signal?: AbortSignal;
 }
 
-export interface ProcessRunner {
+interface ProcessRunner {
   run(request: ProcessRequest): Promise<ProcessResult>;
 }
 

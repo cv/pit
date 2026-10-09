@@ -6,7 +6,7 @@ import {
 
 type NpmMethod = keyof PitNpmFunctions;
 
-export interface PreparedNpmCommand {
+interface PreparedNpmCommand {
   args: string[];
   options: Record<string, unknown>;
 }

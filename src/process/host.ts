@@ -30,7 +30,7 @@ function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
   }
 }
 
-export interface StreamingProcessResult {
+interface StreamingProcessResult {
   stdout: string;
   stderr: string;
   code: number;
@@ -40,7 +40,7 @@ export interface StreamingProcessResult {
   truncated: boolean;
 }
 
-export interface StreamingProcessOptions {
+interface StreamingProcessOptions {
   cwd: string;
   timeout: number;
   signal?: AbortSignal;

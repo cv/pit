@@ -13,7 +13,7 @@ import {
 import { isRecord } from "../shared/records.js";
 import { defineNativeFunction, type NativeFunctionDefinition } from "./global-definition.js";
 
-export const PI_TOOLS_NAMESPACE = "tools";
+const PI_TOOLS_NAMESPACE = "tools";
 export const TOOL_INDEX_NAMESPACE = "toolIndex";
 
 /**
@@ -42,7 +42,7 @@ const MCP_TEXT_NOTE = "Returns the server's text, often JSON: parse it with JSON
 export type JsonSchema = Record<string, unknown>;
 
 /** The fields of Pi's tool definitions the catalog uses. */
-export interface PiToolInfo {
+interface PiToolInfo {
   readonly name: string;
   readonly description?: string;
   readonly parameters?: unknown;
@@ -73,7 +73,7 @@ export interface PiToolCatalog {
   readonly collisions: readonly string[];
 }
 
-export interface PiToolSearchResult {
+interface PiToolSearchResult {
   name: string;
   summary: string;
 }

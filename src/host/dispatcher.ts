@@ -87,7 +87,7 @@ async function readHttpBody(
 const PROMOTION_SUGGESTION_RUNS = 5;
 const TEMPORARY_FUNCTION_NAME = /(?:smoke|scratch|temp|tmp|debug|test)/i;
 
-export interface HostServices {
+interface HostServices {
   pi: ExtensionAPI;
   ctx: ExtensionContext;
   functionState: FunctionState;

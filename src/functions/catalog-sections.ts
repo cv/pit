@@ -1,7 +1,7 @@
 import { buildSessionProjection, type SessionEntry } from "@earendil-works/pi-coding-agent";
 
 /** Prompt sections that hold Pit's saved-function catalogs. */
-export const CATALOG_SECTIONS = ["pit_user_functions", "pit_project_functions"] as const;
+const CATALOG_SECTIONS = ["pit_user_functions", "pit_project_functions"] as const;
 export type CatalogSection = (typeof CATALOG_SECTIONS)[number];
 
 /** A conversation message announcing catalog changes the system prompt does not show yet. */
@@ -30,7 +30,7 @@ export function keepsSystemUpdates(model: { compat?: unknown } | undefined): boo
   return compat?.supportsMidConvoSystemMessages === true;
 }
 
-export interface RecordedCatalogs {
+interface RecordedCatalogs {
   /** Catalog sections as the model's system prompt currently has them. */
   system: Map<CatalogSection, string>;
   /** The newest content the model has seen per section, in the prompt or an announcement. */
@@ -97,7 +97,7 @@ function delta(previous: string, current: string): { added: string[]; removed: s
   return { added, removed };
 }
 
-export interface CatalogPlan {
+interface CatalogPlan {
   /** The value each catalog section should have in this request's prompt; undefined leaves it unset. */
   sections: Record<CatalogSection, string | undefined>;
   /** A message announcing changes the prompt keeps out, when there are any. */

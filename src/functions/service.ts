@@ -29,32 +29,32 @@ import { defaultProjectFunctionDirectory } from "./storage/paths.js";
 import { removeProjectFunction, saveProjectFunction } from "./storage/project.js";
 import { removeUserFunction, saveUserFunction } from "./storage/user.js";
 
-export interface PersistentFunctionPromotionRequest {
+interface PersistentFunctionPromotionRequest {
   name: string;
   summary: string;
   context: SavedFunctionExecutionContext;
   activity?: FunctionActivity[];
 }
 
-export interface ProjectFunctionRemovalRequest {
+interface ProjectFunctionRemovalRequest {
   name: string;
   context: SavedFunctionExecutionContext;
 }
 
-export interface ProjectFunctionStateRemovalRequest {
+interface ProjectFunctionStateRemovalRequest {
   cwd: string;
   name: string;
   state: FunctionState;
   commit: FunctionStateCommit;
 }
 
-export interface SavedFunctionServiceDependencies {
+interface SavedFunctionServiceDependencies {
   state: FunctionState;
   commit: FunctionStateCommit;
   appendEntry(type: string, entry: FunctionEntry): void;
 }
 
-export interface SessionFunctionRemovalOptions {
+interface SessionFunctionRemovalOptions {
   cascade?: boolean;
 }
 

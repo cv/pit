@@ -56,7 +56,7 @@ function compileTypeScript(source: string): string {
   return compiled;
 }
 
-export interface SandboxProgramOptions extends FunctionEnvironment {
+interface SandboxProgramOptions extends FunctionEnvironment {
   input?: unknown;
   definition?: FunctionDefinitionReference;
   timings?: ExecutionTimingRecorder;

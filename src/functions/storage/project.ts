@@ -21,7 +21,7 @@ import { type ConfiguredFunctionPaths, defaultProjectFunctionDirectory } from ".
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
 /** Settings from a trusted project's `.pi/pit.json`. Absent or invalid files yield the defaults. */
-export interface PitProjectConfig {
+interface PitProjectConfig {
   allowedTools?: string[];
   /** Directories for project and user functions, as written; see resolveFunctionPaths. */
   paths?: ConfiguredFunctionPaths;

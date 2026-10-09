@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [".pi/functions/**/*.ts", ".pi/skills/*/assets/*.{ts,mjs}"],
+  "ignore": ["scripts/install-wasmtime.d.mts", "native/wasmtime-executor/smoke.cjs"],
+  "ignoreDependencies": ["minimal", "@earendil-works/pi-ai"]
+}

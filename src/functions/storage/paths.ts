@@ -27,7 +27,7 @@ export function defaultUserFunctionDirectory(): string {
  * other relative paths resolve against the project root. Paths may point outside the project,
  * for example to a separate repository of shared functions.
  */
-export function resolveConfiguredDirectory(cwd: string, configured: string): string {
+function resolveConfiguredDirectory(cwd: string, configured: string): string {
   const path = configured.trim();
   if (path === "~") return homedir();
   if (path.startsWith("~/")) return join(homedir(), path.slice(2));

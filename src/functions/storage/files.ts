@@ -8,12 +8,12 @@ import { validateSavedFunctionSource } from "../core.js";
 import { functionIdFromRelativePath, functionRelativePath } from "../identifier.js";
 import type { PersistentFunctionMetadata } from "../source.js";
 
-export interface PersistentFunctionCandidate {
+interface PersistentFunctionCandidate {
   source: string;
   metadata: PersistentFunctionMetadata;
 }
 
-export interface PersistentFunctionCandidates {
+interface PersistentFunctionCandidates {
   candidates: Map<string, PersistentFunctionCandidate>;
   discoveredNames: Set<string>;
   invalid: Map<string, string>;

@@ -1,4 +1,4 @@
-export interface PromptMetadata {
+interface PromptMetadata {
   description: string;
   promptSnippet?: string;
   promptGuidelines?: readonly string[];

@@ -146,7 +146,7 @@ function record(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-export function firstText(content: EditableContent): string {
+function firstText(content: EditableContent): string {
   if (typeof content === "string") return content;
   const block = content.find((part) => part.type === "text");
   return block?.type === "text" ? block.text : "";
@@ -156,7 +156,7 @@ export function firstText(content: EditableContent): string {
  * The raw content an entry contributed before any context edit. Callers pass only entries Pi
  * lets edits target: user, assistant, and tool-result messages, and custom messages.
  */
-export function originalContent(entry: SessionEntry): EditableContent {
+function originalContent(entry: SessionEntry): EditableContent {
   if (entry.type === "custom_message") return entry.content;
   return (entry as { message: { content: EditableContent } }).message.content;
 }
@@ -302,7 +302,7 @@ function recordProvenance(data: unknown, summaries: Map<string, readonly string[
   }
 }
 
-export interface ContextViewOptions {
+interface ContextViewOptions {
   /** Protects the turn running this tool call from edits. */
   toolCallId?: string;
 }

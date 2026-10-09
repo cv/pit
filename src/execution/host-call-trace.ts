@@ -41,7 +41,7 @@ export interface HostCallTrace {
   function?: FunctionExecutionContext;
 }
 
-export interface HostCallTraceSnapshot {
+interface HostCallTraceSnapshot {
   traces: HostCallTrace[];
   truncated: boolean;
 }
@@ -106,7 +106,7 @@ function argumentSummary(value: unknown): HostCallArgumentSummary {
   return { type: "other" };
 }
 
-export interface StartHostCallTraceInput {
+interface StartHostCallTraceInput {
   id: number;
   sequence: number;
   namespace: string;

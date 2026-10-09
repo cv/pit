@@ -13,7 +13,7 @@ import { getPersistentFunctionMetadata, getSavedFunctionCallSignature } from "./
 import { defaultProjectFunctionDirectory } from "./storage/paths.js";
 import { userFunctionDirectory } from "./storage/user.js";
 
-export interface FunctionInspectionState {
+interface FunctionInspectionState {
   user?: ReadonlyMap<string, string>;
   project?: ReadonlyMap<string, string>;
   session?: ReadonlyMap<string, string>;
@@ -67,7 +67,7 @@ export type FunctionInspection = FunctionSummary & {
   documentation: string;
 } & ({ kind: "source"; source: string } | { kind: "native" | "invalid"; source?: never });
 
-export interface FunctionListResult {
+interface FunctionListResult {
   functions: FunctionSummary[];
   total: number;
   offset: number;
@@ -88,10 +88,7 @@ export class FunctionInspector {
   readonly #projectDirectory: string;
   readonly #userDirectory: string;
 
-  private readonly cwd: string;
-
   constructor(state: FunctionInspectionState, cwd: string) {
-    this.cwd = cwd;
     this.#projectDirectory = state.projectDirectory || defaultProjectFunctionDirectory(cwd);
     this.#userDirectory = userFunctionDirectory(state.userDirectory);
     this.#registry = functionRegistry({

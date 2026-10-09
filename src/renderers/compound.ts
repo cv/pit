@@ -17,7 +17,7 @@ import type { RenderContext, RenderedResultValue } from "./types.js";
 type NestedRenderer = (value: unknown, context: RenderContext) => RenderedResultValue | undefined;
 
 /** Theme and optional syntax hint for structured display; recursion state always starts fresh. */
-export type StructuredDataOptions = Pick<RenderContext, "theme" | "syntaxLanguage">;
+type StructuredDataOptions = Pick<RenderContext, "theme" | "syntaxLanguage">;
 
 /** Display parsed JSON/inputs without pretending nested data are namespace results. */
 export function renderStructuredData(
