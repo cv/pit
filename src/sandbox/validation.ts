@@ -239,82 +239,47 @@ export function validateSandboxTypeScript(
   return graph;
 }
 
-function validateSource(
+const COMPILER_OPTIONS: ts.CompilerOptions = {
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.ESNext,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  lib: ["lib.es2022.d.ts"],
+  types: [],
+  strict: true,
+  noImplicitAny: true,
+  useUnknownInCatchVariables: false,
+  noEmit: true,
+  skipLibCheck: true,
+};
+
+/** Wraps a submission so the checker sees its value checked against the program contract. */
+function wrapProgram(
   source: string,
-  savedFunctions: ReadonlyMap<string, string>,
-  input: unknown,
-  validation: TypeScriptValidationOptions & { requireExpression?: boolean },
-): ValidatedSource {
-  const programExpression = isProgramExpression(source);
-  if (validation.requireExpression && !programExpression) {
-    throw new Error("TypeScript programs must be function expressions");
-  }
-  const environment = validation.environment ?? { sessionFunctions: savedFunctions };
-  // Includes placeholders for tools saved functions inject that Pi does not offer now.
-  const tools = resolveToolCatalog(environment);
-  const registry = functionRegistry(environment, tools);
-  const names = [
-    ...(validation.availableNames ??
-      (validation.environment ? registry.identifiers() : savedFunctions.keys())),
-  ].sort();
-  const registryKey = JSON.stringify(registry.definitions());
-  const availableKey = names.join("\0");
-  const inputSource = input === undefined ? "" : JSON.stringify(input);
-  if (input !== undefined && !programExpression) {
-    throw new Error("Top-level params can only be passed to a function expression");
-  }
-  const cacheKey = JSON.stringify([
-    programExpression,
-    registryKey,
-    availableKey,
-    inputSource,
-    source,
-    validation.definition,
-    validation.checkAll,
-    Boolean(validation.environment),
-    [...(validation.environment?.invalidDefinitions ?? [])],
-  ]);
-  const cached = validationCache.get(cacheKey);
-  if (cached) {
-    validationCacheHits++;
-    if (cached.error) throw new Error(cached.error);
-    return cached;
-  }
-
-  const model = functionTypeModel(source, registry, {
-    ...validation,
-    checkAll: validation.checkAll ?? true,
-    checkCompatibility: Boolean(validation.environment),
-  });
-  const rootType = validation.definition
-    ? `PitSourceProgram<${model.rootDependencies}>`
+  options: { expression: boolean; definition: boolean; rootDependencies: string; input?: string },
+): string {
+  if (!options.expression) return `${EXPRESSION_PREFIX}${source}\n);\nvoid program;\n`;
+  const rootType = options.definition
+    ? `PitSourceProgram<${options.rootDependencies}>`
     : "PitProgram";
-
   const invocation =
-    input === undefined || !programExpression
+    options.input === undefined
       ? ""
-      : `program({} as ${model.rootDependencies}, ${inputSource});\n`;
-  const wrapped = programExpression
-    ? `const program = (\n${source}\n ) satisfies ${rootType};\nvoid program;\n${invocation}`
-    : `${EXPRESSION_PREFIX}${source}\n);\nvoid program;\n`;
-  const options: ts.CompilerOptions = {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    lib: ["lib.es2022.d.ts"],
-    types: [],
-    strict: true,
-    noImplicitAny: true,
-    useUnknownInCatchVariables: false,
-    noEmit: true,
-    skipLibCheck: true,
-  };
-  const baseHost = ts.createCompilerHost(options, true);
+      : `program({} as ${options.rootDependencies}, ${options.input});\n`;
+  return `const program = (\n${source}\n ) satisfies ${rootType};\nvoid program;\n${invocation}`;
+}
+
+/** Creates a program over the in-memory contract, declarations, signatures, and submission. */
+function compileProgram(files: {
+  declarations: string;
+  program: string;
+  signatures: string;
+}): ts.Program {
+  const baseHost = ts.createCompilerHost(COMPILER_OPTIONS, true);
   const sources = new Map([
     [CONTRACT_FILE, CONTRACT_SOURCE],
-    [DECLARATIONS_FILE, `${model.declarations}${tools?.declarations ?? ""}`],
-    [PROGRAM_FILE, wrapped],
-    [SIGNATURES_FILE, model.signatures],
+    [DECLARATIONS_FILE, files.declarations],
+    [PROGRAM_FILE, files.program],
+    [SIGNATURES_FILE, files.signatures],
   ]);
   const host: ts.CompilerHost = {
     ...baseHost,
@@ -328,11 +293,87 @@ function validateSource(
         : ts.createSourceFile(fileName, contents, languageVersion, true);
     },
   };
-  const program = ts.createProgram(
+  return ts.createProgram(
     [CONTRACT_FILE, DECLARATIONS_FILE, SIGNATURES_FILE, PROGRAM_FILE],
-    options,
+    COMPILER_OPTIONS,
     host,
   );
+}
+
+function validationCacheKey(parts: {
+  source: string;
+  expression: boolean;
+  definitions: unknown;
+  names: readonly string[];
+  input: string | undefined;
+  validation: TypeScriptValidationOptions;
+}): string {
+  const { validation } = parts;
+  return JSON.stringify([
+    parts.expression,
+    JSON.stringify(parts.definitions),
+    parts.names.join("\0"),
+    parts.input ?? "",
+    parts.source,
+    validation.definition,
+    validation.checkAll,
+    Boolean(validation.environment),
+    [...(validation.environment?.invalidDefinitions ?? [])],
+  ]);
+}
+
+function validateSource(
+  source: string,
+  savedFunctions: ReadonlyMap<string, string>,
+  input: unknown,
+  validation: TypeScriptValidationOptions & { requireExpression?: boolean },
+): ValidatedSource {
+  const expression = isProgramExpression(source);
+  if (validation.requireExpression && !expression) {
+    throw new Error("TypeScript programs must be function expressions");
+  }
+  if (input !== undefined && !expression) {
+    throw new Error("Top-level params can only be passed to a function expression");
+  }
+  const environment = validation.environment ?? { sessionFunctions: savedFunctions };
+  // Includes placeholders for tools saved functions inject that Pi does not offer now.
+  const tools = resolveToolCatalog(environment);
+  const registry = functionRegistry(environment, tools);
+  const names = [
+    ...(validation.availableNames ??
+      (validation.environment ? registry.identifiers() : savedFunctions.keys())),
+  ].sort();
+  const inputSource = input === undefined ? undefined : JSON.stringify(input);
+  const cacheKey = validationCacheKey({
+    source,
+    expression,
+    definitions: registry.definitions(),
+    names,
+    input: inputSource,
+    validation,
+  });
+  const cached = validationCache.get(cacheKey);
+  if (cached) {
+    validationCacheHits++;
+    if (cached.error) throw new Error(cached.error);
+    return cached;
+  }
+
+  const model = functionTypeModel(source, registry, {
+    ...validation,
+    checkAll: validation.checkAll ?? true,
+    checkCompatibility: Boolean(validation.environment),
+  });
+  const program = compileProgram({
+    declarations: `${model.declarations}${tools?.declarations ?? ""}`,
+    program: wrapProgram(source, {
+      expression,
+      definition: Boolean(validation.definition),
+      rootDependencies: model.rootDependencies,
+      ...(inputSource === undefined ? {} : { input: inputSource }),
+    }),
+    signatures: model.signatures,
+  });
   const diagnostics = programDiagnostics(program);
   if (diagnostics.length > 0) {
     const error = validationError(diagnostics, names);

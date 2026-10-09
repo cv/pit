@@ -36,16 +36,16 @@ export function createProcessRunner(pi: ExtensionAPI, defaultCwd: string): Proce
   };
 }
 
-export async function executeHostProcess({
-  pi,
-  defaultCwd,
-  program,
-  args,
-  options,
-  displayCommand = formatProcessCommand(program, args),
-  onProgress,
-  signal,
-}: ProcessRequest & { pi: ExtensionAPI; defaultCwd: string }): Promise<ProcessResult> {
+type ProcessTermination = "timeout" | "abort";
+
+interface ProcessSettings {
+  cwd: string;
+  budget: { maxBytes: number; maxLines: number };
+  keep: SliceKeep;
+  timeout: number;
+}
+
+function processSettings(options: Record<string, unknown>, defaultCwd: string): ProcessSettings {
   if (options.raise !== undefined && typeof options.raise !== "boolean") {
     throw new TypeError("options.raise must be a boolean");
   }
@@ -60,59 +60,76 @@ export async function executeHostProcess({
     maximum: LIMITS.programData.maxLines,
     fallback: LIMITS.processStream.maxLines,
   });
-  const truncate = options.truncate ?? "tail";
-  if (truncate !== "head" && truncate !== "tail") {
+  const keep = options.truncate ?? "tail";
+  if (keep !== "head" && keep !== "tail") {
     throw new Error('options.truncate must be "head" or "tail"');
   }
-  const keep: SliceKeep = truncate === "head" ? "head" : "tail";
-  const timeout = Number(options.timeoutMs ?? 120_000);
+  return {
+    cwd,
+    budget: { maxBytes, maxLines },
+    keep,
+    timeout: Number(options.timeoutMs ?? 120_000),
+  };
+}
+
+function terminationOf(
+  result: { termination?: ProcessTermination } | { killed: boolean },
+  signal: AbortSignal | undefined,
+): ProcessTermination | undefined {
+  if ("termination" in result) return result.termination;
+  if (!("killed" in result) || !result.killed) return undefined;
+  return signal?.aborted ? "abort" : "timeout";
+}
+
+function terminationMessage(termination: ProcessTermination | undefined, timeout: number): string {
+  if (termination === "timeout") return `Command timed out after ${timeout}ms`;
+  if (termination === "abort") return "Command aborted";
+  return "";
+}
+
+function processFailure(
+  command: string,
+  code: number,
+  output: string,
+  termination: ProcessTermination | undefined,
+): Error {
+  const detail = boundText(output, LIMITS.processError, "tail").text;
+  const message = `Command failed with exit code ${code}: ${command}${detail ? `\n${detail}` : ""}`;
+  // The host's synthetic exit codes are not reliable signals: programs may exit 124 or 130 themselves.
+  if (termination === "timeout") return terminationError("timeout", message);
+  if (termination === "abort") return terminationError("cancelled", message);
+  return new Error(message);
+}
+
+export async function executeHostProcess({
+  pi,
+  defaultCwd,
+  program,
+  args,
+  options,
+  displayCommand = formatProcessCommand(program, args),
+  onProgress,
+  signal,
+}: ProcessRequest & { pi: ExtensionAPI; defaultCwd: string }): Promise<ProcessResult> {
+  const { cwd, budget, keep, timeout } = processSettings(options, defaultCwd);
+  const abort = signal ? { signal } : {};
   onProgress?.({ phase: "start" });
   const result = onProgress
     ? await executeStreamingProcess(program, args, {
         cwd,
         timeout,
-        ...(signal ? { signal } : {}),
-        capture: { budget: { maxBytes, maxLines }, keep },
+        ...abort,
+        capture: { budget, keep },
         onChunk: (stream, chunk) => onProgress({ phase: "output", stream, chunk }),
       })
-    : await pi.exec(program, args, {
-        cwd,
-        ...(signal ? { signal } : {}),
-        timeout,
-      });
+    : await pi.exec(program, args, { cwd, ...abort, timeout });
   onProgress?.({ phase: "end", code: result.code });
-  const processStderr =
-    result.stderr ||
-    ("termination" in result && result.termination === "timeout"
-      ? `Command timed out after ${timeout}ms`
-      : "termination" in result && result.termination === "abort"
-        ? "Command aborted"
-        : "");
-  const stdout = sliceText(result.stdout, { maxBytes, maxLines }, keep);
-  const stderr = sliceText(processStderr, { maxBytes, maxLines }, keep);
+  const termination = terminationOf(result, signal);
+  const stdout = sliceText(result.stdout, budget, keep);
+  const stderr = sliceText(result.stderr || terminationMessage(termination, timeout), budget, keep);
   if (options.raise === true && result.code !== 0) {
-    const detail = boundText(
-      stderr.text.trim() || stdout.text.trim(),
-      LIMITS.processError,
-      "tail",
-    ).text;
-    const message =
-      `Command failed with exit code ${result.code}: ${displayCommand}` +
-      (detail ? `\n${detail}` : "");
-    const termination =
-      "termination" in result
-        ? result.termination
-        : result.killed
-          ? signal?.aborted
-            ? "abort"
-            : "timeout"
-          : undefined;
-    // The host's synthetic exit codes are not reliable signals: programs may exit 124 or 130 themselves.
-    throw termination === "timeout"
-      ? terminationError("timeout", message)
-      : termination === "abort"
-        ? terminationError("cancelled", message)
-        : new Error(message);
+    const output = stderr.text.trim() || stdout.text.trim();
+    throw processFailure(displayCommand, result.code, output, termination);
   }
   return {
     stdout: stdout.text,

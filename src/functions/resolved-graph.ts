@@ -63,6 +63,38 @@ export function assertGraphAvailable(graph: ResolvedFunctionGraph): void {
   }
 }
 
+function assertValid(
+  invalidDefinitions: ReadonlyMap<string, string> | undefined,
+  id: string,
+  sealed: boolean | undefined,
+): void {
+  const invalid = invalidDefinitions?.get(id);
+  if (invalid && !sealed) throw new Error(`Function "${id}" is unavailable: ${invalid}`);
+}
+
+function assertAcyclic(visiting: readonly string[], key: string): void {
+  const cycleAt = visiting.indexOf(key);
+  if (cycleAt < 0) return;
+  const cycle = [...visiting.slice(cycleAt), key].map((entry) =>
+    entry.split(":").slice(1).join(":"),
+  );
+  throw new Error(`function dependency cycle: ${cycle.join(" -> ")}`);
+}
+
+function nextDefinition(
+  registry: LayeredFunctionRegistry<FunctionDefinition>,
+  definition: FunctionDefinition,
+): FunctionDefinition {
+  if (definition.layer === "global") {
+    throw new Error(`global function "${definition.id}" cannot declare $next`);
+  }
+  const next = registry.resolveNext(definition.id, definition.layer);
+  if (!next) {
+    throw new Error(`function "${definition.id}" declares $next without a lower definition`);
+  }
+  return next;
+}
+
 export function resolveFunctionGraph(
   source: string,
   registry: LayeredFunctionRegistry<FunctionDefinition>,
@@ -75,54 +107,41 @@ export function resolveFunctionGraph(
   const effects = new Set<string>();
   const visiting: string[] = [];
 
-  const visit = (definition: FunctionDefinition): string => {
-    const invalid = options.invalidDefinitions?.get(definition.id);
-    if (invalid && !definition.sealed)
-      throw new Error(`Function "${definition.id}" is unavailable: ${invalid}`);
-    const key = definitionKey(definition);
-    if (nodes.has(key)) return key;
-    const cycleAt = visiting.indexOf(key);
-    if (cycleAt >= 0) {
-      const cycle = [...visiting.slice(cycleAt), key].map((entry) =>
-        entry.split(":").slice(1).join(":"),
+  /** Resolves one injected dependency of `requester`, visiting its target. */
+  const edge = (
+    dependency: FunctionDependency,
+    requester: string,
+    noun: string,
+  ): ResolvedFunctionDependency => {
+    const target = registry.resolve(dependency.id);
+    if (!target) {
+      throw new Error(
+        `${requester} ${namespaceDependencyHint(dependency.id, registry) ?? `requires unavailable ${noun} "${dependency.id}"`}`,
       );
-      throw new Error(`function dependency cycle: ${cycle.join(" -> ")}`);
     }
-    visiting.push(key);
+    return { id: dependency.id, localName: dependency.localName, targetKey: visit(target) };
+  };
+
+  const node = (definition: FunctionDefinition, key: string): ResolvedFunctionNode => {
     if (definition.kind === "native") {
       effects.add(definition.effect);
-      nodes.set(key, { key, definition, dependencies: [] });
-      visiting.pop();
-      return key;
+      return { key, definition, dependencies: [] };
     }
-
     const declared = getFunctionDependencies(definition.source);
-    const dependencies = declared.dependencies.map((dependency) => {
-      const target = registry.resolve(dependency.id);
-      if (!target) {
-        throw new Error(
-          `function "${definition.id}" ${namespaceDependencyHint(dependency.id, registry) ?? `requires unavailable dependency "${dependency.id}"`}`,
-        );
-      }
-      return { id: dependency.id, localName: dependency.localName, targetKey: visit(target) };
-    });
-    let nextKey: string | undefined;
-    if (declared.usesNext) {
-      if (definition.layer === "global") {
-        throw new Error(`global function "${definition.id}" cannot declare $next`);
-      }
-      const next = registry.resolveNext(definition.id, definition.layer);
-      if (!next) {
-        throw new Error(`function "${definition.id}" declares $next without a lower definition`);
-      }
-      nextKey = visit(next);
-    }
-    nodes.set(key, {
-      key,
-      definition,
-      dependencies,
-      ...(nextKey ? { nextKey } : {}),
-    });
+    const dependencies = declared.dependencies.map((dependency) =>
+      edge(dependency, `function "${definition.id}"`, "dependency"),
+    );
+    const nextKey = declared.usesNext ? visit(nextDefinition(registry, definition)) : undefined;
+    return { key, definition, dependencies, ...(nextKey ? { nextKey } : {}) };
+  };
+
+  const visit = (definition: FunctionDefinition): string => {
+    assertValid(options.invalidDefinitions, definition.id, definition.sealed);
+    const key = definitionKey(definition);
+    if (nodes.has(key)) return key;
+    assertAcyclic(visiting, key);
+    visiting.push(key);
+    nodes.set(key, node(definition, key));
     visiting.pop();
     return key;
   };
@@ -133,14 +152,14 @@ export function resolveFunctionGraph(
       throw new Error("Submitted definition does not match the active function environment");
     }
     const key = visit(definition);
-    const node = nodes.get(key) as ResolvedFunctionNode;
+    const root = nodes.get(key) as ResolvedFunctionNode;
     nodes.delete(key);
     return {
       definition: options.definition,
-      roots: node.dependencies,
+      roots: root.dependencies,
       nodes,
       effects: [...effects].sort(),
-      ...(node.nextKey ? { nextKey: node.nextKey } : {}),
+      ...(root.nextKey ? { nextKey: root.nextKey } : {}),
     };
   }
 
@@ -149,16 +168,8 @@ export function resolveFunctionGraph(
     throw new Error("submitted programs cannot declare $next");
   }
   const roots = rootDeclaration.dependencies.map((dependency) => {
-    const invalid = options.invalidDefinitions?.get(dependency.id);
-    const target = registry.resolve(dependency.id);
-    if (invalid && !target?.sealed)
-      throw new Error(`Function "${dependency.id}" is unavailable: ${invalid}`);
-    if (!target) {
-      throw new Error(
-        `submitted program ${namespaceDependencyHint(dependency.id, registry) ?? `requires unavailable function "${dependency.id}"`}`,
-      );
-    }
-    return { id: dependency.id, localName: dependency.localName, targetKey: visit(target) };
+    assertValid(options.invalidDefinitions, dependency.id, registry.resolve(dependency.id)?.sealed);
+    return edge(dependency, "submitted program", "function");
   });
   return { roots, nodes, effects: [...effects].sort((left, right) => left.localeCompare(right)) };
 }
