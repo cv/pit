@@ -272,14 +272,17 @@ describe("session.elide", () => {
       signed,
       { type: "text", text: "Writing the new parser." },
     ]);
-    expect(content[2]).toMatchObject({ type: "toolCall", id: callIds[0], name: "typescript" });
-    expect((content[2] as { arguments: { elided: string } }).arguments).toEqual({
-      elided: expect.stringMatching(
+    // The note sits in text before the call, whose arguments are emptied (#292).
+    expect(content[2]).toEqual({
+      type: "text",
+      text: expect.stringMatching(
         new RegExp(
-          `^\\[Pit: these arguments were elided to save context; this is not the original call · ~[\\d.]+K? tokens · reason: parser written · original: session\\.inspectEntry\\("${id}"\\)\\]$`,
+          `^\\[Pit: the tool call arguments below were elided to save context · ~[\\d.]+K? tokens · reason: parser written · original: session\\.inspectEntry\\("${id}"\\)\\]$`,
         ),
       ),
     });
+    expect(content[3]).toMatchObject({ type: "toolCall", id: callIds[0], name: "typescript" });
+    expect((content[3] as { arguments: unknown }).arguments).toEqual({});
     // The result still answers the call.
     expect(modelText(session, result)).toBe('{"applied":1}');
 
@@ -295,6 +298,27 @@ describe("session.elide", () => {
 
   // #252: once its edits are applied, an edit call's payload is redundant, but its stub keeps
   // which files changed and at which revision.
+  it("puts one note before a message's first elided call and empties every call", async () => {
+    const session = new SessionBuilder();
+    session.user("Read both files");
+    const { id, callIds } = session.assistant("", [
+      { name: "typescript", args: { code: "a".repeat(2000) } },
+      { name: "typescript", args: { code: "b".repeat(2000) } },
+    ]);
+    for (const callId of callIds) session.result(callId, "typescript", "ok");
+    session.current();
+    await call(session, `async ({ session: { elide } }) => elide([${JSON.stringify(id)}])`);
+    await endRun(session);
+    const projected = session.manager
+      .buildSessionProjection()
+      .entries.find((entry) => entry.sourceEntry.id === id);
+    const message = projected?.messages[0] as unknown as { content: Array<Record<string, any>> };
+    const { content } = message;
+    expect(content.map((block) => block.type)).toEqual(["text", "toolCall", "toolCall"]);
+    expect(content[0]?.text).toMatch(/^\[Pit: the tool call arguments below were elided/);
+    expect(content.slice(1).map((block) => block.arguments)).toEqual([{}, {}]);
+  });
+
   it.each<{ name: string; details: Record<string, unknown>; applied: string }>([
     {
       name: "the files and revisions its recorded edits applied",
@@ -339,9 +363,10 @@ describe("session.elide", () => {
       .buildSessionProjection()
       .entries.find((entry) => entry.sourceEntry.id === id);
     const message = projected?.messages[0] as unknown as { content: Array<Record<string, any>> };
-    expect(message.content[0]?.arguments.elided).toContain(
-      ` · ${applied} · original: session.inspectEntry(`,
+    const note = message.content.find(
+      (block) => block.type === "text" && block.text.startsWith("[Pit:"),
     );
+    expect(note?.text).toContain(` · ${applied} · original: session.inspectEntry(`);
   });
 
   // Live acceptance found elide stubbing a summary carrier: the assistant entry that holds a
