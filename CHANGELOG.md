@@ -4,6 +4,16 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-10-09
+
+### Changed
+
+- A command run without output streaming that is killed by its deadline or by cancellation, and wrote nothing to stderr, now reports `Command timed out after <n>ms` or `Command aborted` in `stderr`, as streaming commands already did (#306).
+- Internal simplification with no intended behavior change (#305-#308):
+  - unused exports and an unused field are removed, and a `knip.json` configures unused-code checks;
+  - process execution, host dispatch, program validation, saved-function graph resolution, the completed tool-result renderer, the session lifecycle handlers, and anchored-edit preparation are split into named helpers;
+  - `workspace.edit` argument parsing moves to `src/workspace/edit-spec.ts`.
+
 ## [0.28.0] - 2026-10-08
 
 ### Changed
