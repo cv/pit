@@ -109,6 +109,13 @@ interface HostServices {
   recoverableCalls?: RecoverableCallStore;
 }
 
+interface ProcessCommand {
+  program: string;
+  args: string[];
+  /** How progress and errors show the command; defaults to the quoted program and arguments. */
+  command?: string;
+}
+
 interface ProcessHostHandlers {
   withTrace<T>(sequence: number | undefined, operation: () => T): T;
   shell: Record<NativeMethod<"shell">, HostMethodHandler>;
@@ -135,12 +142,10 @@ function createProcessHostHandlers(input: {
       : undefined;
   };
   const run = (
-    program: string,
-    args: string[],
+    { program, args, command = formatProcessCommand(program, args) }: ProcessCommand,
     options: Record<string, unknown>,
     signal: AbortSignal,
   ) => {
-    const command = formatProcessCommand(program, args);
     const progress = progressFor(command);
     return processRunner.run({
       program,
@@ -157,21 +162,13 @@ function createProcessHostHandlers(input: {
       exec: (args, signal) => {
         const command = string(args[0], "command");
         const options = args[1] === undefined ? {} : object(args[1], "options");
-        const progress = progressFor(command);
-        return processRunner.run({
-          program: "/bin/sh",
-          args: ["-lc", command],
-          displayCommand: command,
-          options,
-          ...(progress ? { onProgress: progress } : {}),
-          signal,
-        });
+        return run({ program: "/bin/sh", args: ["-lc", command], command }, options, signal);
       },
       execFile: (args, signal) => {
         const program = string(args[0], "program");
         const processArgs = stringArray(args[1], "args");
         const options = args[2] === undefined ? {} : object(args[2], "options");
-        return run(program, processArgs, options, signal);
+        return run({ program, args: processArgs }, options, signal);
       },
     },
   };
@@ -207,21 +204,92 @@ function createUiHandlers(ctx: ExtensionContext): Record<NativeMethod<"ui">, Hos
   };
 }
 
-export function createHostDispatcher({
-  pi,
-  ctx,
-  functionState,
-  commitFunctionState,
-  activity,
-  promotionSuggestions,
-  onShellProgress,
-  images,
-  toolCalls,
-  toolCallId,
-  contextEdits,
-  completedCalls,
-  recoverableCalls,
-}: HostServices): HostCallHandler {
+async function handleHttp(args: unknown[], signal: AbortSignal) {
+  const url = string(args[0], "url");
+  const options = args[1] === undefined ? {} : object(args[1], "options");
+  const maxBytes = boundedInteger(options.maxBytes, "options.maxBytes", {
+    maximum: LIMITS.httpBody.maxBytes,
+    fallback: LIMITS.httpBody.maxBytes,
+  });
+  const response = await fetch(url, {
+    ...(options.method === undefined ? {} : { method: string(options.method, "method") }),
+    ...(options.headers === undefined
+      ? {}
+      : { headers: options.headers as Record<string, string> }),
+    ...(options.body === undefined ? {} : { body: string(options.body, "body") }),
+    signal,
+  });
+  const body = await readHttpBody(response, maxBytes);
+  return {
+    status: response.status,
+    ok: response.ok,
+    headers: Object.fromEntries(response.headers),
+    body: body.body,
+    truncated: body.truncated,
+  };
+}
+
+function describeContext(ctx: ExtensionContext, functionState: FunctionState) {
+  return {
+    cwd: ctx.cwd,
+    mode: ctx.mode,
+    model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+    thinkingLevel: ctx.thinkingLevel,
+    sessionFile: ctx.sessionManager.getSessionFile(),
+    savedFunctions: [...functionState.effective.keys()].sort(),
+    globalFunctions: globalFunctionDefinitions()
+      .map((definition) => definition.id)
+      .sort(),
+    userFunctions: [...functionState.user.keys()].sort(),
+    projectFunctions: [...functionState.project.keys()].sort(),
+    sessionFunctions: [...functionState.session.keys()].sort(),
+  };
+}
+
+/** Records a saved-function run and suggests promoting a session function used repeatedly. */
+function recordSavedFunctionRun(
+  name: string,
+  callerScope: Parameters<typeof functionRunScope>[2],
+  { functionState, activity, promotionSuggestions }: HostServices,
+): void {
+  if (!functionState.effective.has(name)) {
+    throw new Error(`Saved function "${name}" is unavailable`);
+  }
+  const scope = functionRunScope(
+    name,
+    { user: functionState.user, project: functionState.project, session: functionState.session },
+    callerScope,
+  );
+  activity.push({ action: "run", name, scope });
+  const promotable =
+    scope === "session" &&
+    !functionState.project.has(name) &&
+    !functionState.user.has(name) &&
+    !TEMPORARY_FUNCTION_NAME.test(name);
+  if (!promotable) return;
+  const runs = (functionState.sessionRunCounts.get(name) ?? 0) + 1;
+  functionState.sessionRunCounts.set(name, runs);
+  if (runs >= PROMOTION_SUGGESTION_RUNS && !functionState.promotionSuggested.has(name)) {
+    functionState.promotionSuggested.add(name);
+    promotionSuggestions.push(name);
+  }
+}
+
+export function createHostDispatcher(services: HostServices): HostCallHandler {
+  const {
+    pi,
+    ctx,
+    functionState,
+    commitFunctionState,
+    activity,
+    onShellProgress,
+    images,
+    toolCalls,
+    toolCallId,
+    contextEdits,
+    completedCalls,
+    recoverableCalls,
+  } = services;
   const processHandlers = createProcessHostHandlers({
     pi,
     cwd: ctx.cwd,
@@ -235,50 +303,14 @@ export function createHostDispatcher({
     workspace: (method, args, signal) =>
       handleWorkspace({ cwd: ctx.cwd, images }, method, args, signal),
     shell: (method, args, signal) => shellHandlers[method as NativeMethod<"shell">](args, signal),
-    http: async (_method, args, signal) => {
-      const url = string(args[0], "url");
-      const options = args[1] === undefined ? {} : object(args[1], "options");
-      const maxBytes = boundedInteger(options.maxBytes, "options.maxBytes", {
-        maximum: LIMITS.httpBody.maxBytes,
-        fallback: LIMITS.httpBody.maxBytes,
-      });
-      const response = await fetch(url, {
-        ...(options.method === undefined ? {} : { method: string(options.method, "method") }),
-        ...(options.headers === undefined
-          ? {}
-          : { headers: options.headers as Record<string, string> }),
-        ...(options.body === undefined ? {} : { body: string(options.body, "body") }),
-        signal,
-      });
-      const body = await readHttpBody(response, maxBytes);
-      return {
-        status: response.status,
-        ok: response.ok,
-        headers: Object.fromEntries(response.headers),
-        body: body.body,
-        truncated: body.truncated,
-      };
-    },
+    http: (_method, args, signal) => handleHttp(args, signal),
     ui: (method, args, signal) => {
       if (!ctx.hasUI) {
         throw new Error("UI is not available in this mode");
       }
       return uiHandlers[method as NativeMethod<"ui">](args, signal);
     },
-    context: () => ({
-      cwd: ctx.cwd,
-      mode: ctx.mode,
-      model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
-      thinkingLevel: ctx.thinkingLevel,
-      sessionFile: ctx.sessionManager.getSessionFile(),
-      savedFunctions: [...functionState.effective.keys()].sort(),
-      globalFunctions: globalFunctionDefinitions()
-        .map((definition) => definition.id)
-        .sort(),
-      userFunctions: [...functionState.user.keys()].sort(),
-      projectFunctions: [...functionState.project.keys()].sort(),
-      sessionFunctions: [...functionState.session.keys()].sort(),
-    }),
+    context: () => describeContext(ctx, functionState),
     functions: createFunctionHostHandler({
       pi,
       ctx,
@@ -301,49 +333,27 @@ export function createHostDispatcher({
     }),
   };
 
+  const dispatch = (namespace: string, method: string, args: unknown[], signal: AbortSignal) => {
+    if (isPiToolNamespace(namespace)) {
+      /* v8 ignore next -- validation rejects tools.* when the call has no callable tools. */
+      if (!toolCalls) throw new Error(`Unknown host function: ${namespace}.${method}`);
+      return callPiTool(toolCalls, { namespace, method, args, signal });
+    }
+    validateNativeCall(namespace, method, args);
+    return publicHandlers[namespace as NativeNamespace](method, args, signal);
+  };
+
   return ({ namespace, method, args, signal, functionContext, traceSequence }) =>
     processHandlers.withTrace(traceSequence, () => {
       if (namespace === "__pit" && method === "savedFunctionRun") {
-        const name = string(args[0], "saved function name");
-        if (!functionState.effective.has(name)) {
-          throw new Error(`Saved function "${name}" is unavailable`);
-        }
-        const scope = functionRunScope(
-          name,
-          {
-            user: functionState.user,
-            project: functionState.project,
-            session: functionState.session,
-          },
+        recordSavedFunctionRun(
+          string(args[0], "saved function name"),
           functionContext?.scope,
+          services,
         );
-        activity.push({ action: "run", name, scope });
-        if (
-          scope === "session" &&
-          !functionState.project.has(name) &&
-          !functionState.user.has(name) &&
-          !TEMPORARY_FUNCTION_NAME.test(name)
-        ) {
-          const runs = (functionState.sessionRunCounts.get(name) ?? 0) + 1;
-          functionState.sessionRunCounts.set(name, runs);
-          if (runs >= PROMOTION_SUGGESTION_RUNS && !functionState.promotionSuggested.has(name)) {
-            functionState.promotionSuggested.add(name);
-            promotionSuggestions.push(name);
-          }
-        }
         return null;
       }
-
-      const result = isPiToolNamespace(namespace)
-        ? (() => {
-            /* v8 ignore next -- validation rejects tools.* when the call has no callable tools. */
-            if (!toolCalls) throw new Error(`Unknown host function: ${namespace}.${method}`);
-            return callPiTool(toolCalls, { namespace, method, args, signal });
-          })()
-        : (() => {
-            validateNativeCall(namespace, method, args);
-            return publicHandlers[namespace as NativeNamespace](method, args, signal);
-          })();
+      const result = dispatch(namespace, method, args, signal);
       if (!completedCalls) return result;
       return Promise.resolve(result).then((value) => {
         // A call that settles after its program was cancelled or timed out was interrupted, not

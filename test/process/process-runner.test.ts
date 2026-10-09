@@ -66,6 +66,25 @@ describe("process runner", () => {
     expect(progress.at(-1)).toEqual({ phase: "end", code: 124 });
   });
 
+  it.each<{ name: string; aborted: boolean; stderr: string }>([
+    { name: "deadline", aborted: false, stderr: "Command timed out after 50ms" },
+    { name: "cancellation", aborted: true, stderr: "Command aborted" },
+  ])("explains a silent non-streaming command killed by its $name", async (row) => {
+    const controller = new AbortController();
+    if (row.aborted) controller.abort();
+    const exec = async () => ({ stdout: "", stderr: "", code: 124, killed: true });
+    const result = await executeHostProcess({
+      pi: { exec } as any,
+      defaultCwd: process.cwd(),
+      program: "worker",
+      args: [],
+      options: { timeoutMs: 50 },
+      signal: controller.signal,
+    });
+
+    expect(result).toMatchObject({ code: 124, stderr: row.stderr });
+  });
+
   it("raises streaming deadlines as named timeouts", async () => {
     await expect(
       executeHostProcess({
