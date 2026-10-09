@@ -1,6 +1,10 @@
 import { join } from "node:path";
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+  BeforeAgentStartEvent,
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 import { cacheState } from "../context/cache-state.js";
 import { formatPitSkillsForPrompt } from "../skill-prompt.js";
@@ -101,140 +105,157 @@ function registerSavedFunctionManager({
   });
 }
 
+interface LifecycleState {
+  pi: ExtensionAPI;
+  functionState: FunctionState;
+  selection: PitToolSelection;
+  /**
+   * The first prompt after a session starts or changes branch sends the current catalogs: its
+   * request rewrites the cached prompt anyway.
+   */
+  refreshCatalogs: boolean;
+}
+
+/** Replays the branch's saved-function entries over the loaded user and project functions. */
+function rebuildSessionFunctions(functionState: FunctionState, ctx: ExtensionContext): string[] {
+  reconstructFunctions(
+    functionState.session,
+    ctx.sessionManager.getBranch(),
+    new Map([...functionState.user, ...functionState.projectCandidates]),
+    {
+      capacityBaseFunctions: new Map(),
+      environment: stateFunctionEnvironment(functionState, {
+        projectFunctions: functionState.projectCandidates,
+      }),
+    },
+  );
+  return reconcileFunctionState(functionState);
+}
+
+async function onSessionStart(state: LifecycleState, ctx: ExtensionContext): Promise<void> {
+  const { functionState } = state;
+  state.refreshCatalogs = true;
+  resetFunctionUsage(functionState);
+  const projectConfig = await loadPitProjectConfig(ctx);
+  // Both directories come from the project's pit.json, so a project can choose its own
+  // collection of user functions; an untrusted project uses the defaults.
+  const paths = resolveFunctionPaths(ctx.cwd, projectConfig.paths);
+  functionState.userDirectory = paths.user;
+  functionState.projectDirectory = paths.project;
+  const errors = await loadUserFunctions(
+    functionState.user,
+    functionState.userMetadata,
+    functionState.invalidUser,
+    paths.user,
+  );
+  // Project functions load in every trusted project; loadProjectFunctions checks trust.
+  errors.push(
+    ...(await loadProjectFunctions(
+      ctx,
+      functionState.projectCandidates,
+      functionState.candidateMetadata,
+      {
+        user: functionState.user,
+        invalidDefinitions: functionState.invalidProject,
+        invalidUser: functionState.invalidUser,
+        directory: paths.project,
+      },
+    )),
+  );
+  errors.push(...rebuildSessionFunctions(functionState, ctx));
+  if (ctx.hasUI) {
+    if (projectConfig.error) {
+      ctx.ui.notify(projectConfig.error, "warning");
+    }
+    if (errors.length > 0) {
+      const shown = errors.slice(0, 3).join("; ");
+      const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
+      ctx.ui.notify(`Some saved functions could not be loaded: ${shown}${omitted}`, "warning");
+    }
+  }
+  // Resolved at session start; configuration edits apply after /reload.
+  state.selection.allowedTools = compileToolPatterns(projectConfig.allowedTools ?? []);
+  activatePitTools(state.pi, state.selection);
+}
+
+function onSessionTree(state: LifecycleState, ctx: ExtensionContext): void {
+  state.refreshCatalogs = true;
+  resetFunctionUsage(state.functionState);
+  rebuildSessionFunctions(state.functionState, ctx);
+  // Pi restores the destination branch's recorded tools before this event. A branch recorded
+  // before Pit or an allowedTools change can lack them; add them back without deactivating tools
+  // other extensions activated.
+  activatePitTools(state.pi, state.selection);
+}
+
+/** Adds Pit's skills and function catalogs to the system prompt. */
+function applyPromptAdditions(
+  state: LifecycleState,
+  event: BeforeAgentStartEvent,
+  ctx: ExtensionContext,
+) {
+  const { functionState } = state;
+  // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
+  // can replace the prompt entirely, so the rendered prompt is the reliable record.
+  const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");
+  const skills = promptAlreadyHasSkills
+    ? ""
+    : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []);
+  const catalogs = {
+    pit_user_functions: userFunctionCatalog(
+      functionState.userMetadata,
+      functionState.project,
+      functionState.session,
+    ),
+    pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
+  };
+  const options = event.systemPromptOptions;
+  if (options?.sections && options.forceSystemPrompt === undefined) {
+    // Pi records section changes as transcript deltas, but unless the provider keeps
+    // mid-conversation system messages, it folds them into the leading system prompt and the
+    // whole cached conversation is written again. A catalog change therefore waits for a request
+    // that rewrites the prompt anyway, and the conversation announces it meanwhile.
+    const branch = ctx.sessionManager.getBranch();
+    const hold =
+      !state.refreshCatalogs &&
+      !keepsSystemUpdates(ctx.model) &&
+      cacheState(branch, ctx.model).state !== "cold";
+    state.refreshCatalogs = false;
+    const plan = planCatalogSections(
+      catalogs,
+      recordedCatalogs(branch, ctx.sessionManager.getLeafId()),
+      hold,
+    );
+    // An empty section stays unset, and Pi records its removal.
+    for (const [name, content] of Object.entries({
+      pit_skills: skills || undefined,
+      ...plan.sections,
+    })) {
+      if (content === undefined) delete options.sections[name];
+      else options.sections[name] = content;
+    }
+    return plan.message ? { message: plan.message } : undefined;
+  }
+  const additions = [skills, catalogs.pit_user_functions, catalogs.pit_project_functions].filter(
+    Boolean,
+  );
+  // An earlier handler replaced the prompt, so Pi sends only the replacement text and Pit's
+  // additions must extend it.
+  if (additions.length > 0) {
+    return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
+  }
+  return undefined;
+}
+
 function registerFunctionLifecycle(
   pi: ExtensionAPI,
   functionState: FunctionState,
   selection: PitToolSelection,
 ): void {
-  // The first prompt after a session starts or changes branch sends the current catalogs: its
-  // request rewrites the cached prompt anyway.
-  let refreshCatalogs = true;
-  pi.on("session_start", async (_event, ctx) => {
-    refreshCatalogs = true;
-    resetFunctionUsage(functionState);
-    const projectConfig = await loadPitProjectConfig(ctx);
-    // Both directories come from the project's pit.json, so a project can choose its own
-    // collection of user functions; an untrusted project uses the defaults.
-    const paths = resolveFunctionPaths(ctx.cwd, projectConfig.paths);
-    functionState.userDirectory = paths.user;
-    functionState.projectDirectory = paths.project;
-    const errors = await loadUserFunctions(
-      functionState.user,
-      functionState.userMetadata,
-      functionState.invalidUser,
-      paths.user,
-    );
-    // Project functions load in every trusted project; loadProjectFunctions checks trust.
-    errors.push(
-      ...(await loadProjectFunctions(
-        ctx,
-        functionState.projectCandidates,
-        functionState.candidateMetadata,
-        {
-          user: functionState.user,
-          invalidDefinitions: functionState.invalidProject,
-          invalidUser: functionState.invalidUser,
-          directory: paths.project,
-        },
-      )),
-    );
-    reconstructFunctions(
-      functionState.session,
-      ctx.sessionManager.getBranch(),
-      new Map([...functionState.user, ...functionState.projectCandidates]),
-      {
-        capacityBaseFunctions: new Map(),
-        environment: stateFunctionEnvironment(functionState, {
-          projectFunctions: functionState.projectCandidates,
-        }),
-      },
-    );
-    errors.push(...reconcileFunctionState(functionState));
-    for (const error of [projectConfig.error].filter(Boolean)) {
-      if (ctx.hasUI) {
-        ctx.ui.notify(error as string, "warning");
-      }
-    }
-    if (errors.length > 0 && ctx.hasUI) {
-      const shown = errors.slice(0, 3).join("; ");
-      const omitted = errors.length > 3 ? `; … ${errors.length - 3} more` : "";
-      ctx.ui.notify(`Some saved functions could not be loaded: ${shown}${omitted}`, "warning");
-    }
-    // Resolved at session start; configuration edits apply after /reload.
-    selection.allowedTools = compileToolPatterns(projectConfig.allowedTools ?? []);
-    activatePitTools(pi, selection);
-  });
-  pi.on("session_tree", (_event, ctx) => {
-    refreshCatalogs = true;
-    resetFunctionUsage(functionState);
-    reconstructFunctions(
-      functionState.session,
-      ctx.sessionManager.getBranch(),
-      new Map([...functionState.user, ...functionState.projectCandidates]),
-      {
-        capacityBaseFunctions: new Map(),
-        environment: stateFunctionEnvironment(functionState, {
-          projectFunctions: functionState.projectCandidates,
-        }),
-      },
-    );
-    reconcileFunctionState(functionState);
-    // Pi restores the destination branch's recorded tools before this event. A branch recorded
-    // before Pit or an allowedTools change can lack them; add them back without deactivating tools
-    // other extensions activated.
-    activatePitTools(pi, selection);
-  });
-  pi.on("before_agent_start", (event, ctx) => {
-    // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
-    // can replace the prompt entirely, so the rendered prompt is the reliable record.
-    const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");
-    const skills = promptAlreadyHasSkills
-      ? ""
-      : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []);
-    const catalogs = {
-      pit_user_functions: userFunctionCatalog(
-        functionState.userMetadata,
-        functionState.project,
-        functionState.session,
-      ),
-      pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
-    };
-    const options = event.systemPromptOptions;
-    if (options?.sections && options.forceSystemPrompt === undefined) {
-      // Pi records section changes as transcript deltas, but unless the provider keeps
-      // mid-conversation system messages, it folds them into the leading system prompt and the
-      // whole cached conversation is written again. A catalog change therefore waits for a request
-      // that rewrites the prompt anyway, and the conversation announces it meanwhile.
-      const branch = ctx.sessionManager.getBranch();
-      const hold =
-        !refreshCatalogs &&
-        !keepsSystemUpdates(ctx.model) &&
-        cacheState(branch, ctx.model).state !== "cold";
-      refreshCatalogs = false;
-      const plan = planCatalogSections(
-        catalogs,
-        recordedCatalogs(branch, ctx.sessionManager.getLeafId()),
-        hold,
-      );
-      // An empty section stays unset, and Pi records its removal.
-      for (const [name, content] of Object.entries({
-        pit_skills: skills || undefined,
-        ...plan.sections,
-      })) {
-        if (content === undefined) delete options.sections[name];
-        else options.sections[name] = content;
-      }
-      return plan.message ? { message: plan.message } : undefined;
-    }
-    const additions = [skills, catalogs.pit_user_functions, catalogs.pit_project_functions].filter(
-      Boolean,
-    );
-    // An earlier handler replaced the prompt, so Pi sends only the replacement text and Pit's
-    // additions must extend it.
-    if (additions.length > 0) {
-      return { systemPrompt: `${event.systemPrompt}\n\n${additions.join("\n\n")}` };
-    }
-  });
+  const state: LifecycleState = { pi, functionState, selection, refreshCatalogs: true };
+  pi.on("session_start", (_event, ctx) => onSessionStart(state, ctx));
+  pi.on("session_tree", (_event, ctx) => onSessionTree(state, ctx));
+  pi.on("before_agent_start", (event, ctx) => applyPromptAdditions(state, event, ctx));
 }
 
 export function registerSavedFunctionFeatures(
