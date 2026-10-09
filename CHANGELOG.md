@@ -4,11 +4,15 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-08
+
 ### Changed
 
-- Eliding an assistant entry folds its tool calls and their results into one text note, such as `[Pit: elided tool call: typescript · ~2.1K tokens with its result · originals: …]` (#292). No placeholder tool call is left for a model to copy as a call, and the receipt lists the folded results as targets. Copying an older elided call, or sending empty arguments, gets a specific error.
 - **Breaking:** sessions recorded by older Pit versions are no longer supported. Pit no longer interprets their old-format records: pressure notices without a recorded threshold, `restore` provenance from before #202, edit records and receipts without a `cacheMode`, and results whose applied edits were only countable from traces. Such records are ignored or render as unrecognized, and resuming an old session may misjudge its context.
-- Pit supports only the Pi version it pins in `package-lock.json`, currently Pi 1.1.0. CI no longer tests against Pi 0.99.2 (#282), and the README, contributing guide, and reference no longer promise older versions.
+- **Breaking:** Pit supports only the Pi version it pins in `package-lock.json`, currently Pi 1.1.0. CI no longer tests against Pi 0.99.2 (#282), and the README, contributing guide, and reference no longer promise older versions.
+- Eliding an assistant entry folds its tool calls and their results into one text note, such as `[Pit: elided tool call: typescript · ~2.1K tokens with its result · originals: …]` (#292). No placeholder tool call is left for a model to copy as a call, and the receipt lists the folded results as targets. Copying an older elided call, or sending empty arguments, gets a specific error.
+- Program validation reuses parsed TypeScript library and global-contract files across calls, so each `typescript` call type-checks faster; the full test suite went from 34.7 s to 26.9 s (#279).
+- Edit `context` ranges are budgeted in bytes (32,000) instead of characters, like range reads, and both share one range builder (#284).
 
 ## [0.27.1] - 2026-10-08
 
@@ -419,7 +423,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.27.1...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/cv/pit/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/cv/pit/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/cv/pit/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/cv/pit/compare/v0.25.0...v0.26.0
