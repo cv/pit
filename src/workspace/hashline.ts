@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { recordValue as object, stringValue as string } from "../shared/argument-values.js";
+import { isAnchoredChange, parseEditSpec, type AnchoredChange } from "./edit-spec.js";
 import { takeRanges, type LineRange, type RangeBudget } from "./ranges.js";
 
 const ANCHOR_PATTERN = /^([1-9][0-9]*):([A-Za-z0-9_-]{5})$/;
@@ -18,20 +18,6 @@ interface FileLine {
   anchor: string;
 }
 
-type EditChange =
-  | { kind: "replace"; start: string; end?: string; content: string }
-  | { kind: "delete"; start: string; end?: string }
-  | { kind: "insertBefore" | "insertAfter"; anchor: string; content: string }
-  | { kind: "replaceFile"; content: string }
-  | { kind: "deleteFile" };
-
-interface EditChangeSpec {
-  revision: string | null;
-  changes: EditChange[];
-  /** Lines of context to return around each change, as hashed ranges. */
-  context?: number;
-}
-
 /** Hashed lines of the edited file, which a follow-up edit can anchor to without a read. */
 export interface PreparedEdit {
   next?: string;
@@ -41,8 +27,6 @@ export interface PreparedEdit {
   rangesTruncated?: true;
 }
 
-/** Most context lines an edit may ask for on each side of a change. */
-const MAX_EDIT_CONTEXT = 20;
 /** Lines the returned ranges may hold for one edit, or for every edit in one batch. */
 export const EDIT_RANGE_LINES = { edit: 200, batch: 400 } as const;
 const EDIT_RANGE_BYTES = 32_000;
@@ -128,66 +112,6 @@ function dominantSeparator(lines: readonly FileLine[]): "\n" | "\r\n" {
   return crlf > lf ? "\r\n" : "\n";
 }
 
-function parseSpec(raw: unknown): EditChangeSpec {
-  const value = object(raw, "changes");
-  if (!(value.revision === null || typeof value.revision === "string")) {
-    throw new TypeError("changes.revision must be a string or null");
-  }
-  if (!Array.isArray(value.changes) || value.changes.length === 0) {
-    throw new Error("changes.changes must be a non-empty array");
-  }
-  const changes = value.changes.map((rawChange, index): EditChange => {
-    const change = object(rawChange, `changes.changes[${index}]`);
-    const kind = string(change.kind, `changes.changes[${index}].kind`);
-    const label = `changes.changes[${index}]`;
-    switch (kind) {
-      case "replace":
-        return {
-          kind,
-          start: string(change.start, `${label}.start`),
-          ...(change.end === undefined ? {} : { end: string(change.end, `${label}.end`) }),
-          content: string(change.content, `${label}.content`),
-        };
-      case "delete":
-        return {
-          kind,
-          start: string(change.start, `${label}.start`),
-          ...(change.end === undefined ? {} : { end: string(change.end, `${label}.end`) }),
-        };
-      case "insertBefore":
-      case "insertAfter": {
-        const content = string(change.content, `${label}.content`);
-        if (!content) {
-          throw new Error(`${label}.content must not be empty`);
-        }
-        return { kind, anchor: string(change.anchor, `${label}.anchor`), content };
-      }
-      case "replaceFile":
-        return { kind, content: string(change.content, `${label}.content`) };
-      case "deleteFile":
-        return { kind };
-      default:
-        throw new Error(`Unknown edit change kind: ${kind}`);
-    }
-  });
-  const { context } = value;
-  if (
-    context !== undefined &&
-    !(
-      Number.isInteger(context) &&
-      (context as number) >= 0 &&
-      (context as number) <= MAX_EDIT_CONTEXT
-    )
-  ) {
-    throw new TypeError(`changes.context must be an integer from 0 to ${MAX_EDIT_CONTEXT}`);
-  }
-  return {
-    revision: value.revision,
-    changes,
-    ...(context === undefined ? {} : { context }),
-  } as EditChangeSpec;
-}
-
 /** The index of the last line that starts at or before a character offset. */
 function lineIndexAt(lines: readonly FileLine[], offset: number): number {
   let low = 0;
@@ -271,77 +195,75 @@ function replacementsConflict(a: Replacement, b: Replacement): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
+function toReplacement(
+  lines: readonly FileLine[],
+  separator: string,
+  change: AnchoredChange,
+  index: number,
+): Replacement {
+  const label = `changes.changes[${index}]`;
+  if ("anchor" in change) {
+    const line = resolveAnchor(lines, change.anchor, `${label}.anchor`);
+    const content = normalizeContent(change.content, separator);
+    if (change.kind === "insertBefore") {
+      return { start: line.start, end: line.start, content: content + separator, index };
+    }
+    if (line.separator) {
+      return {
+        start: line.separatorEnd,
+        end: line.separatorEnd,
+        content: content + separator,
+        index,
+      };
+    }
+    return { start: line.contentEnd, end: line.contentEnd, content: separator + content, index };
+  }
+  const startLine = resolveAnchor(lines, change.start, `${label}.start`);
+  const endLine = resolveAnchor(lines, change.end ?? change.start, `${label}.end`);
+  if (endLine.number < startLine.number) {
+    throw new Error(`${label} end anchor precedes start anchor`);
+  }
+  if (change.kind === "replace") {
+    return {
+      start: startLine.start,
+      end: endLine.contentEnd,
+      content: normalizeContent(change.content, separator),
+      index,
+    };
+  }
+  if (endLine.separator) {
+    return { start: startLine.start, end: endLine.separatorEnd, content: "", index };
+  }
+  // Deleting through the last line removes the separator before it instead.
+  const previous = lines[startLine.number - 2];
+  return {
+    start: previous?.contentEnd ?? startLine.start,
+    end: endLine.contentEnd,
+    content: "",
+    index,
+  };
+}
+
+function assertNoOverlaps(replacements: readonly Replacement[]): void {
+  replacements.forEach((left, position) => {
+    for (const right of replacements.slice(position + 1)) {
+      if (replacementsConflict(left, right)) {
+        throw new Error(`changes.changes[${left.index}] overlaps changes.changes[${right.index}]`);
+      }
+    }
+  });
+}
+
 function prepareAnchoredEdit(
   contents: string,
-  changes: EditChange[],
+  changes: AnchoredChange[],
 ): { next: string; spans: Spans } {
   const lines = parseFileLines(contents);
   const separator = dominantSeparator(lines);
-  const replacements = changes.map((change, index): Replacement => {
-    if (change.kind === "replace" || change.kind === "delete") {
-      const startLine = resolveAnchor(lines, change.start, `changes.changes[${index}].start`);
-      const endLine = resolveAnchor(
-        lines,
-        change.end ?? change.start,
-        `changes.changes[${index}].end`,
-      );
-      if (endLine.number < startLine.number) {
-        throw new Error(`changes.changes[${index}] end anchor precedes start anchor`);
-      }
-      if (change.kind === "replace") {
-        return {
-          start: startLine.start,
-          end: endLine.contentEnd,
-          content: normalizeContent(change.content, separator),
-          index,
-        };
-      }
-      if (endLine.separator) {
-        return { start: startLine.start, end: endLine.separatorEnd, content: "", index };
-      }
-      const previous = lines[startLine.number - 2];
-      return {
-        start: previous?.contentEnd ?? startLine.start,
-        end: endLine.contentEnd,
-        content: "",
-        index,
-      };
-    }
-    /* v8 ignore next -- file-level kinds are rejected before anchored preparation. */
-    if (change.kind === "insertBefore" || change.kind === "insertAfter") {
-      const line = resolveAnchor(lines, change.anchor, `changes.changes[${index}].anchor`);
-      const content = normalizeContent(change.content, separator);
-      if (change.kind === "insertBefore") {
-        return { start: line.start, end: line.start, content: content + separator, index };
-      }
-      if (line.separator) {
-        return {
-          start: line.separatorEnd,
-          end: line.separatorEnd,
-          content: content + separator,
-          index,
-        };
-      }
-      return {
-        start: line.contentEnd,
-        end: line.contentEnd,
-        content: separator + content,
-        index,
-      };
-    }
-    /* v8 ignore next -- file-level changes are rejected before anchored preparation. */
-    throw new Error(`changes.changes[${index}] file-level changes cannot be combined`);
-  });
-  for (let left = 0; left < replacements.length; left++) {
-    for (let right = left + 1; right < replacements.length; right++) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      if (replacementsConflict(replacements[left]!, replacements[right]!)) {
-        throw new Error(
-          `changes.changes[${replacements[left]?.index}] overlaps changes.changes[${replacements[right]?.index}]`,
-        );
-      }
-    }
-  }
+  const replacements = changes.map((change, index) =>
+    toReplacement(lines, separator, change, index),
+  );
+  assertNoOverlaps(replacements);
   // Where each change lands in the new file: earlier changes shift later ones.
   let shift = 0;
   const spans = [...replacements]
@@ -367,7 +289,7 @@ export function prepareEdit(
   raw: unknown,
   budget?: RangeBudget,
 ): PreparedEdit {
-  const spec = parseSpec(raw);
+  const spec = parseEditSpec(raw);
   const written = (next: string, spans: Spans, applied: number): PreparedEdit => ({
     next,
     deleted: false,
@@ -392,10 +314,8 @@ export function prepareEdit(
       `Revision mismatch: expected ${spec.revision ?? "null"}; current revision is ${revision}. Re-read the file.`,
     );
   }
-  const fileLevel = spec.changes.some(
-    (change) => change.kind === "replaceFile" || change.kind === "deleteFile",
-  );
-  if (fileLevel) {
+  const anchored = spec.changes.filter(isAnchoredChange);
+  if (anchored.length < spec.changes.length) {
     if (spec.changes.length !== 1) {
       throw new Error("file-level changes must be the only change");
     }
@@ -405,6 +325,6 @@ export function prepareEdit(
     }
     return { deleted: true, applied: 1 };
   }
-  const { next, spans } = prepareAnchoredEdit(current, spec.changes);
+  const { next, spans } = prepareAnchoredEdit(current, anchored);
   return written(next, spans, spec.changes.length);
 }
