@@ -8,7 +8,7 @@ const NEWLINE_PATTERN = /\r\n|\n|\r/g;
 const LINE_HASH_LENGTH = 5;
 const REVISION_HASH_LENGTH = 12;
 
-export interface FileLine {
+interface FileLine {
   number: number;
   content: string;
   start: number;
@@ -18,14 +18,14 @@ export interface FileLine {
   anchor: string;
 }
 
-export type EditChange =
+type EditChange =
   | { kind: "replace"; start: string; end?: string; content: string }
   | { kind: "delete"; start: string; end?: string }
   | { kind: "insertBefore" | "insertAfter"; anchor: string; content: string }
   | { kind: "replaceFile"; content: string }
   | { kind: "deleteFile" };
 
-export interface EditChangeSpec {
+interface EditChangeSpec {
   revision: string | null;
   changes: EditChange[];
   /** Lines of context to return around each change, as hashed ranges. */
@@ -42,7 +42,7 @@ export interface PreparedEdit {
 }
 
 /** Most context lines an edit may ask for on each side of a change. */
-export const MAX_EDIT_CONTEXT = 20;
+const MAX_EDIT_CONTEXT = 20;
 /** Lines the returned ranges may hold for one edit, or for every edit in one batch. */
 export const EDIT_RANGE_LINES = { edit: 200, batch: 400 } as const;
 const EDIT_RANGE_BYTES = 32_000;

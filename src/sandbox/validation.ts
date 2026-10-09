@@ -206,7 +206,7 @@ function validationError(diagnostics: readonly ts.Diagnostic[], names: readonly 
   );
 }
 
-export interface TypeScriptValidationOptions {
+interface TypeScriptValidationOptions {
   environment?: FunctionEnvironment;
   definition?: FunctionDefinitionReference;
   checkAll?: boolean;

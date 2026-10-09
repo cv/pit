@@ -43,7 +43,7 @@ export function processOutputLines(value: SanitizedText): string[] {
   return value.split("\n").filter((line, index, all) => index < all.length - 1 || line !== "");
 }
 
-export interface SemanticOutcomeOptions {
+interface SemanticOutcomeOptions {
   domainOutcome?: Exclude<SemanticOutcome, "error">;
   acceptedExitCodes?: readonly number[];
 }

@@ -16,14 +16,14 @@ import {
   type SessionReader,
 } from "./view.js";
 
-export const NOTE_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-export const MAX_NOTES = 32;
+const NOTE_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const MAX_NOTES = 32;
 const MIN_NOTE_BUDGET = 4_096;
 const NOTE_BUDGET_SHARE = 0.1;
 const REMOVED_BODY = "Removed; earlier versions of this note no longer apply.";
 
 /** Every visible note version shares max(4,096 tokens, 10% of the context window). */
-export function noteBudget(contextWindow: number | undefined): number {
+function noteBudget(contextWindow: number | undefined): number {
   return Math.max(MIN_NOTE_BUDGET, Math.floor((contextWindow ?? 0) * NOTE_BUDGET_SHARE));
 }
 
@@ -31,14 +31,14 @@ export function noteBudget(contextWindow: number | undefined): number {
  * Frames a note for the model; a closing tag inside the note cannot end the frame early. A later
  * version names its number and says it replaces the earlier ones, which stay in context unchanged.
  */
-export function frameNote(key: string, content: string, version = 1): string {
+function frameNote(key: string, content: string, version = 1): string {
   const body = content.replaceAll("</model-note", "<\\/model-note");
   const marker = version > 1 ? ` version="${version}" replaces="earlier"` : "";
   return `<model-note key="${key}"${marker}>\n${body}\n</model-note>`;
 }
 
 /** Frames a removal: earlier versions stay in context unchanged, so the model is told. */
-export function frameRemoval(key: string, version: number): string {
+function frameRemoval(key: string, version: number): string {
   return `<model-note key="${key}" version="${version}" removed>\n${REMOVED_BODY}\n</model-note>`;
 }
 
@@ -57,7 +57,7 @@ function sum(items: readonly ContextItem[]): number {
 }
 
 /** One key's visible entries, oldest first. */
-export interface NoteGroup {
+interface NoteGroup {
   key: string;
   items: ContextItem[];
   /** The newest entry is a removal, so none of the entries is live. */
@@ -92,7 +92,7 @@ export function staleNoteGroups(view: ContextView): NoteGroup[] {
   });
 }
 
-export interface NoteListing {
+interface NoteListing {
   notes: Array<{ key: string; entryId: string; tokens: number; pending?: boolean }>;
   tokens: number;
   /** Superseded versions and removals still in context; they count against the budget. */

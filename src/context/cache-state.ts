@@ -23,7 +23,7 @@ interface CacheModel {
 }
 
 /** The lifetime Pi's cache warmer uses: the `long` tier with `PI_CACHE_RETENTION=long`, else `short`. */
-export function promptCacheTtlSeconds(
+function promptCacheTtlSeconds(
   model: CacheModel | undefined,
   env: Record<string, string | undefined> = process.env,
 ): number | undefined {

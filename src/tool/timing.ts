@@ -20,7 +20,7 @@ export interface ToolCallTimingContext {
   invalidate?: () => void;
 }
 
-export interface ToolResultTimingContext {
+interface ToolResultTimingContext {
   executionStarted?: boolean;
   isError?: boolean;
   state?: unknown;

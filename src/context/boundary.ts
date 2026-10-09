@@ -97,7 +97,7 @@ function prunedNotes(
 }
 
 /** Deferred edits apply at once from this share of the window, where notices ask for cleanup. */
-export const DEFERRED_PRESSURE_PERCENT = Math.min(...NOTICE_LEVELS);
+const DEFERRED_PRESSURE_PERCENT = Math.min(...NOTICE_LEVELS);
 
 /** Entries for edits whose calls succeeded and whose targets remain, then their provenance. */
 function editEntries(
@@ -155,7 +155,7 @@ export function contextBoundaryEntries(
 }
 
 /** Deferred edits, applied when the run ends so their rewrite lands on the next prompt. */
-export function deferredBoundaryEntries(
+function deferredBoundaryEntries(
   ctx: ExtensionContext,
   queue: ContextEditQueue,
 ): SessionBoundaryDraft[] {

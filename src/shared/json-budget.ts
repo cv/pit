@@ -16,7 +16,7 @@ export function display(value: unknown): string {
   }
 }
 
-export interface FittedValue {
+interface FittedValue {
   /** Text within the budget. */
   text: string;
   /** The value `text` represents; undefined when only unstructured text could fit. */

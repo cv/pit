@@ -15,7 +15,7 @@ interface HostCallTraceGroup {
   traces: [HostCallTrace, ...HostCallTrace[]];
 }
 
-export interface DashboardActivity {
+interface DashboardActivity {
   scope: FunctionScope;
   name: string;
 }
@@ -52,7 +52,7 @@ export interface DashboardFunction {
 
 export type DashboardEvent = DashboardCall | DashboardFunction;
 
-export interface ExecutionDashboardModel {
+interface ExecutionDashboardModel {
   activities: DashboardActivity[];
   events: DashboardEvent[];
   tracesTruncated: boolean;

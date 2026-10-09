@@ -28,7 +28,7 @@ function entryLabel(entry: FunctionSummary): string {
   return `${entry.name} [${scope}] — ${detail}`;
 }
 
-export interface FunctionManagerOptions {
+interface FunctionManagerOptions {
   userFunctions?: FunctionRegistry;
   projectFunctions?: FunctionRegistry;
   invalidUser?: ReadonlyMap<string, string>;

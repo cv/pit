@@ -10,7 +10,7 @@ export const NOTICE_LEVELS = [75, 50] as const;
  * Context tokens that earn a notice before 50% in a large window: every request already resends
  * this much, which is costly even when the window has room.
  */
-export const NOTICE_TOKENS = 200_000;
+const NOTICE_TOKENS = 200_000;
 
 export interface NoticeDetails {
   /** The whole percentage of the window at the threshold that fired. */
@@ -47,7 +47,7 @@ function thresholds(contextWindow: number): Threshold[] {
   ];
 }
 
-export function noticeText(details: NoticeDetails): string {
+function noticeText(details: NoticeDetails): string {
   return `[Pit] Context is ${details.percent}% full (~${formatTokens(details.tokens)} of ${formatTokens(details.contextWindow)} tokens), and every request resends it. Use session.outline() to pick absorbed tool results and applied edit calls (entries with edits) to elide and finished turns to summarize, together in one call, and keep task state in session.setNote(). An edit pays back after about 15 × its estimatedReprefillTokens ÷ estimatedTokensFreed later requests.`;
 }
 

@@ -140,7 +140,7 @@ function projectClosure(
   return ordered;
 }
 
-export interface ProjectFunctionReconciliation {
+interface ProjectFunctionReconciliation {
   user: ReadonlyMap<string, string>;
   candidates: ReadonlyMap<string, string>;
   candidateMetadata: ReadonlyMap<string, PersistentFunctionMetadata>;

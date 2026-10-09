@@ -267,7 +267,7 @@ async function globWorkspace(cwd: string, args: unknown[], signal?: AbortSignal)
   return { entries: entries.slice(0, limit), truncated: entries.length > limit };
 }
 
-export interface WorkspaceHost {
+interface WorkspaceHost {
   cwd: string;
   /** Collects the images the current TypeScript invocation attaches to its result. */
   images: ImageCollector;

@@ -11,7 +11,7 @@ export interface LayeredFunctionDefinition {
   sealed?: boolean;
 }
 
-export interface ResolvedFunctionDefinition<Definition extends LayeredFunctionDefinition> {
+interface ResolvedFunctionDefinition<Definition extends LayeredFunctionDefinition> {
   effective: Definition;
   chain: Definition[];
 }

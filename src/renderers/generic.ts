@@ -33,8 +33,6 @@ import {
   renderWorkspaceList,
 } from "./workspace.js";
 
-export type { RenderedResultValue } from "./types.js";
-
 /** Direct namespace results route here before shape-based fallback rendering. */
 const FUNCTION_RESULT_RENDERERS = {
   read: renderRead,

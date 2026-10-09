@@ -3,7 +3,7 @@
  * match the DOMException names from AbortSignal.timeout() and AbortSignal.abort(), so native
  * platform errors classify the same way as Pit's own.
  */
-export type TerminationKind = "timeout" | "cancelled";
+type TerminationKind = "timeout" | "cancelled";
 
 const TERMINATION_NAMES = { timeout: "TimeoutError", cancelled: "AbortError" } as const;
 

@@ -28,7 +28,7 @@ parentPort.on("message", ({ id, lines, limit }) => {
 });
 `;
 
-export interface RegexLineMatch {
+interface RegexLineMatch {
   lineIndex: number;
   column: number;
 }

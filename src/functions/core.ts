@@ -58,7 +58,7 @@ export function functionScopeRegistry(
   );
 }
 
-export interface FunctionScopeRegistries {
+interface FunctionScopeRegistries {
   user: ReadonlyMap<string, string>;
   project: ReadonlyMap<string, string>;
   session: ReadonlyMap<string, string>;

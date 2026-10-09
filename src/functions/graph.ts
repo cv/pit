@@ -40,7 +40,7 @@ function sourceFingerprint(source: string): string {
   return fingerprint([source]);
 }
 
-export interface SavedFunctionReference {
+interface SavedFunctionReference {
   name: string;
   source: string;
   direct: boolean;
@@ -51,7 +51,7 @@ interface CachedReferences {
   names: readonly string[];
 }
 
-export class SavedFunctionDependencyGraph {
+class SavedFunctionDependencyGraph {
   readonly #sources: ReadonlyMap<string, string>;
   readonly #names: ReadonlySet<string>;
   readonly #referenceCache = new Map<string, CachedReferences>();

@@ -38,7 +38,7 @@ function plural(count: number, noun: string, nouns = `${noun}s`): string {
 }
 
 /** The note as the model wrote it, without the frame Pit adds for the model. */
-export function noteBody(content: string): string {
+function noteBody(content: string): string {
   const framed = NOTE_FRAME.exec(content);
   return framed ? (framed[1] as string).replaceAll("<\\/model-note", "</model-note") : content;
 }

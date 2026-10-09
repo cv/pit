@@ -6,7 +6,7 @@ import type {
 
 import { createPiToolCatalog, type PiToolCatalog, piToolPrompt } from "./pi-tools.js";
 
-export const PIT_TOOL_NAME = "typescript";
+const PIT_TOOL_NAME = "typescript";
 
 /** Tool selection resolved from a trusted project's `.pi/pit.json` at session start. */
 export interface PitToolSelection {

@@ -33,7 +33,7 @@ export const INSPECT_LIMITS = {
   visibleChars: 4_000,
 } as const;
 
-export function contentText(content: EditableContent): string {
+function contentText(content: EditableContent): string {
   if (typeof content === "string") return content;
   return content
     .map((block) => (block.type === "text" ? block.text : "[image omitted]"))
@@ -50,7 +50,7 @@ function assistantText(message: AssistantMessage): string {
     .join("\n");
 }
 
-export function messageText(message: ModelMessage): string {
+function messageText(message: ModelMessage): string {
   switch (message.role) {
     case "assistant":
       return assistantText(message);
@@ -70,7 +70,7 @@ export function messageText(message: ModelMessage): string {
  * The model content an entry contributed before any edit, or undefined for prompt and tool
  * state and other entries without conversation content.
  */
-export function entryText(entry: SessionEntry): string | undefined {
+function entryText(entry: SessionEntry): string | undefined {
   switch (entry.type) {
     case "message":
       return isModelMessage(entry.message) ? messageText(entry.message) : undefined;
@@ -93,7 +93,7 @@ function preview(item: ContextItem, maxCharacters: number): string {
   return maxCharacters === 0 ? "" : clipText(text, maxCharacters);
 }
 
-export interface OutlineInput {
+interface OutlineInput {
   after?: string;
   limit: number;
   roles?: ReadonlySet<ContextRole>;
@@ -107,7 +107,7 @@ export interface OutlineInput {
   cache: CacheState;
 }
 
-export interface OutlineEntry {
+interface OutlineEntry {
   id: string;
   role: ContextRole;
   tool?: string;
@@ -130,7 +130,7 @@ export interface OutlineEntry {
   preview: string;
 }
 
-export interface Outline {
+interface Outline {
   leafId: string | null;
   contextTokens: number | null;
   contextWindow: number | null;
@@ -221,9 +221,9 @@ export function outlineContext(view: ContextView, input: OutlineInput): Outline 
   };
 }
 
-export type InspectState = ContextState | "omitted" | "compacted";
+type InspectState = ContextState | "omitted" | "compacted";
 
-export interface InspectedEntry {
+interface InspectedEntry {
   id: string;
   role: ContextRole;
   tool?: string;
