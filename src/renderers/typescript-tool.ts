@@ -2,15 +2,11 @@ import { highlightCode } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { formatDuration } from "../execution/timings.js";
-import type { ExecutionProgressSnapshot } from "../execution/types.js";
-import type { FunctionActivity } from "../functions/core.js";
 import { isRecord } from "../shared/records.js";
 import { shapeGuard } from "../shared/shape-guard.js";
 import { sanitizeTerminalText } from "../shared/text-sanitization.js";
-import type { RecoverableCalls, StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { executionTiming } from "../tool/timing.js";
-import { renderExecutionDashboard } from "./execution-dashboard.js";
 import { inferFunctionCall, runtimeFunctionCall } from "./function-call.js";
 import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
@@ -18,37 +14,20 @@ import { describeResult } from "./result-summary.js";
 import { offsetHangingIndents, outcomeMarker, renderJson } from "./shared.js";
 import type { RenderedResultValue } from "./types.js";
 import { displayedFailure, displayedFunctionPath } from "./typescript-failure.js";
-import { renderPartialToolResult, renderRetainedShellOutput } from "./typescript-progress.js";
+import { renderPartialToolResult } from "./typescript-progress.js";
+import {
+  executionNotices,
+  renderExecutionDetails,
+  type RenderTheme,
+  retainsValue,
+  type TypeScriptDetails,
+} from "./typescript-result-details.js";
 import { renderTypeScriptInputs, type ToolCallArgs } from "./typescript-tool-call.js";
-
-interface TypeScriptDetails extends ExecutionProgressSnapshot {
-  value: unknown;
-  truncated: boolean;
-  functions?: FunctionActivity[];
-  failure?: StructuredTypeScriptFailure;
-  recoverable?: RecoverableCalls;
-  imageAttachments?: Array<{ file: string; mimeType: string; note: string; omitted?: boolean }>;
-}
 
 // Collapsed results name this many attached images; expanded results list all of them.
 const COLLAPSED_IMAGES = 3;
 
-/**
- * Whether details retain the returned value. Truncated results keep a fitted value; older
- * sessions and unstructured fallbacks kept only the model-visible text.
- */
-function retainsValue(details: TypeScriptDetails | undefined): details is TypeScriptDetails {
-  return (
-    details !== undefined &&
-    Object.hasOwn(details, "value") &&
-    !(details.truncated && details.value === undefined)
-  );
-}
-
-interface RenderTheme {
-  fg(color: string, text: string): string;
-  bold(text: string): string;
-}
+type ResultOutcome = NonNullable<RenderedResultValue["outcome"]>;
 
 interface ToolResultLike {
   content: Array<{ type: string; text?: string }>;
@@ -173,72 +152,59 @@ function renderStructuredToolValue(input: {
   return { lines: highlightCode(serialized, language), hangingIndents: {} };
 }
 
-function executionNotices(details: TypeScriptDetails | undefined, outcome: string): string[] {
-  const notices: string[] = [];
-  const failed = details?.traces?.some(
-    (entry) => entry.status === "failed" || entry.status === "rejected",
-  );
-  const nonzero = details?.progress?.some(
-    (entry) => entry.status === "done" && entry.code !== undefined && entry.code !== 0,
-  );
-  if (failed) notices.push("execution had failures");
-  else if (nonzero && outcome !== "error") notices.push("nonzero exits recorded");
-  if (details?.tracesTruncated || details?.progressTruncated)
-    notices.push("execution history incomplete");
-  const omittedImages = details?.imageAttachments?.filter(({ omitted }) => omitted).length ?? 0;
-  if (omittedImages > 0)
-    notices.push(`${omittedImages === 1 ? "image" : "images"} omitted for text-only model`);
-
-  return notices;
-}
-
-function renderInvocationTiming(
-  timings: ExecutionProgressSnapshot["timings"],
-  theme: RenderTheme,
-): string {
-  if (!timings) return "";
-  const phases = Object.entries(timings.phases).sort((left, right) => right[1] - left[1]);
-  if (!phases.length) return "";
-
-  // Show small breakdowns directly; summarize larger ones as the top two costs plus rest.
-  const prominent = phases.length > 3 ? 2 : phases.length;
-  const rest = phases.slice(prominent);
-  const ranking = phases
-    .slice(0, prominent)
-    .map(([phase, value]) => `${formatDuration(value)} ${phase}`);
-  if (rest.length) {
-    const restMs = rest.reduce((sum, [, value]) => sum + value, 0);
-    ranking.push(`${formatDuration(restMs)} rest`);
-  }
-  const total = `${formatDuration(timings.totalMs)} total`;
-  return `\n\n${theme.fg("muted", `${total}: ${ranking.join(", ")}`)}`;
-}
-
-function renderExecutionDetails(
+/** The result headline: an attached-image count, or the summary of the returned value. */
+function resultLabel(
   details: TypeScriptDetails | undefined,
+  rendering: ResultRenderingState,
+  fallback: string,
+  expanded: boolean,
+): string {
+  const images = details?.imageAttachments?.length ?? 0;
+  if (images > 0 && details?.value === undefined) {
+    return images === 1 ? "Image attached" : `${images} images attached`;
+  }
+  return describeResult(details?.value, rendering.structuredResult, {
+    unretained: details?.truncated === true && !retainsValue(details),
+    fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
+    expanded,
+  });
+}
+
+/** The parenthesized state: duration, preceded by truncation unless the value reports it. */
+function resultState(
+  details: TypeScriptDetails | undefined,
+  rendering: ResultRenderingState,
+  duration: string,
+): string {
+  // Domain values that own a truncated flag already report it in their summary; say it once.
+  const reportedByValue =
+    rendering.structuredResult !== undefined &&
+    rendering.structuredResult.kind !== "compound" &&
+    isRecord(details?.value) &&
+    details.value.truncated === true;
+  return details?.truncated && !reportedByValue ? `truncated, ${duration}` : duration;
+}
+
+/** A failed value stays an error; truncation or execution notices raise success to a warning. */
+function resultOutcome(
+  leafOutcome: ResultOutcome,
+  details: TypeScriptDetails | undefined,
+  notices: string[],
+): ResultOutcome {
+  if (leafOutcome === "error") return "error";
+  return details?.truncated || notices.length > 0 ? "warning" : leafOutcome;
+}
+
+function collapsedImages(
+  images: NonNullable<TypeScriptDetails["imageAttachments"]>,
   theme: RenderTheme,
-  returnedLines: string[] = [],
 ): string {
   let text = "";
-  // Error and unretained views may not display details.value at all.
-  const returnedValue =
-    returnedLines.length > 0 && retainsValue(details) ? details.value : undefined;
-  const retained = renderRetainedShellOutput(details, theme, returnedValue);
-  if (retained)
-    text += `\n\n${theme.bold(theme.fg("toolTitle", "Retained process output (tails)"))}${retained}`;
-  const dashboard = renderExecutionDashboard(details, theme, true, returnedValue);
-  if (dashboard)
-    text += `\n\n${theme.bold(theme.fg("toolTitle", "Execution (call completion)"))}${dashboard}`;
-  text += renderInvocationTiming(details?.timings, theme);
-  if (details?.imageAttachments?.length) {
-    const images = details.imageAttachments.map(
-      ({ file, mimeType, note }) => `${file} (${mimeType})${note ? `\n${note}` : ""}`,
-    );
-    text += `\n\n${theme.bold(theme.fg("toolTitle", "Images"))}\n${images.join("\n")}`;
-  }
-
-  if (details?.truncated)
-    text += `\n${theme.fg("warning", "Result truncated to fit the output budget; omitted parts are not retained.")}`;
+  for (const { file, mimeType } of images.slice(0, COLLAPSED_IMAGES))
+    text += `\nImage: ${file} (${mimeType})`;
+  const hidden = images.length - COLLAPSED_IMAGES;
+  if (hidden > 0)
+    text += `\n${theme.fg("dim", `… ${hidden} more image${hidden === 1 ? "" : "s"}; expand to list`)}`;
   return text;
 }
 
@@ -251,65 +217,36 @@ function renderCompletedToolResult(input: {
   rendering: ResultRenderingState;
   context: StatefulResultContext;
 }) {
-  const { expanded, details, fallback, duration, theme, rendering } = input;
-  const shown = expanded ? rendering.lines : [];
-  // Domain values that own a truncated flag already report it in their summary; say it once.
-  const reportedByValue =
-    rendering.structuredResult !== undefined &&
-    rendering.structuredResult.kind !== "compound" &&
-    isRecord(details?.value) &&
-    details.value.truncated === true;
-  const state = details?.truncated && !reportedByValue ? `truncated, ${duration}` : duration;
-  const resultLabel =
-    details?.imageAttachments?.length && details.value === undefined
-      ? details.imageAttachments.length === 1
-        ? "Image attached"
-        : `${details.imageAttachments.length} images attached`
-      : describeResult(details?.value, rendering.structuredResult, {
-          unretained: details?.truncated === true && !retainsValue(details),
-          fallback: details && Object.hasOwn(details, "value") ? "" : fallback,
-          expanded,
-        });
+  const { expanded, details, theme, rendering } = input;
   const leafOutcome = rendering.structuredResult?.outcome ?? "success";
   const notices = executionNotices(details, leafOutcome);
-  const resultOutcome =
-    leafOutcome === "error"
-      ? "error"
-      : details?.truncated || notices.length > 0
-        ? "warning"
-        : leafOutcome;
-  const resultMarker = `${outcomeMarker(theme, resultOutcome)} `;
-  let text = `${expanded ? "\n" : ""}${theme.bold(
-    resultMarker +
-      theme.fg("toolTitle", resultLabel) +
+  const outcome = resultOutcome(leafOutcome, details, notices);
+  const header = theme.bold(
+    `${outcomeMarker(theme, outcome)} ` +
+      theme.fg("toolTitle", resultLabel(details, rendering, input.fallback, expanded)) +
       notices.map((notice) => theme.fg("warning", ` · ${notice}`)).join("") +
-      theme.fg(resultOutcome === "success" ? "dim" : resultOutcome, ` (${state})`),
-  )}`;
+      theme.fg(
+        outcome === "success" ? "dim" : outcome,
+        ` (${resultState(details, rendering, input.duration)})`,
+      ),
+  );
+  let text = `${expanded ? "\n" : ""}${header}`;
   const resultContentStart = text.split("\n").length;
-  if (!expanded && details?.imageAttachments?.length) {
-    const images = details.imageAttachments;
-    for (const { file, mimeType } of images.slice(0, COLLAPSED_IMAGES))
-      text += `\nImage: ${file} (${mimeType})`;
-    const hidden = images.length - COLLAPSED_IMAGES;
-    if (hidden > 0)
-      text += `\n${theme.fg("dim", `… ${hidden} more image${hidden === 1 ? "" : "s"}; expand to list`)}`;
-  }
-
-  if (expanded && shown.length > 0) {
-    text += `\n${shown.join("\n")}`;
-  } else if (expanded) {
-    text += `\n${theme.fg("dim", "(no result)")}`;
-  }
   if (expanded) {
+    text += `\n${rendering.lines.length > 0 ? rendering.lines.join("\n") : theme.fg("dim", "(no result)")}`;
     text += renderInputSection(input.context, theme);
     text += renderExecutionDetails(details, theme, rendering.lines);
+  } else {
+    text += collapsedImages(details?.imageAttachments ?? [], theme);
   }
-  text = sanitizeTerminalText(text, { preserveSgr: true });
   const displayedHangingIndents = offsetHangingIndents(rendering.hangingIndents, {
     lines: resultContentStart,
-    before: shown.length,
+    before: expanded ? rendering.lines.length : 0,
   });
-  return new HangingIndentText(text, displayedHangingIndents);
+  return new HangingIndentText(
+    sanitizeTerminalText(text, { preserveSgr: true }),
+    displayedHangingIndents,
+  );
 }
 
 const Duration = Type.Number({ minimum: 0 });
