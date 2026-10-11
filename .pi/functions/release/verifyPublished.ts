@@ -89,9 +89,9 @@ async function verifyPublished(
       const probe = await execFile(
         "node",
         [
-          "--input-type=module",
+          // Not --input-type=module: the sandbox's worker inherits Node's flags and rejects it.
           "-e",
-          "const { CodemodeSandbox } = await import('@earendil-works/pi-codemode'); const result = await new CodemodeSandbox().execute('return 1 + 1'); process.stdout.write(JSON.stringify(result.ok ? result.value : result.error.message));",
+          "import('@earendil-works/pi-codemode').then(async ({ CodemodeSandbox }) => { const result = await new CodemodeSandbox().execute('return 1 + 1'); process.stdout.write(JSON.stringify(result.ok ? result.value : result.error.message)); })",
         ],
         { cwd, timeoutMs: 30000 },
       );

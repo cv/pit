@@ -43,7 +43,7 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
    git clone --depth 1 --branch vX.Y.Z https://github.com/cv/pit.git /tmp/pit-vX.Y.Z
    cd /tmp/pit-vX.Y.Z
    npm ci --omit=dev
-   node --input-type=module -e "const { CodemodeSandbox } = await import('@earendil-works/pi-codemode'); console.log(await new CodemodeSandbox().execute('return 1 + 1'))"
+   node -e "import('@earendil-works/pi-codemode').then(async ({ CodemodeSandbox }) => console.log(await new CodemodeSandbox().execute('return 1 + 1')))"
    ```
 
 In Pit, `release.verifyPublished({ tag: "vX.Y.Z" })` performs step 5 and reports every problem it finds.
