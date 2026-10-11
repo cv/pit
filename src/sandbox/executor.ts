@@ -24,7 +24,6 @@ const FUNCTION_EXECUTION_SCOPES = new Set(["global", "user", "project", "session
 export function parseFunctionExecutionContext(
   value: unknown,
 ): FunctionExecutionContext | undefined {
-  // The native smoke test bundles this module standalone, so it avoids a TypeBox schema.
   if (!isRecord(value)) return;
   const context = value;
   if (

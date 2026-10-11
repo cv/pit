@@ -15,8 +15,7 @@ import {
   type FunctionExecutor,
 } from "./executor.js";
 import { createGuestSource } from "./guest-source.js";
-import type { HostCallMessage, WireMessage } from "./wire.js";
-import { isHostCallMessage } from "./wire.js";
+import { parseGuestRequest, type HostCallMessage, type HostCallResponse } from "./wire.js";
 
 const MAX_PROTOCOL_FRAME_BYTES = 8_000_000;
 const MAX_HOST_CALLS = 1_024;
@@ -47,36 +46,20 @@ async function runInCodemodeSandbox(
   }
 }
 
-interface TimerRequest {
-  type: "timer";
-  delayMs: number;
-}
-
-function isTimerRequest(
-  request: Record<string, unknown>,
-): request is Record<string, unknown> & TimerRequest {
-  return (
-    request.type === "timer" &&
-    Number.isSafeInteger(request.delayMs) &&
-    Number(request.delayMs) >= 0
-  );
-}
-
 function executionSignal(options: FunctionExecutionOptions, failed: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(options.timeoutMs);
   return AbortSignal.any([...(options.signal ? [options.signal] : []), timeout, failed]);
 }
 
-/** Parses one bounded guest request into a plain object. */
-function parseGuestRequest(raw: string): Record<string, unknown> {
+/** Parses one bounded guest frame into a request the host answers. */
+function readGuestRequest(raw: string) {
   if (Buffer.byteLength(raw) > MAX_PROTOCOL_FRAME_BYTES) {
     throw new Error("Pit guest request exceeds bounds");
   }
   const value = JSON.parse(raw) as unknown;
-  if (!isRecord(value)) {
-    throw new Error("Invalid Pit guest request");
-  }
-  return value;
+  const request = isRecord(value) ? parseGuestRequest(value) : undefined;
+  if (!request) throw new Error("Invalid Pit guest request");
+  return request;
 }
 
 /**
@@ -130,16 +113,14 @@ class GuestExecution {
   };
 
   async #answer(raw: string): Promise<string> {
-    const request = parseGuestRequest(raw);
-    if (isTimerRequest(request)) return this.#wait(request.delayMs);
-    const message = request as WireMessage;
-    if (message.type === "result") {
+    const request = readGuestRequest(raw);
+    if (request.type === "timer") return this.#wait(request.delayMs);
+    if (request.type === "result") {
       this.resultReceived = true;
-      this.result = message.value;
+      this.result = request.value;
       return EMPTY_RESPONSE;
     }
-    if (!isHostCallMessage(message)) throw new Error("Invalid Pit guest request");
-    return this.#call(message);
+    return this.#call(request);
   }
 
   /**
@@ -212,13 +193,11 @@ class GuestExecution {
     return EMPTY_RESPONSE;
   }
 
-  #reply(message: WireMessage): boolean {
-    /* v8 ignore next -- dispatcher responses always carry their request id. */
-    if (typeof message.id !== "number") return false;
+  #reply(message: HostCallResponse): boolean {
     const waiter = this.#waiters.get(message.id);
     if (!waiter) return false;
     const response = JSON.stringify(message);
-    /* v8 ignore next -- dispatcher sends a bounded fallback after rejection. */
+    // The dispatcher answers an oversized response with a bounded error instead.
     if (Buffer.byteLength(response) > MAX_PROTOCOL_FRAME_BYTES) return false;
     this.#waiters.delete(message.id);
     waiter.resolve(response);
