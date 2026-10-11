@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `models.listOfType(type)`, `models.classify(model, request)`, and `models.generateImages(model, request)` run Pi's non-chat models with the session's credentials, like the `models` global in Pi's codemode. Classifiers answer typed questions about JSON state and image files; image models write their images to files that `workspace.viewImage` can show. At most four model requests run at once per call, and provider failures come back as `stopReason: "error"` data.
+
 ### Changed
 
 - **Breaking for local runtime overrides:** Pit runs TypeScript in Pi's codemode sandbox, `CodemodeSandbox` from `@earendil-works/pi-codemode`, instead of its own Wasmtime addon. Each call still gets a fresh QuickJS VM, now QuickJS compiled to WebAssembly in its own worker thread. The runtime is a regular npm dependency, so Pit works on any platform Node supports and needs no download at install time or restart after an update. `PIT_WASMTIME_ADDON`, `PIT_WASMTIME_COMPONENT`, and `PIT_WASMTIME_INSTALL_STRICT` are gone, and releases no longer carry assets.

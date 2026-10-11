@@ -29,4 +29,44 @@ export const modelsFunctions = [
     minimumArguments: 2,
     maximumArguments: 2,
   }),
+  defineNativeFunction("models", "listOfType", {
+    summary: "List classifier or image models",
+    declaration: `listOfType(
+  type: PitModelType,
+  options?: { provider?: string; availableOnly?: boolean; query?: string; limit?: number },
+): Promise<{ models: PitTypedModelMetadata[]; truncated: boolean }>;`,
+    documentation:
+      "models.listOfType(type, options?) lists classifier or image models, those with working credentials by default",
+    minimumArguments: 1,
+    maximumArguments: 2,
+  }),
+  defineNativeFunction("models", "classify", {
+    summary: "Classify state with a classifier model",
+    declaration: `classify(
+  model: { provider: string; id: string },
+  request: {
+    state: Record<string, PitJsonValue>;
+    questions: Record<string, PitClassifierQuestion>;
+    images?: string[];
+    temperature?: number;
+  },
+): Promise<PitModelOutcome & { answers: Record<string, PitClassifierAnswer> }>;`,
+    documentation:
+      "models.classify(model, request) answers typed questions about JSON state and image files; check stopReason",
+    minimumArguments: 2,
+    maximumArguments: 2,
+  }),
+  defineNativeFunction("models", "generateImages", {
+    summary: "Generate images with an image model",
+    declaration: `generateImages(
+  model: { provider: string; id: string },
+  request: { prompt: string; images?: string[]; outputDir?: string },
+): Promise<
+  PitModelOutcome & { images: Array<{ file: string; mimeType: string; bytes: number }>; text: string[] }
+>;`,
+    documentation:
+      "models.generateImages(model, request) writes generated images to files and returns their paths; check stopReason",
+    minimumArguments: 2,
+    maximumArguments: 2,
+  }),
 ] as const;

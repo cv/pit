@@ -108,6 +108,8 @@ export interface ImageCollector {
   attachBlock(image: ImageBlock, source: string): void;
   /** Why returned images were not attached, in call order. */
   omissions(): string[];
+  /** Reads one image for a model request as viewImage would, without attaching it. */
+  load(path: unknown, signal?: AbortSignal): Promise<ImageBlock>;
 }
 
 // Pi runs its read tool with the context of the tool that calls it.
@@ -164,5 +166,7 @@ export function createImageCollector(ctx: ExtensionToolContext): ImageCollector 
       throw error;
     }
   };
-  return { view, attached, attachBlock, omissions: () => [...omitted] };
+  const load = async (path: unknown, signal?: AbortSignal) =>
+    (await loadImage(ctx, path, signal)).image;
+  return { view, attached, attachBlock, omissions: () => [...omitted], load };
 }

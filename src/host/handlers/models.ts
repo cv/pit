@@ -5,6 +5,8 @@ import {
 } from "../../shared/argument-values.js";
 import { clipText } from "../../shared/bounds.js";
 import { terminationError } from "../../shared/termination-errors.js";
+import type { ImageCollector } from "../../workspace/view-image.js";
+import { createModelRequests, isModelRequestMethod } from "./model-requests.js";
 import type { PiControlServices } from "./services.js";
 
 type PiModel = NonNullable<PiControlServices["ctx"]["model"]>;
@@ -48,7 +50,11 @@ function refreshFailure(result: ModelRefreshResult): string {
   return `${shown}${diagnostics.refreshErrorsTruncated ? "; … additional provider errors omitted" : ""}`;
 }
 
-export function createModelsHostHandler({ pi, ctx }: PiControlServices): ModelsHostHandler {
+export function createModelsHostHandler({
+  pi,
+  ctx,
+  loadImage,
+}: PiControlServices & { loadImage: ImageCollector["load"] }): ModelsHostHandler {
   const metadata = (model: PiModel) => {
     const scoped =
       ctx.scopedModels.length === 0 ||
@@ -68,7 +74,10 @@ export function createModelsHostHandler({ pi, ctx }: PiControlServices): ModelsH
     };
   };
 
+  const requests = createModelRequests({ ctx, loadImage });
+
   return async (method, args, signal) => {
+    if (isModelRequestMethod(method)) return requests[method](args, signal);
     if (method === "current") {
       return ctx.model ? metadata(ctx.model) : undefined;
     }

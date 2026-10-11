@@ -146,6 +146,11 @@ When the TypeScript tool is active and context usage first crosses 50% or 75% of
 - `current()` returns bounded metadata for the active model.
 - `list(options?)` returns bounded model metadata and bounded provider refresh diagnostics in `refreshErrors`; available models are the default.
 - `set(provider, id)` selects an explicit configured model and fails when credentials are unavailable.
+- `listOfType(type, options?)` lists `"classifier"` or `"image"` models, by default those whose provider has working credentials. `options.provider`, `query`, and `limit` narrow the list; `availableOnly: false` includes the rest.
+- `classify(model, request)` answers typed questions about JSON `request.state` with a classifier model: `choice`, `score`, and `bool` questions, as in the `models` global of Pi's codemode. `request.images` lists up to 8 image files, read like `workspace.viewImage`, for models whose `input` includes `"image"`.
+- `generateImages(model, request)` runs an image model on `request.prompt` and optional reference `images`, then writes each generated image to a new file in `request.outputDir`, or a fresh temporary directory. It returns the files and any text blocks; pass a file to `workspace.viewImage` to show it to the model. Generation can take minutes, so give the call a long enough `timeoutMs`.
+
+Both model requests use the session's credentials and run at most four at once per call. They do not throw for provider failures: check `stopReason` and `errorMessage`. When the service reports them, `usage` holds token counts and the cost in USD.
 
 ### `runtime`
 
