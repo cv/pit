@@ -43,6 +43,16 @@ describe("tool rendering", () => {
     expect(expanded).toMatch(/… \d+ lines omitted …/);
     expect(expanded).toContain("boom");
     expect(expanded).toContain("Result truncated to fit the output budget");
+    expect(expanded).toContain("omitted parts are not retained");
+
+    const spilled = renderToolResult(
+      {
+        content: [{ type: "text", text: generic.text }],
+        details: { value: generic.value, truncated: true, resultFile: "/tmp/pit-result-1.json" },
+      },
+      { expanded: true, isPartial: false },
+    );
+    expect(spilled).toContain("the full result is in /tmp/pit-result-1.json");
   });
 
   it("renders result values as highlighted JSON", () => {

@@ -6,6 +6,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Added
 
+- A `typescript` result cut to fit Pi's output budget writes its complete value as JSON to a new private temporary file, and the truncation notice names it: `Full result: /tmp/pit-result-….json`. A later call can read the omitted parts instead of rerunning the work. The expanded view names the file too.
 - `models.listOfType(type)`, `models.classify(model, request)`, and `models.generateImages(model, request)` run Pi's non-chat models with the session's credentials, like the `models` global in Pi's codemode. Classifiers answer typed questions about JSON state and image files; image models write their images to files that `workspace.viewImage` can show. At most four model requests run at once per call, and provider failures come back as `stopReason: "error"` data.
 
 ### Changed
