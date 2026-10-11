@@ -48,7 +48,11 @@ function dependencies(release: Release = {}, host: Host = {}) {
     }
     if (program === "npm")
       return processResult({ code: host.installCode ?? 0, stdout: "added 9\n" });
-    if (program === "node" && args.includes("--input-type=module")) {
+    if (program === "node" && args.some((arg) => arg.includes("CodemodeSandbox"))) {
+      // A flag the sandbox's worker would inherit and reject.
+      if (args.includes("--input-type=module")) {
+        return processResult({ stdout: '"--input-type can only be used with string input"' });
+      }
       return processResult(host.sandbox ?? { code: 0, stdout: "2" });
     }
     if (program === "rm") return processResult();
