@@ -140,6 +140,31 @@ describe("HostCallDispatcher", () => {
     expect(traces.map((trace) => trace.status)).toEqual(["running", status]);
   });
 
+  it("records a call that answers after a timeout stopped its program as timed out", async () => {
+    const controller = new AbortController();
+    const traces: HostCallTrace[] = [];
+    let answer!: () => void;
+    const dispatcher = new HostCallDispatcher({
+      handler: () =>
+        new Promise((resolve) => {
+          answer = () => resolve(null);
+        }),
+      signal: controller.signal,
+      maximumCalls: 1,
+      maximumConcurrentCalls: 1,
+      // A stopped program has already answered its waiting calls, so a late reply has no taker.
+      send: () => !controller.signal.aborted,
+      parseFunctionContext: () => undefined,
+      onTrace: (trace) => traces.push(trace),
+    });
+    dispatcher.handle({ type: "call", id: 1, namespace: "context", method: "get", args: [] });
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+    answer();
+    await Promise.all(dispatcher.pending());
+    expect(traces.map((trace) => trace.status)).toEqual(["running", "timed out"]);
+  });
+
   it("never starts a call queued behind the concurrency limit once its program stops", async () => {
     const controller = new AbortController();
     const sent: unknown[] = [];

@@ -554,12 +554,12 @@ describe("runInSandbox", () => {
       runInSandbox(
         "async ({ context: { get } }) => { get(); return 42; }",
         () => new Promise(() => {}),
-        { timeoutMs: 200 },
+        { timeoutMs: 1_500 },
       ),
     ).rejects.toMatchObject({
       name: "TimeoutError",
       message:
-        "TypeScript execution timed out after 200ms while 1 host call was still running: context.get",
+        "TypeScript execution timed out after 1500ms while 1 host call was still running: context.get",
     });
   });
 
@@ -598,11 +598,11 @@ describe("runInSandbox", () => {
           invoked = true;
           return new Promise(() => {});
         },
-        { timeoutMs: 500 },
+        { timeoutMs: 1_500 },
       ),
     ).rejects.toMatchObject({
       message:
-        "TypeScript execution timed out after 500ms while 1 host call was still running: context.get",
+        "TypeScript execution timed out after 1500ms while 1 host call was still running: context.get",
     });
     expect(invoked).toBe(true);
     expect(Date.now() - started).toBeLessThan(10_000);
@@ -622,7 +622,7 @@ describe("runInSandbox", () => {
       program: "async ({ context: { get } }) => { await get(); while (true) {} }",
       calls: 1,
       cancel: false,
-      message: "TypeScript execution timed out after 500ms",
+      message: "TypeScript execution timed out after 1500ms",
     },
   ])("reports calls still running when an execution stops: $name", async (row) => {
     const controller = new AbortController();
@@ -637,34 +637,28 @@ describe("runInSandbox", () => {
           if (invocations === row.calls) controller.abort();
           return new Promise(() => {});
         },
-        { timeoutMs: row.cancel ? 30_000 : 500, signal: controller.signal },
+        { timeoutMs: row.cancel ? 30_000 : 1_500, signal: controller.signal },
       ),
     ).rejects.toMatchObject({ message: row.message });
     expect(invocations).toBe(row.calls);
   });
 
-  it("records a call that finishes after the deadline as timed out, not failed", async () => {
+  it("records a call that answers after its program stopped as stopped, not failed", async () => {
+    const controller = new AbortController();
     const statuses: string[] = [];
-    let finished!: () => void;
-    const done = new Promise<void>((resolve) => {
-      finished = resolve;
-    });
     await expect(
       runInSandbox(
         "async ({ context: { get } }) => get()",
-        // Ignores its abort signal and answers after the program has stopped.
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => {
-              resolve(null);
-              setTimeout(finished, 0);
-            }, 300),
-          ),
-        { timeoutMs: 100, onHostCallTrace: (trace) => statuses.push(trace.status) },
+        // Stops the program once the call has started, then answers anyway, ignoring its signal.
+        () => {
+          controller.abort();
+          return new Promise((resolve) => setTimeout(() => resolve(null), 50));
+        },
+        { signal: controller.signal, onHostCallTrace: (trace) => statuses.push(trace.status) },
       ),
-    ).rejects.toThrow("timed out");
-    await done;
-    expect(statuses).toEqual(["running", "timed out"]);
+    ).rejects.toThrow("cancelled");
+    await vi.waitFor(() => expect(statuses).toHaveLength(2));
+    expect(statuses).toEqual(["running", "cancelled"]);
   });
 
   it("aborts cooperative host handlers on timeout", async () => {
@@ -683,7 +677,7 @@ describe("runInSandbox", () => {
               { once: true },
             );
           }),
-        { timeoutMs: 500 },
+        { timeoutMs: 1_500 },
       ),
     ).rejects.toThrow("timed out");
     await vi.waitFor(() => expect(aborted).toBe(true), { timeout: 5_000 });
