@@ -4,16 +4,6 @@ import { loadWorkflowFunction, processResult } from "../helpers/workflow-functio
 
 const tag = "v1.2.3";
 const dir = "/tmp/pit-release-abc123";
-const assets = [
-  "pit-wasmtime-darwin-arm64.node",
-  "pit-wasmtime-darwin-x64.node",
-  "pit-wasmtime-linux-arm64.node",
-  "pit-wasmtime-linux-x64.node",
-  "pit-wasmtime-win32-arm64.node",
-  "pit-wasmtime-win32-x64.node",
-  "pit-queued-quickjs-guest.wasm",
-  "pit-wasmtime-checksums.json",
-];
 
 interface Release {
   tagName?: string;
@@ -26,9 +16,8 @@ interface Host {
   tempDir?: string;
   cloneFails?: boolean;
   packageVersion?: string;
-  installerCode?: number;
-  marker?: string | null;
-  exports?: string;
+  installCode?: number;
+  sandbox?: { code: number; stdout?: string; stderr?: string };
 }
 
 function dependencies(release: Release = {}, host: Host = {}) {
@@ -39,12 +28,11 @@ function dependencies(release: Release = {}, host: Host = {}) {
         isDraft: release.isDraft ?? false,
         isPrerelease: release.isPrerelease ?? false,
         url: `https://github.com/cv/pit/releases/tag/${tag}`,
-        assets: (release.assets ?? assets).map((name) => ({ name })),
+        assets: (release.assets ?? []).map((name) => ({ name })),
       }),
     }),
   );
   const execFile = vi.fn(async (program: string, args: string[], _options?: object) => {
-    const script = args[1] ?? "";
     if (program === "git" && args[0] === "ls-remote") {
       return processResult({
         stdout: host.lsRemote ?? `1111111\trefs/tags/${tag}\n2222222\trefs/tags/${tag}^{}\n`,
@@ -55,22 +43,13 @@ function dependencies(release: Release = {}, host: Host = {}) {
       if (host.cloneFails) throw new Error("clone failed");
       return processResult();
     }
-    if (program === "node" && script.includes("package.json")) {
+    if (program === "node" && args[1]?.includes("package.json")) {
       return processResult({ stdout: host.packageVersion ?? "1.2.3" });
     }
-    if (program === "node" && script.includes("process.platform")) {
-      return processResult({ stdout: "linux-x64" });
-    }
-    if (program === "env") {
-      return processResult({ code: host.installerCode ?? 0, stdout: "[pit] Installed.\n" });
-    }
-    if (program === "cat") {
-      return host.marker === null
-        ? processResult({ code: 1 })
-        : processResult({ stdout: host.marker ?? '{"version":"1.2.3"}\n' });
-    }
-    if (program === "node" && script.includes("Object.keys")) {
-      return processResult({ stdout: host.exports ?? "executeQueuedJavascript,executeWat" });
+    if (program === "npm")
+      return processResult({ code: host.installCode ?? 0, stdout: "added 9\n" });
+    if (program === "node" && args.includes("--input-type=module")) {
+      return processResult(host.sandbox ?? { code: 0, stdout: "2" });
     }
     if (program === "rm") return processResult();
     throw new Error(`unexpected ${program} ${args.join(" ")}`);
@@ -82,7 +61,7 @@ const programs = (execFile: ReturnType<typeof vi.fn>) =>
   execFile.mock.calls.map(([program]) => program as string);
 
 describe("release.verifyPublished", () => {
-  it("verifies a complete release through a strict installer run and removes its directory", async () => {
+  it("verifies a release by installing its tag and running the sandbox, then removes its directory", async () => {
     const verify = await loadWorkflowFunction("release.verifyPublished");
     const { execFile, deps } = dependencies();
     const result = await verify(deps, { tag });
@@ -90,8 +69,8 @@ describe("release.verifyPublished", () => {
       ok: true,
       problems: [],
       commit: "2222222",
-      assets: { count: 8, missing: [], extra: [] },
-      installer: { target: "linux-x64", packageVersion: "1.2.3", code: 0 },
+      assets: [],
+      install: { packageVersion: "1.2.3", code: 0, sandbox: "2" },
     });
     expect(execFile).toHaveBeenCalledWith(
       "git",
@@ -107,12 +86,9 @@ describe("release.verifyPublished", () => {
       ],
       expect.anything(),
     );
-    const installer = execFile.mock.calls.find(([program]) => program === "env");
-    expect(installer?.[1]).toEqual(
-      expect.arrayContaining(["-u", "PIT_WASMTIME_ADDON", "PIT_WASMTIME_INSTALL_STRICT=1"]),
-    );
-    expect(installer?.[1].slice(-2)).toEqual(["node", "scripts/install-wasmtime.mjs"]);
-    expect(installer?.[2]).toMatchObject({ cwd: `${dir}/pit` });
+    const install = execFile.mock.calls.find(([program]) => program === "npm");
+    expect(install?.[1]).toEqual(expect.arrayContaining(["ci", "--omit=dev"]));
+    expect(install?.[2]).toMatchObject({ cwd: `${dir}/pit` });
     expect(execFile.mock.calls.at(-1)).toEqual(["rm", ["-rf", dir], { raise: true }]);
   });
 
@@ -130,21 +106,16 @@ describe("release.verifyPublished", () => {
   ])("reports $name", async ({ lsRemote, commit }) => {
     const verify = await loadWorkflowFunction("release.verifyPublished");
     const { deps } = dependencies({}, { lsRemote });
-    expect(await verify(deps, { tag, installer: false })).toMatchObject({ ok: true, commit });
+    expect(await verify(deps, { tag, install: false })).toMatchObject({ ok: true, commit });
   });
 
   it.each<{ name: string; release?: Release; host?: Host; problem: string }>([
     { name: "a draft release", release: { isDraft: true }, problem: "release is a draft" },
     { name: "a prerelease", release: { isPrerelease: true }, problem: "release is a prerelease" },
     {
-      name: "a missing addon",
-      release: { assets: assets.filter((name) => !name.includes("win32-x64")) },
-      problem: "missing assets: pit-wasmtime-win32-x64.node",
-    },
-    {
-      name: "an unexpected asset",
-      release: { assets: [...assets, "notes.txt"] },
-      problem: "unexpected assets: notes.txt",
+      name: "an attached asset",
+      release: { assets: ["pit-wasmtime-linux-x64.node"] },
+      problem: "unexpected assets: pit-wasmtime-linux-x64.node",
     },
     {
       name: "a tag absent from the remote",
@@ -156,25 +127,11 @@ describe("release.verifyPublished", () => {
       host: { packageVersion: "1.2.2" },
       problem: "tagged package.json is 1.2.2",
     },
+    { name: "a failed install", host: { installCode: 1 }, problem: "npm ci exited 1" },
     {
-      name: "a failed strict install",
-      host: { installerCode: 1 },
-      problem: "strict installer exited 1",
-    },
-    {
-      name: "a prebuild from another release",
-      host: { marker: '{"version":"1.2.2"}' },
-      problem: 'installed prebuild marker is {"version":"1.2.2"}',
-    },
-    {
-      name: "a missing prebuild marker",
-      host: { marker: null },
-      problem: "installed prebuild marker is missing",
-    },
-    {
-      name: "an addon that does not load",
-      host: { exports: "" },
-      problem: "installed addon did not load",
+      name: "a sandbox that does not load",
+      host: { sandbox: { code: 1, stderr: "Cannot find package 'quickjs-wasi'" } },
+      problem: "sandbox did not run: Cannot find package 'quickjs-wasi'",
     },
   ])("reports $name and still removes its directory", async ({ release, host, problem }) => {
     const verify = await loadWorkflowFunction("release.verifyPublished");
@@ -186,9 +143,9 @@ describe("release.verifyPublished", () => {
 
   it("raises every problem by default", async () => {
     const verify = await loadWorkflowFunction("release.verifyPublished");
-    const { deps } = dependencies({ isDraft: true, assets: assets.slice(1) });
-    await expect(verify(deps, { tag, installer: false })).rejects.toThrow(
-      `Release ${tag} failed verification: release is a draft; missing assets: pit-wasmtime-darwin-arm64.node`,
+    const { deps } = dependencies({ isDraft: true, assets: ["notes.txt"] });
+    await expect(verify(deps, { tag, install: false })).rejects.toThrow(
+      `Release ${tag} failed verification: release is a draft; unexpected assets: notes.txt`,
     );
   });
 
@@ -208,13 +165,10 @@ describe("release.verifyPublished", () => {
     expect(programs(execFile)).not.toContain("rm");
   });
 
-  it("does no temporary work when the installer check is disabled", async () => {
+  it("does no temporary work when the install check is disabled", async () => {
     const verify = await loadWorkflowFunction("release.verifyPublished");
     const { execFile, deps } = dependencies();
-    expect(await verify(deps, { tag, installer: false })).toMatchObject({
-      ok: true,
-      installer: null,
-    });
+    expect(await verify(deps, { tag, install: false })).toMatchObject({ ok: true, install: null });
     expect(programs(execFile)).toEqual(["git"]);
   });
 

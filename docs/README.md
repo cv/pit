@@ -20,7 +20,6 @@ You can use Pit by talking to the agent normally. The call-authoring guides are 
 - [Contributing](../CONTRIBUTING.md): prerequisites, local setup, checks, and PR expectations.
 - [Architecture](architecture.md): runtime flow, internal boundaries, invariants, and where to make a change.
 - [Releasing](releasing.md): preparation, publication, and installed-tag acceptance.
-- [Native runtime](../native/wasmtime-executor/README.md): subsystem build and smoke-test instructions.
 - [Repository workflow functions](../.pi/functions/README.md): this repository's maintainer helpers, not the general saved-functions API.
 
 ## Background and policies

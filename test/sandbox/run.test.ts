@@ -478,11 +478,11 @@ describe("runInSandbox", () => {
   });
 
   it("gives unvalidated guest code no host globals, modules, or ungranted dependencies", async () => {
-    // Bypasses authoring validation: the runtime and the host's grants are the boundary.
+    // Bypasses authoring validation and reaches the raw bridge: the host's grants are the boundary.
     const result = await runRawProgram(`async () => ({
       globals: [typeof process, typeof require, typeof module, typeof fetch, typeof WebAssembly],
       module: await import("fs").then(() => "loaded", () => "unavailable"),
-      direct: JSON.parse(await pitCall(JSON.stringify({
+      direct: JSON.parse(await globalThis.pitCall(JSON.stringify({
         type: "call", id: 1, namespace: "shell", method: "exec", args: ["id"],
       }))),
     })`);
@@ -547,6 +547,20 @@ describe("runInSandbox", () => {
     );
     expect(result).toBe(42);
     expect(completed).toBe(true);
+  });
+
+  it("bounds floating host calls by the execution deadline", async () => {
+    await expect(
+      runInSandbox(
+        "async ({ context: { get } }) => { get(); return 42; }",
+        () => new Promise(() => {}),
+        { timeoutMs: 200 },
+      ),
+    ).rejects.toMatchObject({
+      name: "TimeoutError",
+      message:
+        "TypeScript execution timed out after 200ms while 1 host call was still running: context.get",
+    });
   });
 
   // The PitProgram assignability chain does not say how to fix a result that is not JSON.

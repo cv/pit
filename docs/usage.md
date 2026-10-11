@@ -179,7 +179,7 @@ Display formatting changes only the TUI. It does not change the serialized tool 
 
 ## Execution and failures
 
-Pit type-checks and compiles each call, resolves its injected dependencies, and runs it in a fresh Wasmtime/QuickJS sandbox. Return a JSON-compatible value to send a result back to the model. Intermediate values stay inside the call. See the [security model](security.md) for the host authority those dependencies expose.
+Pit type-checks and compiles each call, resolves its injected dependencies, and runs it in a fresh QuickJS sandbox. Return a JSON-compatible value to send a result back to the model. Intermediate values stay inside the call. See the [security model](security.md) for the host authority those dependencies expose.
 
 Process methods return nonzero exit status as data by default; use `raise: true` when it should stop the workflow. Use a local `catch` or `Promise.allSettled` for failures the workflow can handle. See [common process options](reference.md#shell).
 

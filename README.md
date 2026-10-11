@@ -26,7 +26,7 @@ That call reads a file and checks Git status in parallel, then returns a three-f
 
 - **Fewer round trips.** Related reads, commands, and edits, plus the logic between them, fit in one call. Independent work can [run in parallel](docs/usage.md#control-concurrency).
 - **Quieter context.** Only what the call returns reaches the model, so intermediate output never fills the conversation.
-- **Sandboxed execution.** Each call runs in a fresh Wasmtime/QuickJS sandbox with no direct access to files, the network, or processes. It reaches the host only through the functions it requests, and results are bounded to keep the context and TUI compact.
+- **Sandboxed execution.** Each call runs in a fresh QuickJS sandbox with no direct access to files, the network, or processes. It reaches the host only through the functions it requests, and results are bounded to keep the context and TUI compact.
 - **Earlier feedback.** Calls are [type-checked before they run](docs/usage.md#build-a-call), catching misspelled methods and bad arguments before anything happens.
 - **Reusable workflows.** A useful call can become a [saved function](docs/saved-functions.md), ready to reuse in the session, share with a project, or carry across your projects.
 
@@ -50,7 +50,7 @@ This tracks `main`, where changes land after CI passes. To update:
 pi update git:github.com/cv/pit
 ```
 
-Run `/reload` after source-only updates; restart Pi after a native runtime update. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.28.1` instead; package updates won't move a pinned install.
+Run `/reload` after updating. Prefer a fixed release? Use `pi install git:github.com/cv/pit@v0.28.1` instead; package updates won't move a pinned install.
 
 For a one-session trial or a project-only install, see [installation options](docs/configuration.md#installation-scope). Pit is distributed from GitHub, not npm; [releases](https://github.com/cv/pit/releases) and the [changelog](CHANGELOG.md) cover what's new.
 

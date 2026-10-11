@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createLayeredFunctionRegistry } from "../../src/functions/definitions.js";
 import { generateGlobalContract } from "../../src/functions/global-contract.js";
+import { createCodemodeFunctionExecutor } from "../../src/sandbox/codemode-executor.js";
 import { functionTypeModel } from "../../src/sandbox/function-types.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
 import { runWithFunctionExecutor } from "../../src/sandbox/run.js";
 import { validateTypeScript } from "../../src/sandbox/validation.js";
-import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js";
 import { terminationError } from "../../src/shared/termination-errors.js";
 import { structureTypeScriptFailure } from "../../src/tool/failure-context.js";
 import { typeDiagnostics } from "../helpers/type-contract.js";
@@ -195,7 +195,7 @@ describe("layered override contracts", () => {
     ).rejects.toThrow("TypeScript validation failed");
   });
 
-  it("executes named next chains in Wasmtime with one event per lower invocation", async () => {
+  it("executes named next chains in the sandbox with one event per lower invocation", async () => {
     const project =
       "async function calculate({ $next }, value: number) { return (await $next(value)) * 2; }";
     const session =
@@ -212,7 +212,7 @@ describe("layered override contracts", () => {
         input: 4,
         timeoutMs: 5000,
       },
-      configuredFunctionExecutor(),
+      createCodemodeFunctionExecutor(),
     );
     expect(result).toBe(13);
     expect(handler).toHaveBeenCalledTimes(2);
@@ -230,7 +230,7 @@ describe("layered override contracts", () => {
     );
   });
 
-  it("keeps a namespace termination name through saved-function wrappers in Wasmtime", async () => {
+  it("keeps a namespace termination name through saved-function wrappers in the sandbox", async () => {
     const user =
       "async function calculate({ context: { get } }, value: number): Promise<number> { await get(); return value + 1; }";
     const session =
@@ -248,7 +248,7 @@ describe("layered override contracts", () => {
         input: 4,
         timeoutMs: 5000,
       },
-      configuredFunctionExecutor(),
+      createCodemodeFunctionExecutor(),
     ).catch((error: unknown) => error);
 
     expect(failure).toMatchObject({ name: "TimeoutError" });

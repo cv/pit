@@ -2,8 +2,8 @@ import { runInNewContext } from "node:vm";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { createGuestSource } from "../../src/sandbox/guest-source.js";
 import { prepareSandboxProgram } from "../../src/sandbox/program.js";
-import { createWasmtimeGuestSource } from "../../src/sandbox/wasmtime-source.js";
 
 async function runGuest(
   source: string,
@@ -12,17 +12,17 @@ async function runGuest(
   globals: object = {},
 ) {
   const program = await prepareSandboxProgram(source, { input });
-  // The VM exercises our generated JavaScript; actual Wasm isolation is tested separately.
-  return runInNewContext(`(async () => { ${createWasmtimeGuestSource(program, input)} })()`, {
+  // The VM exercises our generated JavaScript; the sandbox boundary is tested separately.
+  return runInNewContext(`(async () => { ${createGuestSource(program, input)} })()`, {
     ...globals,
     pitCall,
   });
 }
 
-describe("generated Wasmtime guest behavior", () => {
-  it("discards console output without entering WASI or adding host requests", async () => {
+describe("generated guest behavior", () => {
+  it("discards console output without reaching the sandbox's console or adding host requests", async () => {
     const inheritedConsole = vi.fn(() => {
-      throw new Error("WASI console must not run");
+      throw new Error("the sandbox console must not run");
     });
     const pitCall = vi.fn(async (_message: string) => "{}");
     await runGuest(
@@ -94,11 +94,10 @@ describe("generated Wasmtime guest behavior", () => {
         method: "read",
         args: ["restricted.txt"],
       },
-      { type: "failure", name: "Error", message: "permission denied" },
     ]);
   });
 
-  it("keeps host error names and reports an uncaught named failure before rejecting", async () => {
+  it("keeps host error names when rejecting", async () => {
     const requests: Array<Record<string, unknown>> = [];
     const pitCall = async (message: string) => {
       const frame = JSON.parse(message) as Record<string, unknown>;
@@ -114,11 +113,6 @@ describe("generated Wasmtime guest behavior", () => {
         pitCall,
       ),
     ).rejects.toMatchObject({ name: "TimeoutError", message: "deadline reached" });
-    expect(requests.map(({ type }) => type)).toEqual(["call", "failure"]);
-    expect(requests.at(-1)).toEqual({
-      type: "failure",
-      name: "TimeoutError",
-      message: "deadline reached",
-    });
+    expect(requests.map(({ type }) => type)).toEqual(["call"]);
   });
 });

@@ -1,16 +1,15 @@
+import { createCodemodeFunctionExecutor } from "../../src/sandbox/codemode-executor.js";
 import type { HostCallHandler } from "../../src/sandbox/dispatcher.js";
 import { runWithFunctionExecutor, type SandboxOptions } from "../../src/sandbox/run.js";
-import { configuredFunctionExecutor } from "../../src/sandbox/wasmtime-loader.js";
 
-let executor: ReturnType<typeof configuredFunctionExecutor> | undefined;
+const executor = createCodemodeFunctionExecutor();
 
-/** Runs a program on the configured Wasmtime runtime, exactly as the extension does. */
+/** Runs a program in the codemode sandbox, exactly as the extension does. */
 export function runInSandbox(
   source: string,
   handler: HostCallHandler,
   options: SandboxOptions = {},
 ): Promise<unknown> {
-  executor ??= configuredFunctionExecutor();
   return runWithFunctionExecutor(source, handler, options, executor);
 }
 
@@ -21,7 +20,6 @@ export function runRawProgram(
     throw new Error("unexpected host call");
   },
 ): Promise<unknown> {
-  executor ??= configuredFunctionExecutor();
   return executor.execute({ compiled, effects: [] }, handler, {
     memoryLimitMb: 64,
     timeoutMs: 5_000,
