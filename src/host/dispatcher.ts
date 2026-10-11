@@ -325,7 +325,7 @@ export function createHostDispatcher(services: HostServices): HostCallHandler {
       ...(contextEdits ? { contextEdits } : {}),
     }),
     commands: createCommandsHostHandler({ pi }),
-    models: createModelsHostHandler({ pi, ctx }),
+    models: createModelsHostHandler({ pi, ctx, loadImage: images.load }),
     runtime: createRuntimeHostHandler({
       pi,
       ctx,

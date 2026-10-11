@@ -169,6 +169,44 @@ type PitModelMetadata = {
   scoped: boolean;
 };
 
+type PitModelType = "classifier" | "image";
+
+type PitTypedModelMetadata = {
+  type: PitModelType;
+  provider: string;
+  id: string;
+  name: string;
+  /** `"image"` when the model also judges or edits images. */
+  input: string[];
+  /** Image models: `"text"` when the model can also return text. */
+  output?: string[];
+  available: boolean;
+};
+
+type PitClassifierQuestion =
+  /** Pick one label; `criteria` maps each label to what it means. */
+  | { type: "choice"; instructions: string; criteria: Record<string, string> }
+  /** Score on an ordered scale; `criteria` describes each level, lowest first. */
+  | { type: "score"; instructions: string; criteria: string[] }
+  | { type: "bool"; instructions: string; criteria: { true: string; false: string } };
+
+type PitClassifierAnswer =
+  | { type: "choice"; choice: string; probabilities: Record<string, number>; confidence: number }
+  /** `score` is the expected level index, from 0 to `criteria.length - 1`. */
+  | { type: "score"; score: number; confidence: number }
+  /** Probability of `true`. */
+  | { type: "bool"; probability: number };
+
+/** A model request never throws for provider failures: check `stopReason` and `errorMessage`. */
+type PitModelOutcome = {
+  provider: string;
+  model: string;
+  /** Tokens and cost in USD, when the service reports them. */
+  usage?: { input: number; output: number; totalTokens: number; cost: number };
+  stopReason: "stop" | "error" | "aborted";
+  errorMessage?: string;
+};
+
 type PitPersistentFunctionMetadata = {
   name: string;
   signature: string;
@@ -607,6 +645,31 @@ interface PitModelsFunctions {
   }>;
 
   set(provider: string, id: string): Promise<{ provider: string; id: string; changed: boolean }>;
+
+  listOfType(
+    type: PitModelType,
+    options?: { provider?: string; availableOnly?: boolean; query?: string; limit?: number },
+  ): Promise<{ models: PitTypedModelMetadata[]; truncated: boolean }>;
+
+  classify(
+    model: { provider: string; id: string },
+    request: {
+      state: Record<string, PitJsonValue>;
+      questions: Record<string, PitClassifierQuestion>;
+      images?: string[];
+      temperature?: number;
+    },
+  ): Promise<PitModelOutcome & { answers: Record<string, PitClassifierAnswer> }>;
+
+  generateImages(
+    model: { provider: string; id: string },
+    request: { prompt: string; images?: string[]; outputDir?: string },
+  ): Promise<
+    PitModelOutcome & {
+      images: Array<{ file: string; mimeType: string; bytes: number }>;
+      text: string[];
+    }
+  >;
 }
 
 interface PitRuntimeFunctions {
