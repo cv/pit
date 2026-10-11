@@ -5,7 +5,7 @@ import {
   finishHostCallTrace,
   startHostCallTrace,
 } from "../execution/host-call-trace.js";
-import type { HostCallMessage, WireMessage } from "./wire.js";
+import type { HostCallMessage, HostCallResponse } from "./wire.js";
 
 export interface HostCallRequest {
   namespace: string;
@@ -25,7 +25,7 @@ interface HostCallDispatcherOptions {
   maximumCalls: number;
   maximumConcurrentCalls: number;
   allowedCalls?: ReadonlySet<string>;
-  send(message: WireMessage): boolean;
+  send(message: HostCallResponse): boolean;
   parseFunctionContext(value: unknown): FunctionExecutionContext | undefined;
   onTrace?(trace: HostCallTrace): void;
 }
@@ -127,8 +127,12 @@ export class HostCallDispatcher {
       )
       .then(
         (value) => {
+          const endedBy = stoppedStatus(this.options.signal);
           if (this.options.send({ type: "response", id, value })) {
             finishTrace("succeeded");
+          } else if (endedBy) {
+            // The program stopped while this call ran, so its answer had nowhere to go.
+            finishTrace(endedBy);
           } else {
             this.options.send({
               type: "response",
