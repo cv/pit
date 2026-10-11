@@ -271,6 +271,21 @@ describe("models namespace", () => {
       await expect(
         run(`async ({ models: { listOfType } }) => listOfType("chat" as any)`, typedContext()),
       ).rejects.toThrow('type must be "classifier" or "image"');
+      await expect(
+        run(
+          `async ({ models: { listOfType } }) => listOfType("image", { availableOnly: "no" as any })`,
+          typedContext(),
+        ),
+      ).rejects.toThrow("options.availableOnly must be a boolean");
+    });
+
+    it("asks for one provider's models when given one", async () => {
+      const getAvailableOfType = vi.fn(async () => []);
+      await value(
+        `async ({ models: { listOfType } }) => listOfType("classifier", { provider: "typesafe" })`,
+        typedContext({ getAvailableOfType }),
+      );
+      expect(getAvailableOfType).toHaveBeenCalledWith("classifier", "typesafe");
     });
 
     it("classifies state and image files with the named model and returns its answers", async () => {
@@ -355,6 +370,21 @@ describe("models namespace", () => {
         name: "an unknown question type",
         call: `classify({ provider: "typesafe", id: "jev" }, { state: {}, questions: { q: { type: "rank", instructions: "?", criteria: [] } as any } })`,
         error: 'request.questions.q.type must be "choice", "score", or "bool"',
+      },
+      {
+        name: "question criteria that are not a collection",
+        call: `classify({ provider: "typesafe", id: "jev" }, { state: {}, questions: { q: { type: "bool", instructions: "?", criteria: "yes" as any } } })`,
+        error: "request.questions.q.criteria must be an object or array",
+      },
+      {
+        name: "a non-positive temperature",
+        call: `classify({ provider: "typesafe", id: "jev" }, { state: {}, temperature: 0, questions: { q: { type: "score", instructions: "?", criteria: [] } } })`,
+        error: "request.temperature must be a positive number",
+      },
+      {
+        name: "more than eight images",
+        call: `classify({ provider: "openai", id: "luna" }, { state: {}, images: Array(9).fill("a.png"), questions: { q: { type: "score", instructions: "?", criteria: [] } } })`,
+        error: "request.images must be an array of at most 8 paths",
       },
     ])("rejects $name before calling the provider", async ({ call, error }) => {
       const classify = vi.fn();

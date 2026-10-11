@@ -12,6 +12,8 @@ export interface TypeScriptDetails extends ExecutionProgressSnapshot {
   failure?: StructuredTypeScriptFailure;
   recoverable?: RecoverableCalls;
   imageAttachments?: Array<{ file: string; mimeType: string; note: string; omitted?: boolean }>;
+  /** The complete value of a truncated result, written to a temporary file. */
+  resultFile?: string;
 }
 
 /**
@@ -98,7 +100,11 @@ export function renderExecutionDetails(
     text += `\n\n${theme.bold(theme.fg("toolTitle", "Images"))}\n${images.join("\n")}`;
   }
 
-  if (details?.truncated)
-    text += `\n${theme.fg("warning", "Result truncated to fit the output budget; omitted parts are not retained.")}`;
+  if (details?.truncated) {
+    const kept = details.resultFile
+      ? `the full result is in ${details.resultFile}`
+      : "omitted parts are not retained";
+    text += `\n${theme.fg("warning", `Result truncated to fit the output budget; ${kept}.`)}`;
+  }
   return text;
 }

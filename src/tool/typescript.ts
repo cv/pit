@@ -237,7 +237,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
     timings.enter("result");
     // One snapshot keeps the image notes in the text aligned with the attached blocks.
     const attached = images.attached();
-    const result = buildToolResult({
+    const result = await buildToolResult({
       value,
       ...(preparedFunction.name ? { namedFunction: preparedFunction.name } : {}),
       projectFunction: preparedFunction.projectMetadata !== undefined,

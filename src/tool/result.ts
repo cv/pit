@@ -2,6 +2,11 @@
  * Turns a finished program's value into the typescript tool's result: the fitted text the model
  * receives, its notices, and the details the renderer and context edits read.
  */
+import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type { CompletedCallJournal } from "../execution/completed-calls.js";
 import type { ExecutionProgressController } from "../execution/progress.js";
 import type { FunctionActivity } from "../functions/core.js";
@@ -12,8 +17,21 @@ import { LIMITS } from "../shared/bounds.js";
 import { fitValue } from "../shared/json-budget.js";
 import type { ImageAttachmentInfo } from "../workspace/view-image.js";
 
-const TRUNCATION_NOTICE =
-  '\n[Result truncated to fit the output budget; omissions are marked "… N omitted …".]';
+const truncationNotice = (file?: string) =>
+  `\n[Result truncated to fit the output budget; omissions are marked "… N omitted …".${file ? ` Full result: ${file}` : ""}]`;
+
+/**
+ * Writes a truncated result's complete value to a new private temporary file, so a later call can
+ * read the parts the model did not receive. Returns undefined when the file cannot be written.
+ */
+async function spillResult(path: string, value: unknown): Promise<string | undefined> {
+  try {
+    await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    return path;
+  } catch {
+    return undefined;
+  }
+}
 
 const MAX_SAVED_FUNCTION_CATALOG_BYTES = 1200;
 
@@ -52,7 +70,7 @@ export function promotionSuggestionNotice(names: readonly string[]): string {
   return `\n[Promotion suggestion: heavily reused session function${shown.length === 1 ? "" : "s"} ${shown.join(", ")}. Use functions.promote(name, summary) explicitly in an enabled, trusted project${omitted}.]`;
 }
 
-export function buildToolResult(input: {
+export async function buildToolResult(input: {
   value: unknown;
   namedFunction?: string;
   projectFunction: boolean;
@@ -85,16 +103,23 @@ export function buildToolResult(input: {
   const attachmentText =
     input.imageMetadata.map(({ file, note }) => `\nImage: ${file}\n${note}`).join("") +
     input.imageOmissions.map((omission) => `\n${omission}`).join("");
-  const reserved = TRUNCATION_NOTICE + notices + attachmentText;
+  // The spill path is chosen first so the notice that names it fits in the reserved budget.
+  const spillPath = join(tmpdir(), `pit-result-${randomUUID()}.json`);
+  const reserved = truncationNotice(spillPath) + notices + attachmentText;
   const output = fitValue(input.value, {
     maxBytes: LIMITS.result.maxBytes - Buffer.byteLength(reserved),
     maxLines: LIMITS.result.maxLines - (reserved.split("\n").length - 1),
   });
+  const resultFile = output.truncated ? await spillResult(spillPath, input.value) : undefined;
   return {
     content: [
       {
         type: "text" as const,
-        text: output.text + (output.truncated ? TRUNCATION_NOTICE : "") + notices + attachmentText,
+        text:
+          output.text +
+          (output.truncated ? truncationNotice(resultFile) : "") +
+          notices +
+          attachmentText,
       },
     ],
     details: {
@@ -103,6 +128,7 @@ export function buildToolResult(input: {
       ...(input.imageMetadata.length > 0 ? { imageAttachments: input.imageMetadata } : {}),
 
       truncated: output.truncated,
+      ...(resultFile ? { resultFile } : {}),
       ...(input.functionActivity.length > 0 ? { functions: input.functionActivity } : {}),
       ...input.executionProgress.snapshot(),
     },

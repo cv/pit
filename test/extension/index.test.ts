@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
@@ -166,6 +166,37 @@ describe("pit extension", () => {
     expect(text).toContain("Image: pixel.png");
     expect(text).toContain("Result truncated to fit");
     expect(result.content.some((item: any) => item.type === "image")).toBe(true);
+  });
+
+  it("writes a truncated result's complete value to a private file it names", async () => {
+    const result = await run(
+      `async () => ({ rows: Array.from({ length: 5000 }, (_, i) => ({ i })) })`,
+    );
+    const file = result.details.resultFile;
+    try {
+      expect(result.details.truncated).toBe(true);
+      expect(result.content[0].text).toContain(`Full result: ${file}`);
+      expect(JSON.parse(await readFile(file, "utf8")).rows).toHaveLength(5000);
+    } finally {
+      await rm(file, { force: true });
+    }
+  });
+
+  it("still truncates, without naming a file, when the full result cannot be written", async () => {
+    vi.stubEnv("TMPDIR", `${cwd}/missing-directory`);
+    const result = await run(
+      `async () => ({ rows: Array.from({ length: 5000 }, (_, i) => ({ i })) })`,
+    );
+    expect(result.details.truncated).toBe(true);
+    expect(result.details).not.toHaveProperty("resultFile");
+    expect(result.content[0].text).toContain("Result truncated to fit");
+    expect(result.content[0].text).not.toContain("Full result");
+  });
+
+  it("writes no file for a result that fits", async () => {
+    const result = await run("async () => ({ rows: [1, 2, 3] })");
+    expect(result.details).not.toHaveProperty("resultFile");
+    expect(result.content[0].text).not.toContain("Full result");
   });
 
   it("does not leak queued images after a post-image failure", async () => {

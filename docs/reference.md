@@ -97,7 +97,7 @@ List and view methods return structured JSON and accept `json` to select fields.
 - `exec(command, options?)` runs a command through the shell.
 - `execFile(program, args, options?)` runs a program with an argument array.
 
-Git, npm, and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. Each stream keeps 50 KB and 2,000 lines by default; a program that parses large output can raise `maxBytes` to 4,000,000 and `maxLines` to 1,000,000. Only the program's return value reaches the model, and Pi's output budget bounds it. A nonzero exit is result data by default. Set `raise` to `true` to make a nonzero exit stop the function.
+Git, npm, and shell process methods support `cwd`, `timeoutMs`, `raise`, `maxBytes`, `maxLines`, and `truncate`. Each stream keeps 50 KB and 2,000 lines by default; a program that parses large output can raise `maxBytes` to 4,000,000 and `maxLines` to 1,000,000. Only the program's return value reaches the model, and Pi's output budget bounds it. A result cut to fit is marked `… N omitted …`, and its complete value is written as JSON to a new private temporary file that the result names (`Full result: /tmp/pit-result-….json`), so a later call can read what was cut. A nonzero exit is result data by default. Set `raise` to `true` to make a nonzero exit stop the function.
 
 ### `http`
 
