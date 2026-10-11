@@ -72,13 +72,10 @@ External source edits are picked up at session start or `/reload`. See [saved fu
 
 ## Runtime installation
 
-Pit runs TypeScript in a QuickJS guest on a prebuilt Wasmtime addon. The installer downloads this platform's addon and the shared guest from the matching GitHub release, or the latest release for an unpublished package version. It verifies release checksums before activating the files. Missing or unsupported prebuilds leave Pit loaded, but every TypeScript call explains why the runtime is unavailable; there is no fallback executor.
+Pit runs TypeScript in a QuickJS VM from Pi's codemode sandbox (`@earendil-works/pi-codemode`), compiled to WebAssembly. It is a regular npm dependency that Pi installs with Pit on any platform Node supports: nothing is downloaded at install time, and no native addon is loaded.
 
-| Environment variable            | Purpose                                                                            |
-| ------------------------------- | ---------------------------------------------------------------------------------- |
-| `PIT_WASMTIME_ADDON`            | Path to a local Wasmtime native addon; set together with the component path        |
-| `PIT_WASMTIME_COMPONENT`        | Path to the matching local QuickJS Wasm component                                  |
-| `PIT_WASMTIME_INSTALL_STRICT=1` | Make runtime installation fail rather than warn when artifacts cannot be installed |
-| `PI_CODING_AGENT_DIR`           | Pi's user data directory, also the root for Pit's user functions                   |
+| Environment variable  | Purpose                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `PI_CODING_AGENT_DIR` | Pi's user data directory, also the root for Pit's user functions |
 
-Restart Pi after replacing a native addon; `/reload` alone cannot evict Node's loaded native module. For local runtime builds, see the [native runtime guide](../native/wasmtime-executor/README.md). For installation failures, see [troubleshooting](troubleshooting.md).
+For installation failures, see [troubleshooting](troubleshooting.md).

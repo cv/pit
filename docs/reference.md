@@ -186,7 +186,7 @@ Output is bounded. Read metadata uses sparse defaults:
 
 ## Limitations
 
-- Wasmtime prebuild installation requires access to GitHub release assets. Without a usable runtime, Pit cannot run TypeScript. See [runtime configuration](configuration.md#runtime-installation) and the [current requirements](../README.md#install-and-update).
+- TypeScript runs only with Pit's npm dependencies installed, which Pi does when it installs the package. See [runtime installation](configuration.md#runtime-installation) and the [current requirements](../README.md#install-and-update).
 - Session functions belong to one session branch.
 - User functions are user-local to one Pi agent directory; Pit does not synchronize them across machines.
 - Workspace paths are not restricted to the current project.

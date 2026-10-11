@@ -34,7 +34,7 @@ describe("ux.manageSession", () => {
     const { execFile, calls } = host(["Loading", "0.0%/128k (auto)                  fixture\n"]);
     const started = manage(
       { context: { get: vi.fn() }, shell: { execFile } },
-      { action: "start", cwd: "/repo", extraEnv: { PIT_WASMTIME_ADDON: "/build/addon.node" } },
+      { action: "start", cwd: "/repo", extraEnv: { PIT_EXAMPLE: "/build/value" } },
     );
     await vi.runAllTimersAsync();
 
@@ -47,7 +47,7 @@ describe("ux.manageSession", () => {
       "-i",
       `HOME=${ROOT}/home`,
       `PI_CODING_AGENT_DIR=${ROOT}/agent`,
-      "PIT_WASMTIME_ADDON=/build/addon.node",
+      "PIT_EXAMPLE=/build/value",
       "/opt/node/bin/pi",
       "/repo/src/index.ts",
       "/repo/.pi/skills/pit-terminal-ux/assets/fixture-provider.ts",

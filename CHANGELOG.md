@@ -4,6 +4,15 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking for local runtime overrides:** Pit runs TypeScript in Pi's codemode sandbox, `CodemodeSandbox` from `@earendil-works/pi-codemode`, instead of its own Wasmtime addon. Each call still gets a fresh QuickJS VM, now QuickJS compiled to WebAssembly in its own worker thread. The runtime is a regular npm dependency, so Pit works on any platform Node supports and needs no download at install time or restart after an update. `PIT_WASMTIME_ADDON`, `PIT_WASMTIME_COMPONENT`, and `PIT_WASMTIME_INSTALL_STRICT` are gone, and releases no longer carry assets.
+  - The authoring contract is unchanged: standard language globals, a bounded `setTimeout`, and a `console` whose output is discarded. The sandbox's own helpers, such as `text()` and `exit()`, are not in a program's scope, though `globalThis` still lists them.
+  - Memory, deadline, cancellation, protocol, grant, and call limits are unchanged. The deadline terminates the worker; there is no separate fuel budget.
+  - A trivial call takes about 30 ms longer to start, for the worker.
+  - A malformed or oversized bridge request now ends the execution even if the program catches the rejection.
+- Pit no longer ships the Rust addon, its QuickJS guest, the per-platform prebuild workflow, or the installer. `release.verifyPublished()` checks that a release has no assets and that a fresh clone of the tag installs and runs the sandbox.
+
 ## [0.28.1] - 2026-10-09
 
 ### Changed

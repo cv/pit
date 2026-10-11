@@ -39,6 +39,8 @@ function stoppedStatus(signal: AbortSignal | undefined): "cancelled" | "timed ou
 
 export class HostCallDispatcher {
   readonly #inFlight = new Set<Promise<void>>();
+  // Calls received while the concurrency limit was reached, in arrival order.
+  readonly #waiting: HostCallMessage[] = [];
   #callCount = 0;
   #activeCalls = 0;
 
@@ -52,7 +54,16 @@ export class HostCallDispatcher {
     return [...this.#inFlight];
   }
 
+  /** Dispatches a call, or queues it until a running call finishes when the limit is reached. */
   handle(message: HostCallMessage): void {
+    if (this.#activeCalls >= this.options.maximumConcurrentCalls) {
+      this.#waiting.push(message);
+      return;
+    }
+    this.#dispatch(message);
+  }
+
+  #dispatch(message: HostCallMessage): void {
     const { id, namespace, method, args } = message;
     this.#callCount++;
     const functionContext = this.options.parseFunctionContext(message.functionContext);
@@ -93,13 +104,11 @@ export class HostCallDispatcher {
       finishTrace("rejected");
       return;
     }
-    if (this.#activeCalls >= this.options.maximumConcurrentCalls) {
-      this.options.send({
-        type: "response",
-        id,
-        error: `Concurrent RPC call limit exceeded (${this.options.maximumConcurrentCalls})`,
-      });
-      finishTrace("rejected");
+    // A queued call that outlived its program never reaches its handler.
+    const stopped = stoppedStatus(this.options.signal);
+    if (stopped) {
+      this.options.send({ type: "response", id, error: `TypeScript execution ${stopped}` });
+      finishTrace(stopped);
       return;
     }
 
@@ -146,6 +155,8 @@ export class HostCallDispatcher {
       .finally(() => {
         this.#activeCalls--;
         this.#inFlight.delete(task);
+        const next = this.#waiting.shift();
+        if (next) this.#dispatch(next);
       });
     this.#inFlight.add(task);
   }

@@ -36,13 +36,13 @@ A function marked `(unavailable)` injects a tool that isn't callable now. The er
 
 Search for it with `toolIndex.search`: its identifier may differ from the tool name, or it may be one of the [tools Pit doesn't bind](usage.md#results). Check that the extension or MCP server providing it is enabled, for example with `/mcp`. MCP servers without `direct` tools connect in the background after Pi starts, so a call in the first moments of a session can miss their tools; retrying after the server connects works ([#207](https://github.com/cv/pit/issues/207)).
 
-### Pit loads, but TypeScript reports a missing runtime
+### TypeScript reports that the sandbox failed
 
-Read the runtime error for the missing or unloadable artifact. Verify access to GitHub release assets and that your OS/architecture has a prebuild. From the installed Pit package directory, rerun `node scripts/install-wasmtime.mjs`, then restart Pi. Check that any `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` overrides are both set and refer to matching artifacts. See [runtime installation](configuration.md#runtime-installation).
+Pit's sandbox comes from its `@earendil-works/pi-codemode` dependency. An error from the sandbox itself, such as one naming a missing package, usually means Pit's dependencies are missing or damaged. Run `pi update git:github.com/cv/pit`, or `npm ci --omit=dev` in the installed Pit package directory, then `/reload`. See [runtime installation](configuration.md#runtime-installation).
 
 ### An update appears not to take effect
 
-Confirm whether the package is pinned to a tag; package updates do not move pinned references. For source changes, run `/reload`. After a native addon update, restart Pi instead: Node caches loaded native modules.
+Confirm whether the package is pinned to a tag; package updates do not move pinned references. After an update, run `/reload`.
 
 ### A project or user function does not load
 

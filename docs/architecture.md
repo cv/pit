@@ -2,7 +2,7 @@
 
 This document describes the runtime at this source revision. It is a maintainer's map, not a promise that every internal interface is stable. User-facing behavior belongs in the [usage guide](usage.md), [saved-functions guide](saved-functions.md), and [reference](reference.md). Start with [contributing](../CONTRIBUTING.md) for local development; release procedure belongs in [releasing.md](releasing.md).
 
-Pit presents one `typescript` tool to the model. Submitted TypeScript is formatted and type-checked in the trusted extension host, compiled into a self-contained program, and evaluated by QuickJS inside a fresh bounded Wasmtime store. The Wasm component has no useful ambient authority. It requests effects from the host through explicitly injected functions such as `workspace.read`, `git.status`, and `http.request`.
+Pit presents one `typescript` tool to the model. Submitted TypeScript is formatted and type-checked in the trusted extension host, compiled into a self-contained program, and evaluated by a fresh QuickJS VM in Pi's codemode sandbox: QuickJS compiled to WebAssembly, running in its own Node worker thread. The VM has no ambient authority. It requests effects from the host through explicitly injected functions such as `workspace.read`, `git.status`, and `http.request`.
 
 ## System model
 
@@ -13,7 +13,7 @@ Pi extension host
 │  ├─ FunctionState                    persistent/session source state
 │  ├─ SavedFunctionService             preparation, promotion, persistence, removal
 │  ├─ saved-function lifecycle         Pi events, prompt catalogs, /functions
-│  ├─ configured FunctionExecutor      Wasmtime/QuickJS; no fallback runtime
+│  ├─ codemode FunctionExecutor        QuickJS in a worker; no fallback runtime
 │  └─ TypeScript tool adapter          request orchestration and rendering
 │
 ├─ trusted preparation path
@@ -22,9 +22,9 @@ Pi extension host
 │  ├─ layered function graph and grant resolution
 │  └─ TypeScript transpilation
 │
-├─ in-process native boundary
-│  ├─ fresh Wasmtime store + restricted WASI context
-│  └─ custom QuickJS component + queued JSON requests
+├─ worker-thread boundary
+│  ├─ fresh worker + QuickJS Wasm VM (pi-codemode)
+│  └─ queued JSON requests through one pitCall() global
 │          │
 │          └─ bounded concurrent host callbacks
 │
@@ -39,10 +39,10 @@ Pi extension host
 There are three distinct authority layers:
 
 1. **Pi and the Pit extension host are trusted.** They hold the extension context, function state, filesystem access, process execution, network access, and UI handles.
-2. **Each submitted program runs in an untrusted Wasm guest.** Its restricted WASI context inherits no filesystem, environment, network, arguments, or stdio. Fuel, epoch deadlines, store limits, and protocol limits bound each invocation.
+2. **Each submitted program runs in an untrusted Wasm guest.** The QuickJS VM has no filesystem, environment, network, modules, timers, or stdio of its own. A memory limit, a wall-clock deadline that terminates its worker, and protocol limits bound each invocation.
 3. **Injected functions deliberately reintroduce selected host authority.** The sandbox is a boundary around direct access, not around effects explicitly exposed by a function. The host enforces the exact resolved transitive effect grant.
 
-Pit has no long-lived code worker or daemon. Each TypeScript invocation creates a new Wasmtime engine, store, and QuickJS runtime; only extension-host state, the loaded component and its compiled code, and persisted function definitions survive between calls.
+Pit has no long-lived code worker or daemon. Each TypeScript invocation starts a new worker thread and QuickJS VM; only extension-host state, the compiled QuickJS Wasm module, and persisted function definitions survive between calls.
 
 ## Extension composition and Pi lifecycle
 
@@ -93,7 +93,7 @@ Persistent function source is not copied into the prompt. Session overrides are 
 1. **Canonicalize source.** Pit asks Oxfmt to format the completed submission with a fixed configuration. Formatting is best-effort: formatter failure does not replace the more useful validation path.
 2. **Prepare candidate state.** `SavedFunctionService.prepare()` classifies the source as anonymous or as a named top-level function. A named direct submission is always prepared as a session definition. Project or user persistence requires an explicit promotion path.
 3. **Validate the candidate registry.** The new definition is evaluated against the registry that would exist after a successful commit. This makes the definition available to its own first execution without mutating live state prematurely.
-4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh Wasmtime store, and dispatches host calls.
+4. **Compile and execute.** Pit resolves reachable saved functions, generates scope-aware wrappers, compiles the program, starts a fresh sandbox VM, and dispatches host calls.
 5. **Commit only after success.** A named direct submission is appended to Pi's session history and installed in memory only after execution succeeds. Failed definitions do not become active. With `saveOnly`, execution is skipped but the same validated commit path is used.
 6. **Build a bounded result.** The model receives the result fitted to Pi's output budget as valid JSON with counted omission markers, followed by saved-function guidance, promotion suggestions, and a compact session catalog. Structured details retain traces, progress, and the same fitted value.
 
@@ -113,7 +113,7 @@ The execution pipeline deliberately separates **prepare**, **run**, and **commit
 
 Validation uses strict ES2022 compiler settings without emitting JavaScript. Diagnostics are deduplicated, bounded, and rewritten to locations in the submitted source. The actual serialized `params` value is included in validation so obvious input-shape mismatches fail before guest execution starts.
 
-The authoring contract exposes portable language globals, bounded `setTimeout`, and `console.log/warn/error`, but not Node's `process`, `require`, or `Buffer`. The Wasmtime wrapper installs no-op console methods rather than entering Javy's WASI-backed stdio from the addon's asynchronous runtime. Visible diagnostics must be returned as data.
+The authoring contract exposes portable language globals, bounded `setTimeout`, and `console.log/warn/error`, but not Node's `process`, `require`, or `Buffer`. The guest wrapper gives the program no-op console methods, and `setTimeout` is a host-timed request bounded by the execution deadline. Visible diagnostics must be returned as data.
 
 Validation results use a bounded 128-entry cache keyed by source, effective function sources, available names, execution form, and input. Both successful and failed validations are cached.
 
@@ -142,29 +142,28 @@ After validation and scope resolution, TypeScript's `transpileModule` erases typ
 
 ## Sandbox and RPC boundary
 
-`scripts/install-wasmtime.mjs` selects the current OS and architecture during Pi's Git package `npm install`, downloads only that release addon plus the shared QuickJS component, verifies both against the release checksum manifest, and writes them atomically under `native/prebuilds/<target>/` with a `pit-release.json` marker. When the package version has no published release, it uses the latest release's artifacts and checksums instead. Artifacts from another release, or without a marker, are refreshed; a failed download leaves working artifacts in place. `src/sandbox/wasmtime-loader.ts` loads those artifacts by default, or `PIT_WASMTIME_ADDON` and `PIT_WASMTIME_COMPONENT` together. A missing or unloadable runtime warns once and yields an executor whose every run fails with the cause and recovery, so the extension and tool stay registered.
+`src/sandbox/codemode-executor.ts` runs each program in `CodemodeSandbox` from `@earendil-works/pi-codemode`, the sandbox behind Pi's own codemode tool. Each execution gets its own worker thread and QuickJS VM; the compiled `quickjs-wasi` module is loaded once per process. The runtime is a regular npm dependency, so nothing is downloaded or built per platform.
 
-`src/sandbox/wasmtime-executor.ts` gives every invocation a random execution ID and creates a bounded dispatcher for the program's resolved effects. It wraps the compiled program as an ES module that exposes a queued `pitCall()` bridge. The custom component retains JavaScript Promise resolvers, exports queued requests to Rust, accepts completions, and pumps pending QuickJS jobs.
+`src/sandbox/guest-source.ts` wraps the compiled program in a script that reaches the host through one `pitCall()` global: host calls, timers, the result, and the program's failure are JSON requests that the host answers. The program is evaluated inside a function whose parameters shadow `pitCall` and the sandbox's own helpers (`text`, `image`, `exit`, `store`, `load`, `tools`, and `ALL_TOOLS`) and replace its console. Shadowing keeps the authoring contract clean; it is not the security boundary, since `globalThis.pitCall` stays reachable and the host checks every request.
 
-The Rust N-API addon creates a fresh Wasmtime engine, store, restricted WASI Preview 2 context, and QuickJS runtime for each invocation. It compiles the QuickJS component once per process and loads that compiled code into each engine; engines stay per invocation because deadlines interrupt through the engine epoch. Independent request callbacks in one queue batch are awaited concurrently. Requests and responses are JSON strings bounded on both sides; they never use process stdio. The host dispatcher validates every call against the resolved grant before invoking a host handler. At most 32 host calls run at once; further calls queue in the addon. When the deadline passes or the call is cancelled, the executor answers every pending guest call and interrupts the guest, so a host handler that ignores its abort signal cannot extend the execution. The error names the calls that were still running, whose effects may have started. Their signal dismisses dialogs the program opened, and user function promotion and removal ignore a confirmation answered after the call ended.
+Requests and responses are JSON strings bounded on both sides. A malformed or oversized request ends the execution, even if the program catches the rejection. The host dispatcher validates every call against the resolved grant before invoking a host handler. At most 32 host calls run at once; further calls queue in the dispatcher, and a queued call never starts once its execution has stopped. Calls the program started but did not await still finish before a successful result is reported. When the deadline passes or the call is cancelled, the executor answers every pending guest call and aborts the sandbox, which terminates the worker, so a host handler that ignores its abort signal cannot extend the execution. The error names the calls that were still running, whose effects may have started. Their signal dismisses dialogs the program opened, and user function promotion and removal ignore a confirmation answered after the call ended.
 
 Saved-function attribution is passed explicitly: every generated function receives its caller's invocation context, and host calls carry the context of the function that made them. QuickJS has no async context tracking, so no invocation state is shared between concurrent calls.
 
 Current defensive bounds are:
 
-| Resource                      |  Effective host limit |
-| ----------------------------- | --------------------: |
-| Protocol frame                |       8,000,000 bytes |
-| Host calls per invocation     |                 1,024 |
-| Concurrent host calls         |                    32 |
-| Saved-function nesting depth  |                    32 |
-| Default TypeScript wall time  |            30 seconds |
-| Default Wasmtime memory limit |                128 MB |
-| Default Wasmtime fuel         | 9,007,199,254,740,991 |
+| Resource                     | Effective host limit |
+| ---------------------------- | -------------------: |
+| Protocol frame               |      8,000,000 bytes |
+| Host calls per invocation    |                1,024 |
+| Concurrent host calls        |                   32 |
+| Saved-function nesting depth |                   32 |
+| Default TypeScript wall time |           30 seconds |
+| Default memory limit         |               128 MB |
 
-Timeouts and explicit cancellation advance the execution epoch. Cancellation IDs are registered race-safely: an abort arriving before native registration is queued and interrupts initialization once the epoch timer is installed. The same abort signal reaches cooperative host handlers. Each execution registration, epoch timer, store, and QuickJS runtime is discarded when the call settles.
+Timeouts and explicit cancellation abort one signal, which terminates the sandbox worker and reaches cooperative host handlers. A program that awaits a promise with no host call or timer pending can never resume, so it fails at once instead of waiting for the deadline. The worker and its VM are discarded when the call settles.
 
-Wasmtime links the WASI interfaces required by Javy, but `WasiCtx::builder().build()` inherits nothing. The guest cannot directly read files, access environment credentials, open network connections, or launch processes. Wasmtime itself is a native addon inside Pi's process, so a native runtime defect shares the trusted host's crash boundary.
+The guest cannot directly read files, access environment credentials, open network connections, or launch processes. Its worker shares Pi's process: a VM trap or an out-of-memory error ends the worker and fails the call, but a defect in Node or V8 still shares the trusted host's crash boundary.
 
 ## Global functions and native primitives
 
@@ -341,7 +340,7 @@ Files directly under `src/` are composition entry points or true cross-domain ad
 | Add or change a global function     | `src/functions/globals/<name>.ts`                 | global catalog, source or host implementation, generated contract, renderer |
 | Change TypeScript request semantics | `src/tool/typescript.ts`                          | preparation, sandbox run, result renderers                                  |
 | Change validation or compilation    | `src/sandbox/validation.ts` or `program.ts`       | generated contract, function graph, scoped runtime                          |
-| Change guest isolation or protocol  | `src/sandbox/wasmtime-executor.ts` and `native/`  | guest source, dispatcher, prebuilds, security tests                         |
+| Change guest isolation or protocol  | `src/sandbox/codemode-executor.ts`                | guest source, dispatcher, security tests                                    |
 | Change saved-function scope         | `src/functions/state.ts` and `unified-runtime.ts` | preparation, reconciliation, graph, removal                                 |
 | Change persistent storage           | `src/functions/storage/`                          | lifecycle, service, project integration tests                               |
 | Change workspace edits              | `src/workspace/hashline.ts` and `host-handler.ts` | read/search, concurrency tests                                              |

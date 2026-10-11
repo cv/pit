@@ -11,7 +11,6 @@ Pit is distributed only through GitHub: `main` for the latest changes and tags f
 5. Keep the README's primary install command unpinned (`pi install git:github.com/cv/pit`); `npm run package:check` enforces both.
 6. Run a full-history secret scan before the first public release or after adding substantial generated/session artifacts.
 7. Review the dry-run package file list and size.
-8. Confirm the reusable Wasmtime prebuild workflow has successfully built and smoke-tested Linux, macOS, and Windows on ARM64/x64 before tagging.
 
 ## Validate
 
@@ -37,19 +36,17 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
    git push origin vX.Y.Z
    ```
 
-4. The Release workflow builds and smoke-tests all six addons and the shared QuickJS component, validates the package/tag, and publishes them with a versioned SHA-256 manifest.
-5. Verify the release targets the tagged commit and contains exactly six `.node` assets, one `.wasm` component, and `pit-wasmtime-checksums.json`.
-6. Test the installer against the published release with strict checksum verification before declaring delivery complete. From a fresh clone of the tag, run it with any development overrides removed:
+4. The Release workflow validates the package and tag, then publishes a release with generated notes and no assets: Pit installs from the tagged source.
+5. Verify the release targets the tagged commit and has no assets. Then, before declaring delivery complete, install the tag's runtime dependencies from a fresh clone and run the sandbox:
 
    ```sh
    git clone --depth 1 --branch vX.Y.Z https://github.com/cv/pit.git /tmp/pit-vX.Y.Z
    cd /tmp/pit-vX.Y.Z
-   env -u PIT_WASMTIME_ADDON -u PIT_WASMTIME_COMPONENT PIT_WASMTIME_INSTALL_STRICT=1 node scripts/install-wasmtime.mjs
+   npm ci --omit=dev
+   node --input-type=module -e "const { CodemodeSandbox } = await import('@earendil-works/pi-codemode'); console.log(await new CodemodeSandbox().execute('return 1 + 1'))"
    ```
 
-   It must report the new version for this platform, and `native/prebuilds/<platform>-<arch>/pit-release.json` must name it.
-
-In Pit, `release.verifyPublished({ tag: "vX.Y.Z" })` performs steps 5 and 6 and reports every problem it finds.
+In Pit, `release.verifyPublished({ tag: "vX.Y.Z" })` performs step 5 and reports every problem it finds.
 
 ## Install and smoke-test the tag
 
@@ -62,7 +59,7 @@ HOME=/tmp/pit-smoke/home PI_CODING_AGENT_DIR=/tmp/pit-smoke/agent \
 
 The installed package is under `/tmp/pit-smoke/agent/git/github.com/cv/pit`. Pass that directory as `cwd` to `ux.manageSession` to exercise the installed tag in an isolated Pi, or install it in your own Pi with `pi install git:github.com/cv/pit@vX.Y.Z`.
 
-Restart Pi after a native addon update (Node caches loaded `.node` modules). For source-only updates, `/reload` is sufficient. Then test:
+Run `/reload` after installing or updating the tag, then test:
 
 - a one-shot TypeScript call;
 - hashed read and edit behavior;

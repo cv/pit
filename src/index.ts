@@ -7,7 +7,7 @@ import { SavedFunctionService } from "./functions/service.js";
 import { createFunctionState, createFunctionStateCommitQueue } from "./functions/state.js";
 import { createPitToolSelection } from "./functions/tool-loadout.js";
 import { registerContextRenderers } from "./renderers/context-entries.js";
-import { configuredFunctionExecutor } from "./sandbox/wasmtime-loader.js";
+import { createCodemodeFunctionExecutor } from "./sandbox/codemode-executor.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
 export { GLOBAL_METHODS } from "./functions/globals.js";
@@ -25,7 +25,7 @@ export default function pit(pi: ExtensionAPI) {
     appendEntry: (type, entry) => pi.appendEntry(type, entry),
   });
   registerSavedFunctionFeatures(pi, functionState, savedFunctionService, toolSelection);
-  const functionExecutor = configuredFunctionExecutor();
+  const functionExecutor = createCodemodeFunctionExecutor();
   registerTypeScriptTool({
     pi,
     functionState,

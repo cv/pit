@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { HostCallTrace } from "../../src/execution/host-call-trace.js";
 import { HostCallDispatcher } from "../../src/sandbox/dispatcher.js";
@@ -138,5 +138,42 @@ describe("HostCallDispatcher", () => {
       controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
     await Promise.all(dispatcher.pending());
     expect(traces.map((trace) => trace.status)).toEqual(["running", status]);
+  });
+
+  it("never starts a call queued behind the concurrency limit once its program stops", async () => {
+    const controller = new AbortController();
+    const sent: unknown[] = [];
+    let release!: () => void;
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const handler = vi.fn(() => {
+      started();
+      return new Promise<null>((resolve) => {
+        release = () => resolve(null);
+      });
+    });
+    const dispatcher = new HostCallDispatcher({
+      handler,
+      signal: controller.signal,
+      maximumCalls: 2,
+      maximumConcurrentCalls: 1,
+      send: (message) => sent.push(message) > 0,
+      parseFunctionContext: () => undefined,
+    });
+    dispatcher.handle({ type: "call", id: 1, namespace: "context", method: "get", args: [] });
+    dispatcher.handle({ type: "call", id: 2, namespace: "shell", method: "exec", args: ["rm"] });
+    await running;
+    controller.abort();
+    release();
+    await Promise.all(dispatcher.pending());
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(sent).toContainEqual({
+      type: "response",
+      id: 2,
+      error: "TypeScript execution cancelled",
+    });
   });
 });

@@ -7,7 +7,7 @@
  *   working directory.
  * @param input.width - Initial window columns (40-400). The default is 120.
  * @param input.height - Initial window rows (10-200). The default is 50.
- * @param input.extraEnv - Additional variables for the isolated Pi, such as PIT_WASMTIME_ADDON.
+ * @param input.extraEnv - Additional variables for the isolated Pi, such as PIT_DEBUG.
  *   Names must be uppercase shell identifiers.
  * @param input.keepShell - Keep the pane's shell running after Pi exits, as a terminal does. Exit
  *   checks need it: when the pane closes, the hang-up kills Pi's descendants whatever Pit did.
