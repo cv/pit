@@ -4,15 +4,17 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-11
+
 ### Added
 
-- The `typescript` tool declares a grammar, as Pi's codemode tool does, so providers with grammar-constrained tool input, such as OpenAI's Responses API, let the model write the program as raw text instead of a JSON-escaped string. An optional first line `// @pit: {...}` sets `label`, `functionId`, `params`, `saveOnly`, or `timeoutMs` as JSON. Other providers keep the JSON schema.
-- A `typescript` result cut to fit Pi's output budget writes its complete value as JSON to a new private temporary file, and the truncation notice names it: `Full result: /tmp/pit-result-….json`. A later call can read the omitted parts instead of rerunning the work. The expanded view names the file too.
-- `models.listOfType(type)`, `models.classify(model, request)`, and `models.generateImages(model, request)` run Pi's non-chat models with the session's credentials, like the `models` global in Pi's codemode. Classifiers answer typed questions about JSON state and image files; image models write their images to files that `workspace.viewImage` can show. At most four model requests run at once per call, and provider failures come back as `stopReason: "error"` data.
+- The `typescript` tool declares a grammar, as Pi's codemode tool does, so providers with grammar-constrained tool input, such as OpenAI's Responses API, let the model write the program as raw text instead of a JSON-escaped string. An optional first line `// @pit: {...}` sets `label`, `functionId`, `params`, `saveOnly`, or `timeoutMs` as JSON. Other providers keep the JSON schema (#313).
+- A `typescript` result cut to fit Pi's output budget writes its complete value as JSON to a new private temporary file, and the truncation notice names it: `Full result: /tmp/pit-result-….json`. A later call can read the omitted parts instead of rerunning the work. The expanded view names the file too (#312).
+- `models.listOfType(type)`, `models.classify(model, request)`, and `models.generateImages(model, request)` run Pi's non-chat models with the session's credentials, like the `models` global in Pi's codemode. Classifiers answer typed questions about JSON state and image files; image models write their images to files that `workspace.viewImage` can show. At most four model requests run at once per call, and provider failures come back as `stopReason: "error"` data (#311).
 
 ### Changed
 
-- **Breaking for local runtime overrides:** Pit runs TypeScript in Pi's codemode sandbox, `CodemodeSandbox` from `@earendil-works/pi-codemode`, instead of its own Wasmtime addon. Each call still gets a fresh QuickJS VM, now QuickJS compiled to WebAssembly in its own worker thread. The runtime is a regular npm dependency, so Pit works on any platform Node supports and needs no download at install time or restart after an update. `PIT_WASMTIME_ADDON`, `PIT_WASMTIME_COMPONENT`, and `PIT_WASMTIME_INSTALL_STRICT` are gone, and releases no longer carry assets.
+- **Breaking for local runtime overrides:** Pit runs TypeScript in Pi's codemode sandbox, `CodemodeSandbox` from `@earendil-works/pi-codemode`, instead of its own Wasmtime addon. Each call still gets a fresh QuickJS VM, now QuickJS compiled to WebAssembly in its own worker thread. The runtime is a regular npm dependency, so Pit works on any platform Node supports and needs no download at install time or restart after an update. `PIT_WASMTIME_ADDON`, `PIT_WASMTIME_COMPONENT`, and `PIT_WASMTIME_INSTALL_STRICT` are gone, and releases no longer carry assets (#310).
   - The authoring contract is unchanged: standard language globals, a bounded `setTimeout`, and a `console` whose output is discarded. The sandbox's own helpers, such as `text()` and `exit()`, are not in a program's scope, though `globalThis` still lists them.
   - Memory, deadline, cancellation, protocol, grant, and call limits are unchanged. The deadline terminates the worker; there is no separate fuel budget.
   - A trivial call takes about 30 ms longer to start, for the worker.
