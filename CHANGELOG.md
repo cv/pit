@@ -4,6 +4,17 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.29.1] - 2026-10-11
+
+### Fixed
+
+- A host call that ignores its abort signal and finishes after its program timed out or was cancelled is traced as `timed out` or `cancelled`, not `failed` (#316).
+- `release.verifyPublished()` runs its sandbox check without `--input-type=module`, which the sandbox's worker inherited and rejected, so a working tag no longer fails verification (#315).
+
+### Changed
+
+- Internal cleanup with no other behavior change (#316-#318): a typed bridge protocol, model requests split into named helpers, faster deadline tests, unit tests for the generated guest replaced by real-sandbox coverage, and the unused Docker smoke image removed.
+
 ## [0.29.0] - 2026-10-11
 
 ### Added
