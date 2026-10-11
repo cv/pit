@@ -35,8 +35,7 @@ export const modelsFunctions = [
   type: PitModelType,
   options?: { provider?: string; availableOnly?: boolean; query?: string; limit?: number },
 ): Promise<{ models: PitTypedModelMetadata[]; truncated: boolean }>;`,
-    documentation:
-      "models.listOfType(type, options?) lists classifier or image models, those with working credentials by default",
+    documentation: "models.listOfType(type, options?) lists classifier or image models",
     minimumArguments: 1,
     maximumArguments: 2,
   }),
@@ -51,8 +50,7 @@ export const modelsFunctions = [
     temperature?: number;
   },
 ): Promise<PitModelOutcome & { answers: Record<string, PitClassifierAnswer> }>;`,
-    documentation:
-      "models.classify(model, request) answers typed questions about JSON state and image files; check stopReason",
+    documentation: "models.classify(model, request) runs a classifier; check stopReason",
     minimumArguments: 2,
     maximumArguments: 2,
   }),
@@ -64,8 +62,7 @@ export const modelsFunctions = [
 ): Promise<
   PitModelOutcome & { images: Array<{ file: string; mimeType: string; bytes: number }>; text: string[] }
 >;`,
-    documentation:
-      "models.generateImages(model, request) writes generated images to files and returns their paths; check stopReason",
+    documentation: "models.generateImages(model, request) writes images to files; check stopReason",
     minimumArguments: 2,
     maximumArguments: 2,
   }),

@@ -558,6 +558,49 @@ describe("pit extension", () => {
     });
   });
 
+  it("runs raw source whose first line carries the other arguments", async () => {
+    // Grammar-capable providers send raw text in code; Pi requires it be the one required string.
+    expect((tool as any).constrainedSampling).toMatchObject({ type: "grammar" });
+    expect((tool as any).parameters.required).toEqual(["code"]);
+    const args = tool.prepareArguments?.({
+      code: '// @pit: {"params": {"n": 2}, "label": "double it", "timeoutMs": 5000}\nasync ({}, input: { n: number }) =>\n  input.n * 2',
+    });
+    expect(args).toMatchObject({ params: { n: 2 }, label: "double it", timeoutMs: 5000 });
+    expect(args.code.split("\n")[0]).toBe("");
+    const result = await tool.execute("raw-call", args, undefined, undefined, context());
+    expect(result.details.value).toBe(4);
+  });
+
+  it.each<{ name: string; line: string; error: string }>([
+    {
+      name: "invalid JSON",
+      line: "// @pit: {label: 1}",
+      error: "The // @pit: line must hold a JSON object:",
+    },
+    {
+      name: "a non-object",
+      line: "// @pit: [1]",
+      error: "The // @pit: line must hold a JSON object",
+    },
+    {
+      name: "an unknown option",
+      line: '// @pit: {"timeout": 5}',
+      error: 'Unknown // @pit: option "timeout"',
+    },
+  ])("rejects an options line with $name", ({ line, error }) => {
+    expect(() => tool.prepareArguments?.({ code: `${line}\nasync () => 1` })).toThrow(error);
+  });
+
+  it("rejects an option set both as an argument and on the options line", () => {
+    expect(() =>
+      tool.prepareArguments?.({ code: '// @pit: {"label": "a"}\nasync () => 1', label: "b" }),
+    ).toThrow('"label" is set both as an argument and on the // @pit: line');
+    // Strict sampling sends unset arguments as null, which do not conflict.
+    expect(
+      tool.prepareArguments?.({ code: '// @pit: {"label": "a"}\nasync () => 1', label: null }),
+    ).toMatchObject({ label: "a" });
+  });
+
   it("treats null optional arguments as omitted, as strict schema sampling sends them", async () => {
     // Pi applies prepareArguments to the raw provider arguments before validation and execution.
     const strict = (args: Record<string, unknown>) => ({

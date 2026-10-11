@@ -19,6 +19,8 @@ Destructure every direct dependency in the first parameter. A function using non
 
 The tool schema gives `params` an explicit JSON type for every kind of value, so clients send objects and arrays as JSON rather than as encoded strings. If a client still sends a JSON string, Pit decodes a string holding a JSON object or array when the declared input type does not accept strings; a program that declares a string input receives the string unchanged. Clients that sample arguments against a strict JSON schema send `null` for options the model left out, so a `null` value for `params`, `label`, `functionId`, `saveOnly`, or `timeoutMs` counts as omitted.
 
+Providers that support grammar-constrained tool input, such as OpenAI's Responses API, receive the tool with a grammar like Pi's codemode tool, and the model writes the program as raw text in `code` instead of a JSON-escaped string. Other providers keep the JSON schema. In raw text, an optional first line sets the other parameters as one JSON object, `// @pit: {"label": "Check status", "timeoutMs": 60000, "params": {"files": ["a.ts"]}}`. Pit moves those values into the call and leaves an empty first line, so diagnostics keep the line numbers as written. The line works with any provider. Setting the same parameter both there and as an argument is an error.
+
 ## What Pit can do
 
 Pit injects only the functions that submitted code requests.

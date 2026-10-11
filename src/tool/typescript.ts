@@ -42,6 +42,7 @@ import {
 } from "./metadata.js";
 import { appliedEditDetails, buildToolResult } from "./result.js";
 import { formatTypeScriptSource } from "./source-formatter.js";
+import { applySourceOptions, PIT_SOURCE_GRAMMAR } from "./source-options.js";
 
 interface TypeScriptToolServices {
   contextEdits: ContextEditQueue;
@@ -324,10 +325,13 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     promptSnippet: PROMPT_SNIPPET,
     promptGuidelines: [...PROMPT_GUIDELINES],
     parameters: TOOL_PARAMETERS,
+    // Grammar-capable providers send the program as raw text instead of a JSON-escaped string;
+    // other providers keep the JSON schema.
+    constrainedSampling: { type: "grammar", variants: { openai_lark: PIT_SOURCE_GRAMMAR } },
     // Pi validates the prepared arguments against TOOL_PARAMETERS afterwards.
     prepareArguments: (args) => {
       rejectCopiedElisionStub(args);
-      return omitNullArguments(args) as Static<typeof TOOL_PARAMETERS>;
+      return omitNullArguments(applySourceOptions(args)) as Static<typeof TOOL_PARAMETERS>;
     },
     // Pit orchestrates the other tools and must not be callable from them, for example from
     // codemode scripts, which would also hide its declaration in codemode's `only` mode.
