@@ -96,6 +96,96 @@ function limiter(limit: number) {
   };
 }
 
+type ModelSummary = { provider: string; id: string; name: string; input: readonly string[] };
+
+const modelKey = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
+
+function listOptions(value: unknown) {
+  const options = value === undefined ? {} : object(value, "options");
+  const availableOnly = options.availableOnly ?? true;
+  if (typeof availableOnly !== "boolean") {
+    throw new Error("options.availableOnly must be a boolean");
+  }
+  return {
+    provider:
+      options.provider === undefined ? undefined : string(options.provider, "options.provider"),
+    availableOnly,
+    query: options.query === undefined ? "" : string(options.query, "options.query").toLowerCase(),
+    limit: boundedInteger(options.limit, "options.limit", { maximum: 200, fallback: 100 }),
+  };
+}
+
+function describeModel(type: ModelType, model: ModelSummary, available: boolean) {
+  const metadata: Record<string, unknown> = {
+    type,
+    provider: model.provider,
+    id: model.id,
+    name: model.name,
+    input: [...model.input],
+  };
+  if ("output" in model && Array.isArray(model.output)) metadata.output = [...model.output];
+  metadata.available = available;
+  return metadata;
+}
+
+function findModel<T extends ModelType>(registry: Registry, type: T, value: unknown) {
+  const { provider, id } = modelReference(value);
+  const model = registry.getModelOfType(type, provider, id);
+  if (!model) {
+    throw new Error(
+      `No ${type} model "${provider}/${id}"; models.listOfType("${type}") lists them`,
+    );
+  }
+  return model;
+}
+
+function imagePaths(value: unknown): unknown[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_INPUT_IMAGES) {
+    throw new Error(`request.images must be an array of at most ${MAX_INPUT_IMAGES} paths`);
+  }
+  return value;
+}
+
+function temperatureOption(value: unknown): { temperature?: number } {
+  if (value === undefined) return {};
+  if (!(typeof value === "number" && value > 0)) {
+    throw new Error("request.temperature must be a positive number");
+  }
+  return { temperature: value };
+}
+
+/**
+ * Writes generated images to new files in `outputDir`, or a fresh temporary directory. Paths
+ * inside the workspace are returned relative, like other workspace results.
+ */
+async function writeImages(cwd: string, outputDir: unknown, result: ImagesResult) {
+  const generated = result.output.flatMap((block) => (block.type === "image" ? [block] : []));
+  const directory =
+    outputDir === undefined
+      ? await mkdtemp(join(tmpdir(), "pit-images-"))
+      : resolveWorkspacePath(cwd, outputDir);
+  if (generated.length > 0) await mkdir(directory, { recursive: true });
+  const stamp = Date.now();
+  return Promise.all(
+    generated.map(async (block, index) => {
+      const path = join(
+        directory,
+        `image-${stamp}-${index + 1}.${EXTENSIONS[block.mimeType] ?? "bin"}`,
+      );
+      const data = Buffer.from(block.data, "base64");
+      // Never overwrite: a name already taken fails this call instead.
+      await writeFile(path, data, { flag: "wx" });
+      const shown = workspaceResultPath(cwd, path);
+      return {
+        file: shown.startsWith("../") ? path : shown,
+        mimeType: block.mimeType,
+        bytes: data.length,
+      };
+    }),
+  );
+}
+
 /** Runs Pi's non-chat models: classifiers and image generators, with the session's credentials. */
 export function createModelRequests({
   ctx,
@@ -103,91 +193,48 @@ export function createModelRequests({
 }: Pick<PiControlServices, "ctx"> & { loadImage: ImageCollector["load"] }) {
   const registry = ctx.modelRegistry;
   const slot = limiter(MAX_CONCURRENT_REQUESTS);
-
-  const find = <T extends ModelType>(type: T, value: unknown) => {
-    const { provider, id } = modelReference(value);
-    const model = registry.getModelOfType(type, provider, id);
-    if (!model) {
-      throw new Error(
-        `No ${type} model "${provider}/${id}"; models.listOfType("${type}") lists them`,
-      );
-    }
-    return model;
-  };
-
-  const images = async (value: unknown, signal: AbortSignal) => {
-    if (value === undefined) return [];
-    if (!Array.isArray(value) || value.length > MAX_INPUT_IMAGES) {
-      throw new Error(`request.images must be an array of at most ${MAX_INPUT_IMAGES} paths`);
-    }
-    const loaded = await Promise.all(value.map((path) => loadImage(path, signal)));
-    return loaded;
-  };
+  const loadImages = (value: unknown, signal: AbortSignal) =>
+    Promise.all(imagePaths(value).map((path) => loadImage(path, signal)));
 
   return {
     async listOfType(args: unknown[]) {
       const type = modelType(args[0]);
-      const options = args[1] === undefined ? {} : object(args[1], "options");
-      const provider =
-        options.provider === undefined ? undefined : string(options.provider, "options.provider");
-      const availableOnly = options.availableOnly ?? true;
-      if (typeof availableOnly !== "boolean") {
-        throw new Error("options.availableOnly must be a boolean");
-      }
-      const query =
-        options.query === undefined ? "" : string(options.query, "options.query").toLowerCase();
-      const limit = boundedInteger(options.limit, "options.limit", { maximum: 200, fallback: 100 });
-      const key = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
+      const { provider, availableOnly, query, limit } = listOptions(args[1]);
       const availableModels = await registry.getAvailableOfType(type, provider);
-      const available = new Set(availableModels.map(key));
+      const available = new Set(availableModels.map(modelKey));
       const source = availableOnly ? availableModels : registry.getModelsOfType(type, provider);
       const matches = source.filter((model) =>
-        `${key(model)} ${model.name}`.toLowerCase().includes(query),
+        `${modelKey(model)} ${model.name}`.toLowerCase().includes(query),
       );
       return {
-        models: matches.slice(0, limit).map((model) => {
-          const metadata: Record<string, unknown> = {
-            type,
-            provider: model.provider,
-            id: model.id,
-            name: model.name,
-            input: [...model.input],
-          };
-          if ("output" in model && Array.isArray(model.output)) metadata.output = [...model.output];
-          metadata.available = available.has(key(model));
-          return metadata;
-        }),
+        models: matches
+          .slice(0, limit)
+          .map((model) => describeModel(type, model, available.has(modelKey(model)))),
         truncated: matches.length > limit,
       };
     },
 
     async classify(args: unknown[], signal: AbortSignal) {
-      const model = find("classifier", args[0]);
+      const model = findModel(registry, "classifier", args[0]);
       const request = object(args[1], "request");
       const state = object(request.state, "request.state") as ClassifierContext["state"];
-      const temperature = request.temperature;
-      if (temperature !== undefined && !(typeof temperature === "number" && temperature > 0)) {
-        throw new Error("request.temperature must be a positive number");
-      }
+      const options = temperatureOption(request.temperature);
       const context: ClassifierContext = {
         state,
         questions: questions(request.questions),
-        ...(request.images === undefined ? {} : { images: await images(request.images, signal) }),
+        ...(request.images === undefined
+          ? {}
+          : { images: await loadImages(request.images, signal) }),
       };
-      const result = await slot(() =>
-        registry.classify(model, context, {
-          signal,
-          ...(temperature === undefined ? {} : { temperature }),
-        }),
-      );
+      const result = await slot(() => registry.classify(model, context, { signal, ...options }));
       return { ...outcome(result), answers: result.answers };
     },
 
     async generateImages(args: unknown[], signal: AbortSignal) {
-      const model = find("image", args[0]);
+      const model = findModel(registry, "image", args[0]);
       const request = object(args[1], "request");
       const prompt = string(request.prompt, "request.prompt");
-      const references = await images(request.images, signal);
+      const references = await loadImages(request.images, signal);
       const result = await slot(() =>
         registry.generateImages(
           model,
@@ -195,31 +242,9 @@ export function createModelRequests({
           { signal },
         ),
       );
-      const generated = result.output.flatMap((block) => (block.type === "image" ? [block] : []));
-      const directory =
-        request.outputDir === undefined
-          ? await mkdtemp(join(tmpdir(), "pit-images-"))
-          : resolveWorkspacePath(ctx.cwd, request.outputDir);
-      if (generated.length > 0) await mkdir(directory, { recursive: true });
-      const stamp = Date.now();
-      const files = await Promise.all(
-        generated.map(async (block, index) => {
-          const path = join(
-            directory,
-            `image-${stamp}-${index + 1}.${EXTENSIONS[block.mimeType] ?? "bin"}`,
-          );
-          const data = Buffer.from(block.data, "base64");
-          // Never overwrite: a name already taken fails this call instead.
-          await writeFile(path, data, { flag: "wx" });
-          // Paths inside the workspace are relative, like other workspace results.
-          const shown = workspaceResultPath(ctx.cwd, path);
-          const file = shown.startsWith("../") ? path : shown;
-          return { file, mimeType: block.mimeType, bytes: data.length };
-        }),
-      );
       return {
         ...outcome(result),
-        images: files,
+        images: await writeImages(ctx.cwd, request.outputDir, result),
         text: result.output.flatMap((block) => (block.type === "text" ? [block.text] : [])),
       };
     },
