@@ -195,7 +195,10 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
 
   const images = createImageCollector(request.ctx);
   // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
-  const catalog = createPiToolCatalog(request.ctx.tools);
+  const catalog = createPiToolCatalog(
+    request.ctx.tools,
+    (name) => request.functionState.toolGuidelines?.get(name) ?? [],
+  );
   // Saving and committing check saved functions against the tools this call can use.
   request.functionState.toolCatalog = catalog;
   let terminate = false;
@@ -339,7 +342,11 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     exposure: "model-only",
     prepareLoadout: (loadout) => {
       // Pi reruns this whenever tools register, so the session catalog follows MCP connections.
-      const catalog = createPiToolCatalog(loadout.callable);
+      const guidelines = new Map(
+        loadout.callable.map(({ name }) => [name, loadout.getPromptGuidelines(name)] as const),
+      );
+      functionState.toolGuidelines = guidelines;
+      const catalog = createPiToolCatalog(loadout.callable, (name) => guidelines.get(name) ?? []);
       functionState.toolCatalog = catalog;
       return pitLoadout(loadout, services.toolSelection, catalog);
     },

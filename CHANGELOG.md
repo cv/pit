@@ -7,6 +7,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 ### Added
 
 - A `typescript` call waits for MCP servers that are still connecting before it runs, so `tools.*` includes their tools ([#207](https://github.com/cv/pit/issues/207)). Pit declares the tools a call reaches through Pi's `reachesTools`: the `tools` members the program and the saved functions it injects, directly or through other saved functions, declare, or every tool when one of them injects `toolIndex`. Pi's MCP extension waits only for the servers those names belong to.
+- `toolIndex.describe(name)` includes the tool's prompt guidelines. Pi leaves the guidelines of tools whose declarations Pit hides out of the system prompt, so the model did not see them; codemode likewise shows them with its declarations. Pit records them from Pi's tool loadout, because Pi's per-call tool info omits them.
 
 ### Changed
 

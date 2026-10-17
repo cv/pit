@@ -416,6 +416,27 @@ describe("Pi tools injected from tools", () => {
     });
   });
 
+  it("describes a tool with the prompt guidelines Pi leaves out of the system prompt", async () => {
+    const goal = TOOLS.find((entry) => entry.name === "goal_complete");
+    const guideline = "Call goal_complete only after verifying every requirement.";
+    tool.prepareLoadout?.(
+      toolLoadout([
+        { name: "typescript", description: "Run TypeScript.", exposure: "model-only" },
+        { ...goal, name: "goal_complete", exposure: "model-only", promptGuidelines: [guideline] },
+        ...TOOLS.filter((entry) => entry.name === "screenshot"),
+      ]),
+    );
+    // Pi's per-call tool info carries no guidelines; they come from the latest loadout.
+    const described = await value(
+      `async ({ toolIndex: { describe } }) => [await describe("goal_complete"), await describe("screenshot")]`,
+      toolContext({}).ctx,
+    );
+    expect(described).toEqual([
+      expect.stringContaining(`Mark the current goal complete.\n\nGuidelines:\n- ${guideline}\n\n`),
+      expect.not.stringContaining("Guidelines:"),
+    ]);
+  });
+
   it("ranks search results, honors the limit, and shortens long summaries", async () => {
     const { ctx } = toolContext({});
     const found = await value(

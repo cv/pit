@@ -30,8 +30,8 @@ export function toolLoadout(
     declared,
     callable: declarations(options.callable ?? tools) as unknown as ToolLoadout["callable"],
     registered: declared,
-    // These fixtures declare no promptGuidelines.
-    getPromptGuidelines: () => [],
+    getPromptGuidelines: (name) =>
+      (byName.get(name)?.promptGuidelines as string[] | undefined) ?? [],
     getExposure: (name) => byName.get(name)?.exposure ?? "direct",
     getNamespace: (name) => {
       const namespace = byName.get(name)?.namespace;

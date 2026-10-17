@@ -177,7 +177,7 @@ Both model requests use the session's credentials and run at most four at once p
 
 - `tools.NAME(args?)` calls another Pi tool through Pi's `executeTool()`, with Pi's argument preparation, validation, hooks, and permission checks. Its argument and result types come from the tool's schemas. It returns the tool's structured value when the tool declares an output schema, or its text otherwise; MCP tools return the server's untruncated result. A failed call throws.
 - `toolIndex.search(query, limit?)` returns up to `limit` `{ name, summary }` matches ranked by name and description. The default is 8, the maximum 20.
-- `toolIndex.describe(name)` returns a tool's description and TypeScript declaration, or `null`.
+- `toolIndex.describe(name)` returns a tool's description, prompt guidelines, and TypeScript declaration, or `null`.
 
 The usage guide covers [results and omissions](usage.md#call-other-pi-tools).
 

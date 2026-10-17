@@ -48,6 +48,11 @@ interface PiToolInfo {
   readonly outputSchema?: unknown;
 }
 
+/** A tool's `promptGuidelines`, from Pi's tool loadout. */
+export type ToolGuidelines = (name: string) => readonly string[];
+
+const NO_GUIDELINES: ToolGuidelines = () => [];
+
 export interface PiToolBinding {
   /** Identifier under `tools`. */
   readonly method: string;
@@ -59,6 +64,8 @@ export interface PiToolBinding {
   readonly mcp: boolean;
   /** Schema of the structured value the call returns. Without one, the call returns text. */
   readonly outputSchema?: JsonSchema;
+  /** The tool's `promptGuidelines`, which Pi leaves out of the system prompt while Pit hides it. */
+  readonly guidelines: readonly string[];
 }
 
 export interface PiToolCatalog {
@@ -88,7 +95,7 @@ const TOOL_INDEX_MEMBERS = [
   [
     "describe",
     "describe(name: string): Promise<string | null>;",
-    "Show a tool's description and TypeScript declaration",
+    "Show a tool's description, guidelines, and TypeScript declaration",
     1,
     1,
   ],
@@ -158,7 +165,7 @@ function mcpContentSchema(schema: unknown): JsonSchema | null | undefined {
   return unnestReferences(structuredContent) as JsonSchema;
 }
 
-function binding(tool: PiToolInfo, method: string): PiToolBinding {
+function binding(tool: PiToolInfo, method: string, guidelines: readonly string[]): PiToolBinding {
   // MCP tools declare a CallToolResult wrapper; the call returns what it wraps.
   const wrapped = mcpContentSchema(tool.outputSchema);
   const mcp = wrapped !== undefined;
@@ -185,6 +192,7 @@ function binding(tool: PiToolInfo, method: string): PiToolBinding {
     declaration,
     mcp,
     ...(structured ? { outputSchema: structured } : {}),
+    guidelines,
   };
 }
 
@@ -200,7 +208,7 @@ function toolIndexDefinitions(): NativeFunctionDefinition[] {
   );
 }
 
-function buildCatalog(tools: readonly PiToolInfo[]): PiToolCatalog {
+function buildCatalog(tools: readonly PiToolInfo[], guidelinesOf: ToolGuidelines): PiToolCatalog {
   const bindings = new Map<string, PiToolBinding>();
   const collisions: string[] = [];
   for (const tool of tools) {
@@ -209,7 +217,7 @@ function buildCatalog(tools: readonly PiToolInfo[]): PiToolCatalog {
       collisions.push(tool.name);
       continue;
     }
-    bindings.set(method, binding(tool, method));
+    bindings.set(method, binding(tool, method, guidelinesOf(tool.name)));
   }
   if (bindings.size === 0) {
     return { bindings, definitions: [], declarations: "", members: [], collisions };
@@ -315,11 +323,26 @@ export function withMissingPiTools(
   };
 }
 
-/** The catalog for the tools a call may use. Returns the same object for the same tools. */
-export function createPiToolCatalog(tools: readonly PiToolInfo[] | undefined): PiToolCatalog {
+/**
+ * The catalog for the tools a call may use. Returns the same object for the same tools.
+ *
+ * @param guidelinesOf - Each tool's `promptGuidelines`. Pi's tool info omits them, and Pi leaves
+ * them out of the system prompt for tools whose declarations Pit hides, so `toolIndex.describe`
+ * shows them instead, as codemode shows them with its declarations.
+ */
+export function createPiToolCatalog(
+  tools: readonly PiToolInfo[] | undefined,
+  guidelinesOf: ToolGuidelines = NO_GUIDELINES,
+): PiToolCatalog {
   const usable = (tools ?? []).filter((tool) => !EXCLUDED_TOOLS.has(tool.name));
   const fingerprint = JSON.stringify(
-    usable.map((tool) => [tool.name, tool.description, tool.parameters, tool.outputSchema]),
+    usable.map((tool) => [
+      tool.name,
+      tool.description,
+      tool.parameters,
+      tool.outputSchema,
+      guidelinesOf(tool.name),
+    ]),
   );
   const cached = catalogCache.get(fingerprint);
   if (cached) {
@@ -327,7 +350,7 @@ export function createPiToolCatalog(tools: readonly PiToolInfo[] | undefined): P
     catalogCache.set(fingerprint, cached);
     return cached;
   }
-  const catalog = buildCatalog(usable);
+  const catalog = buildCatalog(usable, guidelinesOf);
   catalogCache.set(fingerprint, catalog);
   /* v8 ignore next 3 -- defensive cache capacity bound. */
   if (catalogCache.size > MAX_CACHED_CATALOGS) {
@@ -362,7 +385,7 @@ export function piToolPrompt(catalog: PiToolCatalog): string {
     "",
     `TOOLS: ${catalog.bindings.size} other Pi tools are injectable from \`${PI_TOOLS_NAMESPACE}\`: ${listed}.`,
     ...collisions,
-    `Before calling one, inject \`${TOOL_INDEX_NAMESPACE}: { search, describe }\`: search(query) ranks tools by name and description; describe(name) returns the declaration to call it with. Then call it, for example \`async ({ ${PI_TOOLS_NAMESPACE}: { NAME } }) => NAME({ ... })\`.`,
+    `Before calling one, inject \`${TOOL_INDEX_NAMESPACE}: { search, describe }\`: search(query) ranks tools by name and description; describe(name) returns its declaration and any usage guidelines. Then call it, for example \`async ({ ${PI_TOOLS_NAMESPACE}: { NAME } }) => NAME({ ... })\`.`,
     "Calls run through Pi like direct tool calls. A call returns the tool's declared structured value, otherwise its text (MCP text is often JSON: parse it with JSON.parse). A failed call throws.",
     "When one of these tools covers a service, use it instead of Pit's workspace, gh, http, or shell functions: those act on this machine and the user's own accounts, not on the configured servers.",
   ].join("\n");
@@ -402,5 +425,8 @@ export function describePiTool(catalog: PiToolCatalog, name: string): string | n
   const entry = catalog.bindings.get(name) ?? catalog.bindings.get(toCodemodeIdentifier(name));
   if (!entry) return null;
   const note = entry.mcp && !entry.outputSchema ? `\n${MCP_TEXT_NOTE}` : "";
-  return `${entry.description}${note}\n\n${entry.declaration}`.trim();
+  const guidelines = entry.guidelines.length
+    ? `\n\nGuidelines:\n${entry.guidelines.map((line) => `- ${line}`).join("\n")}`
+    : "";
+  return `${entry.description}${note}${guidelines}\n\n${entry.declaration}`.trim();
 }
