@@ -125,13 +125,6 @@ describe("project function storage", () => {
     expect(await loadPitProjectConfig(ctx())).toEqual({ allowedTools: ["goal_*"] });
     expect(await loadPitProjectConfig(ctx(false))).toEqual({});
 
-    // A file from before the flag was removed still loads; the key is ignored.
-    await writeFile(
-      join(cwd, ".pi/pit.json"),
-      JSON.stringify({ projectFunctions: { enabled: false } }),
-    );
-    expect(await loadPitProjectConfig(ctx())).toEqual({});
-
     for (const invalid of ["not json", "[]", JSON.stringify({ allowedTools: "goal_*" })]) {
       await writeFile(join(cwd, ".pi/pit.json"), invalid);
       expect(await loadPitProjectConfig(ctx())).toEqual({

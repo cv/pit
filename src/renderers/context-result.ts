@@ -117,8 +117,7 @@ const isNoteListing = shapeGuard(
         ),
       ),
       tokens: Type.Number(),
-      // Optional: listings from before old note versions stayed in context still render.
-      supersededTokens: Type.Optional(Type.Number()),
+      supersededTokens: Type.Number(),
       budgetTokens: Type.Number(),
       maxNotes: Type.Number(),
     },
