@@ -30,7 +30,7 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
-import { omitNullArguments, rejectCopiedElisionStub, resolveToolInput } from "./input.js";
+import { omitNullArguments, resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
   FUNCTION_ID_DESCRIPTION,
@@ -334,7 +334,6 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     constrainedSampling: { type: "grammar", variants: { openai_lark: PIT_SOURCE_GRAMMAR } },
     // Pi validates the prepared arguments against TOOL_PARAMETERS afterwards.
     prepareArguments: (args) => {
-      rejectCopiedElisionStub(args);
       return omitNullArguments(applySourceOptions(args)) as Static<typeof TOOL_PARAMETERS>;
     },
     // Pit orchestrates the other tools and must not be callable from them, for example from

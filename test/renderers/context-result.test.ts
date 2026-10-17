@@ -285,6 +285,7 @@ describe("context result rendering", () => {
         { key: "plan", entryId: "8b8b8b8b", tokens: 93 },
       ],
       tokens: 120,
+      supersededTokens: 0,
       budgetTokens: 12_800,
       maxNotes: 32,
     };

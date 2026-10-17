@@ -11,6 +11,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Changed
 
+- **Breaking:** Pit drops its remaining handling of formats that earlier versions wrote. A `typescript` call with empty arguments or an `{ elided }` placeholder, which Pit's context edits stopped writing in 0.28.0, now fails Pi's schema validation for the missing `code`. A `session.notes()` result without `supersededTokens`, written before 0.27.0, renders as raw data.
 - **Breaking:** Pit supports Pi 1.3.0, the version `package-lock.json` now pins. The Pi development packages and `@earendil-works/pi-codemode` are 1.3.0.
 - A `typescript` result without Pit's timings, such as a thrown error, shows the execution time Pi recorded, also after the session reloads. It showed `0.0s` before.
 
