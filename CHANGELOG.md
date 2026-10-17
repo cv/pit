@@ -4,6 +4,19 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- A `typescript` call waits for MCP servers that are still connecting before it runs, so `tools.*` includes their tools ([#207](https://github.com/cv/pit/issues/207)). Pit declares the tools a call reaches through Pi's `reachesTools`: the `tools` members the program and the saved functions it injects, directly or through other saved functions, declare, or every tool when one of them injects `toolIndex`. Pi's MCP extension waits only for the servers those names belong to.
+
+### Changed
+
+- **Breaking:** Pit supports Pi 1.3.0, the version `package-lock.json` now pins. The Pi development packages and `@earendil-works/pi-codemode` are 1.3.0.
+- A `typescript` result without Pit's timings, such as a thrown error, shows the execution time Pi recorded, also after the session reloads. It showed `0.0s` before.
+
+### Fixed
+
+- `tools.*` recognizes the result schema Pi 1.2 and newer declare for MCP tools, which has no `_meta` and declares undeclared structured content as `{}`. `@earendil-works/pi-codemode` 1.2 removed the helper Pit used to recognize it. References in an MCP tool's output schema, which Pi now nests below `structuredContent`, resolve for type-checking and result validation.
+
 ## [0.29.1] - 2026-10-11
 
 ### Fixed

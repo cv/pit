@@ -16,6 +16,7 @@ import { createPiToolCatalog, type PiToolCatalog } from "../functions/pi-tools.j
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { pitLoadout, type PitToolSelection } from "../functions/tool-loadout.js";
+import { piToolReach } from "../functions/tool-reach.js";
 import { createHostDispatcher } from "../host/dispatcher.js";
 import type { PiToolCallServices } from "../host/handlers/pi-tools.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
@@ -342,6 +343,9 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
       functionState.toolCatalog = catalog;
       return pitLoadout(loadout, services.toolSelection, catalog);
     },
+    // Pi's MCP extension waits for the servers a program's tools belong to before it runs.
+    reachesTools: (input) =>
+      piToolReach(input.code, [functionState.user, functionState.project, functionState.session]),
     renderCall(args, theme, context) {
       return renderTypeScriptToolCall(args, theme, context, functionState.effective);
     },

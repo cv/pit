@@ -16,17 +16,20 @@ import { toolLoadout } from "../support/tool-loadout.js";
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-/** Pi's MCP extension declares every MCP tool as returning this wrapper. */
-function mcpResultSchema(structuredContent?: object): object {
+/**
+ * Pi's MCP extension declares every MCP tool as returning this wrapper, with the server's
+ * output schema as `structuredContent` and its local references moved below it.
+ */
+function mcpResultSchema(structuredContent: object = {}): object {
   return {
     type: "object",
     properties: {
       content: { type: "array", items: { type: "object" } },
-      ...(structuredContent ? { structuredContent } : {}),
+      structuredContent,
       isError: { type: "boolean" },
-      _meta: { type: "object" },
     },
     required: ["content"],
+    additionalProperties: true,
   };
 }
 
@@ -175,6 +178,64 @@ describe("Pi tools injected from tools", () => {
       "mcp__github__list_issues",
       { owner: "acme", repo: "widgets", labels: ["bug"] },
       { signal: expect.any(AbortSignal) },
+    );
+  });
+
+  it.each<{ name: string; properties: Record<string, unknown>; structured: unknown }>([
+    {
+      name: "content that is not an array",
+      properties: { content: { type: "string" }, isError: { type: "boolean" } },
+      structured: { content: "body", isError: false },
+    },
+    {
+      name: "isError that is not a boolean",
+      properties: { content: { type: "array" }, isError: { type: "string" } },
+      structured: { content: ["body"], isError: "no" },
+    },
+  ])(
+    "returns a non-MCP tool's structured result whole when it has $name",
+    async ({ properties, structured }) => {
+      const tool = {
+        name: "report",
+        description: "Report.",
+        parameters: { type: "object", properties: {} },
+        outputSchema: { type: "object", properties },
+      };
+      const { ctx } = toolContext(
+        {
+          report: {
+            result: { content: text("report"), structuredContent: structured },
+            isError: false,
+          },
+        },
+        [tool],
+      );
+      expect(await value(`async ({ tools: { report } }) => report()`, ctx)).toEqual(structured);
+    },
+  );
+
+  it("resolves references Pi moved below an MCP tool's structured content schema", async () => {
+    const tool = {
+      name: "mcp__docs__find",
+      description: "Find a node.",
+      parameters: { type: "object", properties: {} },
+      outputSchema: mcpResultSchema({
+        type: "object",
+        properties: { node: { $ref: "#/properties/structuredContent/$defs/Node" } },
+        required: ["node"],
+        $defs: {
+          Node: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+        },
+      }),
+    };
+    const code = `async ({ tools: { mcp__docs__find } }) => (await mcp__docs__find()).node.name.toUpperCase()`;
+    const found = (structuredContent: object) =>
+      toolContext({ mcp__docs__find: mcpOutcome({ content: text("{}"), structuredContent }) }, [
+        tool,
+      ]).ctx;
+    expect(await value(code, found({ node: { name: "Dana" } }))).toBe("DANA");
+    await expect(value(code, found({ node: { name: 7 } }))).rejects.toThrow(
+      /does not match its output schema: \/node\/name/,
     );
   });
 
@@ -759,5 +820,53 @@ describe("ending a program with nested tool calls", () => {
     expect(calls.map((call) => call.name).sort()).toEqual(["goal_complete", "screenshot"]);
     expect(calls.every((call) => call.signal.aborted && call.aborted)).toBe(true);
     expect(executeTool).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Pi's MCP extension waits, before a call runs, for the servers whose namespace a reached name contains.
+describe("the tools a typescript call reaches", () => {
+  const reach = (code: unknown) => tool.reachesTools?.({ code });
+
+  it.each<{ name: string; code: unknown; expected: "all" | string[] }>([
+    {
+      name: "the tools a program injects",
+      code: `async ({ tools: { mcp__docs__search, goal_complete }, workspace: { read } }) => null`,
+      expected: ["mcp__docs__search", "goal_complete"],
+    },
+    {
+      name: "every tool when it injects toolIndex",
+      code: `async ({ toolIndex: { search } }) => search("docs")`,
+      expected: "all",
+    },
+    {
+      name: "no tools without tool dependencies",
+      code: `async ({ workspace: { read } }) => read("a")`,
+      expected: [],
+    },
+    {
+      name: "no tools for a program that does not parse",
+      code: `async (tools) => 1`,
+      expected: [],
+    },
+    { name: "no tools without code", code: undefined, expected: [] },
+    {
+      name: "every tool when it injects the tools namespace",
+      code: `async ({ tools }) => null`,
+      expected: "all",
+    },
+  ])("is $name", ({ code, expected }) => {
+    expect(reach(code)).toEqual(expected);
+  });
+
+  it("includes the tools of the saved functions a program injects, transitively", async () => {
+    const { ctx } = toolContext({
+      goal_complete: { result: { content: text("Goal completed.") }, isError: false },
+    });
+    await value(
+      `async function finish({ tools: { goal_complete } }) { return goal_complete({ summary: "done" }); }`,
+      ctx,
+    );
+    await value(`async function wrapUp({ finish }) { return finish(); }`, ctx);
+    expect(reach(`async ({ wrapUp }) => wrapUp()`)).toEqual(["goal_complete"]);
   });
 });

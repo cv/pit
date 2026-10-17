@@ -41,6 +41,8 @@ interface ToolResultContext {
   argsComplete?: boolean;
   state?: unknown;
   invalidate?: () => void;
+  /** Pi's recorded execution time of a final result, also after a session reloads. */
+  durationMs?: number | undefined;
 }
 
 type StatefulResultContext = WithRendererState<ToolResultContext>;
@@ -292,7 +294,9 @@ function renderToolResult(
     throw new Error("Invalid execution metadata");
   }
   const details = rawDetails as TypeScriptDetails | undefined;
-  const recordedMs = details?.timings?.totalMs;
+  // Pit's own total excludes Pi's wrapping; Pi's recorded time covers results without details,
+  // such as thrown errors, whose wall-clock start is unknown after a reload.
+  const recordedMs = details?.timings?.totalMs ?? context.durationMs;
   if ((!options.isPartial || context.isError) && recordedMs !== undefined) {
     execution.duration = formatDuration(recordedMs);
   }

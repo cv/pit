@@ -5,7 +5,6 @@
  * package, so identifiers and types match what codemode shows for the same tools.
  */
 import {
-  mcpStructuredContentSchema,
   renderToolSignature,
   toCodemodeIdentifier,
 } from "@earendil-works/pi-codemode/declarations";
@@ -13,7 +12,7 @@ import {
 import { isRecord } from "../shared/records.js";
 import { defineNativeFunction, type NativeFunctionDefinition } from "./global-definition.js";
 
-const PI_TOOLS_NAMESPACE = "tools";
+export const PI_TOOLS_NAMESPACE = "tools";
 export const TOOL_INDEX_NAMESPACE = "toolIndex";
 
 /**
@@ -122,9 +121,46 @@ function isParameterless(schema: unknown): boolean {
   );
 }
 
+const MCP_CONTENT_POINTER = "#/properties/structuredContent";
+
+/**
+ * Points `$ref`s that Pi moved below `#/properties/structuredContent`, when it nested an MCP tool's
+ * output schema in its result schema, back at the root, so the schema resolves on its own.
+ */
+function unnestReferences(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(unnestReferences);
+  if (!isRecord(schema)) return schema;
+  return Object.fromEntries(
+    Object.entries(schema).map(([key, value]) => {
+      if (
+        key === "$ref" &&
+        typeof value === "string" &&
+        (value === MCP_CONTENT_POINTER || value.startsWith(`${MCP_CONTENT_POINTER}/`))
+      ) {
+        return [key, `#${value.slice(MCP_CONTENT_POINTER.length)}`];
+      }
+      return [key, unnestReferences(value)];
+    }),
+  );
+}
+
+/**
+ * The schema of the structured content an MCP tool's `CallToolResult` wraps: `null` when the server
+ * declares none, `undefined` when the tool is not an MCP tool. Pi's MCP extension declares
+ * `{ content, structuredContent, isError }`, with `{}` for undeclared structured content.
+ */
+function mcpContentSchema(schema: unknown): JsonSchema | null | undefined {
+  if (!isRecord(schema) || !isRecord(schema.properties)) return undefined;
+  const { content, isError, structuredContent } = schema.properties;
+  if (!isRecord(content) || content.type !== "array") return undefined;
+  if (!isRecord(isError) || isError.type !== "boolean") return undefined;
+  if (!isRecord(structuredContent) || Object.keys(structuredContent).length === 0) return null;
+  return unnestReferences(structuredContent) as JsonSchema;
+}
+
 function binding(tool: PiToolInfo, method: string): PiToolBinding {
   // MCP tools declare a CallToolResult wrapper; the call returns what it wraps.
-  const wrapped = mcpStructuredContentSchema(tool.outputSchema as never);
+  const wrapped = mcpContentSchema(tool.outputSchema);
   const mcp = wrapped !== undefined;
   const output = mcp ? wrapped : tool.outputSchema;
   const structured = isRecord(output) ? (output as JsonSchema) : undefined;
