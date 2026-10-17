@@ -55,7 +55,9 @@ export function activatePitTools(pi: ExtensionAPI, selection: PitToolSelection):
 export function pitLoadout(
   loadout: ToolLoadout,
   selection: PitToolSelection,
-  catalog: PiToolCatalog = createPiToolCatalog(loadout.callable),
+  catalog: PiToolCatalog = createPiToolCatalog(loadout.callable, (name) =>
+    loadout.getPromptGuidelines(name),
+  ),
 ): ToolLoadoutChanges {
   const own = loadout.declared.find(({ name }) => name === PIT_TOOL_NAME);
   const prompt = piToolPrompt(catalog);

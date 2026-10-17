@@ -4,9 +4,10 @@ Thank you for helping improve Pit. Participation is governed by [CODE_OF_CONDUCT
 
 ## Prerequisites
 
-- Node.js 22.19 or newer
-- npm 11.17.0
-- Pi 1.1.0 for interactive testing, the version `package-lock.json` pins
+- Node.js 22.22.2, 24.15, or 26 or newer, which npm 12.2.0 needs; Pit itself runs on Node 22.19 or
+  newer
+- npm 12.2.0
+- Pi 1.3.0 for interactive testing, the version `package-lock.json` pins
 - jq on `PATH` for the saved-function query tests, which are skipped locally without it and
   required in CI
 

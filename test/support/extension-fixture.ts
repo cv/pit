@@ -34,6 +34,7 @@ interface RegisteredTool {
   prepareArguments?: (args: unknown) => any;
   exposure?: string;
   prepareLoadout?: (loadout: ToolLoadout) => ToolLoadoutChanges | undefined;
+  reachesTools?: (input: Record<string, unknown>) => "all" | readonly string[];
   renderCall?: (args: any, theme: any, context: any) => RenderedComponent;
   renderResult?: (result: any, options: any, theme: any, context: any) => RenderedComponent;
   execute: (...args: any[]) => Promise<any>;

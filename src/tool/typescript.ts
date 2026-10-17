@@ -16,6 +16,7 @@ import { createPiToolCatalog, type PiToolCatalog } from "../functions/pi-tools.j
 import type { PreparedSavedFunctionExecution, SavedFunctionService } from "../functions/service.js";
 import type { FunctionState, FunctionStateCommit } from "../functions/state.js";
 import { pitLoadout, type PitToolSelection } from "../functions/tool-loadout.js";
+import { piToolReach } from "../functions/tool-reach.js";
 import { createHostDispatcher } from "../host/dispatcher.js";
 import type { PiToolCallServices } from "../host/handlers/pi-tools.js";
 import { renderTypeScriptToolCall } from "../renderers/typescript-tool-call.js";
@@ -29,7 +30,7 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
-import { omitNullArguments, rejectCopiedElisionStub, resolveToolInput } from "./input.js";
+import { omitNullArguments, resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
   FUNCTION_ID_DESCRIPTION,
@@ -194,7 +195,10 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
 
   const images = createImageCollector(request.ctx);
   // Only the tools Pi lets this call use; rebuilt per call, so a changed tool set never leaks.
-  const catalog = createPiToolCatalog(request.ctx.tools);
+  const catalog = createPiToolCatalog(
+    request.ctx.tools,
+    (name) => request.functionState.toolGuidelines?.get(name) ?? [],
+  );
   // Saving and committing check saved functions against the tools this call can use.
   request.functionState.toolCatalog = catalog;
   let terminate = false;
@@ -330,7 +334,6 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     constrainedSampling: { type: "grammar", variants: { openai_lark: PIT_SOURCE_GRAMMAR } },
     // Pi validates the prepared arguments against TOOL_PARAMETERS afterwards.
     prepareArguments: (args) => {
-      rejectCopiedElisionStub(args);
       return omitNullArguments(applySourceOptions(args)) as Static<typeof TOOL_PARAMETERS>;
     },
     // Pit orchestrates the other tools and must not be callable from them, for example from
@@ -338,10 +341,17 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     exposure: "model-only",
     prepareLoadout: (loadout) => {
       // Pi reruns this whenever tools register, so the session catalog follows MCP connections.
-      const catalog = createPiToolCatalog(loadout.callable);
+      const guidelines = new Map(
+        loadout.callable.map(({ name }) => [name, loadout.getPromptGuidelines(name)] as const),
+      );
+      functionState.toolGuidelines = guidelines;
+      const catalog = createPiToolCatalog(loadout.callable, (name) => guidelines.get(name) ?? []);
       functionState.toolCatalog = catalog;
       return pitLoadout(loadout, services.toolSelection, catalog);
     },
+    // Pi's MCP extension waits for the servers a program's tools belong to before it runs.
+    reachesTools: (input) =>
+      piToolReach(input.code, [functionState.user, functionState.project, functionState.session]),
     renderCall(args, theme, context) {
       return renderTypeScriptToolCall(args, theme, context, functionState.effective);
     },

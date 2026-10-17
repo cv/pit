@@ -543,21 +543,6 @@ describe("pit extension", () => {
     expect(branchEntries).toHaveLength(entriesBefore);
   });
 
-  it("names a copied elision stub instead of reporting a missing program", () => {
-    // A model can imitate an elided call, with emptied arguments, or an older placeholder.
-    const stub = { elided: "[Pit: the tool call arguments below were elided to save context]" };
-    for (const copied of [stub, {}]) {
-      expect(() => tool.prepareArguments?.(copied)).toThrow(
-        "These arguments copy an elided call from context; they are not a program.",
-      );
-    }
-    // Other arguments without code are left for schema validation to report.
-    expect(tool.prepareArguments?.({ params: {} })).toEqual({ params: {} });
-    expect(tool.prepareArguments?.({ code: "async () => 1", ...stub })).toMatchObject({
-      code: "async () => 1",
-    });
-  });
-
   it("runs raw source whose first line carries the other arguments", async () => {
     // Grammar-capable providers send raw text in code; Pi requires it be the one required string.
     expect((tool as any).constrainedSampling).toMatchObject({ type: "grammar" });

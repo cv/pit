@@ -6,6 +6,10 @@ const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "ut
 
 const readme = await readFile(resolve(root, "README.md"), "utf8");
 const piProvided = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"];
+// Pit supports only the Pi version it pins, so its peer range for Pi's own packages matches the
+// development range. Pi ignores peer ranges when it installs packages, so the range documents the
+// requirement rather than enforcing it.
+const pinnedPiPackages = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui"]);
 const requiredRuntimeFiles = [
   "src/index.ts",
   "src/sandbox/run.ts",
@@ -68,8 +72,11 @@ for (const path of new Set([...requiredRuntimeFiles, ...declaredExtensions])) {
 }
 
 for (const dependency of piProvided) {
-  if (packageJson.peerDependencies?.[dependency] !== "*") {
-    fail(`${dependency} must be declared as a '*' peer dependency`);
+  const peerRange = pinnedPiPackages.has(dependency)
+    ? packageJson.devDependencies?.[dependency]
+    : "*";
+  if (packageJson.peerDependencies?.[dependency] !== peerRange) {
+    fail(`${dependency} must be declared as a '${peerRange}' peer dependency`);
   }
   if (packageJson.dependencies?.[dependency] !== undefined) {
     fail(`${dependency} must not be bundled as a runtime dependency`);
