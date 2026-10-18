@@ -130,6 +130,22 @@ describe("terminal UX lifecycle and fallback", () => {
     }
   });
 
+  it("shows Pi's recorded execution time for a replayed failure without Pit's timings", () => {
+    const failure = { content: [{ type: "text", text: "FAILURE_SENTINEL" }] };
+    const replayed = (durationMs?: number) =>
+      plain(
+        renderTypeScriptToolResult(failure, options, theme, {
+          isError: true,
+          executionStarted: true,
+          argsComplete: true,
+          state: {},
+          ...(durationMs === undefined ? {} : { durationMs }),
+        }),
+      );
+    expect(replayed(1_234)).toContain("1.2s");
+    expect(replayed()).not.toContain("1.2s");
+  });
+
   it("keeps one clock across renders when a caller omits renderer state", () => {
     vi.useFakeTimers();
     try {

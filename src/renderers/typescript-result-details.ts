@@ -17,8 +17,8 @@ export interface TypeScriptDetails extends ExecutionProgressSnapshot {
 }
 
 /**
- * Whether details retain the returned value. Truncated results keep a fitted value; older
- * sessions and unstructured fallbacks kept only the model-visible text.
+ * Whether details retain the returned value. Truncated results keep a fitted value; unstructured
+ * fallbacks keep only the model-visible text.
  */
 export function retainsValue(details: TypeScriptDetails | undefined): details is TypeScriptDetails {
   return (

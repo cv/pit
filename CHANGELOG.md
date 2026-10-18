@@ -4,6 +4,22 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- A `typescript` call waits for MCP servers that are still connecting before it runs, so `tools.*` includes their tools ([#207](https://github.com/cv/pit/issues/207)). Pit declares the tools a call reaches through Pi's `reachesTools`: the `tools` members the program and the saved functions it injects, directly or through other saved functions, declare, or every tool when one of them injects `toolIndex`. Pi's MCP extension waits only for the servers those names belong to.
+- `toolIndex.describe(name)` includes the tool's prompt guidelines. Pi leaves the guidelines of tools whose declarations Pit hides out of the system prompt, so the model did not see them; codemode likewise shows them with its declarations. Pit records them from Pi's tool loadout, because Pi's per-call tool info omits them.
+
+### Changed
+
+- **Breaking:** Pit drops its remaining handling of formats that earlier versions wrote. A `typescript` call with empty arguments or an `{ elided }` placeholder, which Pit's context edits stopped writing in 0.28.0, now fails Pi's schema validation for the missing `code`. A `session.notes()` result without `supersededTokens`, written before 0.27.0, renders as raw data.
+- **Breaking:** Pit supports Pi 1.3.0, the version `package-lock.json` now pins. Pit pins the packages it shares with Pi exactly to the versions Pi 1.3.0 loads: `@earendil-works/pi-codemode` 1.3.0, which Pit installs as its own copy, and, for development and tests, `pi-coding-agent` and `pi-tui` 1.3.0 and `typebox` 1.3.27, which Pi provides at runtime. Before, `typebox` tests ran on 1.3.36, and `^` ranges let a Pit install pull a newer `pi-codemode` than the Pi it runs in. The `peerDependencies` ranges for `pi-coding-agent` and `pi-tui` are `1.3.0` instead of `*`. Pi ignores peer ranges when it installs packages, so the range documents the requirement; `npm run package:check` keeps it equal to the development range.
+- Development and CI use npm 12.2.0, which needs Node 22.22.2, 24.15, or 26 or newer, and CI also tests on Node 26. `allowScripts` in `package.json` denies the install scripts of `@google/genai`, a no-op, and `protobufjs`, a version-scheme warning, which Pi's development packages pull in, so npm 12 no longer warns about unreviewed scripts. Pit uses `oxfmt` 0.73.0, and development uses `oxlint` 1.88.0 and Vitest 5.0.5.
+- A `typescript` result without Pit's timings, such as a thrown error, shows the execution time Pi recorded, also after the session reloads. It showed `0.0s` before.
+
+### Fixed
+
+- `tools.*` recognizes the result schema Pi 1.2 and newer declare for MCP tools, which has no `_meta` and declares undeclared structured content as `{}`. `@earendil-works/pi-codemode` 1.2 removed the helper Pit used to recognize it. References in an MCP tool's output schema, which Pi now nests below `structuredContent`, resolve for type-checking and result validation.
+
 ## [0.29.1] - 2026-10-11
 
 ### Fixed

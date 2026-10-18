@@ -73,7 +73,7 @@ async ({ toolIndex: { search, describe } }) => {
 }
 ```
 
-`search(query, limit?)` ranks tools by name and description and returns `{ name, summary }` entries: 8 by default, at most 20. `describe(name)` returns the tool's description and TypeScript declaration, or `null` for an unknown name.
+`search(query, limit?)` ranks tools by name and description and returns `{ name, summary }` entries: 8 by default, at most 20. `describe(name)` returns the tool's description, its prompt guidelines if it has any, and its TypeScript declaration, or `null` for an unknown name. Pi leaves the guidelines of tools Pit hides out of the system prompt, so `describe` is where the model sees them.
 
 Then inject the tool like any other function:
 

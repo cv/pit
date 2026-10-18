@@ -37,6 +37,11 @@ export interface FunctionState {
    * functions are checked against it outside a call, for example when a session is resumed.
    */
   toolCatalog?: PiToolCatalog;
+  /**
+   * The `promptGuidelines` of the callable tools in the latest loadout. Pi's per-call tool info
+   * omits them, so `typescript` calls read them here for `toolIndex.describe`.
+   */
+  toolGuidelines?: ReadonlyMap<string, readonly string[]>;
 }
 
 export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promise<T>;

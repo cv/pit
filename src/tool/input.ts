@@ -20,20 +20,6 @@ export function resolveToolInput(source: string, params: unknown): unknown {
 const OPTIONAL_ARGUMENTS = ["label", "functionId", "params", "saveOnly", "timeoutMs"] as const;
 
 /**
- * Elide folds a past call and its results into a `[Pit: elided tool call …]` text note, so no
- * placeholder call remains in context. A model that still sends empty arguments, or an older
- * `{ elided }` placeholder, sends no program, so name the mistake instead of letting schema
- * validation report a missing `code`.
- */
-export function rejectCopiedElisionStub(args: unknown): void {
-  if (typeof args !== "object" || args === null || "code" in args) return;
-  if (!("elided" in args) && Object.keys(args).length > 0) return;
-  throw new Error(
-    "These arguments copy an elided call from context; they are not a program. Earlier calls' arguments were elided to save context. Send { code } with the program to run.",
-  );
-}
-
-/**
  * Treats a `null` optional tool argument as omitted. A provider sampling arguments against a strict
  * JSON schema must send every property, so it sends `null` for options the model left out. Pi drops
  * such a `null` only where the property's schema rejects it, which excludes `params`. `code` is
