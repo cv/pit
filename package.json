@@ -76,5 +76,9 @@
     "@earendil-works/pi-coding-agent": "1.3.0",
     "@earendil-works/pi-tui": "1.3.0",
     "typebox": "*"
+  },
+  "allowScripts": {
+    "@google/genai": false,
+    "protobufjs": false
   }
 }
