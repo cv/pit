@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-17
+
 ### Added
 
 - A `typescript` call waits for MCP servers that are still connecting before it runs, so `tools.*` includes their tools ([#207](https://github.com/cv/pit/issues/207)). Pit declares the tools a call reaches through Pi's `reachesTools`: the `tools` members the program and the saved functions it injects, directly or through other saved functions, declare, or every tool when one of them injects `toolIndex`. Pi's MCP extension waits only for the servers those names belong to.
@@ -477,7 +479,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/cv/pit/compare/v0.29.1...v0.30.0
+[0.29.1]: https://github.com/cv/pit/compare/v0.29.0...v0.29.1
+[0.29.0]: https://github.com/cv/pit/compare/v0.28.1...v0.29.0
+[0.28.1]: https://github.com/cv/pit/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/cv/pit/compare/v0.27.1...v0.28.0
 [0.27.1]: https://github.com/cv/pit/compare/v0.27.0...v0.27.1
 [0.27.0]: https://github.com/cv/pit/compare/v0.26.0...v0.27.0
