@@ -66,7 +66,7 @@ describe("pit extension", () => {
     expect(await value("async ({ answer }) => answer()")).toBe(42);
     // Without an input parameter, params would be dropped, so validation rejects them.
     await expect(runWithParams("async () => 42", { value: 1 })).rejects.toThrow(
-      "Expected 0 arguments, but got 2",
+      "params was provided, but the program declares no input parameter",
     );
   });
 

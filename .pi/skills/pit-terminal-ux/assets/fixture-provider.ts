@@ -19,6 +19,12 @@ function processFixture(label: string, script: string, timeoutMs = 5000, raise =
 }
 const fixtures: Record<string, ToolCall["arguments"]> = {
   "trace-a": { label: "TRACE A: simple value", code: "async ({}) => 42" },
+  // Validation rejects params the program has no parameter to receive.
+  "params-without-input": {
+    label: "PARAMS: no input parameter",
+    code: "async ({}) => 42",
+    params: { path: "books" },
+  },
   // Pi and MCP tools injected from `tools`; configure the fixture MCP server as `fixture`.
   "tools-call": {
     label: "TOOLS: MCP text",

@@ -21,6 +21,57 @@ describe("validateTypeScript", () => {
     expect(message.match(/not assignable to parameter of type 'number'/g)).toHaveLength(1);
   });
 
+  it.each<{ name: string; source: string; params: unknown; includes: string[] }>([
+    {
+      name: "a dependencies-only program",
+      source: "async ({}) => 1",
+      params: {},
+      includes: ["params was provided, but the program declares no input parameter"],
+    },
+    {
+      name: "a program without parameters",
+      source: "async () => 1",
+      params: { value: 1 },
+      includes: ["params was provided, but the program declares no input parameter"],
+    },
+    {
+      name: "a void input",
+      source: "async ({}, input: void) => input",
+      params: {},
+      includes: ["params could not be passed as the program's input", "'void'"],
+    },
+    {
+      name: "a differently typed input",
+      source: "async ({}, input: { path: string }) => input.path",
+      params: { path: 42 },
+      includes: ["params could not be passed as the program's input", "'number'", "'string'"],
+    },
+  ])("explains params that $name cannot accept", ({ source, params, includes }) => {
+    let message = "";
+    try {
+      validateTypeScript(source, new Map(), params);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    for (const text of includes) expect(message).toContain(text);
+    // The generated params call is not code the submission wrote.
+    expect(message).not.toContain("program({} as");
+  });
+
+  it("keeps the submission's own errors at their location when params are passed", () => {
+    let message = "";
+    try {
+      validateTypeScript('async ({}, input: { n: number }) => input.n.toFixed("two")', new Map(), {
+        n: 1,
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('input.n.toFixed("two")');
+    expect(message).toContain("^");
+    expect(message).not.toContain("params");
+  });
+
   it("retains virtual saved-function typing for annotated dependencies", () => {
     const saved = new Map([["answer", "async function answer({}) { return 42; }"]]);
     expect(() =>
