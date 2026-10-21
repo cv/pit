@@ -68,6 +68,8 @@ describe("pit extension", () => {
     await expect(runWithParams("async () => 42", { value: 1 })).rejects.toThrow(
       "params was provided, but the program declares no input parameter",
     );
+    // Empty params lose nothing, so they run as if omitted.
+    expect((await runWithParams("async ({}) => 42", {})).details.value).toBe(42);
   });
 
   it("exposes the public global-method view", () => {

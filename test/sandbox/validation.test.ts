@@ -25,7 +25,7 @@ describe("validateTypeScript", () => {
     {
       name: "a dependencies-only program",
       source: "async ({}) => 1",
-      params: {},
+      params: { path: "books" },
       includes: ["params was provided, but the program declares no input parameter"],
     },
     {
@@ -56,6 +56,19 @@ describe("validateTypeScript", () => {
     for (const text of includes) expect(message).toContain(text);
     // The generated params call is not code the submission wrote.
     expect(message).not.toContain("program({} as");
+  });
+
+  it.each<{ name: string; source: string; params: unknown }>([
+    { name: "an empty object for dependencies only", source: "async ({}) => 1", params: {} },
+    { name: "an empty array for no parameters", source: "async () => 1", params: [] },
+  ])("accepts $name, as nothing is lost", ({ source, params }) => {
+    expect(() => validateTypeScript(source, new Map(), params)).not.toThrow();
+  });
+
+  it("still checks empty params against a declared input", () => {
+    expect(() =>
+      validateTypeScript("async ({}, input: { path: string }) => input.path", new Map(), {}),
+    ).toThrow(/params could not be passed[\s\S]*'path'/);
   });
 
   it("keeps the submission's own errors at their location when params are passed", () => {
