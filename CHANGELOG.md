@@ -4,6 +4,18 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-10-20
+
+### Fixed
+
+- When top-level `params` can't be passed to a program, validation says so instead of reporting TypeScript's raw arity error on the generated `program({} as PitDependencies, params)` call, which the program never wrote. A program without an input parameter gets the fix (declare one after the dependencies, or omit `params`); other mismatches keep TypeScript's detail under a `params` heading. Errors in the program's own code keep their location and excerpt ([#328](https://github.com/cv/pit/pull/328)).
+- Empty `params` (`{}` or `[]`), which some models send on every call, no longer fail a program that declares no input parameter; the program runs as if `params` were omitted. Non-empty `params` still fail there, and empty `params` are still checked against a declared input type ([#329](https://github.com/cv/pit/pull/329)).
+
+### Changed
+
+- The `sessions.analyze()` project function counts TypeScript failures caused by `params` as `paramsFailures`, in both the older raw form and the new messages, and recommends omitting or declaring the input instead of the generic TypeScript advice ([#330](https://github.com/cv/pit/pull/330)).
+- Internal cleanup with no behavior change: MCP result schema recognition moved into its own module ([#326](https://github.com/cv/pit/pull/326)).
+
 ## [0.30.0] - 2026-10-17
 
 ### Added
