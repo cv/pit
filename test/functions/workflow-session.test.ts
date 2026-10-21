@@ -117,6 +117,55 @@ describe("sessions.analyze", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it.each<{ name: string; errors: string[]; params: number; generic: boolean }>([
+    {
+      name: "the raw generated call",
+      errors: [
+        "TypeScript validation failed:\n- 9:32 Expected 1 arguments, but got 2.\n  program({} as PitDependencies, {});\n                                 ^",
+      ],
+      params: 1,
+      generic: false,
+    },
+    {
+      name: "the explained message",
+      errors: [
+        "TypeScript validation failed:\n- params was provided, but the program declares no input parameter.",
+      ],
+      params: 1,
+      generic: false,
+    },
+    {
+      name: "a mismatch beside an unrelated type error",
+      errors: [
+        "TypeScript validation failed:\n- params could not be passed as the program's input, its second parameter:",
+        "TypeScript validation failed:\n- 2:15 Cannot find name 'process'.",
+      ],
+      params: 1,
+      generic: true,
+    },
+  ])("attributes params failures reported as $name", async ({ errors, params, generic }) => {
+    const analyze = await loadWorkflowFunction("sessions.analyze");
+    const readEvents = vi.fn().mockResolvedValue(
+      page(
+        errors.map((error, index) => ({
+          calls: [call(`id${index}`, `call ${index}`)],
+          failure: failure(`id${index}`, error),
+        })),
+      ),
+    );
+    const result = await analyze(
+      { context: { get: vi.fn() }, sessions: { readEvents } },
+      { file: "/session.jsonl" },
+    );
+    expect(result).toMatchObject({
+      paramsFailures: params,
+      categories: { typescript: errors.length },
+    });
+    const advice = (result.recommendations as string[]).join("\n");
+    expect(advice).toContain("Omit params, or declare the input as the program's second parameter");
+    expect(advice.includes("inspect declared types")).toBe(generic);
+  });
+
   it("correlates calls across empty pages and bounds examples without losing counts", async () => {
     const analyze = await loadWorkflowFunction("sessions.analyze");
     const readEvents = vi
