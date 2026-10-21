@@ -24,6 +24,10 @@ async function analyze(
   if (!file) throw new Error("No Pi session file is available");
   type Page = Awaited<ReturnType<typeof readEvents>>;
   type Failure = NonNullable<Page["events"][number]["failure"]>;
+  // Validation checks top-level params with a generated program(dependencies, params) call.
+  // Older Pit versions reported its errors raw, with that call as the excerpt.
+  const PARAMS_FAILURE =
+    /^\s*program\(\{\} as |params was provided, but the program declares no input parameter|params could not be passed as the program's input/m;
   const classifyFailure = (label: string, error: string) => {
     if (
       /^(?:Expect failure:|Trigger .*?(?:failure|timeout)|Verify .*?(?:reject|fail))/i.test(label)
@@ -39,6 +43,8 @@ async function analyze(
       return "gate";
     return /Command failed/i.test(error) ? "command" : "logic";
   };
+  const isParamsFailure = (kind: string, error: string) =>
+    kind === "typescript" && PARAMS_FAILURE.test(error);
   const increment = (counts: Map<string, number>, key: string) =>
     counts.set(key, (counts.get(key) ?? 0) + 1);
   const calls = new Map<string, string>();
@@ -52,6 +58,7 @@ async function analyze(
   let shellExecCalls = 0;
   let promiseAllCalls = 0;
   let workspaceBatchCalls = 0;
+  let paramsFailures = 0;
   // Context telemetry. A pressure notice counts as followed when an elide or summarize is
   // recorded within the next NOTICE_WINDOW model turns (assistant messages).
   const NOTICE_WINDOW = 3;
@@ -275,6 +282,7 @@ async function analyze(
       const kind = classifyFailure(label, failure.error);
       failures++;
       increment(categories, kind);
+      paramsFailures += Number(isParamsFailure(kind, failure.error));
       if (kind !== "gate" && kind !== "expected") {
         workflowFailures++;
         increment(labels, label);
@@ -291,7 +299,11 @@ async function analyze(
     recommendations.push(
       'Use targeted tests and npm.run("check") before the final delivery.validate gate.',
     );
-  if (categories.has("typescript"))
+  if (paramsFailures > 0)
+    recommendations.push(
+      "Some TypeScript failures came from top-level params the program could not accept, checked by the generated program(dependencies, params) call. Omit params, or declare the input as the program's second parameter with a type that matches them.",
+    );
+  if ((categories.get("typescript") ?? 0) > paramsFailures)
     recommendations.push(
       "After a TypeScript submission failure, inspect declared types and numeric bounds, then simplify the next call.",
     );
@@ -342,6 +354,7 @@ async function analyze(
     workflowFailureRatePercent: rate(workflowFailures),
     gateFailures: categories.get("gate") ?? 0,
     expectedFailures: categories.get("expected") ?? 0,
+    paramsFailures,
     categories: Object.fromEntries(categories),
     execFilePrograms: Object.fromEntries(programs),
     shellExecCalls,
