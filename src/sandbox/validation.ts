@@ -41,6 +41,9 @@ const MAX_CACHE_ENTRIES = 128;
 // submission never wrote, which does not say that params is the cause.
 const PARAMS_WITHOUT_INPUT =
   "params was provided, but the program declares no input parameter. Declare one after the dependencies, as in async ({ shell: { exec } }, input: { path: string }) => …, or omit params.";
+// Empty params carry nothing that a program without an input parameter would lose, and some
+// models send them on every call.
+const EMPTY_INPUTS = new Set(["{}", "[]"]);
 interface ValidatedSource {
   error?: string;
   graph?: ResolvedFunctionGraph;
@@ -164,22 +167,30 @@ function withoutSignatureRepeats(diagnostics: readonly ts.Diagnostic[]): ts.Diag
   );
 }
 
+/** The params check's arity error for a program that declares no input parameter. */
+function isMissingInput(diagnostic: ts.Diagnostic): boolean {
+  return (
+    diagnostic.code === 2554 &&
+    /^Expected [01] arguments?, but got 2\.$/.test(
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+    )
+  );
+}
+
 /**
  * Describes an error on the generated `program(dependencies, params)` call in terms of params:
  * its source line is the wrapper's, not the submission's, so it gets no location or excerpt.
  */
 function paramsDiagnostic(diagnostic: ts.Diagnostic): string {
+  if (isMissingInput(diagnostic)) return PARAMS_WITHOUT_INPUT;
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
-  if (diagnostic.code === 2554 && /^Expected [01] arguments?, but got 2\.$/.test(message)) {
-    return PARAMS_WITHOUT_INPUT;
-  }
   return `params could not be passed as the program's input, its second parameter:\n  ${message.replaceAll("\n", "\n  ")}`;
 }
 
 function validationError(
   diagnostics: readonly ts.Diagnostic[],
   names: readonly string[],
-  paramsStart?: number,
+  onParams: (diagnostic: ts.Diagnostic) => boolean = () => false,
 ): string {
   const unique = [
     ...new Map(
@@ -191,11 +202,7 @@ function validationError(
   ];
   const displayed = unique.slice(0, MAX_DIAGNOSTICS);
   const messages = displayed.map((diagnostic) =>
-    paramsStart !== undefined &&
-    diagnostic.file?.fileName === PROGRAM_FILE &&
-    (diagnostic.start ?? -1) >= paramsStart
-      ? paramsDiagnostic(diagnostic)
-      : formatDiagnostic(diagnostic),
+    onParams(diagnostic) ? paramsDiagnostic(diagnostic) : formatDiagnostic(diagnostic),
   );
   const omitted = unique.length - displayed.length;
   const savedFunctionHint = diagnostics.some((diagnostic) => {
@@ -397,16 +404,22 @@ function validateSource(
     ...(inputSource === undefined ? {} : { input: inputSource }),
   });
   // The params check is the wrapper's last line, after the submitted source.
-  const paramsStart =
-    inputSource === undefined ? undefined : programText.lastIndexOf("\nprogram({} as ") + 1;
+  const paramsStart = programText.lastIndexOf("\nprogram({} as ") + 1;
+  const onParams = (diagnostic: ts.Diagnostic) =>
+    inputSource !== undefined &&
+    diagnostic.file?.fileName === PROGRAM_FILE &&
+    (diagnostic.start ?? -1) >= paramsStart;
   const program = compileProgram({
     declarations: `${model.declarations}${tools?.declarations ?? ""}`,
     program: programText,
     signatures: model.signatures,
   });
-  const diagnostics = programDiagnostics(program);
+  const diagnostics = programDiagnostics(program).filter(
+    (diagnostic) =>
+      !(EMPTY_INPUTS.has(inputSource ?? "") && onParams(diagnostic) && isMissingInput(diagnostic)),
+  );
   if (diagnostics.length > 0) {
-    const error = validationError(diagnostics, names, paramsStart);
+    const error = validationError(diagnostics, names, onParams);
     cacheSet(cacheKey, { error });
     throw new Error(error);
   }

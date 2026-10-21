@@ -20,6 +20,8 @@ function processFixture(label: string, script: string, timeoutMs = 5000, raise =
 const fixtures: Record<string, ToolCall["arguments"]> = {
   "trace-a": { label: "TRACE A: simple value", code: "async ({}) => 42" },
   // Validation rejects params the program has no parameter to receive.
+  // Empty params, as some models send on every call, run a program without an input parameter.
+  "params-empty": { label: "PARAMS: empty", code: "async ({}) => 42", params: {} },
   "params-without-input": {
     label: "PARAMS: no input parameter",
     code: "async ({}) => 42",
