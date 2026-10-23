@@ -262,7 +262,7 @@ describe("session.summarize", () => {
       limit: "~160",
     },
   ])(
-    "caps summaries at Pi's compaction-summary budget from $name",
+    "caps summaries at 0.8 × the compaction reserve or the output limit from $name",
     async ({ settings, ctx, limit }) => {
       setPiSettings(settings);
       const { session, first, third } = agentRun();
@@ -272,7 +272,7 @@ describe("session.summarize", () => {
           { from: first.assistant, to: third.result, summary: "y".repeat(1_000) },
           ctx,
         ),
-      ).rejects.toThrow(`the limit is ${limit}, Pi's compaction-summary budget`);
+      ).rejects.toThrow(`the limit is ${limit} (0.8 × the compaction reserveTokens`);
     },
   );
 });
@@ -286,6 +286,6 @@ describe("summarize edges", () => {
         { from: first.assistant, to: third.result, summary: "z".repeat(60_000) },
         { model: undefined },
       ),
-    ).rejects.toThrow("the limit is ~13.1K, Pi's compaction-summary budget");
+    ).rejects.toThrow("the limit is ~13.1K (0.8 × the compaction reserveTokens");
   });
 });

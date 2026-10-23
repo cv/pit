@@ -4,6 +4,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Pit supports Pi 1.4.0, the version `package-lock.json` now pins: `@earendil-works/pi-codemode` 1.4.0, which Pit installs as its own copy, and, for development, tests, and the `peerDependencies` ranges, `pi-coding-agent` and `pi-tui` 1.4.0. `typebox` stays 1.3.27, the version Pi 1.4.0 loads. Pi 1.4.0's limit of two concurrent codemode workers applies to Pi's own codemode tool, not to Pit's sandbox, so `typescript` calls do not queue behind it or count toward `PI_CODEMODE_MAX_WORKERS`.
+- `session.summarize` keeps its summary limit, 0.8 × the compaction `reserveTokens` capped at the model's output limit, as Pit's own: Pi 1.4.0 no longer applies it to compaction summaries, because their generation budget also covers reasoning, while Pit's limit counts only the summary text. Its error now states the formula instead of calling it Pi's compaction-summary budget.
+
 ## [0.30.1] - 2026-10-20
 
 ### Fixed

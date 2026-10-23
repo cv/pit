@@ -26,8 +26,10 @@ import {
 type Settings = ReturnType<ExtensionAPI["getSettings"]>;
 
 /**
- * The largest model-written summary: Pi's own compaction-summary budget,
- * min(0.8 × reserveTokens, the model's output limit).
+ * The largest model-written summary: 0.8 × the compaction reserveTokens, capped at the model's
+ * output limit. Pi 1.3 bounded its own compaction summaries the same way; Pi 1.4 dropped that
+ * bound because the generation budget also had to cover reasoning. This limit counts only the
+ * summary text, so it keeps a summary within the headroom Pi reserves for compaction.
  */
 export function summaryTokenCap(
   settings: Settings | undefined,
@@ -146,7 +148,7 @@ export function planSummarize(
   const summaryTokens = textTokens(summary);
   if (summaryTokens > input.capTokens) {
     throw new Error(
-      `Cannot summarize: the summary is ~${formatTokens(summaryTokens)} tokens; the limit is ~${formatTokens(input.capTokens)}, Pi's compaction-summary budget`,
+      `Cannot summarize: the summary is ~${formatTokens(summaryTokens)} tokens; the limit is ~${formatTokens(input.capTokens)} (0.8 × the compaction reserveTokens, capped at the model's output limit)`,
     );
   }
   const carrier = range[0] as ContextItem;
