@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- `npm run package:check` requires every package Pit shares with the pinned Pi to be the exact version Pi requires in `package-lock.json`: today `@earendil-works/pi-codemode` 1.4.0, `pi-tui` 1.4.0, and `typebox` 1.3.27. Dependabot no longer proposes `typebox` updates, which move only with a Pi upgrade; [#335](https://github.com/cv/pit/pull/335) had proposed `typebox` 1.4.2 for development while Pi 1.4.0 loads 1.3.27. Development uses `oxlint` 1.89.0.
+
 ## [0.31.0] - 2026-10-23
 
 ### Changed

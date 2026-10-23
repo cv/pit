@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Pi pins typebox for Pit at runtime; scripts/verify-package.mjs requires Pi's exact version,
+    # so typebox moves only with a Pi upgrade.
+    ignore:
+      - dependency-name: typebox
     groups:
       compatible-development-dependencies:
         dependency-type: development
