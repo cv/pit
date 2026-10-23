@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-23
+
 ### Changed
 
 - **Breaking:** Pit supports Pi 1.4.0, the version `package-lock.json` now pins: `@earendil-works/pi-codemode` 1.4.0, which Pit installs as its own copy, and, for development, tests, and the `peerDependencies` ranges, `pi-coding-agent` and `pi-tui` 1.4.0. `typebox` stays 1.3.27, the version Pi 1.4.0 loads. Pi 1.4.0's limit of two concurrent codemode workers applies to Pi's own codemode tool, not to Pit's sandbox, so `typescript` calls do not queue behind it or count toward `PI_CODEMODE_MAX_WORKERS`.
