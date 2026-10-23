@@ -36,7 +36,7 @@ Review the final diff and confirm a clean worktree. Changes to TUI, extension lo
    git push origin vX.Y.Z
    ```
 
-4. The Release workflow validates the package and tag, then publishes a release with generated notes and no assets: Pit installs from the tagged source.
+4. The Release workflow validates the package and tag, then publishes a release with generated notes and no assets: Pit installs from the tagged source. GitHub can deliver one tag push more than once; runs for a tag wait for each other, and a later run leaves a release already published at the tagged commit unchanged.
 5. Verify the release targets the tagged commit and has no assets. Then, before declaring delivery complete, install the tag's runtime dependencies from a fresh clone and run the sandbox:
 
    ```sh

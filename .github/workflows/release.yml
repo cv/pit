@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# GitHub can deliver one tag push more than once. Runs for a tag wait for each other, so a later
+# run sees the release an earlier one published.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: release
@@ -41,4 +47,20 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "pit $GITHUB_REF_NAME" --generate-notes
+        # A published release for this tag at this commit means an earlier run for the same push
+        # finished; leave it unchanged. Any other existing release is an error.
+        run: |
+          if view=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>&1); then
+            tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)
+            if [ "$view" = "false" ] && [ "$tagged" = "$GITHUB_SHA" ]; then
+              echo "::notice::Release $GITHUB_REF_NAME is already published at $GITHUB_SHA; leaving it unchanged."
+              exit 0
+            fi
+            echo "::error::Release $GITHUB_REF_NAME already exists (draft: $view) at $tagged, not at this run's $GITHUB_SHA."
+            exit 1
+          fi
+          case "$view" in
+            *"release not found"*) ;;
+            *) echo "::error::Could not check for an existing release: $view"; exit 1 ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "pit $GITHUB_REF_NAME" --generate-notes
