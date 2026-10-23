@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 const root = process.cwd();
 const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const packageLock = JSON.parse(await readFile(resolve(root, "package-lock.json"), "utf8"));
 
 const readme = await readFile(resolve(root, "README.md"), "utf8");
 const piProvided = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"];
@@ -83,6 +84,26 @@ for (const dependency of piProvided) {
   }
   if (packageJson.devDependencies?.[dependency] === undefined) {
     fail(`${dependency} must remain a development dependency`);
+  }
+}
+
+// Pit runs inside Pi, so every package it shares with the pinned Pi must be the exact version
+// that Pi requires: Pi provides the runtime copy, and tests on another version prove nothing.
+const piAgentName = "@earendil-works/pi-coding-agent";
+const lockedPiAgent = packageLock.packages?.[`node_modules/${piAgentName}`];
+if (lockedPiAgent?.version !== packageJson.devDependencies?.[piAgentName]) {
+  fail(
+    `package-lock.json must lock ${piAgentName} ${packageJson.devDependencies?.[piAgentName]}, not ${lockedPiAgent?.version}`,
+  );
+}
+for (const [dependency, piRequirement] of Object.entries(lockedPiAgent.dependencies ?? {})) {
+  for (const field of ["dependencies", "devDependencies"]) {
+    const declared = packageJson[field]?.[dependency];
+    if (declared !== undefined && declared !== piRequirement) {
+      fail(
+        `${field}.${dependency} must be ${piRequirement}, the version ${piAgentName} ${lockedPiAgent.version} requires, not ${declared}`,
+      );
+    }
   }
 }
 
