@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-codemode": "1.4.0",
-    "oxfmt": "0.73.0",
+    "oxfmt": "0.74.0",
     "tinyglobby": "^0.2.17",
     "typescript": "^6.0.3"
   },
