@@ -202,6 +202,12 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     code: 'async ({ ui: { confirm } }) => confirm("PIT_DIALOG_SENTINEL", "Leave this unanswered")',
     timeoutMs: 3000,
   },
+  // Pi 1.4 stacks concurrent dialogs; answer both and the program returns both answers.
+  "dialog-pair": {
+    label: "UX DIALOG PAIR: answer both confirmations",
+    code: 'async ({ ui: { confirm } }) => Promise.all([confirm("PIT_DIALOG_A", "Answer the first"), confirm("PIT_DIALOG_B", "Answer the second")])',
+    timeoutMs: 60000,
+  },
   calls: {
     label: "UX CALLS: more call groups than the live budget",
     code: 'async ({ workspace: { stat, list }, shell: { execFile } }, input: { rounds: number; script: string }) => { for (let round = 0; round < input.rounds; round++) { await stat("package.json"); await list("src"); } return execFile("node", ["--input-type=module", "--eval", input.script], { timeoutMs: 15000 }); }',
