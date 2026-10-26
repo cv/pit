@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+  CONFIG_DIR_NAME,
+  getAgentDir,
+  type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 import { isRecord } from "../../shared/records.js";
 import { type FunctionRegistry, validateSavedFunctionSource } from "../core.js";
@@ -20,7 +24,11 @@ import {
 import { type ConfiguredFunctionPaths, defaultProjectFunctionDirectory } from "./paths.js";
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
-/** Settings from a trusted project's `.pi/pit.json`. Absent or invalid files yield the defaults. */
+/**
+ * Settings from Pi's user `pit.json` and a trusted project's `.pi/pit.json`. A project's
+ * allowedTools replaces the user's; an invalid or unreadable project file grants no exceptions.
+ * `paths` comes only from the project file.
+ */
 interface PitProjectConfig {
   allowedTools?: string[];
   /** Directories for project and user functions, as written; see resolveFunctionPaths. */
@@ -47,18 +55,20 @@ function configuredPaths(value: unknown): ConfiguredFunctionPaths | undefined {
   return paths;
 }
 
-export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
-  if (!ctx.isProjectTrusted()) {
-    return {};
-  }
+/**
+ * Reads one `pit.json`. A missing file yields no settings; an unreadable or invalid file yields only
+ * an error. User files support only allowedTools: their `paths` is ignored with a warning, without
+ * discarding their allowedTools.
+ */
+async function readPitConfig(file: string, scope: "user" | "project"): Promise<PitProjectConfig> {
   let source: string;
   try {
-    source = await readFile(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "utf8");
+    source = await readFile(file, "utf8");
   } catch (error) {
     if (isMissingFileError(error)) {
       return {};
     }
-    throw error;
+    return { error: `Cannot read ${file}: ${(error as Error).message}` };
   }
   try {
     const config = JSON.parse(source) as unknown;
@@ -73,14 +83,33 @@ export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitPr
     ) {
       throw new Error("allowedTools must be an array of non-empty strings");
     }
+    const selection = allowedTools === undefined ? {} : { allowedTools };
+    if (scope === "user") {
+      return config.paths === undefined
+        ? selection
+        : { ...selection, error: `Ignored paths in ${file}: function paths are project-only` };
+    }
     const paths = configuredPaths(config.paths);
-    return {
-      ...(allowedTools === undefined ? {} : { allowedTools }),
-      ...(paths === undefined ? {} : { paths }),
-    };
+    return { ...selection, ...(paths === undefined ? {} : { paths }) };
   } catch (error) {
-    return { error: `Invalid ${CONFIG_DIR_NAME}/pit.json: ${(error as Error).message}` };
+    return { error: `Invalid ${file}: ${(error as Error).message}` };
   }
+}
+
+export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
+  const [user, project] = await Promise.all([
+    readPitConfig(join(getAgentDir(), "pit.json"), "user"),
+    ctx.isProjectTrusted()
+      ? readPitConfig(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "project")
+      : Promise.resolve<PitProjectConfig>({}),
+  ]);
+  const allowedTools = project.error ? [] : (project.allowedTools ?? user.allowedTools);
+  const error = [user.error, project.error].filter(Boolean).join("; ");
+  return {
+    ...project,
+    ...(allowedTools === undefined ? {} : { allowedTools }),
+    ...(error ? { error } : {}),
+  };
 }
 
 export async function saveProjectFunction(

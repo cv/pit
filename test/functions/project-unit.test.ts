@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { functionRunScope, functionScopeRegistry } from "../../src/functions/core.js";
 import {
@@ -106,8 +106,10 @@ function sizedInvalidProjectFunction(name: string, bytes: number): string {
 
 beforeEach(async () => {
   cwd = await mkdtemp(join(tmpdir(), "pit-project-functions-"));
+  vi.stubEnv("PI_CODING_AGENT_DIR", join(cwd, "agent"));
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await rm(cwd, { recursive: true, force: true });
 });
 
@@ -128,16 +130,31 @@ describe("project function storage", () => {
     for (const invalid of ["not json", "[]", JSON.stringify({ allowedTools: "goal_*" })]) {
       await writeFile(join(cwd, ".pi/pit.json"), invalid);
       expect(await loadPitProjectConfig(ctx())).toEqual({
-        error: expect.stringContaining("Invalid .pi/pit.json"),
+        allowedTools: [],
+        error: expect.stringContaining(`Invalid ${join(cwd, ".pi/pit.json")}`),
       });
     }
 
     await rm(join(cwd, ".pi/pit.json"));
     await mkdir(join(cwd, ".pi/pit.json"));
-    await expect(loadPitProjectConfig(ctx())).rejects.toThrow();
+    expect(await loadPitProjectConfig(ctx())).toEqual({
+      allowedTools: [],
+      error: expect.stringContaining(`Cannot read ${join(cwd, ".pi/pit.json")}`),
+    });
   });
 
   it("reads configured function paths and rejects malformed ones", async () => {
+    await mkdir(join(cwd, "agent"));
+    await writeFile(
+      join(cwd, "agent/pit.json"),
+      JSON.stringify({ paths: { project: "../global-project", user: "../global-user" } }),
+    );
+    for (const trusted of [true, false]) {
+      expect(await loadPitProjectConfig(ctx(trusted))).toEqual({
+        error: `Ignored paths in ${join(cwd, "agent/pit.json")}: function paths are project-only`,
+      });
+    }
+    await rm(join(cwd, "agent/pit.json"));
     await mkdir(join(cwd, ".pi"), { recursive: true });
     await writeFile(
       join(cwd, ".pi/pit.json"),
@@ -156,7 +173,8 @@ describe("project function storage", () => {
     ] as const) {
       await writeFile(join(cwd, ".pi/pit.json"), JSON.stringify({ paths }));
       expect(await loadPitProjectConfig(ctx())).toEqual({
-        error: `Invalid .pi/pit.json: ${message}`,
+        allowedTools: [],
+        error: `Invalid ${join(cwd, ".pi/pit.json")}: ${message}`,
       });
     }
   });

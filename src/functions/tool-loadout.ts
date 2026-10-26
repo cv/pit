@@ -8,7 +8,7 @@ import { createPiToolCatalog, type PiToolCatalog, piToolPrompt } from "./pi-tool
 
 const PIT_TOOL_NAME = "typescript";
 
-/** Tool selection resolved from a trusted project's `.pi/pit.json` at session start. */
+/** Tool selection resolved at session start from the user's and a trusted project's `pit.json`. */
 export interface PitToolSelection {
   /** Tools declared to the model alongside `typescript` (`allowedTools`). */
   allowedTools: RegExp[];

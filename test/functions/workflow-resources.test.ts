@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 
 import { loadSkillsFromDir, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createFunctionState, reconcileFunctionState } from "../../src/functions/state.js";
 import { loadPitProjectConfig, loadProjectFunctions } from "../../src/functions/storage/project.js";
@@ -31,7 +33,10 @@ for (const skill of skills) {
 const state = createFunctionState();
 let config: Awaited<ReturnType<typeof loadPitProjectConfig>>;
 let errors: string[];
+let agentDir: string;
 beforeAll(async () => {
+  agentDir = await mkdtemp(join(tmpdir(), "pit-workflow-agent-"));
+  vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
   const ctx = { cwd: process.cwd(), isProjectTrusted: () => true } as ExtensionContext;
   config = await loadPitProjectConfig(ctx);
   errors = await loadProjectFunctions(ctx, state.projectCandidates, state.candidateMetadata, {
@@ -39,6 +44,10 @@ beforeAll(async () => {
   });
   errors.push(...reconcileFunctionState(state));
 }, 30_000);
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await rm(agentDir, { recursive: true, force: true });
+});
 
 describe("project agent workflow resources", () => {
   it("discovers and type-checks the trusted project's complete workflow graph", () => {
