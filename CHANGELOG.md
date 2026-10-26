@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-10-26
+
 ### Added
 
 - User-wide `allowedTools` defaults in `$PI_CODING_AGENT_DIR/pit.json` (`~/.pi/agent/pit.json`), which apply in untrusted projects too. A trusted project's `allowedTools` replaces them; omit the key to inherit or use `[]` to clear. An invalid or unreadable project file grants no exceptions rather than inheriting. `paths` stays project-only and is ignored, with a warning, in the user file. Configuration warnings name the file's full path, and an unreadable `pit.json` is reported as a warning instead of failing session start.
@@ -506,7 +508,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/cv/pit/compare/v0.31.0...v0.32.0
+[0.31.0]: https://github.com/cv/pit/compare/v0.30.1...v0.31.0
+[0.30.1]: https://github.com/cv/pit/compare/v0.30.0...v0.30.1
 [0.30.0]: https://github.com/cv/pit/compare/v0.29.1...v0.30.0
 [0.29.1]: https://github.com/cv/pit/compare/v0.29.0...v0.29.1
 [0.29.0]: https://github.com/cv/pit/compare/v0.28.1...v0.29.0
