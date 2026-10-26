@@ -160,6 +160,12 @@ describe("allowed tool exceptions", () => {
       warnings: ["agent/pit.json", ".pi/pit.json"],
       expected: [],
     },
+    {
+      name: "user paths are ignored without discarding user defaults",
+      userConfig: { allowedTools: ["goal_*"], paths: { user: 1 } },
+      warnings: ["Ignored paths in", "agent/pit.json"],
+      expected: ["goal_complete", "goal_blocked", "goal_wait"],
+    },
   ])(
     "activates and declares configured exceptions: $name",
     async ({ config, userConfig, trusted = true, warnings = [], expected }) => {
@@ -175,6 +181,41 @@ describe("allowed tool exceptions", () => {
       for (const path of warnings) {
         expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining(path), "warning");
       }
+    },
+  );
+
+  it.each<{
+    name: string;
+    unreadable: string;
+    config?: unknown;
+    userConfig?: unknown;
+    expected: string[];
+  }>([
+    {
+      name: "user file keeps a valid project list",
+      unreadable: "agent",
+      config: { allowedTools: ["goal_complete"] },
+      expected: ["goal_complete"],
+    },
+    {
+      name: "project file grants no exceptions",
+      unreadable: ".pi",
+      userConfig: { allowedTools: ["goal_*"] },
+      expected: [],
+    },
+  ])(
+    "warns about an unreadable configuration file: $name",
+    async ({ unreadable, config, userConfig, expected }) => {
+      if (config !== undefined) await configure(config);
+      if (userConfig !== undefined) await configure(userConfig, join(cwd, "agent"));
+      await mkdir(join(cwd, unreadable, "pit.json"), { recursive: true });
+      const ctx = context();
+      await sessionStart({}, ctx);
+      expect(setActiveTools).toHaveBeenLastCalledWith(["typescript", ...expected]);
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining(`Cannot read ${join(cwd, unreadable, "pit.json")}`),
+        "warning",
+      );
     },
   );
 

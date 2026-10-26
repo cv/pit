@@ -137,8 +137,8 @@ async function onSessionStart(state: LifecycleState, ctx: ExtensionContext): Pro
   state.refreshCatalogs = true;
   resetFunctionUsage(functionState);
   const projectConfig = await loadPitProjectConfig(ctx);
-  // Both directories come from the project's pit.json, so a project can choose its own
-  // collection of user functions; an untrusted project uses the defaults.
+  // Both directories come from the trusted project's pit.json, never the user's, so a project can
+  // choose its own collection of user functions; an untrusted project uses the defaults.
   const paths = resolveFunctionPaths(ctx.cwd, projectConfig.paths);
   functionState.userDirectory = paths.user;
   functionState.projectDirectory = paths.project;

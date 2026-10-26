@@ -137,7 +137,10 @@ describe("project function storage", () => {
 
     await rm(join(cwd, ".pi/pit.json"));
     await mkdir(join(cwd, ".pi/pit.json"));
-    await expect(loadPitProjectConfig(ctx())).rejects.toThrow();
+    expect(await loadPitProjectConfig(ctx())).toEqual({
+      allowedTools: [],
+      error: expect.stringContaining(`Cannot read ${join(cwd, ".pi/pit.json")}`),
+    });
   });
 
   it("reads configured function paths and rejects malformed ones", async () => {
@@ -146,8 +149,12 @@ describe("project function storage", () => {
       join(cwd, "agent/pit.json"),
       JSON.stringify({ paths: { project: "../global-project", user: "../global-user" } }),
     );
-    expect((await loadPitProjectConfig(ctx())).paths).toBeUndefined();
-    expect((await loadPitProjectConfig(ctx(false))).paths).toBeUndefined();
+    for (const trusted of [true, false]) {
+      expect(await loadPitProjectConfig(ctx(trusted))).toEqual({
+        error: `Ignored paths in ${join(cwd, "agent/pit.json")}: function paths are project-only`,
+      });
+    }
+    await rm(join(cwd, "agent/pit.json"));
     await mkdir(join(cwd, ".pi"), { recursive: true });
     await writeFile(
       join(cwd, ".pi/pit.json"),

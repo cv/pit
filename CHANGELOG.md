@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- User-wide `allowedTools` defaults in `$PI_CODING_AGENT_DIR/pit.json` (`~/.pi/agent/pit.json`), which apply in untrusted projects too. A trusted project's `allowedTools` replaces them; omit the key to inherit or use `[]` to clear. An invalid or unreadable project file grants no exceptions rather than inheriting. `paths` stays project-only and is ignored, with a warning, in the user file. Configuration warnings name the file's full path, and an unreadable `pit.json` is reported as a warning instead of failing session start.
+
 ### Changed
 
 - `npm run package:check` requires every package Pit shares with the pinned Pi to be the exact version Pi requires in `package-lock.json`: today `@earendil-works/pi-codemode` 1.4.0, `pi-tui` 1.4.0, and `typebox` 1.3.27. Dependabot no longer proposes `typebox` updates, which move only with a Pi upgrade; [#335](https://github.com/cv/pit/pull/335) had proposed `typebox` 1.4.2 for development while Pi 1.4.0 loads 1.3.27. Development uses `oxlint` 1.89.0.

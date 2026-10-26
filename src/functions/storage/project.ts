@@ -24,7 +24,11 @@ import {
 import { type ConfiguredFunctionPaths, defaultProjectFunctionDirectory } from "./paths.js";
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
-/** Project settings with user-wide allowedTools defaults. Invalid project files grant no exceptions. */
+/**
+ * Settings from Pi's user `pit.json` and a trusted project's `.pi/pit.json`. A project's
+ * allowedTools replaces the user's; an invalid or unreadable project file grants no exceptions.
+ * `paths` comes only from the project file.
+ */
 interface PitProjectConfig {
   allowedTools?: string[];
   /** Directories for project and user functions, as written; see resolveFunctionPaths. */
@@ -51,7 +55,12 @@ function configuredPaths(value: unknown): ConfiguredFunctionPaths | undefined {
   return paths;
 }
 
-async function readPitConfig(file: string): Promise<PitProjectConfig> {
+/**
+ * Reads one `pit.json`. A missing file yields no settings; an unreadable or invalid file yields only
+ * an error. User files support only allowedTools: their `paths` is ignored with a warning, without
+ * discarding their allowedTools.
+ */
+async function readPitConfig(file: string, scope: "user" | "project"): Promise<PitProjectConfig> {
   let source: string;
   try {
     source = await readFile(file, "utf8");
@@ -59,7 +68,7 @@ async function readPitConfig(file: string): Promise<PitProjectConfig> {
     if (isMissingFileError(error)) {
       return {};
     }
-    throw error;
+    return { error: `Cannot read ${file}: ${(error as Error).message}` };
   }
   try {
     const config = JSON.parse(source) as unknown;
@@ -74,11 +83,14 @@ async function readPitConfig(file: string): Promise<PitProjectConfig> {
     ) {
       throw new Error("allowedTools must be an array of non-empty strings");
     }
+    const selection = allowedTools === undefined ? {} : { allowedTools };
+    if (scope === "user") {
+      return config.paths === undefined
+        ? selection
+        : { ...selection, error: `Ignored paths in ${file}: function paths are project-only` };
+    }
     const paths = configuredPaths(config.paths);
-    return {
-      ...(allowedTools === undefined ? {} : { allowedTools }),
-      ...(paths === undefined ? {} : { paths }),
-    };
+    return { ...selection, ...(paths === undefined ? {} : { paths }) };
   } catch (error) {
     return { error: `Invalid ${file}: ${(error as Error).message}` };
   }
@@ -86,9 +98,9 @@ async function readPitConfig(file: string): Promise<PitProjectConfig> {
 
 export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
   const [user, project] = await Promise.all([
-    readPitConfig(join(getAgentDir(), "pit.json")),
+    readPitConfig(join(getAgentDir(), "pit.json"), "user"),
     ctx.isProjectTrusted()
-      ? readPitConfig(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"))
+      ? readPitConfig(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "project")
       : Promise.resolve<PitProjectConfig>({}),
   ]);
   const allowedTools = project.error ? [] : (project.allowedTools ?? user.allowedTools);

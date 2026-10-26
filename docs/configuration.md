@@ -40,7 +40,7 @@ Pit declares only `typescript` to the model by default. Other active tools, incl
 
 The `allowedTools` list names explicit exceptions that the model sees directly. Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. An empty list grants no exceptions. To use Pi's `codemode` alongside Pit, for example, add `"codemode"`.
 
-Set user-wide `allowedTools` defaults in `$PI_CODING_AGENT_DIR/pit.json` (`~/.pi/agent/pit.json`), including in untrusted projects. A trusted project's list replaces these defaults: omit the key to inherit, or use `[]` to clear them. Invalid files warn; an invalid project file grants no exceptions rather than inheriting. Function `paths` remain project-only.
+Set user-wide `allowedTools` defaults in `$PI_CODING_AGENT_DIR/pit.json` (`~/.pi/agent/pit.json`); they apply in untrusted projects too. A trusted project's list replaces these defaults: omit the key to inherit them, or use `[]` to clear them. An invalid or unreadable file is reported as a warning; a broken project file grants no exceptions rather than inheriting the defaults. Function `paths` are project-only: Pit ignores them in the user file and warns.
 
 Pit also leaves these tools declared, because they reflect explicit choices:
 
