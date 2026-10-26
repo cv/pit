@@ -21,9 +21,9 @@ import { toolLoadout, type LoadoutTool } from "../support/tool-loadout.js";
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
 
-async function configure(config: unknown): Promise<void> {
-  await mkdir(join(cwd, ".pi"), { recursive: true });
-  await writeFile(join(cwd, ".pi/pit.json"), JSON.stringify(config));
+async function configure(config: unknown, directory = join(cwd, ".pi")): Promise<void> {
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, "pit.json"), JSON.stringify(config));
 }
 
 const available = [
@@ -64,7 +64,14 @@ describe("allowed tool exceptions", () => {
     expect(tool.exposure).toBe("model-only");
   });
 
-  it.each<{ name: string; config: unknown; expected: string[] }>([
+  it.each<{
+    name: string;
+    config?: unknown;
+    userConfig?: unknown;
+    trusted?: boolean;
+    warnings?: string[];
+    expected: string[];
+  }>([
     { name: "omitted", config: {}, expected: [] },
     { name: "empty", config: { allowedTools: [] }, expected: [] },
     { name: "exact", config: { allowedTools: ["goal_complete"] }, expected: ["goal_complete"] },
@@ -96,11 +103,80 @@ describe("allowed tool exceptions", () => {
       config: { allowedTools: ["*"] },
       expected: available.slice(1),
     },
-  ])("activates only configured exceptions: $name", async ({ config, expected }) => {
-    await configure(config);
-    await sessionStart({}, context());
-    expect(setActiveTools).toHaveBeenLastCalledWith(["typescript", ...expected]);
-  });
+    {
+      name: "user defaults without a project file",
+      userConfig: { allowedTools: ["goal_*"] },
+      expected: ["goal_complete", "goal_blocked", "goal_wait"],
+    },
+    {
+      name: "omitted project key inherits user defaults",
+      config: {},
+      userConfig: { allowedTools: ["goal_*"] },
+      expected: ["goal_complete", "goal_blocked", "goal_wait"],
+    },
+    {
+      name: "project list replaces rather than merges user defaults",
+      config: { allowedTools: ["goal_complete"] },
+      userConfig: { allowedTools: ["subagent"] },
+      expected: ["goal_complete"],
+    },
+    {
+      name: "empty project list clears user defaults",
+      config: { allowedTools: [] },
+      userConfig: { allowedTools: ["goal_*"] },
+      expected: [],
+    },
+    {
+      name: "user defaults apply in untrusted projects",
+      config: { allowedTools: ["*"] },
+      userConfig: { allowedTools: ["subagent"] },
+      trusted: false,
+      expected: ["subagent"],
+    },
+    {
+      name: "invalid project does not fall back to user defaults",
+      config: null,
+      userConfig: { allowedTools: ["goal_*"] },
+      warnings: [".pi/pit.json"],
+      expected: [],
+    },
+    {
+      name: "invalid user config grants no defaults",
+      userConfig: { allowedTools: "goal_*" },
+      warnings: ["agent/pit.json"],
+      expected: [],
+    },
+    {
+      name: "valid project list survives invalid user config",
+      config: { allowedTools: ["goal_complete"] },
+      userConfig: [],
+      warnings: ["agent/pit.json"],
+      expected: ["goal_complete"],
+    },
+    {
+      name: "both invalid files are identified",
+      config: { allowedTools: false },
+      userConfig: { allowedTools: null },
+      warnings: ["agent/pit.json", ".pi/pit.json"],
+      expected: [],
+    },
+  ])(
+    "activates and declares configured exceptions: $name",
+    async ({ config, userConfig, trusted = true, warnings = [], expected }) => {
+      if (config !== undefined) await configure(config);
+      if (userConfig !== undefined) await configure(userConfig, join(cwd, "agent"));
+      const ctx = context({ isProjectTrusted: () => trusted });
+      await sessionStart({}, ctx);
+      expect(setActiveTools).toHaveBeenLastCalledWith(["typescript", ...expected]);
+      expect(
+        tool.prepareLoadout?.(loadout(available.map((name) => ({ name, exposure: "direct" }))))
+          ?.hiddenDeclarations,
+      ).toEqual(available.filter((name) => name !== "typescript" && !expected.includes(name)));
+      for (const path of warnings) {
+        expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining(path), "warning");
+      }
+    },
+  );
 
   it.each<{ name: string; allowedTools: unknown }>([
     { name: "string", allowedTools: "goal_*" },
@@ -112,6 +188,7 @@ describe("allowed tool exceptions", () => {
     { name: "blank pattern", allowedTools: [" "] },
   ])("fails closed for invalid configuration: $name", async ({ allowedTools }) => {
     await configure({ allowedTools });
+    await configure({ allowedTools: ["goal_*"] }, join(cwd, "agent"));
     const ctx = context();
     await sessionStart({}, ctx);
     expect(setActiveTools).toHaveBeenLastCalledWith(["typescript"]);
@@ -165,12 +242,12 @@ describe("allowed tool exceptions", () => {
     },
   );
 
-  it("re-reads exceptions at session startup and hides revoked exceptions", async () => {
-    await configure({ allowedTools: ["goal_*"] });
+  it("re-reads user exceptions at session startup and hides revoked exceptions", async () => {
+    await configure({ allowedTools: ["goal_*"] }, join(cwd, "agent"));
     await sessionStart({}, context());
     const goal = loadout([{ name: "goal_complete", exposure: "direct" }]);
     expect(tool.prepareLoadout?.(goal)).toEqual({ hiddenDeclarations: [] });
-    await configure({ allowedTools: [] });
+    await configure({ allowedTools: [] }, join(cwd, "agent"));
     await sessionStart({}, context());
     expect(tool.prepareLoadout?.(goal)).toEqual({ hiddenDeclarations: ["goal_complete"] });
   });

@@ -663,7 +663,7 @@ async function brokenProject({}) { throw new Error("project failure"); }`),
     const ctx = context();
     await sessionStart({}, ctx);
     expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Invalid .pi/pit.json"),
+      expect.stringContaining(`Invalid ${join(cwd, ".pi/pit.json")}`),
       "warning",
     );
     await expect(value("async ({ stillLoaded }) => stillLoaded()", ctx)).resolves.toBe(1);

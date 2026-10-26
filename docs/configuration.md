@@ -38,7 +38,9 @@ Run `/reload` after changing configuration.
 
 Pit declares only `typescript` to the model by default. Other active tools, including Pi's built-in tools, extension tools, and the `codemode` and `tool_search` tools, stay active but are hidden from the model. Extensions that check for their tools in the active set keep working, and hidden tools remain callable by other tools.
 
-The `allowedTools` list names explicit exceptions that the model sees directly. Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. Empty or invalid configuration grants no exceptions. To use Pi's `codemode` alongside Pit, for example, add `"codemode"`.
+The `allowedTools` list names explicit exceptions that the model sees directly. Names are case-sensitive; `*` matches any sequence. Pi's tool restrictions still apply. An empty list grants no exceptions. To use Pi's `codemode` alongside Pit, for example, add `"codemode"`.
+
+Set user-wide `allowedTools` defaults in `$PI_CODING_AGENT_DIR/pit.json` (`~/.pi/agent/pit.json`), including in untrusted projects. A trusted project's list replaces these defaults: omit the key to inherit, or use `[]` to clear them. Invalid files warn; an invalid project file grants no exceptions rather than inheriting. Function `paths` remain project-only.
 
 Pit also leaves these tools declared, because they reflect explicit choices:
 

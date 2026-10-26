@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+  CONFIG_DIR_NAME,
+  getAgentDir,
+  type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 import { isRecord } from "../../shared/records.js";
 import { type FunctionRegistry, validateSavedFunctionSource } from "../core.js";
@@ -20,7 +24,7 @@ import {
 import { type ConfiguredFunctionPaths, defaultProjectFunctionDirectory } from "./paths.js";
 import { validatePersistentFunction, filterPersistentIdentifiers } from "./validation.js";
 
-/** Settings from a trusted project's `.pi/pit.json`. Absent or invalid files yield the defaults. */
+/** Project settings with user-wide allowedTools defaults. Invalid project files grant no exceptions. */
 interface PitProjectConfig {
   allowedTools?: string[];
   /** Directories for project and user functions, as written; see resolveFunctionPaths. */
@@ -47,13 +51,10 @@ function configuredPaths(value: unknown): ConfiguredFunctionPaths | undefined {
   return paths;
 }
 
-export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
-  if (!ctx.isProjectTrusted()) {
-    return {};
-  }
+async function readPitConfig(file: string): Promise<PitProjectConfig> {
   let source: string;
   try {
-    source = await readFile(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "utf8");
+    source = await readFile(file, "utf8");
   } catch (error) {
     if (isMissingFileError(error)) {
       return {};
@@ -79,8 +80,24 @@ export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitPr
       ...(paths === undefined ? {} : { paths }),
     };
   } catch (error) {
-    return { error: `Invalid ${CONFIG_DIR_NAME}/pit.json: ${(error as Error).message}` };
+    return { error: `Invalid ${file}: ${(error as Error).message}` };
   }
+}
+
+export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
+  const [user, project] = await Promise.all([
+    readPitConfig(join(getAgentDir(), "pit.json")),
+    ctx.isProjectTrusted()
+      ? readPitConfig(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"))
+      : Promise.resolve<PitProjectConfig>({}),
+  ]);
+  const allowedTools = project.error ? [] : (project.allowedTools ?? user.allowedTools);
+  const error = [user.error, project.error].filter(Boolean).join("; ");
+  return {
+    ...project,
+    ...(allowedTools === undefined ? {} : { allowedTools }),
+    ...(error ? { error } : {}),
+  };
 }
 
 export async function saveProjectFunction(
