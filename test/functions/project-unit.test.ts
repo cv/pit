@@ -139,7 +139,7 @@ describe("project function storage", () => {
     await mkdir(join(cwd, ".pi/pit.json"));
     expect(await loadPitProjectConfig(ctx())).toEqual({
       allowedTools: [],
-      error: expect.stringContaining(`Cannot read ${join(cwd, ".pi/pit.json")}`),
+      error: `Cannot read ${join(cwd, ".pi/pit.json")}: EISDIR`,
     });
   });
 

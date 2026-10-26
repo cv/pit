@@ -68,7 +68,8 @@ async function readPitConfig(file: string, scope: "user" | "project"): Promise<P
     if (isMissingFileError(error)) {
       return {};
     }
-    return { error: `Cannot read ${file}: ${(error as Error).message}` };
+    // readFile rejects with a Node system error, whose message repeats the path: give its code.
+    return { error: `Cannot read ${file}: ${(error as { code?: string }).code}` };
   }
   try {
     const config = JSON.parse(source) as unknown;
