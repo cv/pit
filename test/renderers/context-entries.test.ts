@@ -112,7 +112,8 @@ describe("model note renderer", () => {
   const body = Array.from({ length: 10 }, (_, index) => `step ${index + 1}`).join("\n");
 
   it("shows the key and the note without Pit's frame, with an omission count when collapsed", () => {
-    const collapsed = rows(renderNote(note(body), { expanded: false }, theme));
+    const keyText = () => "ctrl+o";
+    const collapsed = rows(renderNote(note(body), { expanded: false, keyText }, theme));
     expect(collapsed.filter(Boolean)).toEqual([
       " Model note · progress · ~28 tokens",
       " step 1",
@@ -121,8 +122,10 @@ describe("model note renderer", () => {
       " step 4",
       " step 5",
       " step 6",
-      " … 4 more lines",
+      " … 4 more lines (ctrl+o to expand)",
     ]);
+    const unbound = rows(renderNote(note(body), { expanded: false, keyText: () => "" }, theme));
+    expect(unbound).toContain(" … 4 more lines");
     const expanded = rows(renderNote(note(body), { expanded: true }, theme)).filter(Boolean);
     expect(expanded.slice(1)).toEqual(body.split("\n").map((line) => ` ${line}`));
   });

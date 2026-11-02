@@ -168,6 +168,26 @@ describe("renderer inspection boundaries", () => {
     expect(output).not.toContain("shell exit");
   });
 
+  it("re-highlights a row's unchanged source after the user switches themes", () => {
+    // Like Pi's theme, one object whose colors change when the user switches themes.
+    let active = "dark";
+    const live = {
+      fg: (color: string, text: string) => `<${active}:${color}>${text}`,
+      bold: theme.bold,
+    };
+    const args = { code: 'const answer = "forty-two"; // comment' };
+    const row = { expanded: true, argsComplete: false };
+    const darkRow = renderTypeScriptInputs(args, live, row);
+    initTheme("light");
+    active = "light";
+    const lightRow = renderTypeScriptInputs(args, live, row);
+
+    expect(lightRow).not.toBe(darkRow);
+    expect(lightRow).toBe(
+      renderTypeScriptInputs(args, live, { expanded: true, argsComplete: false }),
+    );
+  });
+
   it("preserves content with an empty syntax hint", () => {
     const output = renderStructuredData(
       { language: "  ", content: "first\nlast" },

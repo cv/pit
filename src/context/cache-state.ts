@@ -19,7 +19,7 @@ export interface CacheState {
 interface CacheModel {
   provider: string;
   id: string;
-  promptCache?: { short?: number; long?: number };
+  promptCache?: { short?: number | undefined; long?: number | undefined };
 }
 
 /** The lifetime Pi's cache warmer uses: the `long` tier with `PI_CACHE_RETENTION=long`, else `short`. */

@@ -63,6 +63,44 @@ function formattedDisplaySource(code: string, context: WithRendererState<ToolCal
   return formatting.formatted ?? code;
 }
 
+const SOURCE_HIGHLIGHT_STATE = Symbol("pit-source-highlight");
+
+interface SourceHighlightState {
+  source: string;
+  palette: string;
+  lines: string[];
+}
+
+const SYNTAX_COLORS = [
+  "syntaxComment",
+  "syntaxKeyword",
+  "syntaxFunction",
+  "syntaxVariable",
+  "syntaxString",
+  "syntaxNumber",
+  "syntaxType",
+  "syntaxOperator",
+  "syntaxPunctuation",
+];
+
+/**
+ * Highlighted source, reused while the source and the theme's syntax colors stay the same: spinner
+ * ticks and progress updates redraw a running row without changing its source. Pi's theme object
+ * keeps its identity when the user switches themes, so the colors themselves are the cache key.
+ */
+function highlightedSource(
+  source: string,
+  theme: RenderTheme,
+  context: WithRendererState<ToolCallContext>,
+): string[] {
+  const palette = SYNTAX_COLORS.map((color) => theme.fg(color, "")).join("\0");
+  const last = context.state[SOURCE_HIGHLIGHT_STATE] as SourceHighlightState | undefined;
+  if (last?.source === source && last.palette === palette) return last.lines;
+  const lines = highlightCode(source, "typescript");
+  context.state[SOURCE_HIGHLIGHT_STATE] = { source, palette, lines } satisfies SourceHighlightState;
+  return lines;
+}
+
 function normalizedLabel(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return;
@@ -111,7 +149,7 @@ export function renderTypeScriptInputs(
   if (code)
     lines.push(
       theme.bold(theme.fg("toolTitle", "Source")),
-      ...highlightCode(sanitizeTerminalText(code), "typescript"),
+      ...highlightedSource(sanitizeTerminalText(code), theme, context),
     );
   else
     lines.push(theme.fg("dim", context.argsComplete ? "(empty source)" : "(waiting for source…)"));

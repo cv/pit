@@ -218,7 +218,12 @@ describe("models namespace", () => {
       input: ["text", "image"],
       output: ["image", "text"],
     };
-    const usage = { input: 12, output: 3, totalTokens: 15, cost: { total: 0.002 } };
+    const usage = {
+      input: 12,
+      output: 3,
+      totalTokens: 15,
+      cost: { total: 0.002, totalFromProvider: true },
+    };
 
     function typedContext(overrides: Record<string, unknown> = {}) {
       const base = context();
@@ -311,7 +316,7 @@ describe("models namespace", () => {
       expect(result).toEqual({
         provider: "openai",
         model: "luna",
-        usage: { input: 12, output: 3, totalTokens: 15, cost: 0.002 },
+        usage: { input: 12, output: 3, totalTokens: 15, cost: 0.002, costBilled: true },
         stopReason: "stop",
         answers: { broken: { type: "bool", probability: 0.9 } },
       });

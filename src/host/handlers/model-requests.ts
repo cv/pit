@@ -65,6 +65,7 @@ function usage(result: ClassifierResult | ImagesResult) {
           output: result.usage.output,
           totalTokens: result.usage.totalTokens,
           cost: result.usage.cost.total,
+          costBilled: result.usage.cost.totalFromProvider === true,
         },
       }
     : {};
