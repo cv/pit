@@ -45,7 +45,7 @@ function noteBody(content: string): string {
 
 export function renderNote(
   message: CustomMessage,
-  options: { expanded: boolean },
+  options: { expanded: boolean; keyText?: (keybinding: "app.tools.expand") => string },
   theme: Theme,
 ): Component {
   const text = messageText(message);
@@ -72,7 +72,10 @@ export function renderNote(
   box.addChild(new Text(label, 0, 0));
   box.addChild(new Text(theme.fg("customMessageText", shown.join("\n")), 0, 1));
   if (omitted > 0) {
-    box.addChild(new Text(theme.fg("dim", `… ${plural(omitted, "more line")}`), 0, 0));
+    // Pi supplies the user's configured key; it is empty when the action is unbound.
+    const expandKey = options.keyText?.("app.tools.expand");
+    const hint = expandKey ? ` (${expandKey} to expand)` : "";
+    box.addChild(new Text(theme.fg("dim", `… ${plural(omitted, "more line")}${hint}`), 0, 0));
   }
   return box;
 }

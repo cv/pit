@@ -43,6 +43,8 @@ interface ToolResultContext {
   invalidate?: () => void;
   /** Pi's recorded execution time of a final result, also after a session reloads. */
   durationMs?: number | undefined;
+  /** The user's configured key for a Pi action, empty when it is unbound. */
+  keyText?: (keybinding: "app.tools.expand") => string;
 }
 
 type StatefulResultContext = WithRendererState<ToolResultContext>;
@@ -200,13 +202,14 @@ function resultOutcome(
 function collapsedImages(
   images: NonNullable<TypeScriptDetails["imageAttachments"]>,
   theme: RenderTheme,
+  expandKey: string,
 ): string {
   let text = "";
   for (const { file, mimeType } of images.slice(0, COLLAPSED_IMAGES))
     text += `\nImage: ${file} (${mimeType})`;
   const hidden = images.length - COLLAPSED_IMAGES;
   if (hidden > 0)
-    text += `\n${theme.fg("dim", `… ${hidden} more image${hidden === 1 ? "" : "s"}; expand to list`)}`;
+    text += `\n${theme.fg("dim", `… ${hidden} more image${hidden === 1 ? "" : "s"}; ${expandKey || "expand"} to list`)}`;
   return text;
 }
 
@@ -239,7 +242,8 @@ function renderCompletedToolResult(input: {
     text += renderInputSection(input.context, theme);
     text += renderExecutionDetails(details, theme, rendering.lines);
   } else {
-    text += collapsedImages(details?.imageAttachments ?? [], theme);
+    const expandKey = input.context.keyText?.("app.tools.expand") ?? "";
+    text += collapsedImages(details?.imageAttachments ?? [], theme, expandKey);
   }
   const displayedHangingIndents = offsetHangingIndents(rendering.hangingIndents, {
     lines: resultContentStart,

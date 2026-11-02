@@ -7,7 +7,7 @@ Pit is distributed only through GitHub: `main` for the latest changes and tags f
 1. Confirm the release tracking issue is current.
 2. Confirm the intended Pi version has been tested and documented without overstating compatibility.
 3. Review dependency updates and run `npm audit`.
-4. Update `CHANGELOG.md`, `package.json`, and `package-lock.json` to the release version, and point the README's pinned install example at the new tag.
+4. Update `CHANGELOG.md`, `package.json`, and `package-lock.json` to the release version, and point the README's pinned install example at the new tag. After users update, Pi shows them the changelog entries under each `## [X.Y.Z]` heading newer than the version they last saw, so write entries for Pit's users and keep the heading format; `npm run package:check` requires a heading for the `package.json` version.
 5. Keep the README's primary install command unpinned (`pi install git:github.com/cv/pit`); `npm run package:check` enforces both.
 6. Run a full-history secret scan before the first public release or after adding substantial generated/session artifacts.
 7. Review the dry-run package file list and size.

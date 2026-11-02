@@ -8,7 +8,13 @@ import {
 
 describe("process runner", () => {
   it("runs bounded non-streaming commands without optional progress or signal", async () => {
-    const exec = vi.fn(async () => ({ stdout: "ok\n", stderr: "", code: 0 }));
+    const exec = vi.fn(async () => ({
+      stdout: "ok\n",
+      stderr: "",
+      code: 0,
+      killed: false,
+      truncated: false,
+    }));
     const result = await executeHostProcess({
       pi: { exec } as any,
       defaultCwd: process.cwd(),
@@ -27,7 +33,7 @@ describe("process runner", () => {
 
   it("raises a bounded tail of long diagnostics with a counted omission", async () => {
     const stderr = Array.from({ length: 2_000 }, (_, index) => `error ${index}`).join("\n");
-    const exec = async () => ({ stdout: "", stderr, code: 2 });
+    const exec = async () => ({ stdout: "", stderr, code: 2, killed: false, truncated: false });
     const error = await executeHostProcess({
       pi: { exec } as any,
       defaultCwd: process.cwd(),
@@ -44,7 +50,13 @@ describe("process runner", () => {
   });
 
   it("runs object requests through configured dependencies", async () => {
-    const exec = async () => ({ stdout: "ok", stderr: "", code: 0 });
+    const exec = async () => ({
+      stdout: "ok",
+      stderr: "",
+      code: 0,
+      killed: false,
+      truncated: false,
+    });
     const runner = createProcessRunner({ exec } as any, process.cwd());
     await expect(
       runner.run({ program: "git", args: ["status"], options: {} }),
@@ -66,13 +78,25 @@ describe("process runner", () => {
     expect(progress.at(-1)).toEqual({ phase: "end", code: 124 });
   });
 
-  it.each<{ name: string; aborted: boolean; stderr: string }>([
-    { name: "deadline", aborted: false, stderr: "Command timed out after 50ms" },
-    { name: "cancellation", aborted: true, stderr: "Command aborted" },
+  it.each<{ name: string; aborted: boolean; truncated: boolean; stderr: string }>([
+    { name: "deadline", aborted: false, truncated: false, stderr: "Command timed out after 50ms" },
+    { name: "cancellation", aborted: true, truncated: false, stderr: "Command aborted" },
+    {
+      name: "output limit",
+      aborted: false,
+      truncated: true,
+      stderr: "Command stopped: output exceeded Pi's capture limit",
+    },
   ])("explains a silent non-streaming command killed by its $name", async (row) => {
     const controller = new AbortController();
     if (row.aborted) controller.abort();
-    const exec = async () => ({ stdout: "", stderr: "", code: 124, killed: true });
+    const exec = async () => ({
+      stdout: "",
+      stderr: "",
+      code: 124,
+      killed: true,
+      truncated: row.truncated,
+    });
     const result = await executeHostProcess({
       pi: { exec } as any,
       defaultCwd: process.cwd(),
@@ -82,7 +106,7 @@ describe("process runner", () => {
       signal: controller.signal,
     });
 
-    expect(result).toMatchObject({ code: 124, stderr: row.stderr });
+    expect(result).toMatchObject({ code: 124, stderr: row.stderr, truncated: row.truncated });
   });
 
   it("raises streaming deadlines as named timeouts", async () => {
@@ -101,14 +125,33 @@ describe("process runner", () => {
     });
   });
 
-  it.each<{ name: string; killed: boolean; aborted: boolean; errorName: string }>([
+  it.each<{
+    name: string;
+    killed: boolean;
+    truncated?: boolean;
+    aborted: boolean;
+    errorName: string;
+  }>([
     { name: "a killed deadline", killed: true, aborted: false, errorName: "TimeoutError" },
     { name: "a killed cancellation", killed: true, aborted: true, errorName: "AbortError" },
     { name: "a program's own exit code 124", killed: false, aborted: false, errorName: "Error" },
+    {
+      name: "output over Pi's capture limit",
+      killed: true,
+      truncated: true,
+      aborted: false,
+      errorName: "Error",
+    },
   ])("names raised failures for $name by termination, not exit code", async (row) => {
     const controller = new AbortController();
     if (row.aborted) controller.abort();
-    const exec = async () => ({ stdout: "", stderr: "stopped", code: 124, killed: row.killed });
+    const exec = async () => ({
+      stdout: "",
+      stderr: "stopped",
+      code: 124,
+      killed: row.killed,
+      truncated: row.truncated === true,
+    });
     await expect(
       executeHostProcess({
         pi: { exec } as any,

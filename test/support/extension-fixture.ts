@@ -7,7 +7,7 @@ import {
   type ToolLoadout,
   type ToolLoadoutChanges,
 } from "@earendil-works/pi-coding-agent";
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
 
 import pit from "../../src/index.js";
 
@@ -58,7 +58,10 @@ export async function emit(event: string, payload: unknown, ctx: unknown): Promi
   return results;
 }
 export let branchEntries: any[];
-export let execMock: ReturnType<typeof vi.fn>;
+/** `pi.exec`; results give only the fields a test needs. */
+export let execMock: Mock<
+  (...args: any[]) => Promise<{ stdout: string; stderr: string; code: number }>
+>;
 export let setActiveTools: ReturnType<typeof vi.fn>;
 export let getAllTools: ReturnType<typeof vi.fn>;
 export let getActiveTools: ReturnType<typeof vi.fn>;
@@ -76,7 +79,7 @@ interface PromptEvent {
   systemPromptOptions?: Record<string, unknown>;
 }
 
-/** What a before_agent_start handler contributes, observed the way Pi 0.86+ applies it. */
+/** What a before_agent_start handler contributes, observed the way Pi applies it. */
 interface PromptContribution {
   /** The handler's return value. A `systemPrompt` in it forces an opaque replacement prompt. */
   returned: unknown;
@@ -91,19 +94,19 @@ function runBeforeAgentStart(
   event: PromptEvent,
   ctx: unknown,
 ): PromptContribution {
-  // Pi hands handlers normalized, mutable options. Pass `sections: undefined` to model Pi < 0.86.
+  // Pi hands handlers normalized, mutable options.
   const options: Record<string, unknown> = {
     selectedTools: [],
     skills: [],
     sections: {},
     ...event.systemPromptOptions,
   };
-  const initial = { ...(options["sections"] as Record<string, string> | undefined) };
+  const initial = { ...(options["sections"] as Record<string, string>) };
   const returned = callback(
     { type: "before_agent_start", prompt: "", ...event, systemPromptOptions: options },
     ctx,
   );
-  const current = (options["sections"] as Record<string, string> | undefined) ?? {};
+  const current = options["sections"] as Record<string, string>;
   const sections = Object.fromEntries(
     Object.entries(current).filter(([name, content]) => initial[name] !== content),
   );
@@ -228,7 +231,7 @@ export async function setupHarness(): Promise<void> {
   renderers.clear();
   sentUserMessages = [];
   sentMessages = [];
-  execMock = vi.fn(async () => ({ stdout: "shell out\n", stderr: "", code: 0 }));
+  execMock = vi.fn(async (..._args: any[]) => ({ stdout: "shell out\n", stderr: "", code: 0 }));
   setActiveTools = vi.fn();
   getAllTools = vi.fn(() => []);
   getActiveTools = vi.fn((): string[] => []);
@@ -286,7 +289,12 @@ export async function setupHarness(): Promise<void> {
     setActiveTools,
     getAllTools,
     getActiveTools,
-    exec: execMock,
+    // Mocks give only the fields a test needs; Pi's result always says whether it stopped the command.
+    exec: async (...args: any[]) => ({
+      killed: false,
+      truncated: false,
+      ...(await execMock(...args)),
+    }),
   };
   pit(pi as any);
 }

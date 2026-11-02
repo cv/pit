@@ -107,6 +107,18 @@ for (const [dependency, piRequirement] of Object.entries(lockedPiAgent.dependenc
   }
 }
 
+// After an update, Pi shows the CHANGELOG.md entries newer than the version a user last saw,
+// matching headings such as `## [1.2.0]` against the version in package.json.
+const changelog = await readFile(resolve(root, "CHANGELOG.md"), "utf8");
+const versionHeading = `## [${packageJson.version}]`;
+if (
+  !changelog
+    .split("\n")
+    .some((line) => line.startsWith(`${versionHeading} `) || line === versionHeading)
+) {
+  fail(`CHANGELOG.md must have a ${versionHeading} heading for the package.json version`);
+}
+
 if (!packageJson.keywords?.includes("pi-package")) {
   fail("keywords must include 'pi-package'");
 }

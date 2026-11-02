@@ -198,12 +198,12 @@ describe("retained process output", () => {
     expect(rawRows.every((line) => visibleWidth(line) <= 32)).toBe(true);
   });
 
-  it.each<{ count: number; hidden: string }>([
-    { count: 4, hidden: "… 1 more image; expand to list" },
-    { count: 5, hidden: "… 2 more images; expand to list" },
+  it.each<{ count: number; key: string; hidden: string }>([
+    { count: 4, key: "", hidden: "… 1 more image; expand to list" },
+    { count: 5, key: "ctrl+o", hidden: "… 2 more images; ctrl+o to list" },
   ])(
     "names the first of $count images when collapsed and lists all when expanded",
-    ({ count, hidden }) => {
+    ({ count, key, hidden }) => {
       const files = Array.from({ length: count }, (_, index) => `shot-${index + 1}.png`);
       const result = {
         content: [{ type: "text", text: "undefined" }],
@@ -219,7 +219,9 @@ describe("retained process output", () => {
         },
       };
       const render = (expanded: boolean) =>
-        renderTypeScriptToolResult(result, { expanded, isPartial: false }, theme, {})
+        renderTypeScriptToolResult(result, { expanded, isPartial: false }, theme, {
+          keyText: () => key,
+        })
           .render(60)
           .map(stripTerminalSequences)
           .join("\n");

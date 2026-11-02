@@ -80,11 +80,6 @@ describe("Pit skill prompt", () => {
       systemPrompt: "earlier replacement",
       options: { forceSystemPrompt: "earlier replacement", selectedTools: ["typescript", "read"] },
     },
-    {
-      name: "Pi before 0.86 has no prompt sections",
-      systemPrompt: "base prompt",
-      options: { sections: undefined },
-    },
   ])("extends the replacement prompt when Pi would ignore sections: $name", (row) => {
     const skills = [{ name: "delivery", description: "Deliver", filePath: "/skills/delivery.md" }];
     const result = beforeAgentStart({

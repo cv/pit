@@ -201,8 +201,11 @@ type PitClassifierAnswer =
 type PitModelOutcome = {
   provider: string;
   model: string;
-  /** Tokens and cost in USD, when the service reports them. */
-  usage?: { input: number; output: number; totalTokens: number; cost: number };
+  /**
+   * Tokens and cost in USD, when the service reports them. `costBilled` is true when `cost` is
+   * what the provider billed, false when Pi estimated it from catalog prices.
+   */
+  usage?: { input: number; output: number; totalTokens: number; cost: number; costBilled: boolean };
   stopReason: "stop" | "error" | "aborted";
   errorMessage?: string;
 };

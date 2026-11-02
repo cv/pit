@@ -36,7 +36,7 @@ export function createProcessRunner(pi: ExtensionAPI, defaultCwd: string): Proce
   };
 }
 
-type ProcessTermination = "timeout" | "abort";
+type ProcessTermination = "timeout" | "abort" | "output-limit";
 
 interface ProcessSettings {
   cwd: string;
@@ -72,18 +72,22 @@ function processSettings(options: Record<string, unknown>, defaultCwd: string): 
   };
 }
 
+/** Why the host stopped a command: Pit's streaming runner says so; `pi.exec` reports only `killed`. */
 function terminationOf(
-  result: { termination?: ProcessTermination } | { killed: boolean },
+  result: { killed: boolean; truncated: boolean; termination?: ProcessTermination },
   signal: AbortSignal | undefined,
 ): ProcessTermination | undefined {
-  if ("termination" in result) return result.termination;
-  if (!("killed" in result) || !result.killed) return undefined;
-  return signal?.aborted ? "abort" : "timeout";
+  if (result.termination) return result.termination;
+  if (!result.killed) return undefined;
+  if (signal?.aborted) return "abort";
+  // Pi also kills a command whose output exceeds its capture limit; that is not a deadline.
+  return result.truncated ? "output-limit" : "timeout";
 }
 
 function terminationMessage(termination: ProcessTermination | undefined, timeout: number): string {
   if (termination === "timeout") return `Command timed out after ${timeout}ms`;
   if (termination === "abort") return "Command aborted";
+  if (termination === "output-limit") return "Command stopped: output exceeded Pi's capture limit";
   return "";
 }
 
@@ -135,7 +139,6 @@ export async function executeHostProcess({
     stdout: stdout.text,
     stderr: stderr.text,
     code: result.code,
-    truncated:
-      stdout.truncated || stderr.truncated || ("truncated" in result && result.truncated === true),
+    truncated: stdout.truncated || stderr.truncated || result.truncated,
   };
 }

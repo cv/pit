@@ -4,6 +4,23 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-02
+
+### Added
+
+- Pi shows Pit's changelog after an update: entries newer than the version you last ran appear under "Extension Updates" on the next fresh launch. `npm run package:check` requires a `## [X.Y.Z]` heading for the `package.json` version, the heading Pi matches.
+- `models.classify` and `models.generateImages` report `usage.costBilled`: true when `usage.cost` is what the provider billed, false when Pi estimated it from catalog prices.
+- Collapsed rows name the key you configured for expanding tool rows: a long model note ends with `… 4 more lines (ctrl+o to expand)`, and a result with more than three images with `… 2 more images; ctrl+o to list`. An unbound key keeps the previous text.
+
+### Changed
+
+- **Breaking:** Pit supports Pi 1.5.0, the version `package-lock.json` now pins: `@earendil-works/pi-codemode` 1.5.0, which Pit installs as its own copy, and, for development, tests, and the `peerDependencies` ranges, `pi-coding-agent` and `pi-tui` 1.5.0. `typebox` stays 1.3.27, the version Pi 1.5.0 loads.
+- An expanded `typescript` row highlights its source once and reuses it while the source and the theme's syntax colors stay the same, instead of on every spinner tick and progress update.
+
+### Fixed
+
+- A command run without progress output that Pi stops because its output exceeded Pi's capture limit, new in Pi 1.5.0, is no longer reported as a timeout: its `stderr` explains the limit when the command wrote none, `truncated` is true, and with `raise: true` it throws an ordinary `Error`, not a `TimeoutError`.
+
 ## [0.32.0] - 2026-10-26
 
 ### Added
@@ -508,7 +525,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/cv/pit/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/cv/pit/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/cv/pit/compare/v0.30.1...v0.31.0
 [0.30.1]: https://github.com/cv/pit/compare/v0.30.0...v0.30.1

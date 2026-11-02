@@ -200,7 +200,7 @@ function applyPromptAdditions(
   const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");
   const skills = promptAlreadyHasSkills
     ? ""
-    : formatPitSkillsForPrompt(event.systemPromptOptions?.skills ?? []);
+    : formatPitSkillsForPrompt(event.systemPromptOptions.skills);
   const catalogs = {
     pit_user_functions: userFunctionCatalog(
       functionState.userMetadata,
@@ -210,7 +210,7 @@ function applyPromptAdditions(
     pit_project_functions: projectFunctionCatalog(functionState.metadata, functionState.session),
   };
   const options = event.systemPromptOptions;
-  if (options?.sections && options.forceSystemPrompt === undefined) {
+  if (options.forceSystemPrompt === undefined) {
     // Pi records section changes as transcript deltas, but unless the provider keeps
     // mid-conversation system messages, it folds them into the leading system prompt and the
     // whole cached conversation is written again. A catalog change therefore waits for a request
