@@ -4,6 +4,10 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- `/pit-reflect` reviews the work since its previous run in the session unless given a focus. It asks once before promoting tested helpers to the project or user scope instead of leaving them session-scoped, finishes its changes in the same turn, and ends with next steps you can approve: files to commit with a suggested message, pending promotions, and required reloads or smoke tests.
+
 ## [0.33.0] - 2026-11-02
 
 ### Added

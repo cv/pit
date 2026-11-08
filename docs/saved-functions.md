@@ -183,4 +183,4 @@ async ({ functions: { listAll, getSaved } }) => {
 
 ## Reflect on reusable work
 
-Pit packages a `/pit-reflect [focus]` prompt template. It reviews work completed in the current session, compares recurring workflows with the effective saved-function registry, and makes only high-confidence additions or improvements. It prefers extending or composing existing functions, keeps unproven helpers session-scoped, and reports when no new function is justified.
+Pit packages a `/pit-reflect [focus]` prompt template. It reviews work completed in the current session, by default since its previous run, compares recurring workflows with the effective saved-function registry, and makes only high-confidence additions or improvements. It prefers extending or composing existing functions, keeps helpers session-scoped until they have run on a real case, and asks before promoting exercised helpers to the project or user scope. It reports when no new function is justified and ends with next steps the user can approve: files to commit, pending promotions, and required reloads or smoke tests.
