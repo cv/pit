@@ -158,6 +158,15 @@ session-schema projection, and external query execution.
 - Multi-session discovery uses bounded filesystem globbing, refuses truncated
   listings, selects newest timestamped filenames, and audits at most four sessions
   concurrently. Aggregated failure labels reflect each session's bounded label list.
+- `sessions.findPromptRuns({ marker })` evaluates a prompt template or skill across
+  every project's sessions, not just the current project's. `grep -F` selects the files
+  that contain the marker, and one jq query per file summarizes each run: the messages
+  after the matching user message, in file order, up to the next user message. Each
+  summary keeps bounded tool-call labels, error excerpts, saved function IDs, cost, the
+  final report, and the user's next message. Unlike `sessions.readEvents()`, it reads each
+  matching file whole; a file whose summary exceeds jq's output limit is listed in
+  `failures` rather than truncated. The current session is excluded unless
+  `includeCurrent` is set.
 
 ## Tests
 
