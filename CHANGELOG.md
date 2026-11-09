@@ -4,9 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-09
+
 ### Changed
 
 - `/pit-reflect` reviews the work since its previous run in the session unless given a focus. It asks once before promoting tested helpers to the project or user scope instead of leaving them session-scoped, finishes its changes in the same turn, and ends with next steps you can approve: files to commit with a suggested message, pending promotions, and required reloads or smoke tests.
+- Pit depends on `oxfmt` 0.75.0.
 
 ## [0.33.0] - 2026-11-02
 
@@ -529,7 +532,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/cv/pit/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/cv/pit/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/cv/pit/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/cv/pit/compare/v0.30.1...v0.31.0
