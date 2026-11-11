@@ -1,5 +1,4 @@
-import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-
+import type { PitHostApi, PitHostContext } from "../host/context.js";
 import { recordValue as record, stringValue as string } from "../shared/argument-values.js";
 import { terminationError } from "../shared/termination-errors.js";
 import type { FunctionActivity, FunctionScope } from "./core.js";
@@ -14,8 +13,8 @@ type FunctionMethod = NativeMethod<"functions">;
 type FunctionMethodHandler = (args: unknown[], signal: AbortSignal) => unknown | Promise<unknown>;
 
 interface FunctionHostServices {
-  pi: ExtensionAPI;
-  ctx: ExtensionContext;
+  pi: Pick<PitHostApi, "appendEntry">;
+  ctx: PitHostContext;
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];
@@ -98,7 +97,7 @@ function listOptions(value: unknown): FunctionListOptions {
 type PersistentFunctionMethod = "list" | "get" | "remove" | "listUser" | "getUser" | "removeUser";
 
 interface PersistentFunctionHandlerServices {
-  ctx: ExtensionContext;
+  ctx: PitHostContext;
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];

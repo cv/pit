@@ -1,12 +1,11 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-
+import type { PitHostApi, PitHostContext } from "../host/context.js";
 import type { FunctionActivity } from "./core.js";
 import { createFunctionHostMethods } from "./host-methods.js";
 import type { FunctionState, FunctionStateCommit } from "./state.js";
 
 interface FunctionHostServices {
-  pi: ExtensionAPI;
-  ctx: ExtensionContext;
+  pi: Pick<PitHostApi, "appendEntry">;
+  ctx: PitHostContext;
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];

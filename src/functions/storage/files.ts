@@ -2,8 +2,7 @@ import { constants } from "node:fs";
 import { mkdir, opendir, open, lstat, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 
-import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-
+import { hostPlatform } from "../../shared/host-platform.js";
 import { validateSavedFunctionSource } from "../core.js";
 import { functionIdFromRelativePath, functionRelativePath } from "../identifier.js";
 import type { PersistentFunctionMetadata } from "../source.js";
@@ -39,7 +38,7 @@ export async function assertPersistentPath(directory: string, id: string): Promi
 }
 
 export async function writePersistentFunctionFile(path: string, source: string): Promise<void> {
-  await withFileMutationQueue(path, async () => {
+  await hostPlatform().withFileMutationQueue(path, async () => {
     await mkdir(dirname(path), { recursive: true });
     const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
     try {
@@ -57,7 +56,7 @@ export async function writePersistentFunctionFile(path: string, source: string):
 }
 
 export function removePersistentFunctionFile(path: string): Promise<boolean> {
-  return withFileMutationQueue(path, async () => {
+  return hostPlatform().withFileMutationQueue(path, async () => {
     try {
       await rm(path);
       return true;

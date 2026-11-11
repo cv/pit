@@ -1,6 +1,5 @@
-import { formatSize } from "@earendil-works/pi-coding-agent";
-
 import { validateTypeScript } from "../sandbox/validation.js";
+import { hostPlatform } from "../shared/host-platform.js";
 import { isRecord } from "../shared/records.js";
 import { createLayeredFunctionRegistry } from "./definitions.js";
 import { getFunctionDependencies } from "./dependencies.js";
@@ -86,7 +85,9 @@ export interface FunctionActivity {
 }
 export function validateSavedFunctionSource(source: string): void {
   if (Buffer.byteLength(source) > MAX_SAVED_FUNCTION_BYTES) {
-    throw new Error(`saved function source exceeds ${formatSize(MAX_SAVED_FUNCTION_BYTES)}`);
+    throw new Error(
+      `saved function source exceeds ${hostPlatform().formatSize(MAX_SAVED_FUNCTION_BYTES)}`,
+    );
   }
 }
 
@@ -108,7 +109,7 @@ export function validateRegistryCapacity(
   );
   if (currentBytes - previousBytes + sourceBytes > MAX_SAVED_FUNCTION_TOTAL_BYTES) {
     throw new Error(
-      `saved function registry exceeds ${formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`,
+      `saved function registry exceeds ${hostPlatform().formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`,
     );
   }
 }
@@ -123,7 +124,7 @@ export function validateEffectiveRegistryCapacity(registry: ReadonlyMap<string, 
   );
   if (totalBytes > MAX_SAVED_FUNCTION_TOTAL_BYTES) {
     throw new Error(
-      `saved function registry exceeds ${formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`,
+      `saved function registry exceeds ${hostPlatform().formatSize(MAX_SAVED_FUNCTION_TOTAL_BYTES)} total source`,
     );
   }
 }

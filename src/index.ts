@@ -1,4 +1,10 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  CONFIG_DIR_NAME,
+  type ExtensionAPI,
+  formatSize,
+  getAgentDir,
+  withFileMutationQueue,
+} from "@earendil-works/pi-coding-agent";
 
 import { registerContextBoundary } from "./context/boundary.js";
 import { ContextEditQueue } from "./context/queue.js";
@@ -8,11 +14,19 @@ import { createFunctionState, createFunctionStateCommitQueue } from "./functions
 import { createPitToolSelection } from "./functions/tool-loadout.js";
 import { registerContextRenderers } from "./renderers/context-entries.js";
 import { createCodemodeFunctionExecutor } from "./sandbox/codemode-executor.js";
+import { installHostPlatform } from "./shared/host-platform.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
 export { GLOBAL_METHODS } from "./functions/globals.js";
 
 export default function pit(pi: ExtensionAPI) {
+  // Pi's helpers: pit's writes queue with Pi's edit and write tools, and Pi's directories apply.
+  installHostPlatform({
+    agentDir: getAgentDir,
+    configDirName: CONFIG_DIR_NAME,
+    formatSize,
+    withFileMutationQueue,
+  });
   const functionState = createFunctionState();
   const commitFunctionState = createFunctionStateCommitQueue();
   const toolSelection = createPitToolSelection();

@@ -1,12 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  CONFIG_DIR_NAME,
-  getAgentDir,
-  type ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import { hostPlatform } from "../../shared/host-platform.js";
 import { isRecord } from "../../shared/records.js";
 import { type FunctionRegistry, validateSavedFunctionSource } from "../core.js";
 import { functionRelativePath } from "../identifier.js";
@@ -97,11 +94,17 @@ async function readPitConfig(file: string, scope: "user" | "project"): Promise<P
   }
 }
 
-export async function loadPitProjectConfig(ctx: ExtensionContext): Promise<PitProjectConfig> {
+/** The directory facts a project load needs; the Pi context provides them. */
+export type ProjectLoadContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted">;
+
+export async function loadPitProjectConfig(
+  ctx: ProjectLoadContext,
+  agentDir = hostPlatform().agentDir(),
+): Promise<PitProjectConfig> {
   const [user, project] = await Promise.all([
-    readPitConfig(join(getAgentDir(), "pit.json"), "user"),
+    readPitConfig(join(agentDir, "pit.json"), "user"),
     ctx.isProjectTrusted()
-      ? readPitConfig(join(ctx.cwd, CONFIG_DIR_NAME, "pit.json"), "project")
+      ? readPitConfig(join(ctx.cwd, hostPlatform().configDirName, "pit.json"), "project")
       : Promise.resolve<PitProjectConfig>({}),
   ]);
   const allowedTools = project.error ? [] : (project.allowedTools ?? user.allowedTools);
@@ -138,7 +141,7 @@ export async function removeProjectFunction(directory: string, name: string): Pr
 }
 
 export async function loadProjectFunctions(
-  ctx: ExtensionContext,
+  ctx: ProjectLoadContext,
   registry: FunctionRegistry,
   metadata: PersistentFunctionMetadataRegistry,
   {
