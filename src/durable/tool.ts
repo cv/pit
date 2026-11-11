@@ -28,6 +28,7 @@ import {
 import { appliedEditDetails, buildToolResult } from "../tool/result.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { applySourceOptions } from "../tool/source-options.js";
+import { StagedContextChanges } from "./context/staging.js";
 import { createDurableModelsHandler, createDurableRuntimeHandler } from "./handlers.js";
 import {
   createDurableHostApi,
@@ -42,6 +43,7 @@ import {
   unavailableNamespace,
 } from "./host.js";
 import { DurableQuestions, type QuestionPosted } from "./questions.js";
+import { createDurableSessionHandler } from "./session.js";
 import {
   type ConversationFunctions,
   DurableEntryWrites,
@@ -94,7 +96,7 @@ interface DurableToolParams {
 const HOST_NOTES = [
   "",
   "ON PI-DURABLE",
-  "Commands and host effects run in the host process, in the conversation's working directory. session.*, commands.*, models.set, model requests, and workspace.viewImage are unavailable and throw.",
+  "Commands and host effects run in the host process, in the conversation's working directory. session.getName, session.setName, session.compact, commands.*, models.set, model requests, and workspace.viewImage are unavailable and throw.",
 ].join("\n");
 
 export interface DurableToolServices {
@@ -169,6 +171,8 @@ async function runDurableProgram(call: DurableCall) {
   const executionProgress = new ExecutionProgressController();
   const images = createDurableImageCollector();
   const { deadline, stop, questions, ctx, agent, model } = await prepareHost(call);
+  // Context edits and notes wait here, as on Pi, until the program succeeds.
+  const staging = new StagedContextChanges();
   // Only the tools this call may run; rebuilt per call, so a changed tool set never leaks.
   const catalog = createDurableToolCatalog(agent.callable);
   functionState.toolCatalog = catalog;
@@ -208,7 +212,12 @@ async function runDurableProgram(call: DurableCall) {
             "Written to .pi/functions in this host's working tree; commit it, or a host that checks the repository out again will not have it.",
         },
         {
-          session: unavailableNamespace("session", "context editing is not supported yet"),
+          session: createDurableSessionHandler({
+            api,
+            context,
+            contextWindow: model?.contextWindow,
+            staging,
+          }),
           commands: unavailableNamespace("commands", "the host has no slash commands"),
           models: createDurableModelsHandler({ models: api.models, current: model }),
           runtime: createDurableRuntimeHandler(recoverableCalls),
@@ -254,6 +263,7 @@ async function runDurableProgram(call: DurableCall) {
     await savedFunctionService.commit(prepared, ctx, functionActivity);
     // The conversation records the saved-function changes before the call reports them.
     await call.writes.settle();
+    await staging.apply(api, context, model?.contextWindow);
     await questions?.recordConsumed();
     timings.enter("result");
     const result = await buildToolResult({
