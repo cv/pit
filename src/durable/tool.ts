@@ -175,6 +175,8 @@ async function runDurableProgram(call: DurableCall) {
           },
           images,
           completedCalls,
+          // Hosts such as pi-action run unattended on shared repositories: project files ask first.
+          confirmProjectWrites: true,
         },
         {
           session: unavailableNamespace("session", "context editing is not supported yet"),

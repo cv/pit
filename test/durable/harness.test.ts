@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -427,6 +427,50 @@ describe("pit on a pi-durable Harness", () => {
     ]);
     expect(untrusted.results[1]?.isError).toBe(true);
     expect(untrusted.results[1]?.text).toMatch(/trust/i);
+  });
+
+  it("asks the host before a program writes or removes a trusted project's function files", async () => {
+    const asked: string[] = [];
+    const answering = (answer: boolean) => ({
+      confirm: async (title: string) => {
+        asked.push(title);
+        return answer;
+      },
+      select: async () => undefined,
+      input: async () => undefined,
+      notify: () => undefined,
+    });
+    const save = { code: "/** Runs the tests. */\nasync function runTests({}) { return 'ok'; }" };
+    const promote = {
+      code: 'async ({ functions: { promote } }) => promote("runTests", "Runs the tests.")',
+    };
+    const file = join(cwd, ".pi/functions/runTests.ts");
+
+    const headless = await host({ trustProject: true }).run([save, promote]);
+    expect(headless.results[1]?.isError).toBe(true);
+    expect(headless.results[1]?.text).toMatch(
+      /^Project function promotion requires interactive confirmation/,
+    );
+    const declined = await host({ trustProject: true, ui: answering(false) }).run([save, promote]);
+    expect(declined.results[1]?.text).toMatch(/^Project function promotion was cancelled/);
+    await expect(stat(file)).rejects.toThrow();
+
+    const accepted = await host({ trustProject: true, ui: answering(true) }).run([
+      save,
+      promote,
+      { code: 'async ({ functions: { remove } }) => remove("runTests")' },
+    ]);
+    expect(accepted.results[1]?.details.value).toEqual({
+      name: "runTests",
+      promoted: true,
+      scope: "project",
+    });
+    expect(accepted.results[2]?.details.value).toEqual({ name: "runTests", removed: true });
+    expect(asked).toEqual([
+      "Save runTests to the project?",
+      "Save runTests to the project?",
+      "Remove project function runTests?",
+    ]);
   });
 
   it("warns about an unreadable pit.json and summarizes many broken functions", async () => {
