@@ -31,13 +31,13 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 
 ## Options
 
-| Option         | Default                                                                        | Effect                                                                                                                                                                               |
-| -------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cwd`          | the call's environment, then the agent's, then the process's working directory | Working directory for programs, commands, and project functions.                                                                                                                     |
-| `agentDir`     | `PI_CODING_AGENT_DIR`, else `~/.pi/agent`                                      | Where user functions (`functions/`) and the user-wide `pit.json` load from, as on Pi.                                                                                                |
-| `trustProject` | `false`                                                                        | Loads the project's `.pi/pit.json` and `.pi/functions` and lets programs save project functions. Set it only for repositories whose code you would run anyway.                       |
-| `ui`           | none                                                                           | Dialogs with the signatures of Pi's `ctx.ui.confirm`, `select`, `input`, and `notify`. Without it, `ui.*` throws `UI is not available in this mode`, as on Pi without a UI.          |
-| `log`          | none                                                                           | `info` and `warning` callbacks for what Pi would show as notifications: saved functions that failed to load, an unreadable `pit.json`, and project functions left unloaded by trust. |
+| Option         | Default                                                                        | Effect                                                                                                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cwd`          | the call's environment, then the agent's, then the process's working directory | Working directory for programs, commands, and project functions.                                                                                                                                                                                                                |
+| `agentDir`     | `PI_CODING_AGENT_DIR`, else `~/.pi/agent`                                      | Where user functions (`functions/`) and the user-wide `pit.json` load from, as on Pi.                                                                                                                                                                                           |
+| `trustProject` | `false`                                                                        | Loads the project's `.pi/pit.json` and `.pi/functions` and lets programs save project functions. Set it only for repositories whose code you would run anyway.                                                                                                                  |
+| `ui`           | none                                                                           | How people answer questions: `ask` for asynchronous hosts, or blocking `confirm`, `select`, and `input` with the signatures of Pi's `ctx.ui`, plus `notify`. Without any, `ui.*` throws `UI is not available in this mode`, as on Pi without a UI. See [Questions](#questions). |
+| `log`          | none                                                                           | `info` and `warning` callbacks for what Pi would show as notifications: saved functions that failed to load, an unreadable `pit.json`, and project functions left unloaded by trust.                                                                                            |
 
 ## What works
 
@@ -47,7 +47,7 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 - `context.get()` reports `mode: "durable"`, no session file, and an extra `hasUI` field, so a program can check for dialogs before asking. The shared type declaration does not include `hasUI` yet; read it with a cast.
 - `models.current` and `models.list` read the host's model catalog; every model counts as in scope.
 - `runtime.status` and `runtime.completedCalls`. Recovered calls stay in memory for the host process, as on Pi for one session.
-- `ui.*` through the host's `ui` option. While a dialog waits for its answer, here and in `functions.promote` and `functions.removeUser`, the program's `timeoutMs` deadline is paused, so an answer that takes minutes, such as a GitHub comment, does not time the program out. Other host calls running meanwhile still count. On Pi the deadline does not pause.
+- `ui.*` and the confirmations `functions.*` asks for, through the host's `ui` option, as [Questions](#questions) describes.
 
 Results are plain text for the model plus the same JSON `details` Pi's renderers read: the value, progress, traces, timings, and saved-function changes. Command output streams through `output()` while a call runs. A failed call returns an error result whose text is the root error, as on Pi.
 
@@ -62,6 +62,23 @@ These throw a `PitDurableUnavailableError` whose message names the global, such 
 - `workspace.viewImage`. Images that nested tools return are not attached; the result says so.
 
 Pi-only features are absent: renderers and the `/functions` and `/pit-reflect` commands, Pit's skills, `allowedTools` in `pit.json` (the host chooses the tools), and catalog cache holding (pi-durable sends a changed section as a transcript delta).
+
+## Questions
+
+A program asks a person through `ui.confirm`, `ui.select`, and `ui.input`, and Pit asks before `functions.promote` and project function removal. How the answer arrives depends on the host's `ui` option.
+
+**Asynchronous hosts** implement `ask(question)`. A GitHub thread is one: people may answer hours later, so nothing waits on a timer, and no program is replayed.
+
+1. Pit derives the question's key: the first 16 hex characters of `sha256(JSON.stringify([kind, title, detail]))`, where `detail` is the confirm message, the select options array, or the input placeholder (`null` without one).
+2. If the conversation has an unused answer with that key, the call returns it. An answer is an entry of kind `ui.answer` with data `{ key, kind, answer, by?, url? }`: `answer` is a boolean for confirm and a string for select and input. pi-action writes it as the user message that delivers the answer. An answer of the wrong type is skipped.
+3. Otherwise Pit calls `ask({ kind, key, title, message | options | placeholder })`, which posts the question and returns at once with `{ url? }`. Pit stops the program, so it cannot catch the question and carry on, and returns a result that is not an error: `Question posted: <title> (<url>). The answer will arrive as a later message; end your turn now.` The result sets `control: { terminate: true }`, so the run ends after this tool round. Calls the program completed before asking keep their effects, and `runtime.completedCalls` recovers their results. Staged context edits and saved-function changes of the stopped program are dropped, as for any program that does not finish.
+4. When the answer arrives, the model runs the step again, and the same question returns the answer.
+
+An answer is used once. Pit records each answer a call used as a `ui.answer-consumed` entry with data `{ key }`, but only if the call succeeds: a program that fails after reading an answer gets the same answer when it runs again. After a successful call used it, the same question is asked anew.
+
+**Interactive hosts** implement blocking `confirm`, `select`, and `input`, which Pit uses only when `ask` is absent. While one waits for its answer, the program's `timeoutMs` deadline is paused; other host calls running meanwhile still count. On Pi the deadline does not pause.
+
+`notify` works the same way on both kinds of host. `context.get().hasUI` is `true` when the host implements `ask` or any blocking dialog.
 
 ## Session functions
 

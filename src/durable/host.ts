@@ -1,21 +1,39 @@
 import type { PitHostApi, PitHostContext } from "../host/context.js";
 import type { NativeFunctionHandler } from "../host/native-dispatcher.js";
 import type { ImageCollector } from "../workspace/view-image.js";
+import type { DurableQuestions, UiQuestion } from "./questions.js";
 
-/** The dialogs a pi-durable host can answer; without them `ui.*` reports that no UI is available. */
+/**
+ * The dialogs a pi-durable host can answer; without any `ui.*` reports that no UI is available.
+ * An asynchronous host, such as a GitHub thread, implements `ask`: it posts the question and
+ * returns at once, the program ends, and the answer arrives in a later run. An interactive host
+ * implements the blocking dialogs instead, which Pit uses only when `ask` is absent.
+ */
 export interface PitDurableUi {
-  confirm(title: string, message: string, options?: { signal?: AbortSignal }): Promise<boolean>;
-  input(
+  /** Asynchronous hosts: post the question and return at once, with where it was posted. */
+  ask?(question: UiQuestion): Promise<{ url?: string }>;
+  confirm?(title: string, message: string, options?: { signal?: AbortSignal }): Promise<boolean>;
+  input?(
     title: string,
     placeholder?: string,
     options?: { signal?: AbortSignal },
   ): Promise<string | undefined>;
-  select(
+  select?(
     title: string,
     options: string[],
     dialog?: { signal?: AbortSignal },
   ): Promise<string | undefined>;
   notify(message: string, level?: "info" | "warning" | "error"): void;
+}
+
+/** Whether the host answers any dialog, which `context.get().hasUI` reports. */
+export function answersDialogs(ui: PitDurableUi | undefined): ui is PitDurableUi {
+  return (
+    ui?.ask !== undefined ||
+    ui?.confirm !== undefined ||
+    ui?.select !== undefined ||
+    ui?.input !== undefined
+  );
 }
 
 /** Where Pit reports host-level problems, such as saved functions that could not be loaded. */
@@ -43,9 +61,12 @@ export function unavailableNamespace(namespace: string, reason?: string): Native
   };
 }
 
-/* v8 ignore start -- Pit checks hasUI before every dialog, as on Pi without a UI. */
+type Dialogs = PitHostContext["ui"];
+
+/** A dialog the host does not implement fails as Pi's do without a UI. */
 const noDialog = () => Promise.reject(new Error("UI is not available in this mode"));
-const NO_UI: PitDurableUi = {
+/* v8 ignore start -- Pit checks hasUI before every dialog, as on Pi without a UI. */
+const NO_UI: Dialogs = {
   confirm: noDialog,
   input: noDialog,
   select: noDialog,
@@ -58,7 +79,8 @@ export interface DurableHostContextInput {
   model: PitHostContext["model"];
   thinkingLevel: NonNullable<PitHostContext["thinkingLevel"]>;
   projectTrusted: boolean;
-  ui: PitDurableUi | undefined;
+  /** The dialogs this call answers; absent when the host answers none. */
+  ui: Dialogs | undefined;
 }
 
 /** The Pi context members Pit's shared host functions read, answered for one pi-durable call. */
@@ -121,16 +143,14 @@ export function createDurableImageCollector(): ImageCollector {
 }
 
 /**
- * The host's dialogs with the program deadline paused while each waits for its answer, so a
- * person answering through a slow channel, such as a GitHub comment, does not time the program out.
+ * The host's blocking dialogs with the program deadline paused while each waits for its answer,
+ * so a person answering through a slow channel does not time the program out.
  */
-export function pauseWhileAsking(
-  ui: PitDurableUi,
-  deadline: { pause(): () => void },
-): PitDurableUi {
+export function pauseWhileAsking(ui: PitDurableUi, deadline: { pause(): () => void }): Dialogs {
   const paused =
-    <A extends unknown[], R>(ask: (...args: A) => Promise<R>) =>
+    <A extends unknown[], R>(ask: ((...args: A) => Promise<R>) | undefined) =>
     async (...args: A): Promise<R> => {
+      if (!ask) return noDialog();
       const resume = deadline.pause();
       try {
         return await ask(...args);
@@ -139,9 +159,19 @@ export function pauseWhileAsking(
       }
     };
   return {
-    confirm: paused(ui.confirm.bind(ui)),
-    select: paused(ui.select.bind(ui)),
-    input: paused(ui.input.bind(ui)),
+    confirm: paused(ui.confirm?.bind(ui)),
+    select: paused(ui.select?.bind(ui)),
+    input: paused(ui.input?.bind(ui)),
+    notify: ui.notify.bind(ui),
+  };
+}
+
+/** Dialogs answered from the conversation, or posted through the host's `ask`. */
+export function askingDialogs(questions: DurableQuestions, ui: PitDurableUi): Dialogs {
+  return {
+    confirm: (title, message) => questions.confirm(title, message),
+    select: (title, options) => questions.select(title, options),
+    input: (title, placeholder) => questions.input(title, placeholder),
     notify: ui.notify.bind(ui),
   };
 }
