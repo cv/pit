@@ -14,6 +14,12 @@ import type { ImageBlock, ImageCollector } from "../workspace/view-image.js";
 
 type ToolContext = Parameters<ToolRegistration["execute"]>[2];
 
+/**
+ * Tools Pit does not bind on pi-durable: itself and other orchestrators. Unlike on Pi, the file and
+ * shell tools stay: the host chose them, and they act in its environment rather than Pit's process.
+ */
+const ORCHESTRATORS = new Set(["typescript", "codemode", "tool_search"]);
+
 /** The host tools a call may run through `tools.*`: the agent's tools other callers may use. */
 export function createDurableToolCatalog(callable: readonly ToolRegistration[]): PiToolCatalog {
   return createPiToolCatalog(
@@ -25,7 +31,27 @@ export function createDurableToolCatalog(callable: readonly ToolRegistration[]):
         ? {}
         : { outputSchema: tool.structuredOutputSchema }),
     })),
+    undefined,
+    ORCHESTRATORS,
   );
+}
+
+const MAX_LISTED_TOOLS = 40;
+
+/** Tells the model which host tools `tools.*` reaches, as Pi's tool description does. */
+export function durableToolsPrompt(catalog: PiToolCatalog): string | undefined {
+  const names = [...catalog.bindings.keys()];
+  if (names.length === 0) return undefined;
+  const listed = names.slice(0, MAX_LISTED_TOOLS).join(", ");
+  const more =
+    names.length > MAX_LISTED_TOOLS
+      ? `, … ${names.length - MAX_LISTED_TOOLS} more (find them with toolIndex.search)`
+      : "";
+  return [
+    `The host's other tools are injectable from \`tools\`: ${listed}${more}.`,
+    "Before calling one, inject `toolIndex: { search, describe }`: describe(name) returns its declaration. Then call it, for example `async ({ tools: { NAME } }) => NAME({ ... })`.",
+    "Calls run through the host like direct tool calls, in the host's environment. A call returns the tool's declared structured value, otherwise its text. A failed call throws.",
+  ].join("\n");
 }
 
 function textOf(value: unknown): string {

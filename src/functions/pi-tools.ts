@@ -297,8 +297,9 @@ export function withMissingPiTools(
 export function createPiToolCatalog(
   tools: readonly PiToolInfo[] | undefined,
   guidelinesOf: ToolGuidelines = NO_GUIDELINES,
+  excluded: ReadonlySet<string> = EXCLUDED_TOOLS,
 ): PiToolCatalog {
-  const usable = (tools ?? []).filter((tool) => !EXCLUDED_TOOLS.has(tool.name));
+  const usable = (tools ?? []).filter((tool) => !excluded.has(tool.name));
   const fingerprint = JSON.stringify(
     usable.map((tool) => [
       tool.name,
