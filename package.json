@@ -12,6 +12,11 @@
     "SECURITY.md",
     "LICENSE"
   ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./durable": "./src/durable/index.ts",
+    "./package.json": "./package.json"
+  },
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -32,6 +37,7 @@
     "extensions": [
       "./src/index.ts"
     ],
+    "durable": "./src/durable/index.ts",
     "prompts": [
       "./prompts"
     ]
@@ -43,7 +49,10 @@
     "typescript": "^6.0.3"
   },
   "devDependencies": {
+    "@earendil-works/chord": "1.5.0",
+    "@earendil-works/pi-ai": "1.5.0",
     "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-durable": "1.5.0",
     "@earendil-works/pi-tui": "1.5.0",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
@@ -75,7 +84,13 @@
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "1.5.0",
     "@earendil-works/pi-tui": "1.5.0",
-    "typebox": "*"
+    "typebox": "*",
+    "@earendil-works/pi-durable": "^1.5.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-durable": {
+      "optional": true
+    }
   },
   "allowScripts": {
     "@google/genai": false,

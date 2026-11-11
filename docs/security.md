@@ -30,4 +30,8 @@ Report suspected vulnerabilities privately as described in [SECURITY.md](../SECU
 
 The runtime is Pit's npm dependency `@earendil-works/pi-codemode`, with the QuickJS Wasm module from `quickjs-wasi`. Pi installs them with Pit's locked versions from the npm registry; Pit downloads no other artifacts and loads no native addon. Locked versions do not make third-party extension source trustworthy.
 
+## pi-durable hosts
+
+On a pi-durable host, the same host functions run in the host's Node process rather than through pi-durable's execution environment, project trust is off unless the host enables it, and whoever can write to the conversation can drive them. [Pit on pi-durable hosts](durable.md#security-notes) describes those differences.
+
 See [configuration](configuration.md#runtime-installation) for runtime installation and [architecture](architecture.md) for the internal dispatch and isolation implementation.

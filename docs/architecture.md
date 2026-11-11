@@ -194,7 +194,7 @@ Effect grants describe the resolved primitive (normally `shell.execFile`), not a
 
 ### Host layer
 
-`src/host/dispatcher.ts` creates a dispatcher for one invocation using Pi's current `ExtensionContext`, current function state, and the invocation's abort signal. It validates namespace and method names plus argument counts, then delegates to domain handlers that validate concrete argument shapes.
+`src/host/native-dispatcher.ts` creates a dispatcher for one invocation from a narrow host boundary: `PitHostApi` and `PitHostContext` in `src/host/context.ts` pick the few `ExtensionAPI` and `ExtensionContext` members Pit's shared host functions use, so Pi's objects pass unchanged and another host can supply its own. It validates namespace and method names plus argument counts, then delegates to domain handlers that validate concrete argument shapes. The host's own namespaces (session, commands, models, runtime, and `tools.*`) arrive as handlers: `src/host/dispatcher.ts` builds Pi's from the current `ExtensionContext`, and `src/durable/` builds pi-durable's.
 
 Native host functions fall into three implementation groups:
 
@@ -316,8 +316,9 @@ Pit is organized around feature boundaries:
 - `src/process/` owns host-process execution, bounded process results, and process-runner behavior.
 - `src/workspace/` owns workspace paths, hashed reads and edits, search, and regex worker behavior.
 - `src/execution/` owns progress snapshots, host-call traces, and dashboard models.
+- `src/durable/` adapts the TypeScript tool to pi-durable hosts: the extension, the tool call adapter, conversation-entry session functions, and prompt sections. It must not value-import Pi's coding agent, Pi's TUI, TypeBox, or anything that does; `test/durable/isolation.test.ts` loads it with those packages blocked.
 - `src/renderers/` contains TUI and result presentation. Only renderer modules, the tool adapter, and root composition may depend on them.
-- `src/shared/` contains neutral helpers safe for lower-level domains.
+- `src/shared/` contains neutral helpers safe for lower-level domains. `host-platform.ts` holds the helpers shared modules take from their host (size formatting, the file mutation queue, the agent and configuration directories): the Pi extension installs Pi's, and other hosts keep Node implementations that follow Pi's defaults.
 - `src/generated/` contains generated artifacts and must not be edited manually.
 
 Files directly under `src/` are composition entry points or true cross-domain adapters. Do not add a general-purpose `utils.ts`; place helpers in the domain that owns their semantics or in `src/shared/` when they are intentionally neutral.
@@ -346,6 +347,7 @@ Files directly under `src/` are composition entry points or true cross-domain ad
 | Change workspace edits              | `src/workspace/hashline.ts` and `host-handler.ts` | read/search, concurrency tests                                              |
 | Change process behavior             | `src/process/`                                    | host dispatcher, progress, process renderer                                 |
 | Change partial/final presentation   | `src/execution/` and `src/renderers/`             | tool adapter and extension smoke tests                                      |
+| Change pi-durable hosting           | `src/durable/`                                    | native dispatcher, host context, durable tests                              |
 
 ## Tests and architecture gates
 
