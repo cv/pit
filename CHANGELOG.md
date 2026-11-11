@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-11-11
+
+### Changed
+
+- Pit formats `typescript` sources with `oxfmt` 0.77.0. Development uses `oxlint` 1.92.0 and `vitest` 5.1.0.
+
 ## [0.35.0] - 2026-11-11
 
 ### Added
