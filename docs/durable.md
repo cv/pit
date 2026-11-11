@@ -43,11 +43,11 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 
 - `workspace.*` except `viewImage`, `shell.*`, `git.*`, `npm.*`, `gh.*`, `http.*`, and the other command globals, in the conversation's working directory.
 - Saved functions in every scope. Session functions are conversation entries; user and project functions load from disk as on Pi. `functions.*` manages them.
-- `tools.*` and `toolIndex.*` call the agent's other tools through `executeTool()`, so the Harness validates arguments, runs tool hooks, and validates declared structured output. Pit's own tool is model-only (`callers: ["model"]`), and, as on Pi, Pi's file and shell tools (`read`, `bash`, `edit`, `write`, and the like) are left out because Pit's globals replace them.
+- `tools.*` and `toolIndex.*` call the agent's other tools through `executeTool()`, so the Harness validates arguments, runs tool hooks, and validates declared structured output. Every tool other callers may use is bound, including pi-durable's coding tools (`read`, `bash`, `edit`, `write`): unlike Pi's built-ins, they act in the host's execution environment, which may differ from Pit's process. Only Pit's own tool (model-only, `callers: ["model"]`) and other orchestrators (`codemode`, `tool_search`) are left out. A `pit_tools` prompt section lists the bound tools.
 - `context.get()` reports `mode: "durable"`, no session file, and an extra `hasUI` field, so a program can check for dialogs before asking. The shared type declaration does not include `hasUI` yet; read it with a cast.
 - `models.current` and `models.list` read the host's model catalog; every model counts as in scope.
 - `runtime.status` and `runtime.completedCalls`. Recovered calls stay in memory for the host process, as on Pi for one session.
-- `ui.*` through the host's `ui` option.
+- `ui.*` through the host's `ui` option. While a dialog waits for its answer, here and in `functions.promote` and `functions.removeUser`, the program's `timeoutMs` deadline is paused, so an answer that takes minutes, such as a GitHub comment, does not time the program out. Other host calls running meanwhile still count. On Pi the deadline does not pause.
 
 Results are plain text for the model plus the same JSON `details` Pi's renderers read: the value, progress, traces, timings, and saved-function changes. Command output streams through `output()` while a call runs. A failed call returns an error result whose text is the root error, as on Pi.
 

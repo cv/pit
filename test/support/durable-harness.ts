@@ -17,6 +17,7 @@ import {
   type Storage,
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 
 /** One `typescript` result as the conversation recorded it for the model. */
 export interface DurableToolResult {
@@ -73,11 +74,23 @@ export class DurableTestHost {
   readonly #cwd: string;
   #harness: Harness | undefined;
 
-  constructor(input: { extension: Extension; tools?: ToolRegistration[]; cwd: string }) {
+  readonly #env: boolean;
+
+  constructor(input: {
+    extension: Extension;
+    tools?: ToolRegistration[];
+    /** More extensions to install, such as pi-durable's coding tools. */
+    extensions?: Extension[];
+    /** Gives each conversation a Node execution environment in `cwd`. */
+    env?: boolean;
+    cwd: string;
+  }) {
+    this.#env = input.env === true;
     this.#models.setProvider(this.#faux.provider);
     this.#extensions = [
       input.extension,
       ...(input.tools ? [{ name: "test-tools", tools: input.tools }] : []),
+      ...(input.extensions ?? []),
     ];
     this.#cwd = input.cwd;
   }
@@ -86,7 +99,16 @@ export class DurableTestHost {
     if (this.#harness) return this.#harness;
     const registry = createRegistry();
     for (const extension of this.#extensions) registry.install(extension);
-    this.#harness = await Harness.open(this.#storage, { models: this.#models, registry }, context);
+    const cwd = this.#cwd;
+    this.#harness = await Harness.open(
+      this.#storage,
+      {
+        models: this.#models,
+        registry,
+        ...(this.#env ? { env: () => new NodeExecutionEnv({ cwd }) } : {}),
+      },
+      context,
+    );
     return this.#harness;
   }
 

@@ -3,6 +3,7 @@ import type { PromptInput, PromptSection } from "@earendil-works/pi-durable";
 import { projectFunctionCatalog, userFunctionCatalog } from "../functions/persistent-functions.js";
 import { PROMPT_GUIDELINES, PROMPT_SNIPPET } from "../tool/metadata.js";
 import type { DurableFunctionStore } from "./state.js";
+import { createDurableToolCatalog, durableToolsPrompt } from "./tools.js";
 
 // Context editing is Pi-only so far; its guideline would point at unavailable functions.
 const GUIDELINES = PROMPT_GUIDELINES.filter((guideline) => !guideline.startsWith("Long tasks:"));
@@ -45,3 +46,9 @@ export function createCatalogSections(
     },
   ];
 }
+
+/** The host tools `tools.*` reaches in this request, omitted when there are none. */
+export const TOOLS_SECTION: PromptSection = {
+  key: "pit_tools",
+  render: (input) => durableToolsPrompt(createDurableToolCatalog(input.agent.callable)),
+};
