@@ -219,9 +219,13 @@ describe("pit on a pi-durable Harness", () => {
   });
 
   it("pauses the program deadline while a host dialog waits for its answer", async () => {
+    // The deadline leaves room for a slow runner to start the program; the dialog and the command
+    // each outlast it by half again, so only the pause lets the dialog's program finish.
+    const deadlineMs = 2_000;
+    const outlastMs = deadlineMs * 1.5;
     const slowUi = {
       confirm: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await new Promise((resolve) => setTimeout(resolve, outlastMs));
         return true;
       },
       select: async () => undefined,
@@ -231,17 +235,17 @@ describe("pit on a pi-durable Harness", () => {
     const { results } = await host({ ui: slowUi }).run([
       {
         code: 'async ({ ui: { confirm } }) => confirm("Deploy?", "Ship it")',
-        timeoutMs: 150,
+        timeoutMs: deadlineMs,
       },
       {
-        code: 'async ({ shell: { exec } }) => exec("sleep 0.4")',
-        timeoutMs: 150,
+        code: `async ({ shell: { exec } }) => exec("sleep ${outlastMs / 1000}")`,
+        timeoutMs: deadlineMs,
       },
     ]);
     expect(results[0]).toMatchObject({ isError: false, details: { value: true } });
     // Other host calls still count against the deadline.
     expect(results[1]?.isError).toBe(true);
-    expect(results[1]?.text).toMatch(/timed out after 150ms/);
+    expect(results[1]?.text).toMatch(new RegExp(`timed out after ${deadlineMs}ms`));
   });
 
   it("behaves as Pi without a UI unless the host passes dialogs", async () => {
