@@ -446,6 +446,15 @@ describe("pit on a pi-durable Harness", () => {
     };
     const file = join(cwd, ".pi/functions/runTests.ts");
 
+    // Nothing to promote or remove: no question, and the promotion fails as it would after one.
+    const missing = await host({ trustProject: true, ui: answering(true) }).run([
+      promote,
+      { code: 'async ({ functions: { remove } }) => remove("runTests")' },
+    ]);
+    expect(missing.results[0]?.text).toMatch(/^Saved function "runTests" was not found/);
+    expect(missing.results[1]?.details.value).toEqual({ name: "runTests", removed: false });
+    expect(asked).toEqual([]);
+
     const headless = await host({ trustProject: true }).run([save, promote]);
     expect(headless.results[1]?.isError).toBe(true);
     expect(headless.results[1]?.text).toMatch(
@@ -464,6 +473,7 @@ describe("pit on a pi-durable Harness", () => {
       name: "runTests",
       promoted: true,
       scope: "project",
+      note: expect.stringContaining("commit it"),
     });
     expect(accepted.results[2]?.details.value).toEqual({ name: "runTests", removed: true });
     expect(asked).toEqual([

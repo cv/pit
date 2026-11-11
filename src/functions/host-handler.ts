@@ -11,6 +11,8 @@ interface FunctionHostServices {
   activity: FunctionActivity[];
   /** Asks the host's UI before writing or removing project function files. */
   confirmProjectWrites?: boolean;
+  /** Added to a project promotion's result. */
+  projectPromotionNote?: string;
 }
 
 type FunctionHostHandler = (

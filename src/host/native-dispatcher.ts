@@ -117,6 +117,8 @@ export interface NativeHostServices {
   completedCalls?: CompletedCallJournal;
   /** Asks the host's UI before `functions.*` writes or removes project function files. */
   confirmProjectWrites?: boolean;
+  /** Added to a project promotion's result, such as where the host keeps the new file. */
+  projectPromotionNote?: string;
 }
 
 interface ProcessCommand {
@@ -331,6 +333,9 @@ export function createNativeHostDispatcher(
       commitFunctionState,
       activity,
       ...(services.confirmProjectWrites ? { confirmProjectWrites: true } : {}),
+      ...(services.projectPromotionNote
+        ? { projectPromotionNote: services.projectPromotionNote }
+        : {}),
     }),
     session: hosted.session,
     commands: hosted.commands,

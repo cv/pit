@@ -181,6 +181,8 @@ async function runDurableProgram(call: DurableCall) {
           completedCalls,
           // Hosts such as pi-action run unattended on shared repositories: project files ask first.
           confirmProjectWrites: true,
+          projectPromotionNote:
+            "Written to .pi/functions in this host's working tree; commit it, or a host that checks the repository out again will not have it.",
         },
         {
           session: createDurableSessionHandler({
