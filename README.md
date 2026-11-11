@@ -72,7 +72,7 @@ From there, try a workflow that fits your project:
 
 ## Beyond Pi
 
-Hosts built on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable), such as [pi-action](https://github.com/cv/pi-action), can load the same `typescript` tool from `pit/durable`: `createPitDurableExtension()` returns a pi-durable extension, and session functions persist as conversation entries. Session context editing, commands, and image viewing stay Pi-only; [Pit on pi-durable hosts](docs/durable.md) lists what works and the security differences.
+Hosts built on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable), such as [pi-action](https://github.com/cv/pi-action), can load the same `typescript` tool from `pit/durable`: `createPitDurableExtension()` returns a pi-durable extension, and session functions persist as conversation entries. Slash commands and image viewing stay Pi-only; [Pit on pi-durable hosts](docs/durable.md) lists what works and the security differences.
 
 ## Documentation
 

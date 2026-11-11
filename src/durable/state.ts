@@ -157,18 +157,12 @@ async function readFunctionEntries(
 ): Promise<EntryRecord[]> {
   return api.commit(async (tx) => {
     const entries: EntryRecord[] = [];
-    let page = await tx.scanEntries(
-      { conversationId: api.conversationId, order: "ascending" },
-      ENTRY_PAGE_SIZE,
-    );
+    const query = { conversationId: api.conversationId, order: "ascending" } as const;
+    let page = await tx.scanEntries(query, ENTRY_PAGE_SIZE);
     for (;;) {
       entries.push(...page.items.filter((entry) => entry.kind === FUNCTION_ENTRY_TYPE));
       if (page.next === undefined) return entries;
-      page = await tx.scanEntries(
-        { conversationId: api.conversationId },
-        ENTRY_PAGE_SIZE,
-        page.next,
-      );
+      page = await tx.scanEntries(query, ENTRY_PAGE_SIZE, page.next);
     }
   }, context);
 }

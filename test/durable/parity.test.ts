@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { CONFIG_DIR_NAME, formatSize, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { APPLY_STAGED_EDITS_HOOK } from "../../src/durable/context/apply.js";
 import { createPitDurableExtension } from "../../src/durable/index.js";
 import { NODE_HOST_PLATFORM } from "../../src/shared/host-platform.js";
 import { cleanupHarness, setupHarness, tool } from "../support/extension-fixture.js";
@@ -104,5 +105,12 @@ describe("the Node host platform", () => {
         NODE_HOST_PLATFORM.withFileMutationQueue(path, async () => "next"),
       ).resolves.toBe("next");
     });
+  });
+});
+
+describe("pi-durable registrations by name", () => {
+  it("hooks the generation task under the name pi-durable registers it with", async () => {
+    const { GenerationTask } = await import("@earendil-works/pi-durable");
+    expect(APPLY_STAGED_EDITS_HOOK.task).toBe(GenerationTask.definition.name);
   });
 });
