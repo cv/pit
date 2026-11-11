@@ -56,9 +56,10 @@ describe("DurableFunctionStore", () => {
     ]);
     const functions = await store().forCall(api, context, root);
     expect([...functions.functionState.session.keys()]).toEqual(["first", "second"]);
+    // Each page continues the same ascending scan.
     expect(scans).toEqual([
       { query: { conversationId: 1, order: "ascending" }, cursor: undefined },
-      { query: { conversationId: 1 }, cursor: 1 },
+      { query: { conversationId: 1, order: "ascending" }, cursor: 1 },
     ]);
   });
 

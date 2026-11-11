@@ -39,6 +39,7 @@ import {
   type PitDurableUi,
   unavailableNamespace,
 } from "./host.js";
+import { createDurableSessionHandler } from "./session.js";
 import {
   type ConversationFunctions,
   DurableEntryWrites,
@@ -91,7 +92,7 @@ interface DurableToolParams {
 const HOST_NOTES = [
   "",
   "ON PI-DURABLE",
-  "Commands and host effects run in the host process, in the conversation's working directory. session.*, commands.*, models.set, model requests, and workspace.viewImage are unavailable and throw.",
+  "Commands and host effects run in the host process, in the conversation's working directory. session.getName, session.setName, session.compact, commands.*, models.set, model requests, and workspace.viewImage are unavailable and throw.",
 ].join("\n");
 
 export interface DurableToolServices {
@@ -177,7 +178,11 @@ async function runDurableProgram(call: DurableCall) {
           completedCalls,
         },
         {
-          session: unavailableNamespace("session", "context editing is not supported yet"),
+          session: createDurableSessionHandler({
+            api,
+            context,
+            contextWindow: model?.contextWindow,
+          }),
           commands: unavailableNamespace("commands", "the host has no slash commands"),
           models: createDurableModelsHandler({ models: api.models, current: model }),
           runtime: createDurableRuntimeHandler(recoverableCalls),

@@ -185,7 +185,8 @@ describe("pit on a pi-durable Harness", () => {
 
   it.each([
     ["commands.list", "async ({ commands: { list } }) => list()"],
-    ["session.outline", "async ({ session: { outline } }) => outline()"],
+    ["session.compact", "async ({ session: { compact } }) => compact()"],
+    ["session.setName", 'async ({ session: { setName } }) => setName("issue 7")'],
     ["models.set", 'async ({ models: { set } }) => set("faux", "faux-model")'],
     ["workspace.viewImage", 'async ({ workspace: { viewImage } }) => viewImage("a.png")'],
   ])("reports %s as unavailable on pi-durable hosts", async (global, code) => {
@@ -297,8 +298,7 @@ describe("pit on a pi-durable Harness", () => {
     expect(results[0]?.details.value).toBe("user hello");
     expect(sections.pit_user_functions).toContain("userHello()");
     expect(sections.pit_guidelines).toContain("Use typescript for host work");
-    // Context editing is not available yet, so its guideline is left out.
-    expect(sections.pit_guidelines).not.toContain("session.setNote");
+    expect(sections.pit_guidelines).toContain("session.setNote");
   });
 
   it("warns once, to the log and the first result, about saved functions that fail to load", async () => {

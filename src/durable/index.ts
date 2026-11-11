@@ -2,6 +2,8 @@ import type { Extension, PromptInput } from "@earendil-works/pi-durable";
 
 import { createCodemodeFunctionExecutor } from "../sandbox/codemode-executor.js";
 import { NODE_HOST_PLATFORM } from "../shared/host-platform.js";
+import { APPLY_STAGED_EDITS, APPLY_STAGED_EDITS_HOOK } from "./context/apply.js";
+import { notesSection } from "./context/notes.js";
 import { conversationCwd, type PitDurableLog, type PitDurableUi } from "./host.js";
 import { createCatalogSections, GUIDELINES_SECTION, TOOLS_SECTION } from "./sections.js";
 import { DurableFunctionStore } from "./state.js";
@@ -59,7 +61,14 @@ export function createPitDurableExtension(options: PitDurableOptions = {}): Exte
         log: options.log,
       }),
     ],
-    sections: [GUIDELINES_SECTION, TOOLS_SECTION, ...createCatalogSections(store, cwdOf)],
+    sections: [
+      GUIDELINES_SECTION,
+      TOOLS_SECTION,
+      ...createCatalogSections(store, cwdOf),
+      notesSection(),
+    ],
+    tasks: [APPLY_STAGED_EDITS],
+    hooks: [APPLY_STAGED_EDITS_HOOK],
   };
 }
 

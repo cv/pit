@@ -5,14 +5,11 @@ import { PROMPT_GUIDELINES, PROMPT_SNIPPET } from "../tool/metadata.js";
 import type { DurableFunctionStore } from "./state.js";
 import { createDurableToolCatalog, durableToolsPrompt } from "./tools.js";
 
-// Context editing is Pi-only so far; its guideline would point at unavailable functions.
-const GUIDELINES = PROMPT_GUIDELINES.filter((guideline) => !guideline.startsWith("Long tasks:"));
-
 /** How to use the `typescript` tool: Pi's prompt snippet and guidelines for it. */
 export const GUIDELINES_SECTION: PromptSection = {
   key: "pit_guidelines",
   render: () =>
-    [`typescript: ${PROMPT_SNIPPET}.`, ...GUIDELINES.map((line) => `- ${line}`)].join("\n"),
+    [`typescript: ${PROMPT_SNIPPET}.`, ...PROMPT_GUIDELINES.map((line) => `- ${line}`)].join("\n"),
 };
 
 /**

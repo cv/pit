@@ -46,6 +46,7 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 - `tools.*` and `toolIndex.*` call the agent's other tools through `executeTool()`, so the Harness validates arguments, runs tool hooks, and validates declared structured output. Every tool other callers may use is bound, including pi-durable's coding tools (`read`, `bash`, `edit`, `write`): unlike Pi's built-ins, they act in the host's execution environment, which may differ from Pit's process. Only Pit's own tool (model-only, `callers: ["model"]`) and other orchestrators (`codemode`, `tool_search`) are left out. A `pit_tools` prompt section lists the bound tools.
 - `context.get()` reports `mode: "durable"`, no session file, and an extra `hasUI` field, so a program can check for dialogs before asking. The shared type declaration does not include `hasUI` yet; read it with a cast.
 - `models.current` and `models.list` read the host's model catalog; every model counts as in scope.
+- `session.info`, `outline`, `inspectEntry`, `elide`, `summarize`, `setNote`, and `notes`, as described in [Context editing and notes](#context-editing-and-notes).
 - `runtime.status` and `runtime.completedCalls`. Recovered calls stay in memory for the host process, as on Pi for one session.
 - `ui.*` through the host's `ui` option. While a dialog waits for its answer, here and in `functions.promote` and `functions.removeUser`, the program's `timeoutMs` deadline is paused, so an answer that takes minutes, such as a GitHub comment, does not time the program out. Other host calls running meanwhile still count. On Pi the deadline does not pause.
 
@@ -55,7 +56,7 @@ Results are plain text for the model plus the same JSON `details` Pi's renderers
 
 These throw a `PitDurableUnavailableError` whose message names the global, such as `commands.list is unavailable on pi-durable hosts: the host has no slash commands`:
 
-- `session.*`: context editing and notes are not implemented yet, so the prompt guidelines omit them.
+- `session.getName`, `session.setName`, and `session.compact`: conversations have no name, and the host compacts them.
 - `commands.*`: pi-durable has no slash commands.
 - `models.set`: the host configures the conversation's model.
 - Model requests (`models.listOfType`, `models.classify`, `models.generateImages`).
@@ -68,6 +69,26 @@ Pi-only features are absent: renderers and the `/functions` and `/pit-reflect` c
 A saved session function is written to the conversation as a data-only entry of kind `pit-function-definitions`, with the same data as Pi's custom entry: `{ name, source }`, or `{ name, deleted: true }` for a removal. pi-durable appends data-only writes at once, even during a run, and the call waits for them before it reports the change.
 
 The first call in a conversation, per host process, replays these entries from the conversation's whole fork-aware history, so a reopened Harness and a fork see what earlier calls saved, and a fork's later changes stay in the fork. Conversations stay in memory up to a bound, least recently used first out; an evicted conversation replays again on its next call.
+
+## Context editing and notes
+
+`session.*` reads the conversation's active context, from the newest compaction head through the tail, and rewrites it with pi-durable's context edits: an entry whose `edits` omit or replace earlier entries' model messages. Entry IDs are pi-durable's entry numbers, as strings. Entries stay append-only: `session.inspectEntry` still reads an edited entry's original.
+
+- **`elide(ids)`** replaces a tool result with a stub that names its size and how to read the original, keeping the call answered. An assistant entry's tool calls become one plain-text note, and their results leave the context with them, so the model sees neither a call to copy nor an unanswered one. User messages, compaction summaries, host messages, and the turn running the call are protected.
+- **`summarize({ from, to, summary })`** replaces a contiguous range: its first entry carries the summary and the rest are omitted. A range must keep each tool call with its result, and the summary must be shorter than what it replaces.
+- **`setNote(key, content)`** keeps notes in a conversation document, rendered as the `pit_notes` prompt section. Notes need no compaction hook: pi-durable sends sections again after a compaction head, so notes outlive compaction without depending on its summary, and a fork starts with the notes its parent had at the fork point. Each change sends the whole section again, so notes have Pi's budget (the larger of 4,096 tokens and 10% of the context window) and at most 32 keys.
+
+When edits apply:
+
+| Call                                       | Applies                                                                                                                                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `elide(..., { when: "now" })`, `summarize` | At the next boundary: pi-durable places a write with `edits` after the current tool round, so the run's next request sees it.                                                                                  |
+| `elide` (default `when: "end"`)            | When the run answers. The call stages the edit as a data-only entry; an `afterRun` hook applies what the run staged in one write before the next input. A run that fails or is aborted drops its staged edits. |
+| `setNote`                                  | At the run's next request, which renders the section again.                                                                                                                                                    |
+
+Receipts report `appliesAt` (`turn_end` or `run_end`), the estimated tokens freed, and `cacheMode: "unknown"`: pi-durable does not report the provider's cache, so the re-prefill estimate assumes the whole conversation is sent again.
+
+What the prototype established (pi-durable 1.5): replacing an assistant tool-call entry with text while omitting its result keeps the context valid; omitting only a result makes pi-durable answer the call with a placeholder ("Tool result unavailable"), and omitting only a call drops its now-orphaned result. Pit always edits a call and its results together. A replaced call can leave two assistant messages in a row; the prototype used pi-ai's faux provider, so check a strict provider before relying on it.
 
 ## Security notes
 

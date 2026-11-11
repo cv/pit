@@ -13,6 +13,7 @@ import {
   type EntryRecord,
   type Extension,
   Harness,
+  type HarnessSettings,
   MemoryStorage,
   type Storage,
   type ToolRegistration,
@@ -31,6 +32,8 @@ export interface DurableRun {
   results: DurableToolResult[];
   /** The prompt sections the model saw on the run's last request. */
   sections: Record<string, string>;
+  /** The messages of each model request in the run, in order. */
+  requests: ModelContext["messages"][];
 }
 
 /** A storage that outlives each Harness, so a test can reopen the same conversations. */
@@ -72,6 +75,7 @@ export class DurableTestHost {
   readonly #models = createModels();
   readonly #extensions: Extension[];
   readonly #cwd: string;
+  readonly #settings: HarnessSettings | undefined;
   #harness: Harness | undefined;
 
   readonly #env: boolean;
@@ -84,8 +88,10 @@ export class DurableTestHost {
     /** Gives each conversation a Node execution environment in `cwd`. */
     env?: boolean;
     cwd: string;
+    settings?: HarnessSettings;
   }) {
     this.#env = input.env === true;
+    this.#settings = input.settings;
     this.#models.setProvider(this.#faux.provider);
     this.#extensions = [
       input.extension,
@@ -106,6 +112,7 @@ export class DurableTestHost {
         models: this.#models,
         registry,
         ...(this.#env ? { env: () => new NodeExecutionEnv({ cwd }) } : {}),
+        ...(this.#settings ? { settings: this.#settings } : {}),
       },
       context,
     );
@@ -126,13 +133,16 @@ export class DurableTestHost {
   ): Promise<DurableRun> {
     const target = conversation ?? (await this.root());
     let sections: Record<string, string> = {};
+    const requests: ModelContext["messages"][] = [];
     this.#faux.setResponses([
-      ...programs.map((args) =>
-        fauxAssistantMessage(fauxToolCall("typescript", args as Record<string, any>), {
+      ...programs.map((args) => (request: ModelContext) => {
+        requests.push(request.messages);
+        return fauxAssistantMessage(fauxToolCall("typescript", args as Record<string, any>), {
           stopReason: "toolUse",
-        }),
-      ),
+        });
+      }),
       (request: ModelContext) => {
+        requests.push(request.messages);
         sections = systemSections(request);
         return fauxAssistantMessage("done");
       },
@@ -141,6 +151,8 @@ export class DurableTestHost {
     const submission = await target.submit({ type: "input", content: "run" }, context);
     const settled = await submission.wait(context);
     if (settled.status !== "done") throw new Error(`Run ended ${settled.status}`);
+    // Work the run started after its answer, such as staged context edits, finishes first.
+    await target.waitForIdle(context);
     const page = await target.entries(
       { order: "ascending", ...(before === undefined ? {} : { minEntryId: before }) },
       1000,
@@ -150,7 +162,22 @@ export class DurableTestHost {
     return {
       results: page.items.filter((entry) => entry.kind === "pi.tool-result").map(toolResult),
       sections,
+      requests,
     };
+  }
+
+  /** The model context the conversation's next request would send. */
+  async messages(conversation: Conversation): Promise<ModelContext["messages"]> {
+    return [...(await conversation.context(context)).messages];
+  }
+
+  /** Compacts the conversation, the faux model answering the summary request with `summary`. */
+  async compact(conversation: Conversation, summary: string): Promise<void> {
+    this.#faux.setResponses([fauxAssistantMessage(summary)]);
+    const harness = await this.#open();
+    const task = await conversation.compact(undefined, context);
+    await harness.waitForTask(task, context);
+    await conversation.waitForIdle(context);
   }
 
   /** Forks the conversation at its latest entry. */
