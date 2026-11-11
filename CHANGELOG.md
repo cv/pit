@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-11
+
 ### Added
 
 - `session.*` on pi-durable hosts: `outline`, `inspectEntry`, `elide`, and `summarize` rewrite the conversation's context with pi-durable edits, and `setNote`/`notes` keep notes in a conversation document shown as the `pit_notes` section, which pi-durable re-sends after compaction and forks inherit. As on Pi, a change applies only if its call succeeds, after the current tool round with `when: "now"` and notes, and by default when the run answers, through an `afterRun` hook. See [Context editing and notes](docs/durable.md#context-editing-and-notes).
