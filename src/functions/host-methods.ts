@@ -20,6 +20,8 @@ interface FunctionHostServices {
   activity: FunctionActivity[];
   /** Asks the host's UI before writing or removing project function files; Pi does not. */
   confirmProjectWrites?: boolean;
+  /** Added to a project promotion's result, such as where the host keeps the new file. */
+  projectPromotionNote?: string;
 }
 
 /** Asks before a project function file changes, when the host wants that; refuses without a UI. */
@@ -144,14 +146,17 @@ function createPersistentFunctionHandlers({
     remove: async (args, signal) => {
       requireProjectAccess();
       const name = requiredName(args);
-      await confirmProjectWrite(
-        "Project function removal",
-        {
-          title: `Remove project function ${name}?`,
-          message: `Delete ${name} from this project's functions for everyone who trusts it?`,
-        },
-        signal,
-      );
+      // Nothing to delete needs no answer; the removal reports it.
+      const exists = functionState.project.has(name) || functionState.invalidProject.has(name);
+      if (exists)
+        await confirmProjectWrite(
+          "Project function removal",
+          {
+            title: `Remove project function ${name}?`,
+            message: `Delete ${name} from this project's functions for everyone who trusts it?`,
+          },
+          signal,
+        );
       return removeProjectFunctionFromState({
         cwd: ctx.cwd,
         name,
@@ -206,6 +211,7 @@ export function createFunctionHostMethods({
   commitFunctionState,
   activity,
   confirmProjectWrites = false,
+  projectPromotionNote,
 }: FunctionHostServices): Record<FunctionMethod, FunctionMethodHandler> {
   const service = new SavedFunctionService({
     state: functionState,
@@ -255,6 +261,10 @@ export function createFunctionHostMethods({
       const target = promotionTarget(args[2]);
       if (target === "project") {
         requireProjectAccess();
+        // Ask only about a promotion that can happen.
+        if (confirmProjectWrites && !functionState.session.has(name)) {
+          throw new Error(`Saved function "${name}" was not found`);
+        }
         await confirmProjectWrite(
           "Project function promotion",
           {
@@ -279,7 +289,12 @@ export function createFunctionHostMethods({
         }
         await service.promoteToUser({ name, summary, context: ctx, activity });
       }
-      return { name, promoted: true as const, scope: target };
+      return {
+        name,
+        promoted: true as const,
+        scope: target,
+        ...(target === "project" && projectPromotionNote ? { note: projectPromotionNote } : {}),
+      };
     },
     removeSession: (args) => {
       const name = requiredName(args);
