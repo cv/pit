@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { APPLY_STAGED_EDITS, APPLY_STAGED_EDITS_HOOK } from "../../src/durable/context/apply.js";
 import { planElide, planSummarize } from "../../src/durable/context/edits.js";
+import { StagedContextChanges } from "../../src/durable/context/staging.js";
 import { readContextView } from "../../src/durable/context/view.js";
 import { createDurableSessionHandler } from "../../src/durable/session.js";
 
@@ -304,7 +305,12 @@ describe("durable session handler", () => {
     const fake = fakeApi(entries);
     return {
       ...fake,
-      call: createDurableSessionHandler({ api: fake.api, context, contextWindow: 200_000 }),
+      call: createDurableSessionHandler({
+        api: fake.api,
+        context,
+        contextWindow: 200_000,
+        staging: new StagedContextChanges(),
+      }),
     };
   }
 
@@ -356,6 +362,7 @@ describe("durable session handler", () => {
       api: compacted.api,
       context,
       contextWindow: undefined,
+      staging: new StagedContextChanges(),
     });
     await expect(later("inspectEntry", ["3"], undefined as never)).resolves.toMatchObject({
       state: "compacted",
@@ -371,6 +378,7 @@ describe("durable session handler", () => {
       api: bookkeeping.api,
       context,
       contextWindow: undefined,
+      staging: new StagedContextChanges(),
     });
     await expect(reader("inspectEntry", ["11"], undefined as never)).rejects.toThrow(
       /contributes no model content/,
@@ -381,14 +389,27 @@ describe("durable session handler", () => {
     });
   });
 
-  it("writes rewrites now or stages them, and rejects other timings", async () => {
-    const { call: session, submitted } = await handler();
+  it("stages rewrites for now or the run's end, writing nothing until the call applies them", async () => {
+    const fake = fakeApi(HISTORY);
+    const staging = new StagedContextChanges();
+    const session = createDurableSessionHandler({
+      api: fake.api,
+      context,
+      contextWindow: 200_000,
+      staging,
+    });
+    const { submitted } = fake;
     await session("elide", [["3"], { when: "now" }], undefined as never);
     await session(
       "summarize",
       [{ from: "8", to: "9", summary: "one call", when: "end" }],
       undefined as never,
     );
+    expect(submitted).toEqual([]);
+    await expect(session("elide", [["3"]], undefined as never)).rejects.toThrow(
+      /already has a staged rewrite/,
+    );
+    await staging.apply(fake.api, context, 200_000);
     expect(submitted.map((draft) => draft.entry.kind)).toEqual([
       "pit.context-edit",
       "pit.context-edit-pending",
@@ -467,6 +488,7 @@ describe("durable inspection of rewritten and unusual entries", () => {
       api: fake.api,
       context,
       contextWindow: undefined,
+      staging: new StagedContextChanges(),
     });
     await expect(session("inspectEntry", ["8"], undefined as never)).resolves.toMatchObject({
       state: "summarized",

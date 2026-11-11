@@ -177,9 +177,10 @@ describe("session.* on a pi-durable Harness", () => {
 }`,
       },
     ]);
+    // As on Pi, a summary applies when the run ends unless it asks for "now".
     expect(results[2]?.details.value).toMatchObject({
       status: "staged",
-      appliesAt: "turn_end",
+      appliesAt: "run_end",
       operation: "summarize",
       summarizedEntries: 4,
     });
@@ -269,6 +270,36 @@ describe("session.* on a pi-durable Harness", () => {
     expect(results[0]?.details.value).toMatchObject({ notes: [], tokens: 0, maxNotes: 32 });
     expect(results[1]?.text).toMatch(/at most 32 notes/);
     expect(results[2]?.text).toMatch(/over the ~[\d.]+K-token budget/);
+  });
+
+  it("applies a call's edits and notes only when its program succeeds", async () => {
+    const durable = host();
+    const { results } = await durable.run([
+      BULKY,
+      {
+        code: `async ({ session: { outline, elide, setNote, notes } }) => {
+  const [entry] = (await outline({ roles: ["toolResult"] })).entries;
+  await elide([entry.id], { when: "now" });
+  await setNote("plan", "from a failed call");
+  if ((await notes()).notes[0]?.pending) throw new Error("program failed after staging");
+  return "unreachable";
+}`,
+      },
+      {
+        code: `async ({ session: { outline, notes } }) => ({
+  result: (await outline({ roles: ["toolResult"] })).entries[0],
+  notes: (await notes()).notes,
+})`,
+      },
+    ]);
+    expect(results[1]?.isError).toBe(true);
+    expect(results[1]?.text).toMatch(/^program failed after staging/);
+    expect(results[2]?.details.value.result).toMatchObject({ state: "original", editable: true });
+    expect(results[2]?.details.value.notes).toEqual([]);
+    const toolResult = (await durable.messages(await durable.root())).find(
+      (message: any) => message.role === "toolResult",
+    );
+    expect(texts([toolResult])).not.toContainEqual(expect.stringMatching(/^\[Elided/));
   });
 
   it("validates note keys, content, and removals", async () => {

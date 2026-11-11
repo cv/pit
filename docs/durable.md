@@ -78,13 +78,17 @@ The first call in a conversation, per host process, replays these entries from t
 - **`summarize({ from, to, summary })`** replaces a contiguous range: its first entry carries the summary and the rest are omitted. A range must keep each tool call with its result, and the summary must be shorter than what it replaces.
 - **`setNote(key, content)`** keeps notes in a conversation document, rendered as the `pit_notes` prompt section. Notes need no compaction hook: pi-durable sends sections again after a compaction head, so notes outlive compaction without depending on its summary, and a fork starts with the notes its parent had at the fork point. Each change sends the whole section again, so notes have Pi's budget (the larger of 4,096 tokens and 10% of the context window) and at most 32 keys.
 
-When edits apply:
+When edits apply, as on Pi:
 
-| Call                                       | Applies                                                                                                                                                                                                        |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `elide(..., { when: "now" })`, `summarize` | At the next boundary: pi-durable places a write with `edits` after the current tool round, so the run's next request sees it.                                                                                  |
-| `elide` (default `when: "end"`)            | When the run answers. The call stages the edit as a data-only entry; an `afterRun` hook applies what the run staged in one write before the next input. A run that fails or is aborted drops its staged edits. |
-| `setNote`                                  | At the run's next request, which renders the section again.                                                                                                                                                    |
+- **Only after the call succeeds.** `elide`, `summarize`, and `setNote` stage their change in the running `typescript` call; the call writes it after the program and its saved-function changes succeed, and a failed call drops it. A target can be staged once: a second elide of a staged entry fails until the first applies.
+- **`when: "end"`, the default for `elide` and `summarize`:** when the run answers. The call writes the edit as a data-only entry, which changes nothing the model sees; an `afterRun` hook applies what the run staged in one write before the next input. A run that fails or is aborted drops its staged edits.
+- **`when: "now"`:** after the current tool round. pi-durable places a write with `edits` at the next boundary, so the run's next request sees it.
+- **`setNote`:** after the current tool round, like `when: "now"`: the next request renders the notes section again. `notes()` shows a change the running call staged as `pending: true`.
+
+| Receipt `appliesAt` | Meaning                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| `turn_end`          | Applies after the current tool round, if the call succeeds |
+| `run_end`           | Applies when the run answers, if the call succeeds         |
 
 Receipts report `appliesAt` (`turn_end` or `run_end`), the estimated tokens freed, and `cacheMode: "unknown"`: pi-durable does not report the provider's cache, so the re-prefill estimate assumes the whole conversation is sent again.
 

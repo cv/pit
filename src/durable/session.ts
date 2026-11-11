@@ -7,9 +7,10 @@ import {
   stringArrayValue as stringArray,
   stringValue as string,
 } from "../shared/argument-values.js";
-import { type EditTiming, writeEdit } from "./context/apply.js";
+import type { EditTiming } from "./context/apply.js";
 import { planElide, planSummarize, type PlannedEdit } from "./context/edits.js";
-import { describeNotes, readNotes, setNote } from "./context/notes.js";
+import { describeNotes, readNotes } from "./context/notes.js";
+import type { StagedContextChanges } from "./context/staging.js";
 import {
   type ContextItem,
   type ContextRole,
@@ -35,6 +36,8 @@ export interface DurableSessionServices {
   api: Pick<ToolExecutionApi, "commit" | "conversation" | "conversationId" | "callId" | "snapshot">;
   context: ToolContext;
   contextWindow: number | undefined;
+  /** Where this call's edits and notes wait until the call succeeds. */
+  staging: StagedContextChanges;
 }
 
 function messageText(message: Message): string {
@@ -195,8 +198,9 @@ async function inspectEntry(services: DurableSessionServices, view: ContextView,
   };
 }
 
-function timingOf(value: unknown, fallback: "now" | "end"): EditTiming {
-  const when = value ?? fallback;
+/** As on Pi, an elide or summary applies when the run ends unless the call asks for "now". */
+function timingOf(value: unknown): EditTiming {
+  const when = value ?? "end";
   if (when !== "now" && when !== "end") throw new Error('options.when must be "now" or "end"');
   return when === "now" ? "turn_end" : "run_end";
 }
@@ -221,8 +225,8 @@ function receipt(view: ContextView, plan: PlannedEdit, timing: EditTiming) {
 export function createDurableSessionHandler(
   services: DurableSessionServices,
 ): NativeFunctionHandler {
-  const { api, context } = services;
-  const view = () => readContextView(api, context, api.callId);
+  const { api, context, staging } = services;
+  const view = async () => staging.withPending(await readContextView(api, context, api.callId));
   return async (method, args) => {
     switch (method) {
       case "info": {
@@ -253,8 +257,8 @@ export function createDurableSessionHandler(
         const reason =
           options.reason === undefined ? undefined : string(options.reason, "options.reason");
         const plan = planElide(current, stringArray(args[0], "ids"), reason);
-        const timing = timingOf(options.when, "end");
-        await writeEdit(api, context, plan, timing);
+        const timing = timingOf(options.when);
+        staging.stageEdit(plan, timing);
         return receipt(current, plan, timing);
       }
       case "summarize": {
@@ -265,8 +269,8 @@ export function createDurableSessionHandler(
           to: string(input.to, "input.to"),
           summary: string(input.summary, "input.summary"),
         });
-        const timing = timingOf(input.when, "now");
-        await writeEdit(api, context, plan, timing);
+        const timing = timingOf(input.when);
+        staging.stageEdit(plan, timing);
         return {
           ...receipt(current, plan, timing),
           summarizedEntries: plan.summarizedEntries,
@@ -276,14 +280,14 @@ export function createDurableSessionHandler(
       case "setNote": {
         const key = string(args[0], "key");
         const content = args[1] === null ? null : string(args[1], "content");
-        const result = await setNote(api, context, {
+        const result = staging.stageNote(await readNotes(api, context), {
           key,
           content,
           contextWindow: services.contextWindow,
         });
         return {
           status: "staged",
-          // The notes section renders again for the run's next request.
+          // As on Pi, a note applies after this turn: the next request renders the section again.
           appliesAt: "turn_end",
           operation: "note",
           targets: [key],
@@ -295,7 +299,11 @@ export function createDurableSessionHandler(
         };
       }
       case "notes":
-        return describeNotes(await readNotes(api, context), services.contextWindow);
+        return describeNotes(
+          { notes: staging.notes(await readNotes(api, context)) },
+          services.contextWindow,
+          staging.pendingNotes(),
+        );
       default:
         throw new PitDurableUnavailableError(
           `session.${method}`,

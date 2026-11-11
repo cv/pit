@@ -73,11 +73,16 @@ export async function readNotes(
   return state ?? { notes: [] };
 }
 
-export function describeNotes(state: Readonly<NotesState>, contextWindow: number | undefined) {
+export function describeNotes(
+  state: Readonly<NotesState>,
+  contextWindow: number | undefined,
+  pending: ReadonlySet<string> = new Set(),
+) {
   const notes = state.notes.map(({ key, content }) => ({
     key,
     entryId: NOTES_SECTION,
     tokens: noteTokens(key, content),
+    ...(pending.has(key) ? { pending: true } : {}),
   }));
   return {
     notes,
@@ -89,12 +94,16 @@ export function describeNotes(state: Readonly<NotesState>, contextWindow: number
   };
 }
 
-/** Sets or removes one note in the conversation's notes document. */
-export async function setNote(
-  api: Pick<ToolExecutionApi, "commit" | "conversationId">,
-  context: ToolContext,
+type NoteList = Array<{ key: string; content: string }>;
+
+/**
+ * Sets or removes one note in `notes`, which it changes in place. Throws, changing nothing, when
+ * the key or content is invalid or the notes would exceed their count or token budget.
+ */
+export function changeNote(
+  notes: NoteList,
   input: { key: string; content: string | null; contextWindow: number | undefined },
-): Promise<{ action: "created" | "replaced" | "removed"; tokens: number }> {
+): { action: "created" | "replaced" | "removed"; tokens: number } {
   const { key, content } = input;
   if (!NOTE_KEY.test(key)) {
     throw new Error(
@@ -104,31 +113,41 @@ export async function setNote(
   if (content !== null && content.trim() === "") {
     throw new Error("Note content must not be empty; pass null to remove the note");
   }
-  return api.commit(async (tx) => {
+  const index = notes.findIndex((note) => note.key === key);
+  if (content === null) {
+    if (index === -1) throw new Error(`No note has key "${key}"`);
+    notes.splice(index, 1);
+    return { action: "removed", tokens: 0 };
+  }
+  if (index === -1 && notes.length >= MAX_NOTES) {
+    throw new Error(`A conversation keeps at most ${MAX_NOTES} notes; remove one first`);
+  }
+  const others = notes.filter((note) => note.key !== key);
+  const tokens = noteTokens(key, content);
+  const used = others.reduce((sum, note) => sum + noteTokens(note.key, note.content), tokens);
+  const budget = noteBudget(input.contextWindow);
+  if (used > budget) {
+    throw new Error(
+      `Notes would use ~${formatTokens(used)} tokens, over the ~${formatTokens(budget)}-token budget (the larger of 4,096 tokens and 10% of the context window)`,
+    );
+  }
+  if (index === -1) {
+    notes.push({ key, content });
+    return { action: "created", tokens };
+  }
+  (notes[index] as { content: string }).content = content;
+  return { action: "replaced", tokens };
+}
+
+/** Applies note changes a call staged, in order, in one commit of the notes document. */
+export async function applyNoteChanges(
+  api: Pick<ToolExecutionApi, "commit" | "conversationId">,
+  context: ToolContext,
+  changes: ReadonlyArray<{ key: string; content: string | null }>,
+  contextWindow: number | undefined,
+): Promise<void> {
+  await api.commit(async (tx) => {
     const state = await tx.doc(NOTES_DOC, api.conversationId);
-    const index = state.notes.findIndex((note) => note.key === key);
-    if (content === null) {
-      if (index === -1) throw new Error(`No note has key "${key}"`);
-      state.notes.splice(index, 1);
-      return { action: "removed" as const, tokens: 0 };
-    }
-    if (index === -1 && state.notes.length >= MAX_NOTES) {
-      throw new Error(`A conversation keeps at most ${MAX_NOTES} notes; remove one first`);
-    }
-    const others = state.notes.filter((note) => note.key !== key);
-    const tokens = noteTokens(key, content);
-    const used = others.reduce((sum, note) => sum + noteTokens(note.key, note.content), tokens);
-    const budget = noteBudget(input.contextWindow);
-    if (used > budget) {
-      throw new Error(
-        `Notes would use ~${formatTokens(used)} tokens, over the ~${formatTokens(budget)}-token budget (the larger of 4,096 tokens and 10% of the context window)`,
-      );
-    }
-    if (index === -1) {
-      state.notes.push({ key, content });
-      return { action: "created" as const, tokens };
-    }
-    (state.notes[index] as { content: string }).content = content;
-    return { action: "replaced" as const, tokens };
+    for (const change of changes) changeNote(state.notes, { ...change, contextWindow });
   }, context);
 }

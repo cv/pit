@@ -28,6 +28,7 @@ import {
 import { appliedEditDetails, buildToolResult } from "../tool/result.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { applySourceOptions } from "../tool/source-options.js";
+import { StagedContextChanges } from "./context/staging.js";
 import { createDurableModelsHandler, createDurableRuntimeHandler } from "./handlers.js";
 import {
   createDurableHostApi,
@@ -131,6 +132,8 @@ async function runDurableProgram(call: DurableCall) {
   const images = createDurableImageCollector();
   // A person may take minutes to answer a dialog; that wait does not count against the program.
   const deadline = new ExecutionDeadline(params.timeoutMs ?? 30_000);
+  // Context edits and notes wait here, as on Pi, until the program succeeds.
+  const staging = new StagedContextChanges();
   const agent = await api.agent(context);
   /* v8 ignore next 3 -- a conversation that generates, and so calls tools, has a model. */
   const model = agent.model
@@ -184,6 +187,7 @@ async function runDurableProgram(call: DurableCall) {
             api,
             context,
             contextWindow: model?.contextWindow,
+            staging,
           }),
           commands: unavailableNamespace("commands", "the host has no slash commands"),
           models: createDurableModelsHandler({ models: api.models, current: model }),
@@ -228,6 +232,7 @@ async function runDurableProgram(call: DurableCall) {
     await savedFunctionService.commit(prepared, ctx, functionActivity);
     // The conversation records the saved-function changes before the call reports them.
     await call.writes.settle();
+    await staging.apply(api, context, model?.contextWindow);
     timings.enter("result");
     const result = await buildToolResult({
       value,
