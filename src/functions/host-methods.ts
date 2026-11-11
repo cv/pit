@@ -18,7 +18,16 @@ interface FunctionHostServices {
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];
+  /** Asks the host's UI before writing or removing project function files; Pi does not. */
+  confirmProjectWrites?: boolean;
 }
+
+/** Asks before a project function file changes, when the host wants that; refuses without a UI. */
+type ProjectWriteConfirmation = (
+  operation: string,
+  question: { title: string; message: string },
+  signal: AbortSignal,
+) => Promise<void>;
 
 function requiredName(args: unknown[]): string {
   const name = string(args[0], "function name");
@@ -103,6 +112,7 @@ interface PersistentFunctionHandlerServices {
   activity: FunctionActivity[];
   service: SavedFunctionService;
   requireProjectAccess(): void;
+  confirmProjectWrite: ProjectWriteConfirmation;
 }
 
 function createPersistentFunctionHandlers({
@@ -112,6 +122,7 @@ function createPersistentFunctionHandlers({
   activity,
   service,
   requireProjectAccess,
+  confirmProjectWrite,
 }: PersistentFunctionHandlerServices): Pick<
   Record<FunctionMethod, FunctionMethodHandler>,
   PersistentFunctionMethod
@@ -130,9 +141,17 @@ function createPersistentFunctionHandlers({
       }
       return { ...functionState.metadata.get(name), source };
     },
-    remove: (args) => {
+    remove: async (args, signal) => {
       requireProjectAccess();
       const name = requiredName(args);
+      await confirmProjectWrite(
+        "Project function removal",
+        {
+          title: `Remove project function ${name}?`,
+          message: `Delete ${name} from this project's functions for everyone who trusts it?`,
+        },
+        signal,
+      );
       return removeProjectFunctionFromState({
         cwd: ctx.cwd,
         name,
@@ -186,6 +205,7 @@ export function createFunctionHostMethods({
   functionState,
   commitFunctionState,
   activity,
+  confirmProjectWrites = false,
 }: FunctionHostServices): Record<FunctionMethod, FunctionMethodHandler> {
   const service = new SavedFunctionService({
     state: functionState,
@@ -197,6 +217,15 @@ export function createFunctionHostMethods({
       throw new Error("Project functions require a trusted project");
     }
   };
+  const confirmProjectWrite: ProjectWriteConfirmation = async (operation, question, signal) => {
+    if (!confirmProjectWrites) return;
+    if (!ctx.hasUI) throw new Error(`${operation} requires interactive confirmation`);
+    const confirmed = await ctx.ui.confirm(question.title, question.message, { signal });
+    // An answer that arrives after the call ended must not change anything.
+    if (!confirmed || signal.aborted) {
+      throw terminationError("cancelled", `${operation} was cancelled`);
+    }
+  };
 
   return {
     ...createPersistentFunctionHandlers({
@@ -206,6 +235,7 @@ export function createFunctionHostMethods({
       activity,
       service,
       requireProjectAccess,
+      confirmProjectWrite,
     }),
     listAll: (args) => new FunctionInspector(functionState, ctx.cwd).list(listOptions(args[0])),
     getSaved: (args) =>
@@ -225,6 +255,14 @@ export function createFunctionHostMethods({
       const target = promotionTarget(args[2]);
       if (target === "project") {
         requireProjectAccess();
+        await confirmProjectWrite(
+          "Project function promotion",
+          {
+            title: `Save ${name} to the project?`,
+            message: `Make ${name} a project function that loads for everyone who trusts this project?`,
+          },
+          signal,
+        );
         await service.promoteToProject({ name, summary, context: ctx, activity });
       } else {
         if (!ctx.hasUI) {
