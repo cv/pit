@@ -12,6 +12,7 @@ New to Pit? Start with the [project README](../README.md) for what it does, inst
 | [Reference](reference.md)             | Look up tool parameters, global methods, defaults, return shapes, and limits                      |
 | [Security model](security.md)         | Understand the sandbox's guarantees and the authority host functions retain                       |
 | [Troubleshooting](troubleshooting.md) | Diagnose a symptom and recover                                                                    |
+| [pi-durable hosts](durable.md)        | Run Pit's tool on a pi-durable host such as pi-action, and know what differs from Pi              |
 
 You can use Pit by talking to the agent normally. The call-authoring guides are for understanding or writing the TypeScript it runs, not prerequisites for getting started.
 
