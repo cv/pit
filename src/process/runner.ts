@@ -1,6 +1,5 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-
 import type { HostShellProgressEvent } from "../execution/types.js";
+import type { PitHostApi } from "../host/context.js";
 import { boundedIntegerValue } from "../shared/argument-values.js";
 import { boundText, LIMITS, sliceText, type SliceKeep } from "../shared/bounds.js";
 import { terminationError } from "../shared/termination-errors.js";
@@ -25,7 +24,10 @@ interface ProcessRunner {
   run(request: ProcessRequest): Promise<ProcessResult>;
 }
 
-export function createProcessRunner(pi: ExtensionAPI, defaultCwd: string): ProcessRunner {
+export function createProcessRunner(
+  pi: Pick<PitHostApi, "exec">,
+  defaultCwd: string,
+): ProcessRunner {
   return {
     run: (request) =>
       executeHostProcess({
@@ -114,7 +116,7 @@ export async function executeHostProcess({
   displayCommand = formatProcessCommand(program, args),
   onProgress,
   signal,
-}: ProcessRequest & { pi: ExtensionAPI; defaultCwd: string }): Promise<ProcessResult> {
+}: ProcessRequest & { pi: Pick<PitHostApi, "exec">; defaultCwd: string }): Promise<ProcessResult> {
   const { cwd, budget, keep, timeout } = processSettings(options, defaultCwd);
   const abort = signal ? { signal } : {};
   onProgress?.({ phase: "start" });

@@ -1,7 +1,6 @@
-import { formatSize } from "@earendil-works/pi-coding-agent";
-
 import { globalFunctionDocumentation } from "../functions/global-documentation.js";
 import { LIMITS } from "../shared/bounds.js";
+import { hostPlatform } from "../shared/host-platform.js";
 
 export const PROMPT_SNIPPET = "Execute TypeScript with explicit function dependencies";
 
@@ -70,6 +69,6 @@ export function createToolDescription(maxOutputBytes: number): string {
     "GLOBAL FUNCTIONS",
     ...globalFunctionDocumentation(),
     "",
-    `Paths are relative to Pi's working directory unless absolute. Returned values over ${formatSize(maxOutputBytes)} are cut.`,
+    `Paths are relative to Pi's working directory unless absolute. Returned values over ${hostPlatform().formatSize(maxOutputBytes)} are cut.`,
   ].join("\n");
 }

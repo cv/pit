@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { hostPlatform } from "../../shared/host-platform.js";
 
 /** Where saved functions load from and are written to, resolved for one session. */
 export interface FunctionPaths {
@@ -14,12 +14,12 @@ export type ConfiguredFunctionPaths = Partial<FunctionPaths>;
 
 /** The project default: `.pi/functions` in the project root. */
 export function defaultProjectFunctionDirectory(cwd: string): string {
-  return join(cwd, CONFIG_DIR_NAME, "functions");
+  return join(cwd, hostPlatform().configDirName, "functions");
 }
 
 /** The user default: `functions` in Pi's agent directory, usually `~/.pi/agent/functions`. */
-export function defaultUserFunctionDirectory(): string {
-  return join(getAgentDir(), "functions");
+export function defaultUserFunctionDirectory(agentDir = hostPlatform().agentDir()): string {
+  return join(agentDir, "functions");
 }
 
 /**
@@ -37,6 +37,7 @@ function resolveConfiguredDirectory(cwd: string, configured: string): string {
 export function resolveFunctionPaths(
   cwd: string,
   configured: ConfiguredFunctionPaths = {},
+  agentDir?: string,
 ): FunctionPaths {
   return {
     project:
@@ -45,7 +46,7 @@ export function resolveFunctionPaths(
         : resolveConfiguredDirectory(cwd, configured.project),
     user:
       configured.user === undefined
-        ? defaultUserFunctionDirectory()
+        ? defaultUserFunctionDirectory(agentDir)
         : resolveConfiguredDirectory(cwd, configured.user),
   };
 }

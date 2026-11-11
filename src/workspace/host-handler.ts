@@ -1,7 +1,6 @@
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { glob } from "tinyglobby";
 
 import {
@@ -9,6 +8,7 @@ import {
   recordValue as object,
   stringValue as string,
 } from "../shared/argument-values.js";
+import { hostPlatform } from "../shared/host-platform.js";
 import {
   EDIT_RANGE_LINES,
   fileRevision,
@@ -33,7 +33,7 @@ function rangeFields(edit: PreparedEdit) {
 
 function editWorkspace(cwd: string, args: unknown[], signal?: AbortSignal) {
   const path = resolveWorkspacePath(cwd, args[0]);
-  return withFileMutationQueue(path, async () => {
+  return hostPlatform().withFileMutationQueue(path, async () => {
     checkAbort(signal);
     const snapshot = await readSnapshot(path);
     const prepared = prepareEdit(
@@ -84,7 +84,7 @@ function withMutationQueues<T>(paths: string[], task: () => Promise<T>): Promise
   const [path, ...rest] = paths;
   return path === undefined
     ? task()
-    : withFileMutationQueue(path, () => withMutationQueues(rest, task));
+    : hostPlatform().withFileMutationQueue(path, () => withMutationQueues(rest, task));
 }
 
 async function batchReads(
