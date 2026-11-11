@@ -119,3 +119,29 @@ export function createDurableImageCollector(): ImageCollector {
     load: () => Promise.reject(new PitDurableUnavailableError("Image loading")),
   };
 }
+
+/**
+ * The host's dialogs with the program deadline paused while each waits for its answer, so a
+ * person answering through a slow channel, such as a GitHub comment, does not time the program out.
+ */
+export function pauseWhileAsking(
+  ui: PitDurableUi,
+  deadline: { pause(): () => void },
+): PitDurableUi {
+  const paused =
+    <A extends unknown[], R>(ask: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      const resume = deadline.pause();
+      try {
+        return await ask(...args);
+      } finally {
+        resume();
+      }
+    };
+  return {
+    confirm: paused(ui.confirm.bind(ui)),
+    select: paused(ui.select.bind(ui)),
+    input: paused(ui.input.bind(ui)),
+    notify: ui.notify.bind(ui),
+  };
+}

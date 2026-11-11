@@ -47,7 +47,7 @@ async function runInCodemodeSandbox(
 }
 
 function executionSignal(options: FunctionExecutionOptions, failed: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(options.timeoutMs);
+  const timeout = options.deadline?.signal ?? AbortSignal.timeout(options.timeoutMs);
   return AbortSignal.any([...(options.signal ? [options.signal] : []), timeout, failed]);
 }
 

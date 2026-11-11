@@ -1,11 +1,14 @@
 import type { HostCallTrace, FunctionExecutionContext } from "../execution/host-call-trace.js";
 import { isRecord } from "../shared/records.js";
+import type { ExecutionDeadline } from "./deadline.js";
 import type { HostCallHandler } from "./dispatcher.js";
 import type { PreparedSandboxProgram } from "./program.js";
 
 export interface FunctionExecutionOptions {
   memoryLimitMb: number;
   timeoutMs: number;
+  /** Replaces the fixed `timeoutMs` deadline with one the host can pause. */
+  deadline?: ExecutionDeadline;
   input?: unknown;
   signal?: AbortSignal;
   onHostCallTrace?: (trace: HostCallTrace) => void;

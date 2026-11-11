@@ -1,6 +1,7 @@
 import type { HostCallTrace } from "../execution/host-call-trace.js";
 import type { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { FunctionEnvironment, FunctionDefinitionReference } from "../functions/environment.js";
+import type { ExecutionDeadline } from "./deadline.js";
 import type { HostCallHandler } from "./dispatcher.js";
 import type { FunctionExecutionOptions, FunctionExecutor } from "./executor.js";
 import { prepareSandboxProgram } from "./program.js";
@@ -10,6 +11,8 @@ export interface SandboxOptions extends FunctionEnvironment {
   timings?: ExecutionTimingRecorder;
   memoryLimitMb?: number;
   timeoutMs?: number;
+  /** A deadline the host pauses, such as while a dialog waits for a person; it uses `timeoutMs`. */
+  deadline?: ExecutionDeadline;
   signal?: AbortSignal;
   input?: unknown;
   onHostCallTrace?: (trace: HostCallTrace) => void;
@@ -29,6 +32,7 @@ function executionOptions(options: SandboxOptions): FunctionExecutionOptions {
     timeoutMs,
     ...(options.input === undefined ? {} : { input: options.input }),
     ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.deadline ? { deadline: options.deadline } : {}),
     ...(options.onHostCallTrace ? { onHostCallTrace: options.onHostCallTrace } : {}),
   };
 }
