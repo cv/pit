@@ -115,6 +115,8 @@ export interface NativeHostServices {
   images: ImageCollector;
   /** Records the results of this program's completed calls, kept if the program fails. */
   completedCalls?: CompletedCallJournal;
+  /** Asks the host's UI before `functions.*` writes or removes project function files. */
+  confirmProjectWrites?: boolean;
 }
 
 interface ProcessCommand {
@@ -328,6 +330,7 @@ export function createNativeHostDispatcher(
       functionState,
       commitFunctionState,
       activity,
+      ...(services.confirmProjectWrites ? { confirmProjectWrites: true } : {}),
     }),
     session: hosted.session,
     commands: hosted.commands,

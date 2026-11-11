@@ -9,6 +9,8 @@ interface FunctionHostServices {
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
   activity: FunctionActivity[];
+  /** Asks the host's UI before writing or removing project function files. */
+  confirmProjectWrites?: boolean;
 }
 
 type FunctionHostHandler = (
