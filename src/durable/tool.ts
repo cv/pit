@@ -11,6 +11,7 @@ import { ExecutionTimingRecorder } from "../execution/timings.js";
 import type { ShellProgressEvent } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { createNativeHostDispatcher, describeContext } from "../host/native-dispatcher.js";
+import { ExecutionDeadline } from "../sandbox/deadline.js";
 import type { FunctionExecutor } from "../sandbox/executor.js";
 import { runWithFunctionExecutor } from "../sandbox/run.js";
 import { LIMITS } from "../shared/bounds.js";
@@ -31,6 +32,7 @@ import { createDurableModelsHandler, createDurableRuntimeHandler } from "./handl
 import {
   createDurableHostApi,
   createDurableHostContext,
+  pauseWhileAsking,
   createDurableImageCollector,
   conversationCwd,
   type PitDurableLog,
@@ -126,6 +128,8 @@ async function runDurableProgram(call: DurableCall) {
   const timings = new ExecutionTimingRecorder();
   const executionProgress = new ExecutionProgressController();
   const images = createDurableImageCollector();
+  // A person may take minutes to answer a dialog; that wait does not count against the program.
+  const deadline = new ExecutionDeadline(params.timeoutMs ?? 30_000);
   const agent = await api.agent(context);
   /* v8 ignore next 3 -- a conversation that generates, and so calls tools, has a model. */
   const model = agent.model
@@ -136,7 +140,7 @@ async function runDurableProgram(call: DurableCall) {
     model,
     thinkingLevel: agent.thinkingLevel,
     projectTrusted: call.services.trustProject,
-    ui: call.services.ui,
+    ui: call.services.ui && pauseWhileAsking(call.services.ui, deadline),
   });
   // Only the tools this call may run; rebuilt per call, so a changed tool set never leaks.
   const catalog = createDurableToolCatalog(agent.callable);
@@ -192,6 +196,7 @@ async function runDurableProgram(call: DurableCall) {
           /* v8 ignore next -- the Harness gives every tool call a cancellable context. */
           ...(context.abortSignal ? { signal: context.abortSignal } : {}),
           timeoutMs: params.timeoutMs ?? 30_000,
+          deadline,
           ...(prepared.name
             ? {
                 // The tool saves to the session; functions.promote saves to other scopes.
