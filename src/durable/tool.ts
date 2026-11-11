@@ -32,6 +32,8 @@ import { StagedContextChanges } from "./context/staging.js";
 import { createDurableModelsHandler, createDurableRuntimeHandler } from "./handlers.js";
 import {
   createDurableHostApi,
+  answersDialogs,
+  askingDialogs,
   createDurableHostContext,
   pauseWhileAsking,
   createDurableImageCollector,
@@ -40,6 +42,7 @@ import {
   type PitDurableUi,
   unavailableNamespace,
 } from "./host.js";
+import { DurableQuestions, type QuestionPosted } from "./questions.js";
 import { createDurableSessionHandler } from "./session.js";
 import {
   type ConversationFunctions,
@@ -121,19 +124,24 @@ function jsonValue(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 
-async function runDurableProgram(call: DurableCall) {
-  const { api, context, params, functions } = call;
-  const { functionState, commitFunctionState, savedFunctionService, recoverableCalls } = functions;
-  const completedCalls = new CompletedCallJournal();
-  const functionActivity: FunctionActivity[] = [];
-  const promotionSuggestions: string[] = [];
-  const timings = new ExecutionTimingRecorder();
-  const executionProgress = new ExecutionProgressController();
-  const images = createDurableImageCollector();
-  // A person may take minutes to answer a dialog; that wait does not count against the program.
+/**
+ * What a call needs from its host: the agent and model, the deadline, and the dialogs. A question
+ * posted to an asynchronous host stops the program through `stop`; the answer comes in a later run.
+ */
+async function prepareHost(call: DurableCall) {
+  const { api, context, params } = call;
+  // A person may take minutes to answer a blocking dialog; that wait does not count.
   const deadline = new ExecutionDeadline(params.timeoutMs ?? 30_000);
-  // Context edits and notes wait here, as on Pi, until the program succeeds.
-  const staging = new StagedContextChanges();
+  const stop = new AbortController();
+  const ui = call.services.ui;
+  const questions = ui?.ask
+    ? new DurableQuestions({
+        api,
+        context,
+        ask: ui.ask.bind(ui),
+        onPosted: (posted) => stop.abort(posted),
+      })
+    : undefined;
   const agent = await api.agent(context);
   /* v8 ignore next 3 -- a conversation that generates, and so calls tools, has a model. */
   const model = agent.model
@@ -144,8 +152,27 @@ async function runDurableProgram(call: DurableCall) {
     model,
     thinkingLevel: agent.thinkingLevel,
     projectTrusted: call.services.trustProject,
-    ui: call.services.ui && pauseWhileAsking(call.services.ui, deadline),
+    ui: !answersDialogs(ui)
+      ? undefined
+      : questions
+        ? askingDialogs(questions, ui)
+        : pauseWhileAsking(ui, deadline),
   });
+  return { deadline, stop, questions, ctx, agent, model };
+}
+
+async function runDurableProgram(call: DurableCall) {
+  const { api, context, params, functions } = call;
+  const { functionState, commitFunctionState, savedFunctionService, recoverableCalls } = functions;
+  const completedCalls = new CompletedCallJournal();
+  const functionActivity: FunctionActivity[] = [];
+  const promotionSuggestions: string[] = [];
+  const timings = new ExecutionTimingRecorder();
+  const executionProgress = new ExecutionProgressController();
+  const images = createDurableImageCollector();
+  const { deadline, stop, questions, ctx, agent, model } = await prepareHost(call);
+  // Context edits and notes wait here, as on Pi, until the program succeeds.
+  const staging = new StagedContextChanges();
   // Only the tools this call may run; rebuilt per call, so a changed tool set never leaks.
   const catalog = createDurableToolCatalog(agent.callable);
   functionState.toolCatalog = catalog;
@@ -206,8 +233,10 @@ async function runDurableProgram(call: DurableCall) {
         handler,
         {
           timings,
-          /* v8 ignore next -- the Harness gives every tool call a cancellable context. */
-          ...(context.abortSignal ? { signal: context.abortSignal } : {}),
+          // The Harness's cancellation, and the stop a posted question sends.
+          signal: AbortSignal.any(
+            [context.abortSignal, stop.signal].filter((signal) => signal !== undefined),
+          ),
           timeoutMs: params.timeoutMs ?? 30_000,
           deadline,
           ...(prepared.name
@@ -235,6 +264,7 @@ async function runDurableProgram(call: DurableCall) {
     // The conversation records the saved-function changes before the call reports them.
     await call.writes.settle();
     await staging.apply(api, context, model?.contextWindow);
+    await questions?.recordConsumed();
     timings.enter("result");
     const result = await buildToolResult({
       value,
@@ -243,7 +273,8 @@ async function runDurableProgram(call: DurableCall) {
       saveOnly: params.saveOnly === true,
       functionState,
       functionActivity,
-      imageMetadata: images.attached().map(({ info }) => info),
+      // Images are not attached on pi-durable hosts; the collector records why.
+      imageMetadata: [],
       imageOmissions: images.omissions(),
       promotionSuggestions,
       executionProgress,
@@ -257,7 +288,15 @@ async function runDurableProgram(call: DurableCall) {
       }),
     };
   } catch (error) {
-    // A later program can recover what this one consumed before failing.
+    // A later program can recover what this one consumed before failing or asking.
+    if (questions?.posted) {
+      recoverableCalls.retain(api.callId, completedCalls);
+      return questionResult(questions.posted, {
+        toolCallId: api.callId,
+        calls: completedCalls.size,
+        details: { ...executionProgress.snapshot(), timings: timings.finish() },
+      });
+    }
     recoverableCalls.retain(api.callId, completedCalls);
     const details = captureTypeScriptFailure(
       error,
@@ -278,6 +317,35 @@ async function runDurableProgram(call: DurableCall) {
   } finally {
     executionProgress.dispose();
   }
+}
+
+/**
+ * The result of a program that asked a question: not an error, but the end of the turn. The run
+ * ends after this tool round, and the answer arrives as a later message.
+ */
+function questionResult(
+  posted: QuestionPosted,
+  input: { toolCallId: string; calls: number; details: object },
+) {
+  const where = posted.url ? ` (${posted.url})` : "";
+  const recovery =
+    input.calls > 0
+      ? ` Calls this program completed before asking keep their effects; read their results with runtime.completedCalls("${input.toolCallId}").`
+      : "";
+  const { key, kind, title } = posted.question;
+  return {
+    output: [
+      {
+        type: "text" as const,
+        text: `Question posted: ${title}${where}. The answer will arrive as a later message; end your turn now.${recovery}`,
+      },
+    ],
+    details: jsonValue({
+      ...input.details,
+      question: { key, kind, title, ...(posted.url ? { url: posted.url } : {}) },
+    }),
+    control: { terminate: true },
+  };
 }
 
 const SHOWN_LOAD_ERRORS = 3;

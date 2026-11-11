@@ -130,6 +130,8 @@ export class DurableTestHost {
   async run(
     programs: Array<Record<string, unknown>>,
     conversation?: Conversation,
+    /** The user message that starts the run; a host can place it as its own entry kind. */
+    input: { content: string; entry?: { kind: string; data: any } } = { content: "run" },
   ): Promise<DurableRun> {
     const target = conversation ?? (await this.root());
     let sections: Record<string, string> = {};
@@ -148,13 +150,17 @@ export class DurableTestHost {
       },
     ]);
     const before = await this.#latestEntry(target);
-    const submission = await target.submit({ type: "input", content: "run" }, context);
+    const submission = await target.submit({ type: "input", ...input }, context);
     const settled = await submission.wait(context);
     if (settled.status !== "done") throw new Error(`Run ended ${settled.status}`);
     // Work the run started after its answer, such as staged context edits, finishes first.
     await target.waitForIdle(context);
     const page = await target.entries(
-      { order: "ascending", ...(before === undefined ? {} : { minEntryId: before }) },
+      {
+        order: "ascending",
+        // Only this run's entries: a run that ended on a tool round has no answer after it.
+        ...(before === undefined ? {} : { minEntryId: (before + 1) as EntryId }),
+      },
       1000,
       undefined,
       context,
