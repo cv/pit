@@ -1,1 +1,1 @@
-{"format":1,"seq":118,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":119,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"✓ Closed pull request cv/pit#355 (ci: run pi-action 2.2.2 with pit 0.35.1)\nCLOSED\n"]]}}]}
