@@ -1,1 +1,1 @@
-{"format":1,"seq":580,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":581,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"Checking formatting...\n\nAll matched files use the correct format.\nFinished in 72ms on 379 files using 4 threads.\n"]]}}]}
