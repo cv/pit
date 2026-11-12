@@ -38,17 +38,33 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 | `trustProject` | `false`                                                                        | Loads the project's `.pi/pit.json` and `.pi/functions` and lets programs save project functions. Set it only for repositories whose code you would run anyway.                                                                                                                  |
 | `ui`           | none                                                                           | How people answer questions: `ask` for asynchronous hosts, or blocking `confirm`, `select`, and `input` with the signatures of Pi's `ctx.ui`, plus `notify`. Without any, `ui.*` throws `UI is not available in this mode`, as on Pi without a UI. See [Questions](#questions). |
 | `log`          | none                                                                           | `info` and `warning` callbacks for what Pi would show as notifications: saved functions that failed to load, an unreadable `pit.json`, and project functions left unloaded by trust.                                                                                            |
+| `hideTools`    | `true`                                                                         | Tools to stop offering to the model; they stay enabled for other tools. `true` hides pi-durable's coding tools (`read`, `write`, `edit`, `bash`, `powershell`), an array names the tools instead, and `false` hides none. See [Tools the model sees](#tools-the-model-sees).    |
 
 ## What works
 
 - `workspace.*` except `viewImage`, `shell.*`, `git.*`, `npm.*`, `gh.*`, `http.*`, and the other command globals, in the conversation's working directory.
 - Saved functions in every scope. Session functions are conversation entries; user and project functions load from disk as on Pi. `functions.*` manages them.
-- `tools.*` and `toolIndex.*` call the agent's other tools through `executeTool()`, so the Harness validates arguments, runs tool hooks, and validates declared structured output. Every tool other callers may use is bound, including pi-durable's coding tools (`read`, `bash`, `edit`, `write`): unlike Pi's built-ins, they act in the host's execution environment, which may differ from Pit's process. Only Pit's own tool (model-only, `callers: ["model"]`) and other orchestrators (`codemode`, `tool_search`) are left out. A `pit_tools` prompt section lists the bound tools.
+- `tools.*` and `toolIndex.*` call the agent's other tools through `executeTool()`, so the Harness validates arguments, runs tool hooks, and validates declared structured output. As on Pi, Pit leaves out itself, other orchestrators (`codemode`, `tool_search`), and the file and shell tools its own globals supersede (`read`, `write`, `edit`, `bash`, `powershell`, `grep`, `find`, `ls`), so programs have one way to read a file or run a command: `workspace.*` and `shell.*`. A `pit_tools` prompt section lists the bound tools.
 - `context.get()` reports `mode: "durable"`, no session file, and an extra `hasUI` field, so a program can check for dialogs before asking. The shared type declaration does not include `hasUI` yet; read it with a cast.
 - `models.current` and `models.list` read the host's model catalog; every model counts as in scope.
 - `session.info`, `outline`, `inspectEntry`, `elide`, `summarize`, `setNote`, and `notes`, as described in [Context editing and notes](#context-editing-and-notes).
 - `runtime.status` and `runtime.completedCalls`. Recovered calls stay in memory for the host process, as on Pi for one session.
 - `ui.*` and the confirmations `functions.*` asks for, through the host's `ui` option, as [Questions](#questions) describes.
+
+### Tools the model sees
+
+As on Pi, the model sees `typescript` and not the coding tools. By default Pit stops offering pi-durable's coding tools to the model: `read`, `write`, `edit`, `bash`, and `powershell`. It does this with pi-durable wraps that take `"model"` out of each tool's `callers`. The tools stay enabled, and other tools, such as `codemode`, can still call them through `executeTool()`.
+
+- **`allowedTools`** from the user's `<agentDir>/pit.json` and, with `trustProject` and an explicit `cwd`, the project's `.pi/pit.json` names exceptions that stay offered, with the same precedence as on Pi: a project's list replaces the user's, `[]` clears it, and an invalid project file grants no exceptions. Pit reads these files once, when the host creates the extension. Without `cwd` the conversation's directory isn't known yet, so only the user file applies, and Pit warns through `log.warning` if `trustProject` is set.
+- **`hideTools`** replaces the hide list, or turns hiding off with `false`. Pit never hides `typescript`, `codemode`, or `tool_search`.
+- **Only named tools.** A wrap targets one exact tool name, so tools from other extensions stay offered unless `hideTools` names them. Pi instead hides every tool that isn't an explicit choice. A replacement `bash` from another extension is hidden too: wraps apply after every extension's tools are composed.
+- **Model-only and deferred tools stay unchanged.** Hiding a tool that only the model may call (`callers: ["model"]`) would make it uncallable, and a deferred tool could no longer be loaded by `tool_search`, so Pit leaves both as they are.
+- **The host can only narrow.** `AgentState.modelTools` filters the offered tools further, but can't offer a tool Pit hid; use `allowedTools` or `hideTools` instead. A host that removes `typescript` with `AgentState.tools` while keeping Pit selected leaves the model with no file or shell tools at all.
+- **Pit owns the wrapped tools.** pi-durable names the last extension that provides or wraps a tool in its error reports, so a problem with `bash`, such as `invalid_structured_output`, names Pit.
+- **Not a security boundary.** Hidden tools still run when another tool calls them, and Pit's own globals read files and run commands. Hiding changes what the model is offered, not what it can do.
+- **Host effects move to Pit's process.** pi-durable's coding tools act in the host's `ExecutionEnv`; Pit's `workspace.*` and `shell.*` act in the process that runs the Harness. On a host whose environment is a container or remote machine, offer the coding tools with `allowedTools` or `hideTools: false`.
+
+Existing conversations keep their history: earlier calls to a tool that is no longer offered stay in the transcript, and the next request offers the new tool set.
 
 Results are plain text for the model plus the same JSON `details` Pi's renderers read: the value, progress, traces, timings, and saved-function changes. Command output streams through `output()` while a call runs. A failed call returns an error result whose text is the root error, as on Pi.
 
@@ -62,7 +78,7 @@ These throw a `PitDurableUnavailableError` whose message names the global, such 
 - Model requests (`models.listOfType`, `models.classify`, `models.generateImages`).
 - `workspace.viewImage`. Images that nested tools return are not attached; the result says so.
 
-Pi-only features are absent: renderers and the `/functions` and `/pit-reflect` commands, Pit's skills, `allowedTools` in `pit.json` (the host chooses the tools), and catalog cache holding (pi-durable sends a changed section as a transcript delta).
+Pi-only features are absent: renderers and the `/functions` and `/pit-reflect` commands, Pit's skills, and catalog cache holding (pi-durable sends a changed section as a transcript delta).
 
 ## Questions
 

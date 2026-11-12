@@ -47,6 +47,8 @@ Pit also leaves these tools declared, because they reflect explicit choices:
 - MCP tools configured with `"exposure": "direct"` in `mcp.json`. MCP tools use `codemode` exposure by default.
 - Tools that `tool_search` loaded, when `tool_search` is allowed.
 
+On [pi-durable hosts](durable.md#tools-the-model-sees) such as pi-action, `allowedTools` applies the same way to the tools Pit hides there, pi-durable's coding tools by default. Pit reads it when the host creates the extension; the project's file needs the host's `trustProject` and `cwd` options.
+
 Pit resolves `allowedTools` at session start. It activates `typescript` and the matching tools, and adds them again after `/tree` navigation, because Pi restores the tool set recorded on the destination branch. It does not deactivate tools that Pi's `defaultTools` setting or other extensions activated.
 
 ### Choose function directories

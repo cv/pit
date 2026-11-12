@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ToolRegistration } from "@earendil-works/pi-durable";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -193,30 +192,6 @@ describe("pit on a pi-durable Harness", () => {
     const { results } = await host().run([{ code }]);
     expect(results[0]?.isError).toBe(true);
     expect(results[0]?.text).toMatch(new RegExp(`^${global} is unavailable on pi-durable hosts`));
-  });
-
-  it("reaches the host's coding tools through tools.* and lists them for the model", async () => {
-    await writeFile(join(cwd, "notes.txt"), "from the host's read tool\n");
-    const durable = new DurableTestHost({
-      extension: createPitDurableExtension({ agentDir: join(root, "agent") }),
-      extensions: [CodingTools],
-      env: true,
-      cwd,
-    });
-    const { results, sections } = await durable.run([
-      {
-        code: `async ({ tools: { read, bash } }) => ({
-  read: await read({ path: "notes.txt" }),
-  bash: await bash({ command: "echo from-bash" }),
-})`,
-      },
-    ]);
-    expect(results[0]?.isError).toBe(false);
-    expect(results[0]?.details.value.read).toContain("from the host's read tool");
-    // bash declares structured output, so programs get its fields.
-    expect(results[0]?.details.value.bash).toMatchObject({ output: "from-bash\n", exitCode: 0 });
-    expect(sections.pit_tools).toMatch(/injectable from `tools`: .*\bread\b.*\bbash\b/);
-    expect(sections.pit_tools).not.toMatch(/\btypescript\b/);
   });
 
   it("pauses the program deadline while a host dialog waits for its answer", async () => {

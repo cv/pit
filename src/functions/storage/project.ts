@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -53,21 +54,10 @@ function configuredPaths(value: unknown): ConfiguredFunctionPaths | undefined {
 }
 
 /**
- * Reads one `pit.json`. A missing file yields no settings; an unreadable or invalid file yields only
- * an error. User files support only allowedTools: their `paths` is ignored with a warning, without
- * discarding their allowedTools.
+ * Parses one `pit.json`'s text. An invalid file yields only an error. User files support only
+ * allowedTools: their `paths` is ignored with a warning, without discarding their allowedTools.
  */
-async function readPitConfig(file: string, scope: "user" | "project"): Promise<PitProjectConfig> {
-  let source: string;
-  try {
-    source = await readFile(file, "utf8");
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return {};
-    }
-    // readFile rejects with a Node system error, whose message repeats the path: give its code.
-    return { error: `Cannot read ${file}: ${(error as { code?: string }).code}` };
-  }
+function parsePitConfig(source: string, file: string, scope: "user" | "project"): PitProjectConfig {
   try {
     const config = JSON.parse(source) as unknown;
     if (!isRecord(config)) {
@@ -94,6 +84,56 @@ async function readPitConfig(file: string, scope: "user" | "project"): Promise<P
   }
 }
 
+/** A missing file yields no settings; an unreadable file yields only an error. */
+function unreadablePitConfig(file: string, error: unknown): PitProjectConfig {
+  if (isMissingFileError(error)) return {};
+  // Node's system errors repeat the path in their message: give their code.
+  return { error: `Cannot read ${file}: ${(error as { code?: string }).code}` };
+}
+
+/** Reads one `pit.json`; see {@link parsePitConfig}. */
+async function readPitConfig(file: string, scope: "user" | "project"): Promise<PitProjectConfig> {
+  let source: string;
+  try {
+    source = await readFile(file, "utf8");
+  } catch (error) {
+    return unreadablePitConfig(file, error);
+  }
+  return parsePitConfig(source, file, scope);
+}
+
+/** {@link readPitConfig} for callers that must stay synchronous, such as extension factories. */
+function readPitConfigSync(file: string, scope: "user" | "project"): PitProjectConfig {
+  let source: string;
+  try {
+    source = readFileSync(file, "utf8");
+  } catch (error) {
+    return unreadablePitConfig(file, error);
+  }
+  return parsePitConfig(source, file, scope);
+}
+
+/**
+ * Combines the user's and the project's settings: a project's allowedTools replaces the user's,
+ * and an invalid project file grants no exceptions.
+ */
+function mergePitConfigs(user: PitProjectConfig, project: PitProjectConfig): PitProjectConfig {
+  const allowedTools = project.error ? [] : (project.allowedTools ?? user.allowedTools);
+  const error = [user.error, project.error].filter(Boolean).join("; ");
+  return {
+    ...project,
+    ...(allowedTools === undefined ? {} : { allowedTools }),
+    ...(error ? { error } : {}),
+  };
+}
+
+function pitConfigFiles(agentDir: string, cwd: string) {
+  return {
+    user: join(agentDir, "pit.json"),
+    project: join(cwd, hostPlatform().configDirName, "pit.json"),
+  };
+}
+
 /** The directory facts a project load needs; the Pi context provides them. */
 export type ProjectLoadContext = Pick<ExtensionContext, "cwd" | "isProjectTrusted">;
 
@@ -101,18 +141,35 @@ export async function loadPitProjectConfig(
   ctx: ProjectLoadContext,
   agentDir = hostPlatform().agentDir(),
 ): Promise<PitProjectConfig> {
+  const files = pitConfigFiles(agentDir, ctx.cwd);
   const [user, project] = await Promise.all([
-    readPitConfig(join(agentDir, "pit.json"), "user"),
+    readPitConfig(files.user, "user"),
     ctx.isProjectTrusted()
-      ? readPitConfig(join(ctx.cwd, hostPlatform().configDirName, "pit.json"), "project")
+      ? readPitConfig(files.project, "project")
       : Promise.resolve<PitProjectConfig>({}),
   ]);
-  const allowedTools = project.error ? [] : (project.allowedTools ?? user.allowedTools);
-  const error = [user.error, project.error].filter(Boolean).join("; ");
+  return mergePitConfigs(user, project);
+}
+
+/**
+ * {@link loadPitProjectConfig}'s allowedTools, read synchronously. Without a `cwd` only the user
+ * file applies. Function `paths` are left out: they matter only to function loading.
+ */
+export function loadPitAllowedToolsSync(input: {
+  agentDir: string;
+  cwd?: string | undefined;
+  trustProject: boolean;
+}): Pick<PitProjectConfig, "allowedTools" | "error"> {
+  const files = pitConfigFiles(input.agentDir, input.cwd ?? "");
+  const user = readPitConfigSync(files.user, "user");
+  const project =
+    input.trustProject && input.cwd !== undefined
+      ? readPitConfigSync(files.project, "project")
+      : {};
+  const { allowedTools, error } = mergePitConfigs(user, project);
   return {
-    ...project,
     ...(allowedTools === undefined ? {} : { allowedTools }),
-    ...(error ? { error } : {}),
+    ...(error === undefined ? {} : { error }),
   };
 }
 

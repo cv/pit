@@ -14,13 +14,18 @@ import type { ImageBlock, ImageCollector } from "../workspace/view-image.js";
 
 type ToolContext = Parameters<ToolRegistration["execute"]>[2];
 
-/**
- * Tools Pit does not bind on pi-durable: itself and other orchestrators. Unlike on Pi, the file and
- * shell tools stay: the host chose them, and they act in its environment rather than Pit's process.
- */
-const ORCHESTRATORS = new Set(["typescript", "codemode", "tool_search"]);
+/** Pit's own tool and other orchestrators, which Pit never binds or hides. */
+export const ORCHESTRATORS: ReadonlySet<string> = new Set([
+  "typescript",
+  "codemode",
+  "tool_search",
+]);
 
-/** The host tools a call may run through `tools.*`: the agent's tools other callers may use. */
+/**
+ * The host tools a call may run through `tools.*`: the agent's tools other callers may use, except
+ * orchestrators and, as on Pi, the file and shell tools that Pit's `workspace` and `shell` globals
+ * supersede, so programs get one way to read a file or run a command.
+ */
 export function createDurableToolCatalog(callable: readonly ToolRegistration[]): PiToolCatalog {
   return createPiToolCatalog(
     callable.map((tool) => ({
@@ -31,8 +36,6 @@ export function createDurableToolCatalog(callable: readonly ToolRegistration[]):
         ? {}
         : { outputSchema: tool.structuredOutputSchema }),
     })),
-    undefined,
-    ORCHESTRATORS,
   );
 }
 
