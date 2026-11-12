@@ -1,1 +1,1 @@
-{"format":1,"seq":500,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  10 failed | 5 passed (15)\n== if (tool.deferred === true) return tool;\n"]]}}]}
+{"format":1,"seq":501,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  1 failed | 14 passed (15)\n== !callers.includes(\"tools\")\n"]]}}]}
