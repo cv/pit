@@ -5,6 +5,7 @@ import { NODE_HOST_PLATFORM } from "../shared/host-platform.js";
 import { APPLY_STAGED_EDITS, APPLY_STAGED_EDITS_HOOK } from "./context/apply.js";
 import { notesSection } from "./context/notes.js";
 import { conversationCwd, type PitDurableLog, type PitDurableUi } from "./host.js";
+import { hideFromModel, resolveHiddenTools } from "./loadout.js";
 import { createCatalogSections, GUIDELINES_SECTION, TOOLS_SECTION } from "./sections.js";
 import { DurableFunctionStore } from "./state.js";
 import { createDurableTypeScriptTool } from "./tool.js";
@@ -36,6 +37,13 @@ export interface PitDurableOptions {
   ui?: PitDurableUi;
   /** Receives warnings Pi would show as notifications, such as saved functions that failed to load. */
   log?: PitDurableLog;
+  /**
+   * Tools to stop offering to the model. `true` (default) hides pi-durable's coding tools: read,
+   * write, edit, bash, powershell; Pit's `workspace` and `shell` globals do their work. An array
+   * names the tools to hide instead. `false` hides none. `allowedTools` matches from `pit.json`
+   * are always offered, and `typescript` and other orchestrators are never hidden.
+   */
+  hideTools?: boolean | readonly string[];
 }
 
 /**
@@ -44,9 +52,17 @@ export interface PitDurableOptions {
  * entries, so they survive a reopened Harness and carry into forks.
  */
 export function createPitDurableExtension(options: PitDurableOptions = {}): Extension {
+  const agentDir = options.agentDir ?? NODE_HOST_PLATFORM.agentDir();
   const store = new DurableFunctionStore({
-    agentDir: options.agentDir ?? NODE_HOST_PLATFORM.agentDir(),
+    agentDir,
     trustProject: options.trustProject ?? false,
+  });
+  const hidden = resolveHiddenTools({
+    hideTools: options.hideTools,
+    agentDir,
+    cwd: options.cwd,
+    trustProject: options.trustProject ?? false,
+    log: options.log,
   });
   const cwdOf = (input: PromptInput) => conversationCwd(options.cwd, input.env, input.agent);
   return {
@@ -67,6 +83,7 @@ export function createPitDurableExtension(options: PitDurableOptions = {}): Exte
       ...createCatalogSections(store, cwdOf),
       notesSection(),
     ],
+    wraps: hidden.map(hideFromModel),
     tasks: [APPLY_STAGED_EDITS],
     hooks: [APPLY_STAGED_EDITS_HOOK],
   };
