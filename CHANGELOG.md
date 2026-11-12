@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-12
+
 ### Changed
 
 - On pi-durable hosts, Pit stops offering pi-durable's coding tools (`read`, `write`, `edit`, `bash`, `powershell`) to the model by default, so the model sees `typescript` as on Pi, and `tools.*` no longer binds the file and shell tools that `workspace.*` and `shell.*` supersede. This changes what the model is offered on existing pi-action workflows. `allowedTools` in the user's and a trusted project's `pit.json` now applies there and keeps matching tools offered, and the new `hideTools` option of `createPitDurableExtension` replaces the hide list or turns hiding off with `false`. See [Tools the model sees](docs/durable.md#tools-the-model-sees).
