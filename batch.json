@@ -1,1 +1,1 @@
-{"format":1,"seq":498,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  4 failed | 11 passed (15)\n== callers: callers.filter((caller) => caller !== \"model\")\n"]]}}]}
+{"format":1,"seq":499,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  11 failed | 4 passed (15)\n== callers: callers.filter((caller) => caller !== \"model\")\n"]]}}]}
