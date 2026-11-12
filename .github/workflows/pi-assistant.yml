@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0 # tags and history, for release notes and version bumps
 
       - name: Run pi-action
-        uses: cv/pi-action@9a1ef5509660c68074ade266675f4290de5df3a9 # v2.2.0
+        uses: cv/pi-action@74e578aa20a9b74b041118b1b8fdb784db7680fc # v2.4.0
         with:
           github_token: ${{ steps.app.outputs.token }}
           provider: nvidia
@@ -80,4 +80,4 @@ jobs:
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
           # A released pit, not this checkout: pi edits the checkout, and its tools shouldn't change under it.
-          extensions: github:cv/pit#v0.35.0
+          extensions: github:cv/pit#v0.35.1
