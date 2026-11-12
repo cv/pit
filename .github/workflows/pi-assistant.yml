@@ -80,4 +80,10 @@ jobs:
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
           # A released pit, not this checkout: pi edits the checkout, and its tools shouldn't change under it.
-          extensions: github:cv/pit#v0.35.1
+          extensions: github:cv/pit#v0.36.0
+          # Load this repository's .pi/pit.json and .pi/functions (delivery.*, tests.*, pr.*), which AGENTS.md
+          # relies on. Safe here: only OWNER/MEMBER can start a run, comment runs check out main, and fork PRs
+          # get no secrets to mint the token.
+          trust_project: true
+          # pi-action's default is 30 minutes; use most of the job's 45, leaving time to save the thread.
+          timeout: 2400
