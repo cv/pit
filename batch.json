@@ -1,1 +1,1 @@
-{"format":1,"seq":198,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"actions/checkout@v7.0.1 3d3c42e5aac5ba805825da76410c181273ba90b1\n"]]}}]}
+{"format":1,"seq":199,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"actions/setup-node@v7.1.0 949feb2413d6458794dcd2491c4babbbce0c15c1\nactions/dependency-review-action@v5.0.0 a1d282b36b6f3519aa1f3fc636f609c47dddb294\n"]]}}]}
