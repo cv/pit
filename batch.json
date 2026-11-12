@@ -1,1 +1,1 @@
-{"format":1,"seq":62,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":63,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"]," ! [remote rejected] ci/pi-action-2.4.0 -> ci/pi-action-2.4.0 (refusing to allow a GitHub App to create or update workflow `.github/workflows/pi-assistant.yml` without `workflows` permission)\nerror: failed to push some refs to 'https://github.com/cv/pit'\n"]]}}]}
