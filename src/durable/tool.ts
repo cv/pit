@@ -128,7 +128,7 @@ function jsonValue(value: unknown): JsonValue {
 }
 
 /**
- * What a call needs from its host: the agent and model, the deadline, and the dialogs. A question
+ * What a call needs from its host: the agent and model, the deadline, the dialogs, and the images. A question
  * posted to an asynchronous host stops the program through `stop`; the answer comes in a later run.
  */
 async function prepareHost(call: DurableCall) {
@@ -161,7 +161,13 @@ async function prepareHost(call: DurableCall) {
         ? askingDialogs(questions, ui)
         : pauseWhileAsking(ui, deadline),
   });
-  return { deadline, stop, questions, ctx, agent, model };
+  // The images the program attaches, prepared for this conversation's model.
+  const images = createDurableImageCollector({
+    cwd: call.cwd,
+    model,
+    processor: call.services.images,
+  });
+  return { deadline, stop, questions, ctx, agent, model, images };
 }
 
 async function runDurableProgram(call: DurableCall) {
@@ -172,12 +178,7 @@ async function runDurableProgram(call: DurableCall) {
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = new ExecutionProgressController();
-  const { deadline, stop, questions, ctx, agent, model } = await prepareHost(call);
-  const images = createDurableImageCollector({
-    cwd: call.cwd,
-    model,
-    processor: call.services.images,
-  });
+  const { deadline, stop, questions, ctx, agent, model, images } = await prepareHost(call);
   // Context edits and notes wait here, as on Pi, until the program succeeds.
   const staging = new StagedContextChanges();
   // Only the tools this call may run; rebuilt per call, so a changed tool set never leaks.
