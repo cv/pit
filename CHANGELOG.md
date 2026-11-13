@@ -4,6 +4,14 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `workspace.viewImage` works on pi-durable hosts such as pi-action, with the limits it has on Pi, and the image reaches the model (#365). The new `images` option of `createPitDurableExtension` takes an `ImageProcessor`, such as `createNodePhotonImages()` from `@earendil-works/pi-durable/images/node`, to resize and convert images to the model's limits; without one, PNG, JPEG, GIF, and WebP images within the byte limit attach as they are. See [Images](docs/durable.md#images).
+
+### Fixed
+
+- On pi-durable hosts, images that `tools.*` calls return are attached to the result instead of reported as omitted, also from tools that declare an output schema, whose images were dropped without notice.
+
 ## [0.36.1] - 2026-11-13
 
 ### Changed

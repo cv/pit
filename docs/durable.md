@@ -31,18 +31,19 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 
 ## Options
 
-| Option         | Default                                                                        | Effect                                                                                                                                                                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cwd`          | the call's environment, then the agent's, then the process's working directory | Working directory for programs, commands, and project functions.                                                                                                                                                                                                                |
-| `agentDir`     | `PI_CODING_AGENT_DIR`, else `~/.pi/agent`                                      | Where user functions (`functions/`) and the user-wide `pit.json` load from, as on Pi.                                                                                                                                                                                           |
-| `trustProject` | `false`                                                                        | Loads the project's `.pi/pit.json` and `.pi/functions` and lets programs save project functions. Set it only for repositories whose code you would run anyway.                                                                                                                  |
-| `ui`           | none                                                                           | How people answer questions: `ask` for asynchronous hosts, or blocking `confirm`, `select`, and `input` with the signatures of Pi's `ctx.ui`, plus `notify`. Without any, `ui.*` throws `UI is not available in this mode`, as on Pi without a UI. See [Questions](#questions). |
-| `log`          | none                                                                           | `info` and `warning` callbacks for what Pi would show as notifications: saved functions that failed to load, an unreadable `pit.json`, and project functions left unloaded by trust.                                                                                            |
-| `hideTools`    | `true`                                                                         | Tools to stop offering to the model; they stay enabled for other tools. `true` hides pi-durable's coding tools (`read`, `write`, `edit`, `bash`, `powershell`), an array names the tools instead, and `false` hides none. See [Tools the model sees](#tools-the-model-sees).    |
+| Option         | Default                                                                        | Effect                                                                                                                                                                                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cwd`          | the call's environment, then the agent's, then the process's working directory | Working directory for programs, commands, and project functions.                                                                                                                                                                                                                                 |
+| `agentDir`     | `PI_CODING_AGENT_DIR`, else `~/.pi/agent`                                      | Where user functions (`functions/`) and the user-wide `pit.json` load from, as on Pi.                                                                                                                                                                                                            |
+| `trustProject` | `false`                                                                        | Loads the project's `.pi/pit.json` and `.pi/functions` and lets programs save project functions. Set it only for repositories whose code you would run anyway.                                                                                                                                   |
+| `ui`           | none                                                                           | How people answer questions: `ask` for asynchronous hosts, or blocking `confirm`, `select`, and `input` with the signatures of Pi's `ctx.ui`, plus `notify`. Without any, `ui.*` throws `UI is not available in this mode`, as on Pi without a UI. See [Questions](#questions).                  |
+| `log`          | none                                                                           | `info` and `warning` callbacks for what Pi would show as notifications: saved functions that failed to load, an unreadable `pit.json`, and project functions left unloaded by trust.                                                                                                             |
+| `images`       | none                                                                           | An `ImageProcessor` that resizes and converts the images `workspace.viewImage` attaches to fit the model, such as `await createNodePhotonImages()` from `@earendil-works/pi-durable/images/node`. Without one, supported images within the byte limit attach as they are. See [Images](#images). |
+| `hideTools`    | `true`                                                                         | Tools to stop offering to the model; they stay enabled for other tools. `true` hides pi-durable's coding tools (`read`, `write`, `edit`, `bash`, `powershell`), an array names the tools instead, and `false` hides none. See [Tools the model sees](#tools-the-model-sees).                     |
 
 ## What works
 
-- `workspace.*` except `viewImage`, `shell.*`, `git.*`, `npm.*`, `gh.*`, `http.*`, and the other command globals, in the conversation's working directory.
+- `workspace.*`, `shell.*`, `git.*`, `npm.*`, `gh.*`, `http.*`, and the other command globals, in the conversation's working directory.
 - Saved functions in every scope. Session functions are conversation entries; user and project functions load from disk as on Pi. `functions.*` manages them.
 - `tools.*` and `toolIndex.*` call the agent's other tools through `executeTool()`, so the Harness validates arguments, runs tool hooks, and validates declared structured output. As on Pi, Pit leaves out itself, other orchestrators (`codemode`, `tool_search`), and the file and shell tools its own globals supersede (`read`, `write`, `edit`, `bash`, `powershell`, `grep`, `find`, `ls`), so programs have one way to read a file or run a command: `workspace.*` and `shell.*`. A `pit_tools` prompt section lists the bound tools.
 - `context.get()` reports `mode: "durable"`, no session file, and an extra `hasUI` field, so a program can check for dialogs before asking. The shared type declaration does not include `hasUI` yet; read it with a cast.
@@ -50,6 +51,21 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 - `session.info`, `outline`, `inspectEntry`, `elide`, `summarize`, `setNote`, and `notes`, as described in [Context editing and notes](#context-editing-and-notes).
 - `runtime.status` and `runtime.completedCalls`. Recovered calls stay in memory for the host process, as on Pi for one session.
 - `ui.*` and the confirmations `functions.*` asks for, through the host's `ui` option, as [Questions](#questions) describes.
+
+- `workspace.viewImage` attaches images to the result the model receives, with the limits it has on Pi: 10 MiB per source file, 5 MiB encoded per image, and 8 images and 16 MiB encoded per call. Images that `tools.*` calls return attach the same way, also from tools that declare an output schema. With a text-only model the result says the image was left out. See [Images](#images).
+
+### Images
+
+Pit recognizes PNG, JPEG, GIF, WebP, and BMP files by their magic bytes. How it prepares them depends on the `images` option:
+
+- **With a processor**, such as `await createNodePhotonImages()` from `@earendil-works/pi-durable/images/node`, Pit hands it each image with the model's limits: pi-durable's defaults (2000×2000 pixels, 4.5 MiB encoded), overridden by the model's `inputLimits.images.resize` and capped at 5 MiB. The processor resizes and converts the image, and the result notes what changed and how to map coordinates back.
+- **Without one**, PNG, JPEG, GIF, and WebP images within the encoded limit attach as they are, as pi-durable's `read` does without a processor. BMP and larger images fail with an error that says no processor is configured.
+
+```ts
+import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
+
+registry.install(createPitDurableExtension({ images: await createNodePhotonImages() }));
+```
 
 ### Tools the model sees
 
@@ -76,7 +92,6 @@ These throw a `PitDurableUnavailableError` whose message names the global, such 
 - `commands.*`: pi-durable has no slash commands.
 - `models.set`: the host configures the conversation's model.
 - Model requests (`models.listOfType`, `models.classify`, `models.generateImages`).
-- `workspace.viewImage`. Images that nested tools return are not attached; the result says so.
 
 Pi-only features are absent: renderers and the `/functions` and `/pit-reflect` commands, Pit's skills, and catalog cache holding (pi-durable sends a changed section as a transcript delta).
 
