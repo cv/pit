@@ -85,7 +85,7 @@ function offeredTools(request: ModelContext): string[] {
  */
 export class DurableTestHost {
   readonly #storage = reopenable(new MemoryStorage());
-  readonly #faux = fauxProvider({ provider: "faux", models: [{ id: "faux-model" }] });
+  readonly #faux: ReturnType<typeof fauxProvider>;
   readonly #models = createModels();
   readonly #extensions: Extension[];
   readonly #cwd: string;
@@ -106,7 +106,13 @@ export class DurableTestHost {
     settings?: HarnessSettings;
     /** More of the root conversation's agent state, such as `modelTools`. */
     agent?: Pick<AgentChange, "modelTools">;
+    /** The faux model's input modalities. Default: text and image. */
+    modelInput?: Array<"text" | "image">;
   }) {
+    this.#faux = fauxProvider({
+      provider: "faux",
+      models: [{ id: "faux-model", ...(input.modelInput ? { input: input.modelInput } : {}) }],
+    });
     this.#env = input.env === true;
     this.#agent = input.agent ?? {};
     this.#settings = input.settings;

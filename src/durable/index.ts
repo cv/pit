@@ -1,4 +1,5 @@
 import type { Extension, PromptInput } from "@earendil-works/pi-durable";
+import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 
 import { createCodemodeFunctionExecutor } from "../sandbox/codemode-executor.js";
 import { NODE_HOST_PLATFORM } from "../shared/host-platform.js";
@@ -44,6 +45,13 @@ export interface PitDurableOptions {
    * are always offered, and `typescript` and other orchestrators are never hidden.
    */
   hideTools?: boolean | readonly string[];
+  /**
+   * Prepares the images `workspace.viewImage` attaches: decodes, resizes, and converts them to fit
+   * the model's limits, for example `await createNodePhotonImages()` from
+   * `@earendil-works/pi-durable/images/node`. Default: none; PNG, JPEG, GIF, and WebP images
+   * within the byte limit attach as they are, and others fail, as with pi-durable's `read`.
+   */
+  images?: ImageProcessor;
 }
 
 /**
@@ -75,6 +83,7 @@ export function createPitDurableExtension(options: PitDurableOptions = {}): Exte
         trustProject: options.trustProject ?? false,
         ui: options.ui,
         log: options.log,
+        images: options.images,
       }),
     ],
     sections: [
