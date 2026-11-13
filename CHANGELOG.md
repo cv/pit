@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-11-13
+
 ### Changed
 
 - The `typescript` tool's description shows how to label a call: a first line such as `// @pit: {"label": "Run the test suite with coverage enabled"}`. Providers that sample the tool input with Pit's grammar have no `label` argument, so their calls showed "Run workspace task" in the transcript; they now carry the model's label.
