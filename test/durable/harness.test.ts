@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ToolRegistration } from "@earendil-works/pi-durable";
+import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,6 +12,7 @@ import {
   type PitDurableOptions,
 } from "../../src/durable/index.js";
 import { DurableTestHost } from "../support/durable-harness.js";
+import { png } from "../support/png-fixture.js";
 
 let root: string;
 let cwd: string;
@@ -187,7 +189,6 @@ describe("pit on a pi-durable Harness", () => {
     ["session.compact", "async ({ session: { compact } }) => compact()"],
     ["session.setName", 'async ({ session: { setName } }) => setName("issue 7")'],
     ["models.set", 'async ({ models: { set } }) => set("faux", "faux-model")'],
-    ["workspace.viewImage", 'async ({ workspace: { viewImage } }) => viewImage("a.png")'],
   ])("reports %s as unavailable on pi-durable hosts", async (global, code) => {
     const { results } = await host().run([{ code }]);
     expect(results[0]?.isError).toBe(true);
@@ -365,9 +366,8 @@ describe("pit on a pi-durable Harness", () => {
       quietly: "quietly failed",
       firstMatch: ["chart"],
     });
-    expect(results[0]?.text).toContain(
-      "Image from chart not attached: images are unavailable on pi-durable hosts",
-    );
+    expect(results[0]?.text).toContain("\nImage: chart\nReturned by chart");
+    expect(results[0]?.text).toContain("\nImage: photo\nReturned by photo");
   });
 
   it("saves a dotted function without running it and injects it by namespace", async () => {
@@ -530,5 +530,166 @@ describe("pit on a pi-durable Harness", () => {
   it("exports the generic extension factory name hosts look up", () => {
     expect(createPiDurableExtension).toBe(createPitDurableExtension);
     expect(createPiDurableExtension().tools?.map((tool) => tool.name)).toEqual(["typescript"]);
+  });
+});
+
+describe("images on pi-durable hosts", () => {
+  const view = (file: string) => ({
+    code: `async ({ workspace: { viewImage } }) => viewImage(${JSON.stringify(file)})`,
+  });
+
+  /** The image blocks of the tool results the model's requests carried. */
+  function sentImages(requests: any[][]): Array<{ data: string; mimeType: string }> {
+    const last = requests.at(-1) ?? [];
+    return last
+      .filter((message) => message.role === "toolResult")
+      .flatMap((message) => message.content)
+      .filter((block: any) => block.type === "image")
+      .map(({ data, mimeType }: any) => ({ data, mimeType }));
+  }
+
+  it("attaches a viewed image to the result the model receives", async () => {
+    const bytes = png();
+    await writeFile(join(cwd, "shot.png"), bytes);
+    const { results, requests } = await host().run([view("shot.png")]);
+    expect(results[0]?.isError).toBe(false);
+    expect(results[0]?.details.value).toEqual({
+      file: "shot.png",
+      mimeType: "image/png",
+      queued: true,
+    });
+    expect(results[0]?.text).toContain("\nImage: shot.png\nRead image file [image/png].");
+    expect(results[0]?.details.imageAttachments).toEqual([
+      expect.objectContaining({ file: "shot.png", omitted: false }),
+    ]);
+    expect(sentImages(requests)).toEqual([
+      { data: bytes.toString("base64"), mimeType: "image/png" },
+    ]);
+  });
+
+  it("says a text-only model is not shown the image", async () => {
+    await writeFile(join(cwd, "shot.png"), png());
+    const textOnly = new DurableTestHost({
+      extension: createPitDurableExtension({ agentDir }),
+      cwd,
+      model: { input: ["text"] },
+    });
+    const { results } = await textOnly.run([view("shot.png")]);
+    expect(results[0]?.text).toContain(
+      "The current model does not support images; it is left out of its requests.",
+    );
+    expect(results[0]?.details.imageAttachments).toEqual([
+      expect.objectContaining({ file: "shot.png", omitted: true }),
+    ]);
+  });
+
+  it("recognizes images by their magic bytes and passes inline formats through", async () => {
+    const riff = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WEBPVP8 ")]);
+    await Promise.all([
+      writeFile(join(cwd, "a.gif"), Buffer.from("GIF89a\u0001\u0000\u0001\u0000")),
+      writeFile(join(cwd, "b.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])),
+      writeFile(join(cwd, "c.webp"), riff),
+      writeFile(join(cwd, "d.gif"), Buffer.from("GIF87a\u0001\u0000\u0001\u0000")),
+    ]);
+    const { results } = await host().run([
+      {
+        code: `async ({ workspace: { viewImage } }) =>
+          Promise.all(["a.gif", "b.jpg", "c.webp", "d.gif"].map(async (file) => (await viewImage(file)).mimeType))`,
+      },
+    ]);
+    expect(results[0]?.details.value).toEqual(["image/gif", "image/jpeg", "image/webp", "image/gif"]);
+  });
+
+  it("refuses files it cannot attach without an image processor", async () => {
+    const bmp = Buffer.concat([Buffer.from("BM"), Buffer.alloc(40)]);
+    const large = Buffer.concat([png().subarray(0, 8), Buffer.alloc(4 * 1024 * 1024)]);
+    await Promise.all([
+      writeFile(join(cwd, "a.bmp"), bmp),
+      writeFile(join(cwd, "notes.txt"), "not an image"),
+      writeFile(join(cwd, "large.png"), large),
+    ]);
+    const { results } = await host().run([
+      {
+        code: `async ({ workspace: { viewImage } }) =>
+          Promise.all(["a.bmp", "notes.txt", "large.png"].map((file) =>
+            viewImage(file).catch((error: Error) => error.message)))`,
+      },
+    ]);
+    expect(results[0]?.details.value).toEqual([
+      "a.bmp is an image (image/bmp) that needs converting, and the host configured no image processor",
+      "Not a supported image: notes.txt",
+      "large.png is too large to attach, and the host configured no image processor to shrink it",
+    ]);
+  });
+
+  it("prepares images with the host's processor within the model's limits", async () => {
+    await writeFile(join(cwd, "a.bmp"), Buffer.concat([Buffer.from("BM"), Buffer.alloc(40)]));
+    await writeFile(join(cwd, "broken.png"), png().subarray(0, 12));
+    const prepare = vi.fn(async (bytes: Uint8Array, mimeType: string) =>
+      mimeType === "image/bmp"
+        ? {
+            data: "aGk=",
+            mimeType: "image/png",
+            convertedFrom: "image/bmp",
+            resized: { from: { width: 4000, height: 2000 }, to: { width: 2000, height: 1000 } },
+          }
+        : undefined,
+    );
+    const { results, requests } = await host({ images: { prepare } }).run([
+      {
+        code: `async ({ workspace: { viewImage } }) => ({
+          bmp: await viewImage("a.bmp"),
+          broken: await viewImage("broken.png").catch((error: Error) => error.message),
+        })`,
+      },
+    ]);
+    expect(prepare).toHaveBeenCalledWith(expect.any(Uint8Array), "image/bmp", DEFAULT_IMAGE_LIMITS);
+    expect(results[0]?.details.value).toEqual({
+      bmp: { file: "a.bmp", mimeType: "image/png", queued: true },
+      broken: "Unable to prepare image for the model: broken.png",
+    });
+    expect(results[0]?.text).toContain(
+      "Read image file [image/png]. Converted from image/bmp to image/png. Resized from 4000x2000 to 2000x1000. Multiply coordinates by 2.00 to map them to the original.",
+    );
+    expect(sentImages(requests)).toEqual([{ data: "aGk=", mimeType: "image/png" }]);
+  });
+
+  it("applies the model's resize profile, capped at the encoded limit images have on Pi", async () => {
+    await writeFile(join(cwd, "shot.png"), png());
+    const prepare = vi.fn(async () => ({ data: "aGk=", mimeType: "image/png" }));
+    const limited = new DurableTestHost({
+      extension: createPitDurableExtension({ agentDir, images: { prepare } }),
+      cwd,
+      model: { inputLimits: { images: { resize: { maxWidth: 800, maxBytes: 64 * 1024 * 1024 } } } },
+    });
+    await limited.run([view("shot.png")]);
+    expect(prepare).toHaveBeenCalledWith(expect.any(Uint8Array), "image/png", {
+      maxWidth: 800,
+      maxHeight: DEFAULT_IMAGE_LIMITS.maxHeight,
+      maxBytes: 5 * 1024 * 1024,
+    });
+  });
+
+  it("attaches images that a tool with an output schema returns to programs", async () => {
+    const snap: ToolRegistration = {
+      name: "snap",
+      description: "Takes a snapshot.",
+      parameters: { type: "object", properties: {} },
+      structuredOutputSchema: {
+        type: "object",
+        properties: { type: { type: "string" }, data: { type: "string" }, mimeType: { type: "string" } },
+        required: ["type", "data", "mimeType"],
+      },
+      execute: async () => {
+        const image = { type: "image" as const, data: "aGk=", mimeType: "image/png" };
+        return { output: [image], structuredOutput: image };
+      },
+    };
+    const { results, requests } = await host({}, [snap]).run([
+      { code: "async ({ tools: { snap } }) => (await snap()).mimeType" },
+    ]);
+    expect(results[0]?.details.value).toBe("image/png");
+    expect(results[0]?.text).toContain("\nImage: snap\nReturned by snap");
+    expect(sentImages(requests)).toEqual([{ data: "aGk=", mimeType: "image/png" }]);
   });
 });
