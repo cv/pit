@@ -1,1 +1,1 @@
-{"format":1,"seq":165,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":166,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"check-ok\nnpm notice total files: 181\nnpm notice\npit-0.36.1.tgz\n"]]}}]}
