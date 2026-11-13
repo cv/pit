@@ -7,6 +7,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 import {
+  type AgentChange,
   type Conversation,
   createRegistry,
   type EntryId,
@@ -34,6 +35,8 @@ export interface DurableRun {
   sections: Record<string, string>;
   /** The messages of each model request in the run, in order. */
   requests: ModelContext["messages"][];
+  /** The names of the tools offered to the model on the run's first request, sorted. */
+  offered: string[];
 }
 
 /** A storage that outlives each Harness, so a test can reopen the same conversations. */
@@ -65,6 +68,17 @@ function systemSections(request: ModelContext): Record<string, string> {
   return Object.fromEntries(Object.entries(sections).filter(([, content]) => content !== ""));
 }
 
+/** The tools a request offers: its system messages' tool changes, replayed in order. */
+function offeredTools(request: ModelContext): string[] {
+  const tools = new Set<string>();
+  for (const message of request.messages as any[]) {
+    if (message.role !== "system") continue;
+    for (const tool of message.toolsAdded ?? []) tools.add(tool.name);
+    for (const tool of message.toolsRemoved ?? []) tools.delete(tool.name);
+  }
+  return [...tools].sort();
+}
+
 /**
  * A real pi-durable Harness on MemoryStorage whose faux model calls `typescript` with the given
  * arguments, one call per turn, and then answers.
@@ -79,6 +93,7 @@ export class DurableTestHost {
   #harness: Harness | undefined;
 
   readonly #env: boolean;
+  readonly #agent: Pick<AgentChange, "modelTools">;
 
   constructor(input: {
     extension: Extension;
@@ -89,8 +104,11 @@ export class DurableTestHost {
     env?: boolean;
     cwd: string;
     settings?: HarnessSettings;
+    /** More of the root conversation's agent state, such as `modelTools`. */
+    agent?: Pick<AgentChange, "modelTools">;
   }) {
     this.#env = input.env === true;
+    this.#agent = input.agent ?? {};
     this.#settings = input.settings;
     this.#models.setProvider(this.#faux.provider);
     this.#extensions = [
@@ -122,7 +140,7 @@ export class DurableTestHost {
   async root(): Promise<Conversation> {
     const harness = await this.#open();
     return harness.root(context, {
-      agent: { model: { provider: "faux", modelId: "faux-model" }, cwd: this.#cwd },
+      agent: { model: { provider: "faux", modelId: "faux-model" }, cwd: this.#cwd, ...this.#agent },
     });
   }
 
@@ -136,15 +154,20 @@ export class DurableTestHost {
     const target = conversation ?? (await this.root());
     let sections: Record<string, string> = {};
     const requests: ModelContext["messages"][] = [];
+    let offered: string[] | undefined;
+    const record = (request: ModelContext) => {
+      requests.push(request.messages);
+      offered ??= offeredTools(request);
+    };
     this.#faux.setResponses([
       ...programs.map((args) => (request: ModelContext) => {
-        requests.push(request.messages);
+        record(request);
         return fauxAssistantMessage(fauxToolCall("typescript", args as Record<string, any>), {
           stopReason: "toolUse",
         });
       }),
       (request: ModelContext) => {
-        requests.push(request.messages);
+        record(request);
         sections = systemSections(request);
         return fauxAssistantMessage("done");
       },
@@ -169,6 +192,7 @@ export class DurableTestHost {
       results: page.items.filter((entry) => entry.kind === "pi.tool-result").map(toolResult),
       sections,
       requests,
+      offered: offered ?? [],
     };
   }
 
