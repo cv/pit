@@ -132,10 +132,10 @@ export async function callDurableTool(
     if (result.structuredOutput === undefined) {
       throw new Error(`${entry.toolName} returned no structured result despite declaring one`);
     }
-    return result.structuredOutput;
   }
+  // A declared schema's value may itself carry images, as pi-durable's `read` of an image does.
   for (const image of imagesOf(result.structuredOutput)) {
     services.images.attachBlock(image, entry.toolName);
   }
-  return textOf(result.structuredOutput);
+  return entry.outputSchema ? result.structuredOutput : textOf(result.structuredOutput);
 }
