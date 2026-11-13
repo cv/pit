@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ToolRegistration } from "@earendil-works/pi-durable";
+import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -571,7 +572,7 @@ describe("images on pi-durable hosts", () => {
     const textOnly = new DurableTestHost({
       extension: createPitDurableExtension({ agentDir }),
       cwd,
-      modelInput: ["text"],
+      model: { input: ["text"] },
     });
     const { results } = await textOnly.run([view("shot.png")]);
     expect(results[0]?.text).toContain(
@@ -642,11 +643,7 @@ describe("images on pi-durable hosts", () => {
         })`,
       },
     ]);
-    expect(prepare).toHaveBeenCalledWith(expect.any(Uint8Array), "image/bmp", {
-      maxWidth: 2000,
-      maxHeight: 2000,
-      maxBytes: 4.5 * 1024 * 1024,
-    });
+    expect(prepare).toHaveBeenCalledWith(expect.any(Uint8Array), "image/bmp", DEFAULT_IMAGE_LIMITS);
     expect(results[0]?.details.value).toEqual({
       bmp: { file: "a.bmp", mimeType: "image/png", queued: true },
       broken: "Unable to prepare image for the model: broken.png",
@@ -655,6 +652,22 @@ describe("images on pi-durable hosts", () => {
       "Read image file [image/png]. Converted from image/bmp to image/png. Resized from 4000x2000 to 2000x1000. Multiply coordinates by 2.00 to map them to the original.",
     );
     expect(sentImages(requests)).toEqual([{ data: "aGk=", mimeType: "image/png" }]);
+  });
+
+  it("applies the model's resize profile, capped at the encoded limit images have on Pi", async () => {
+    await writeFile(join(cwd, "shot.png"), png());
+    const prepare = vi.fn(async () => ({ data: "aGk=", mimeType: "image/png" }));
+    const limited = new DurableTestHost({
+      extension: createPitDurableExtension({ agentDir, images: { prepare } }),
+      cwd,
+      model: { inputLimits: { images: { resize: { maxWidth: 800, maxBytes: 64 * 1024 * 1024 } } } },
+    });
+    await limited.run([view("shot.png")]);
+    expect(prepare).toHaveBeenCalledWith(expect.any(Uint8Array), "image/png", {
+      maxWidth: 800,
+      maxHeight: DEFAULT_IMAGE_LIMITS.maxHeight,
+      maxBytes: 5 * 1024 * 1024,
+    });
   });
 
   it("attaches images that a tool with an output schema returns to programs", async () => {

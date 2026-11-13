@@ -2,6 +2,7 @@ import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { Context as ModelContext } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
+  type FauxModelDefinition,
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
@@ -106,12 +107,12 @@ export class DurableTestHost {
     settings?: HarnessSettings;
     /** More of the root conversation's agent state, such as `modelTools`. */
     agent?: Pick<AgentChange, "modelTools">;
-    /** The faux model's input modalities. Default: text and image. */
-    modelInput?: Array<"text" | "image">;
+    /** The faux model's image input, such as `input: ["text"]`. Default: text and image. */
+    model?: Pick<FauxModelDefinition, "input" | "inputLimits">;
   }) {
     this.#faux = fauxProvider({
       provider: "faux",
-      models: [{ id: "faux-model", ...(input.modelInput ? { input: input.modelInput } : {}) }],
+      models: [{ ...input.model, id: "faux-model" }],
     });
     this.#env = input.env === true;
     this.#agent = input.agent ?? {};
