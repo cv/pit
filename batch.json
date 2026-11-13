@@ -1,1 +1,1 @@
-{"format":1,"seq":201,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":202,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"rc=0\n{\"assets\":[],\"isDraft\":false,\"tagName\":\"v0.36.1\",\"targetCommitish\":\"main\",\"url\":\"https://github.com/cv/pit/releases/tag/v0.36.1\"}\n0bc62ed09d8ccf1d9ea2745d4656da6a57dcb5c4\n"]]}}]}
