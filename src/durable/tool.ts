@@ -1,9 +1,9 @@
-import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 import type {
   ToolExecutionApi,
   ToolExecutionResult,
   ToolRegistration,
 } from "@earendil-works/pi-durable";
+import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 
 import { CompletedCallJournal } from "../execution/completed-calls.js";
 import type { HostCallTrace } from "../execution/host-call-trace.js";

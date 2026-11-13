@@ -597,7 +597,12 @@ describe("images on pi-durable hosts", () => {
           Promise.all(["a.gif", "b.jpg", "c.webp", "d.gif"].map(async (file) => (await viewImage(file)).mimeType))`,
       },
     ]);
-    expect(results[0]?.details.value).toEqual(["image/gif", "image/jpeg", "image/webp", "image/gif"]);
+    expect(results[0]?.details.value).toEqual([
+      "image/gif",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+    ]);
   });
 
   it("refuses files it cannot attach without an image processor", async () => {
@@ -677,7 +682,11 @@ describe("images on pi-durable hosts", () => {
       parameters: { type: "object", properties: {} },
       structuredOutputSchema: {
         type: "object",
-        properties: { type: { type: "string" }, data: { type: "string" }, mimeType: { type: "string" } },
+        properties: {
+          type: { type: "string" },
+          data: { type: "string" },
+          mimeType: { type: "string" },
+        },
         required: ["type", "data", "mimeType"],
       },
       execute: async () => {
