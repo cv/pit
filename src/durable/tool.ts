@@ -1,3 +1,4 @@
+import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 import type {
   ToolExecutionApi,
   ToolExecutionResult,
@@ -36,12 +37,12 @@ import {
   askingDialogs,
   createDurableHostContext,
   pauseWhileAsking,
-  createDurableImageCollector,
   conversationCwd,
   type PitDurableLog,
   type PitDurableUi,
   unavailableNamespace,
 } from "./host.js";
+import { createDurableImageCollector } from "./images.js";
 import { DurableQuestions, type QuestionPosted } from "./questions.js";
 import { createDurableSessionHandler } from "./session.js";
 import {
@@ -96,7 +97,7 @@ interface DurableToolParams {
 const HOST_NOTES = [
   "",
   "ON PI-DURABLE",
-  "Commands and host effects run in the host process, in the conversation's working directory. session.getName, session.setName, session.compact, commands.*, models.set, model requests, and workspace.viewImage are unavailable and throw.",
+  "Commands and host effects run in the host process, in the conversation's working directory. session.getName, session.setName, session.compact, commands.*, models.set, and model requests are unavailable and throw.",
 ].join("\n");
 
 export interface DurableToolServices {
@@ -107,6 +108,8 @@ export interface DurableToolServices {
   trustProject: boolean;
   ui: PitDurableUi | undefined;
   log: PitDurableLog | undefined;
+  /** Prepares the images `workspace.viewImage` attaches; without one, they pass as they are. */
+  images: ImageProcessor | undefined;
 }
 
 interface DurableCall {
@@ -125,7 +128,7 @@ function jsonValue(value: unknown): JsonValue {
 }
 
 /**
- * What a call needs from its host: the agent and model, the deadline, and the dialogs. A question
+ * What a call needs from its host: the agent and model, the deadline, the dialogs, and the images. A question
  * posted to an asynchronous host stops the program through `stop`; the answer comes in a later run.
  */
 async function prepareHost(call: DurableCall) {
@@ -158,7 +161,13 @@ async function prepareHost(call: DurableCall) {
         ? askingDialogs(questions, ui)
         : pauseWhileAsking(ui, deadline),
   });
-  return { deadline, stop, questions, ctx, agent, model };
+  // The images the program attaches, prepared for this conversation's model.
+  const images = createDurableImageCollector({
+    cwd: call.cwd,
+    model,
+    processor: call.services.images,
+  });
+  return { deadline, stop, questions, ctx, agent, model, images };
 }
 
 async function runDurableProgram(call: DurableCall) {
@@ -169,8 +178,7 @@ async function runDurableProgram(call: DurableCall) {
   const promotionSuggestions: string[] = [];
   const timings = new ExecutionTimingRecorder();
   const executionProgress = new ExecutionProgressController();
-  const images = createDurableImageCollector();
-  const { deadline, stop, questions, ctx, agent, model } = await prepareHost(call);
+  const { deadline, stop, questions, ctx, agent, model, images } = await prepareHost(call);
   // Context edits and notes wait here, as on Pi, until the program succeeds.
   const staging = new StagedContextChanges();
   // Only the tools this call may run; rebuilt per call, so a changed tool set never leaks.
@@ -266,6 +274,8 @@ async function runDurableProgram(call: DurableCall) {
     await staging.apply(api, context, model?.contextWindow);
     await questions?.recordConsumed();
     timings.enter("result");
+    // One snapshot keeps the image notes in the text aligned with the attached blocks.
+    const attached = images.attached();
     const result = await buildToolResult({
       value,
       ...(prepared.name ? { namedFunction: prepared.name } : {}),
@@ -273,14 +283,13 @@ async function runDurableProgram(call: DurableCall) {
       saveOnly: params.saveOnly === true,
       functionState,
       functionActivity,
-      // Images are not attached on pi-durable hosts; the collector records why.
-      imageMetadata: [],
+      imageMetadata: attached.map(({ info }) => info),
       imageOmissions: images.omissions(),
       promotionSuggestions,
       executionProgress,
     });
     return {
-      output: result.content,
+      output: [...result.content, ...attached.map(({ image }) => image)],
       details: jsonValue({
         ...result.details,
         timings: timings.finish(),

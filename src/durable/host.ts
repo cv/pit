@@ -1,6 +1,5 @@
 import type { PitHostApi, PitHostContext } from "../host/context.js";
 import type { NativeFunctionHandler } from "../host/native-dispatcher.js";
-import type { ImageCollector } from "../workspace/view-image.js";
 import type { DurableQuestions, UiQuestion } from "./questions.js";
 
 /**
@@ -122,24 +121,6 @@ export function conversationCwd(
   agent: { readonly cwd?: string },
 ): string {
   return override ?? environment?.cwd ?? agent.cwd ?? process.cwd();
-}
-
-/**
- * pi-durable has no image reader for Pit to reuse: `workspace.viewImage` and model requests with
- * images throw, and images from nested tools are reported as omitted.
- */
-export function createDurableImageCollector(): ImageCollector {
-  const omitted: string[] = [];
-  return {
-    view: () => Promise.reject(new PitDurableUnavailableError("workspace.viewImage")),
-    attached: () => [],
-    attachBlock: (_image, source) => {
-      omitted.push(`Image from ${source} not attached: images are unavailable on pi-durable hosts`);
-    },
-    omissions: () => [...omitted],
-    /* v8 ignore next -- model requests, which load images, are unavailable on pi-durable hosts. */
-    load: () => Promise.reject(new PitDurableUnavailableError("Image loading")),
-  };
 }
 
 /**
