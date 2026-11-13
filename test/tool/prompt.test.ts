@@ -70,7 +70,9 @@ describe("emitted Pit prompt", () => {
     const size = measurePrompt(tool);
     // A growth ratchet, not a model limit: raise it deliberately when a capability needs prose.
     // #262 raised it for deferred context edits (when: "now" | "end").
-    expect(size.fixed.characters).toBeLessThanOrEqual(5_750);
+    // Raised again for the LABEL section: grammar-sampled providers reach a transcript
+    // title only through the program's leading // @pit: line.
+    expect(size.fixed.characters).toBeLessThanOrEqual(6_000);
     expect(size.fixed.bytes).toBeGreaterThanOrEqual(size.fixed.characters);
     expect(
       measurePrompt({
