@@ -1,1 +1,1 @@
-{"format":1,"seq":471,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\n RUN  v5.1.0 /home/runner/work/pit/pit\n\n\n> pit@0.36.1 structure:check\n> node scripts/check-structure.mjs\n\n"]]}}]}
+{"format":1,"seq":472,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"Pit structure check passed (2/5 root source files, 0 import cycles, domain boundaries valid).\n"]]}}]}
