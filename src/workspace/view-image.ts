@@ -1,1 +1,68 @@
-"import {\n  createReadToolDefinition,\n  detectSupportedImageMimeTypeFromFile,\n  type ExtensionToolContext,\n} from \"@earendil-works/pi-coding-agent\";\n\nimport { boundText } from \"../shared/bounds.js\";\nimport {\n  type AttachedImage,\n  createImageAttachments,\n  type ImageCollector,\n  MAX_ENCODED_BYTES,\n  readImageSource,\n} from \"./image-attachments.js\";\nimport { checkAbort } from \"./paths.js\";\n\nexport type {\n  AttachedImage,\n  ImageAttachmentInfo,\n  ImageBlock,\n  ImageCollector,\n} from \"./image-attachments.js\";\n\nasync function loadImage(\n  ctx: ExtensionToolContext,\n  rawPath: unknown,\n  signal?: AbortSignal,\n): Promise<AttachedImage> {\n  const { path, file, bytes: buffer } = await readImageSource(ctx.cwd, rawPath, signal);\n  // Pi's read tool owns image recognition, so both accept the same formats. Detection reopens\n  // the path; only the bounded bytes read above are decoded and attached.\n  const mimeType = await detectSupportedImageMimeTypeFromFile(path);\n  if (!mimeType) throw new Error(`Not a supported image: ${file}`);\n  const reader = createReadToolDefinition(ctx.cwd, {\n    operations: {\n      access: async () => {},\n      readFile: async () => buffer,\n      detectImageMimeType: async () => mimeType,\n    },\n  });\n  const result = await reader.execute(\"pit-view-image\", { path }, signal, undefined, ctx);\n  checkAbort(signal);\n  const image = result.content.find((block) => block.type === \"image\");\n  const rawNote = result.content\n    .filter((block) => block.type === \"text\")\n    .map((block) => block.text)\n    .join(\"\\n\");\n  const note = boundText(rawNote, { maxBytes: 2048 }, \"ends\").text;\n  if (!image) throw new Error(note || `Unable to decode image: ${file}`);\n  if (Buffer.byteLength(image.data, \"utf8\") > MAX_ENCODED_BYTES)\n    throw new Error(\"Encoded image exceeds 5 MiB\");\n  return {\n    image,\n    info: { file, mimeType: image.mimeType, note, omitted: textOnly(ctx) },\n  };\n}\n\nfunction textOnly(ctx: ExtensionToolContext): boolean {\n  return ctx.model !== undefined && !ctx.model.input.includes(\"image\");\n}\n\n// Pi runs its read tool with the context of the tool that calls it.\nexport function createImageCollector(ctx: ExtensionToolContext): ImageCollector {\n  return createImageAttachments({\n    load: (path, signal) => loadImage(ctx, path, signal),\n    omitted: () => textOnly(ctx),\n  });\n}\n"
+import {
+  createReadToolDefinition,
+  detectSupportedImageMimeTypeFromFile,
+  type ExtensionToolContext,
+} from "@earendil-works/pi-coding-agent";
+
+import { boundText } from "../shared/bounds.js";
+import {
+  type AttachedImage,
+  createImageAttachments,
+  type ImageCollector,
+  MAX_ENCODED_BYTES,
+  readImageSource,
+} from "./image-attachments.js";
+import { checkAbort } from "./paths.js";
+
+export type {
+  AttachedImage,
+  ImageAttachmentInfo,
+  ImageBlock,
+  ImageCollector,
+} from "./image-attachments.js";
+
+async function loadImage(
+  ctx: ExtensionToolContext,
+  rawPath: unknown,
+  signal?: AbortSignal,
+): Promise<AttachedImage> {
+  const { path, file, bytes: buffer } = await readImageSource(ctx.cwd, rawPath, signal);
+  // Pi's read tool owns image recognition, so both accept the same formats. Detection reopens
+  // the path; only the bounded bytes read above are decoded and attached.
+  const mimeType = await detectSupportedImageMimeTypeFromFile(path);
+  if (!mimeType) throw new Error(`Not a supported image: ${file}`);
+  const reader = createReadToolDefinition(ctx.cwd, {
+    operations: {
+      access: async () => {},
+      readFile: async () => buffer,
+      detectImageMimeType: async () => mimeType,
+    },
+  });
+  const result = await reader.execute("pit-view-image", { path }, signal, undefined, ctx);
+  checkAbort(signal);
+  const image = result.content.find((block) => block.type === "image");
+  const rawNote = result.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  const note = boundText(rawNote, { maxBytes: 2048 }, "ends").text;
+  if (!image) throw new Error(note || `Unable to decode image: ${file}`);
+  if (Buffer.byteLength(image.data, "utf8") > MAX_ENCODED_BYTES)
+    throw new Error("Encoded image exceeds 5 MiB");
+  return {
+    image,
+    info: { file, mimeType: image.mimeType, note, omitted: textOnly(ctx) },
+  };
+}
+
+function textOnly(ctx: ExtensionToolContext): boolean {
+  return ctx.model !== undefined && !ctx.model.input.includes("image");
+}
+
+// Pi runs its read tool with the context of the tool that calls it.
+export function createImageCollector(ctx: ExtensionToolContext): ImageCollector {
+  return createImageAttachments({
+    load: (path, signal) => loadImage(ctx, path, signal),
+    omitted: () => textOnly(ctx),
+  });
+}
