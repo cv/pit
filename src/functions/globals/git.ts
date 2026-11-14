@@ -28,7 +28,8 @@ export const gitFunctions = [
   gitFunction("show", "Inspect a Git object"),
   gitFunction("push", "Push Git changes"),
   gitFunction("tag", "Manage Git tags"),
-  gitFunction("switch", "Switch Git branches"),
+  // `switch` is a reserved word, so it could not be destructured from the git namespace.
+  gitFunction("switchBranch", "Switch Git branches", "switch"),
   gitFunction("fetch", "Fetch Git refs"),
   gitFunction("pull", "Pull Git changes"),
   gitFunction("revParse", "Resolve Git revisions", "rev-parse"),

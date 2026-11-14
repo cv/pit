@@ -17,7 +17,7 @@ export type ResultRendererKey =
   | "git.show"
   | "git.push"
   | "git.tag"
-  | "git.switch"
+  | "git.switchBranch"
   | "git.fetch"
   | "git.pull"
   | "git.revParse"

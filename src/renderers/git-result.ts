@@ -328,7 +328,7 @@ export const GIT_RESULT_RENDERERS = {
   show: renderGitShow,
   push: renderGitPush,
   tag: renderGitTag,
-  switch: renderGitSwitch,
+  switchBranch: renderGitSwitch,
   fetch: renderGitFetch,
   pull: renderGitPull,
   revParse: renderGitRevParse,

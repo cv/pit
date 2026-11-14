@@ -54,7 +54,7 @@ describe("source-backed command globals", () => {
     { id: "git.show", args: [["HEAD"]], argv: ["show", "HEAD"] },
     { id: "git.push", args: [], argv: ["push"] },
     { id: "git.tag", args: [["--list"]], argv: ["tag", "--list"] },
-    { id: "git.switch", args: [["-c", "topic"]], argv: ["switch", "-c", "topic"] },
+    { id: "git.switchBranch", args: [["-c", "topic"]], argv: ["switch", "-c", "topic"] },
     { id: "git.fetch", args: [["origin", "main"]], argv: ["fetch", "origin", "main"] },
     { id: "git.pull", args: [["--ff-only"]], argv: ["pull", "--ff-only"] },
     { id: "git.revParse", args: [["HEAD"]], argv: ["rev-parse", "HEAD"] },

@@ -4,7 +4,7 @@ import { globalFunctionGroups, type GlobalNamespace } from "./globals.js";
 const NAMESPACE_SUMMARIES: Partial<Record<GlobalNamespace, string>> = {
   workspace:
     'read(file, { format?: "hashed" | "raw", offset?, limit?, ranges? }); search(query, { path?, glob?, regex?, caseSensitive?, contextLines?: 0..10, limit?: 1..500, ignore?, dot? }) returns edit-ready anchors and revisions; edit(file, { revision, changes }), where replace/delete take start and end?, insertBefore/insertAfter take anchor, and replaceFile/deleteFile take none; batch runs reads [{ kind: "read", file, options? }] with { failure?: "fail-fast" | "settled" }, or edits [{ kind: "edit", file, changes: { revision, changes: [...] } }], and returns ordered { results }; glob(patterns?, { limit?, dot?, onlyFiles?, ignore? }) -> { entries, truncated }; list(path?); stat(path); viewImage(file) attaches up to 8 images to a successful result',
-  git: "status, diff, log, add, commit, show, push, tag, switch, fetch, pull, revParse (rev-parse), and lsRemote (ls-remote) take an argument array and shell options",
+  git: "status, diff, log, add, commit, show, push, tag, switchBranch (switch), fetch, pull, revParse (rev-parse), and lsRemote (ls-remote) take an argument array and shell options",
   npm: "run(script, args?, options?) or run(script, options), test, install, ci({ includeDev? }), audit, outdated, and pack",
   gh: "issue, PR, run, and release workflows with selectable JSON fields and list filters; api(endpoint) for the rest",
   shell:

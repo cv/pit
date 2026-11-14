@@ -162,13 +162,17 @@ describe("Git result renderers", () => {
 
   it.each<{ method: string; result: ReturnType<typeof processResult>; summary: string }>([
     {
-      method: "switch",
+      method: "switchBranch",
       result: processResult("", "Switched to a new branch 'topic'\n"),
       summary: "switch, topic",
     },
-    { method: "switch", result: processResult("", "Already on 'main'\n"), summary: "switch, main" },
     {
-      method: "switch",
+      method: "switchBranch",
+      result: processResult("", "Already on 'main'\n"),
+      summary: "switch, main",
+    },
+    {
+      method: "switchBranch",
       result: processResult("", "fatal: invalid reference: nope\n", 128),
       summary: "switch, exit 128",
     },
@@ -192,7 +196,7 @@ describe("Git result renderers", () => {
   });
 
   it("shows branch and sync progress as output, not warnings", () => {
-    const switched = render("switch", processResult("", "Switched to branch 'main'\n"));
+    const switched = render("switchBranch", processResult("", "Switched to branch 'main'\n"));
     expect(switched.outcome).toBe("success");
     expect(switched.lines.join("\n")).toContain("<accent>stderr</accent>");
     expect(switched.lines[0]).toContain("git switch");

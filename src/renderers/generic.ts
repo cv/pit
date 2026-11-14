@@ -53,7 +53,7 @@ const FUNCTION_RESULT_RENDERERS = {
   "git.show": GIT_RESULT_RENDERERS.show,
   "git.push": GIT_RESULT_RENDERERS.push,
   "git.tag": GIT_RESULT_RENDERERS.tag,
-  "git.switch": GIT_RESULT_RENDERERS.switch,
+  "git.switchBranch": GIT_RESULT_RENDERERS.switchBranch,
   "git.fetch": GIT_RESULT_RENDERERS.fetch,
   "git.pull": GIT_RESULT_RENDERERS.pull,
   "git.revParse": GIT_RESULT_RENDERERS.revParse,

@@ -18,7 +18,11 @@ function declarations(path: string): string {
 const argumentSource = declarations("../shared/argument-values.ts");
 const commandSources = {
   git: `function prepareGitCommand(method: string, args: unknown[]) {
-    const subcommands: Record<string, string> = { revParse: "rev-parse", lsRemote: "ls-remote" };
+    const subcommands: Record<string, string> = {
+      switchBranch: "switch",
+      revParse: "rev-parse",
+      lsRemote: "ls-remote",
+    };
     return {
       args: [subcommands[method] ?? method, ...(args[0] === undefined ? [] : stringArrayValue(args[0], "args"))],
       options: args[1] === undefined ? {} : recordValue(args[1], "options"),
