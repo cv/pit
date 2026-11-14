@@ -412,6 +412,12 @@ describe("runInSandbox", () => {
       expect(failure(source).split("\n").at(-1)).toBe(hint);
     });
 
+    it("suggests the methods that extend a method name cut short", () => {
+      const hint = failure("async ({ tests: { run } }) => run({ files: [] })").split("\n").at(-1);
+      expect(hint).toMatch(/^Did you mean: tests\.runTargeted[,?]/);
+      expect(hint).toMatch(/tests has: runTargeted, inspectCoverageGaps\.$/);
+    });
+
     it.each<{ name: string; source: string }>([
       {
         name: "a returned value",
