@@ -1,1 +1,1 @@
-{"format":1,"seq":347,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"Switched to a new branch 'fix/project-helpers-durable'\nbranch 'fix/project-helpers-durable' set up to track 'origin/main'.\n"]]}}]}
+{"format":1,"seq":348,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead\n"]]}}]}
