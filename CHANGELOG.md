@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.36.4] - 2026-11-14
+
+### Added
+
+- On pi-durable hosts, the `typescript` tool has a `present` field that tells hosts such as pi-action how to show its calls in a log (#372): the label as the title, the program without its `// @pit:` header and its `params`, the functions it injected as the result's summary, and the returned value as readable text, with strings such as file contents and command output as they are instead of escaped JSON. pi-action no longer needs to parse Pit's header itself. See [pi-durable hosts](docs/durable.md#tools-the-model-sees).
+
 ## [0.36.3] - 2026-11-14
 
 ### Fixed
