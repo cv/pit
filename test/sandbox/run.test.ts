@@ -408,6 +408,11 @@ describe("runInSandbox", () => {
         source: "async () => runTargeted({ files: [] })",
         hint: "Did you mean: tests.runTargeted?",
       },
+      {
+        name: "a method name cut short",
+        source: "async ({ tests: { run } }) => run({ files: [] })",
+        hint: "Did you mean: tests.runTargeted? tests has: inspectCoverageGaps, runTargeted.",
+      },
     ])("suggests the closest names for $name", ({ source, hint }) => {
       expect(failure(source).split("\n").at(-1)).toBe(hint);
     });
