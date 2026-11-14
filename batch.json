@@ -1,1 +1,1 @@
-{"format":1,"seq":130,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead\n"]]}}]}
+{"format":1,"seq":131,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\nadded 179 packages in 4s\n\n RUN  v5.1.0 /home/runner/work/pit/pit\n\n"]]}}]}
