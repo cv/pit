@@ -72,7 +72,8 @@ describe("emitted Pit prompt", () => {
     // #262 raised it for deferred context edits (when: "now" | "end").
     // Raised again for the LABEL section: grammar-sampled providers reach a transcript
     // title only through the program's leading // @pit: line.
-    expect(size.fixed.characters).toBeLessThanOrEqual(6_000);
+    // #375 raised it for planning each step's calls into one round trip.
+    expect(size.fixed.characters).toBeLessThanOrEqual(6_200);
     expect(size.fixed.bytes).toBeGreaterThanOrEqual(size.fixed.characters);
     expect(
       measurePrompt({
