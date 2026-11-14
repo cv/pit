@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0 # tags and history, for release notes and version bumps
 
       - name: Run pi-action
-        uses: cv/pi-action@74e578aa20a9b74b041118b1b8fdb784db7680fc # v2.4.0
+        uses: cv/pi-action@0c28cb8965aaef821b2dccfa23ebd20e1ca8b002 # v2.5.1
         with:
           github_token: ${{ steps.app.outputs.token }}
           provider: nvidia
@@ -80,7 +80,7 @@ jobs:
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
           # A released pit, not this checkout: pi edits the checkout, and its tools shouldn't change under it.
-          extensions: github:cv/pit#v0.36.0
+          extensions: github:cv/pit#v0.36.3
           # Load this repository's .pi/pit.json and .pi/functions (delivery.*, tests.*, pr.*), which AGENTS.md
           # relies on. Safe here: only OWNER/MEMBER can start a run, comment runs check out main, and fork PRs
           # get no secrets to mint the token.
