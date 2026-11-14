@@ -352,13 +352,25 @@ function prepareReleaseCommand(method: GhMethod, args: unknown[]): PreparedGhCom
     }
     case "api": {
       const o = rawArgument(args, 2);
+      if (args[1] !== undefined && !Array.isArray(args[1])) {
+        throw new TypeError(
+          'gh.api(endpoint, args?, options?): args must be an array of strings, gh api flags such as ["-X", "PUT", "-f", "merge_method=rebase"]; pass process options such as maxBytes as the third argument',
+        );
+      }
       return {
         args: [
           "api",
           text(args[0], "endpoint"),
           ...(args[1] === undefined ? [] : list(args[1], "args")),
         ],
-        options: options(o),
+        // A response is data the program parses, not tool output: capture whole JSON documents.
+        // The default 50 KB stream budget cut them mid-document, so JSON.parse failed (#379).
+        options: {
+          // LIMITS.programData; this module runs as sandbox source, so it cannot import it.
+          maxBytes: 4_000_000,
+          maxLines: 1_000_000,
+          ...options(o),
+        },
       };
     }
     default:
