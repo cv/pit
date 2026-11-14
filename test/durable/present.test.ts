@@ -180,4 +180,62 @@ describe("the typescript tool's present field", () => {
 
     expect(shown.summary).toBe("saved hello");
   });
+
+  it.each([
+    { name: "blank code", args: { code: "   " }, title: "typescript" },
+    { name: "blank code with a functionId", args: { code: "", functionId: "notes.f" }, title: "notes.f" },
+    { name: "code that is not a string", args: { code: 42 }, title: "typescript" },
+    { name: "arguments that are not an object", args: null, title: "typescript" },
+  ])("gives a call with $name a title that is not empty", ({ args }) => {
+    const shown = presentation().call(args);
+
+    expect(shown.title).not.toBe("");
+  });
+
+  it.each([
+    { name: "the call's functionId", args: { code: "async function f({}) {}", functionId: "notes.f" }, summary: "saved notes.f" },
+    { name: "the function the code declares", args: { code: "async function hello({}) {}" }, summary: "saved hello" },
+    { name: "nothing when no name is known", args: { code: "async ({}) => 1" }, summary: undefined },
+  ])("names a saveOnly result without a savedFunction by $name", ({ args, summary }) => {
+    const shown = presentation().result(
+      { ...args, saveOnly: true },
+      { content: [{ type: "text", text: "done" }], details: { value: { executed: false } } },
+    );
+
+    expect(shown.summary).toBe(summary);
+  });
+
+  it.each([
+    { name: "no details", details: undefined },
+    { name: "details that are not an object", details: "text" },
+  ])("shows a result with $name by its text", ({ details }) => {
+    const shown = presentation().result(
+      { code: "async ({ git: { status } }) => 1" },
+      { content: [{ type: "text", text: "written by the host" }, { type: "image" }], details },
+    );
+
+    expect(shown).toEqual({ summary: "git.status", body: "written by the host" });
+  });
+
+  it("shows a result whose code is not a string without a summary", () => {
+    const shown = presentation().result({ code: 42 }, { content: [], details: {} });
+
+    expect(shown).toEqual({});
+  });
+
+  it("shows a failure without text or content as the host's generic view", () => {
+    expect(presentation().result({ code: "" }, { isError: true, content: "oops" })).toEqual({});
+  });
+
+  it("summarizes a result that asked a question by the question", () => {
+    const shown = presentation().result(
+      { code: "async ({ ui: { confirm } }) => confirm('Deploy?', 'Ship it')" },
+      {
+        content: [{ type: "text", text: "Question posted: Deploy?." }],
+        details: { question: { key: "k", kind: "confirm", title: "Deploy?" } },
+      },
+    );
+
+    expect(shown).toEqual({ summary: "asked: Deploy?", body: "Question posted: Deploy?." });
+  });
 });
