@@ -505,7 +505,7 @@ interface PitGitFunctions {
 
   tag(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 
-  switch(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
+  switchBranch(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 
   fetch(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;
 
