@@ -259,6 +259,66 @@ const renderGitTag: ValueRenderer = gitRenderer((result, context) => {
   });
 });
 
+const SWITCHED_PATTERN = /^(?:Switched to(?: a new)? branch|Already on) '([^']+)'/m;
+const UP_TO_DATE_PATTERN = /^Already up to date\.?$/m;
+
+/** Branch and sync commands report progress on stderr, which is output rather than a warning. */
+function syncRenderer(
+  method: "switch" | "fetch" | "pull",
+  describe: (result: DisplayProcessResult) => string,
+): ValueRenderer {
+  return gitRenderer((result, context) =>
+    gitResult({
+      method,
+      result,
+      context,
+      summary: failedSummary(method, result) ?? `${method}, ${describe(result)}`,
+      stdoutLines: processOutputLines(result.stdout),
+      stderrAsOutput: true,
+    }),
+  );
+}
+
+const renderGitSwitch = syncRenderer(
+  "switch",
+  (result) => result.stderr.match(SWITCHED_PATTERN)?.[1] ?? "complete",
+);
+const renderGitFetch = syncRenderer("fetch", (result) =>
+  `${result.stdout}${result.stderr}`.trim() === "" ? "up to date" : "complete",
+);
+const renderGitPull = syncRenderer("pull", (result) =>
+  UP_TO_DATE_PATTERN.test(result.stdout) ? "up to date" : "complete",
+);
+
+/** Short single-line answers, such as a SHA or branch name, are the summary themselves. */
+const renderGitRevParse: ValueRenderer = gitRenderer((result, context) => {
+  const output = processOutputLines(result.stdout);
+  const only = output.length === 1 && (output[0] as string).length <= 64 ? output[0] : undefined;
+  return gitResult({
+    method: "rev-parse",
+    result,
+    context,
+    summary:
+      failedSummary("rev-parse", result) ??
+      (only !== undefined ? `rev-parse, ${only}` : `rev-parse, ${plural(output.length, "line")}`),
+    stdoutLines: output.map((line) => context.theme.fg("accent", line)),
+  });
+});
+
+const renderGitLsRemote: ValueRenderer = gitRenderer((result, context) => {
+  const output = processOutputLines(result.stdout);
+  return gitResult({
+    method: "ls-remote",
+    result,
+    context,
+    summary: failedSummary("ls-remote", result) ?? `ls-remote, ${plural(output.length, "ref")}`,
+    stdoutLines: output.map((line) => {
+      const [sha, ref] = line.split("\t");
+      return ref === undefined ? line : `${context.theme.fg("accent", sha as string)}\t${ref}`;
+    }),
+  });
+});
+
 export const GIT_RESULT_RENDERERS = {
   status: renderGitStatus,
   diff: renderGitDiff,
@@ -268,4 +328,9 @@ export const GIT_RESULT_RENDERERS = {
   show: renderGitShow,
   push: renderGitPush,
   tag: renderGitTag,
+  switch: renderGitSwitch,
+  fetch: renderGitFetch,
+  pull: renderGitPull,
+  revParse: renderGitRevParse,
+  lsRemote: renderGitLsRemote,
 } as const satisfies Record<string, ValueRenderer>;
