@@ -355,7 +355,9 @@ describe("gh renderer", () => {
         expected: { maxBytes: 1000, maxLines: 1_000_000, truncate: "head" },
       },
     ])("gh.api $name", ({ options, expected }) => {
-      expect(prepareGhCommand("api", ["repos/cv/pit/pulls", [], options]).options).toEqual(expected);
+      expect(prepareGhCommand("api", ["repos/cv/pit/pulls", [], options]).options).toEqual(
+        expected,
+      );
     });
 
     it("explains gh.api process options passed in place of its flags", () => {

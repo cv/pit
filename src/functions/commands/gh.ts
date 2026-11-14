@@ -359,7 +359,11 @@ function prepareReleaseCommand(method: GhMethod, args: unknown[]): PreparedGhCom
         );
       }
       return {
-        args: ["api", text(args[0], "endpoint"), ...(args[1] === undefined ? [] : list(args[1], "args"))],
+        args: [
+          "api",
+          text(args[0], "endpoint"),
+          ...(args[1] === undefined ? [] : list(args[1], "args")),
+        ],
         // A response is data the program parses, not tool output: capture whole JSON documents.
         // The default 50 KB stream budget cut them mid-document, so JSON.parse failed (#379).
         options: {
