@@ -48,8 +48,7 @@ export function prepareNpmCommand(method: NpmMethod, args: unknown[]): PreparedN
           "npm.run(script, options) takes no third argument; pass script args as an array: npm.run(script, args, options)",
         );
       }
-      const scriptArgs =
-        args[1] === undefined || optionsSecond ? [] : stringArray(args[1], "args");
+      const scriptArgs = args[1] === undefined || optionsSecond ? [] : stringArray(args[1], "args");
       return {
         args: ["run", script, ...(scriptArgs.length > 0 ? ["--", ...scriptArgs] : [])],
         options: processOptions(optionsSecond ? args[1] : args[2]),
@@ -85,7 +84,11 @@ export function prepareNpmCommand(method: NpmMethod, args: unknown[]): PreparedN
     case "ci": {
       const raw = args[0] === undefined ? {} : object(args[0], "options");
       const includeDev =
-        raw.includeDev === undefined ? [] : boolean(raw.includeDev, "options.includeDev") ? ["--include=dev"] : ["--omit=dev"];
+        raw.includeDev === undefined
+          ? []
+          : boolean(raw.includeDev, "options.includeDev")
+            ? ["--include=dev"]
+            : ["--omit=dev"];
       return {
         args: [
           "ci",

@@ -34,7 +34,11 @@ describe("npm namespace", () => {
 
   it.each<{ name: string; options?: Record<string, unknown>; argv: string[] }>([
     { name: "npm's configuration by default", argv: ["ci"] },
-    { name: "omitted dev dependencies", options: { includeDev: false }, argv: ["ci", "--omit=dev"] },
+    {
+      name: "omitted dev dependencies",
+      options: { includeDev: false },
+      argv: ["ci", "--omit=dev"],
+    },
     {
       name: "included dev dependencies without scripts",
       options: { includeDev: true, ignoreScripts: true, raise: true },

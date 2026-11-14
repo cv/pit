@@ -183,7 +183,11 @@ describe("Git result renderers", () => {
       summary: "fetch, complete",
     },
     { method: "pull", result: processResult("Already up to date.\n"), summary: "pull, up to date" },
-    { method: "pull", result: processResult("Fast-forward\n a | 1 +\n"), summary: "pull, complete" },
+    {
+      method: "pull",
+      result: processResult("Fast-forward\n a | 1 +\n"),
+      summary: "pull, complete",
+    },
     { method: "revParse", result: processResult("abc1234\n"), summary: "rev-parse, abc1234" },
     { method: "revParse", result: processResult("a\nb\n"), summary: "rev-parse, 2 lines" },
     {
