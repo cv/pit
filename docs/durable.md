@@ -84,6 +84,8 @@ Existing conversations keep their history: earlier calls to a tool that is no lo
 
 Results are plain text for the model plus the same JSON `details` Pi's renderers read: the value, progress, traces, timings, and saved-function changes. Command output streams through `output()` while a call runs. A failed call returns an error result whose text is the root error, as on Pi.
 
+The `typescript` tool also carries a `present` field for hosts that show tool calls in a log, such as [pi-action's workflow log](https://github.com/cv/pi-action/blob/main/docs/extensions.md#show-tool-calls-in-the-workflow-log). pi-durable ignores it. `present.call(args)` gives the call's title, the label from the `// @pit:` header or the `label` argument, and a body: the program without the header, then `params` as JSON, `functionId`, and `saveOnly`. `present.result(args, result)` gives a summary, the functions the program injected such as `workspace.read · git.status` (`saved <name>` for `saveOnly`, the error's first line on failure), and a body: the returned value with string fields as they are and other values as indented JSON, or the error.
+
 ## What doesn't
 
 These throw a `PitDurableUnavailableError` whose message names the global, such as `commands.list is unavailable on pi-durable hosts: the host has no slash commands`:

@@ -43,6 +43,7 @@ import {
   unavailableNamespace,
 } from "./host.js";
 import { createDurableImageCollector } from "./images.js";
+import { TYPESCRIPT_PRESENTATION, type ToolPresentation } from "./present.js";
 import { DurableQuestions, type QuestionPosted } from "./questions.js";
 import { createDurableSessionHandler } from "./session.js";
 import {
@@ -380,9 +381,11 @@ function takeLoadWarnings(functions: ConversationFunctions, log: PitDurableLog |
 /** Pit's `typescript` tool as a pi-durable tool registration. */
 export function createDurableTypeScriptTool(
   services: DurableToolServices,
-): ToolRegistration<typeof DURABLE_TOOL_PARAMETERS> {
+): ToolRegistration<typeof DURABLE_TOOL_PARAMETERS> & { present: ToolPresentation } {
   return {
     name: "typescript",
+    // How hosts such as pi-action show the calls in their logs; pi-durable ignores it.
+    present: TYPESCRIPT_PRESENTATION,
     description: `${createToolDescription(LIMITS.result.maxBytes)}\n${HOST_NOTES}`,
     parameters: DURABLE_TOOL_PARAMETERS,
     // The Harness validates the prepared arguments against the parameters afterwards.
