@@ -1,1 +1,1 @@
-{"format":1,"seq":457,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"Checking formatting...\n\nAll matched files use the correct format.\nFinished in 153ms on 383 files using 4 threads.\n"]]}}]}
+{"format":1,"seq":458,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ❯ test/tool/prompt.test.ts (24 tests | 1 failed) 1087ms\n   ❯ emitted Pit prompt (18)\n     × budgets all fixed prose without adding the schema twice 5ms\n"]]}}]}
