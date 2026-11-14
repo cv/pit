@@ -4,6 +4,17 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Added
+
+- `npm.ci({ includeDev?, ignoreScripts? })` runs `npm ci`, which `npm.install` could not (#383). `includeDev: false` adds `--omit=dev`; `true` adds `--include=dev`.
+- Git branch and sync globals (#383): `git.switchBranch` (`git switch`; `switch` is a reserved word), `git.fetch`, `git.pull`, `git.revParse` (`git rev-parse`), and `git.lsRemote` (`git ls-remote`). Each takes an argument array and process options like the other `git.*` functions, and its result summary names the branch switched to, `up to date`, the resolved revision, or the ref count.
+- Programs can call `atob` and `btoa`, which the sandbox provided but its type definitions omitted (#383).
+
+### Changed
+
+- `npm.run(script, options)` takes process options second when the script has no args (#383); `npm.run(script, args, options)` still works.
+- `workspace.edit` and batch edits accept a mapped `PitEditChange[]` and anchors typed as plain `string` (#383). Edit already checked at runtime that changes are non-empty and anchors match the file. The tool description shows a batch edit's `changes: { revision, changes: [...] }` shape.
+
 ## [0.36.6] - 2026-11-14
 
 ### Changed
