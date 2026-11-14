@@ -13,7 +13,7 @@ export function proseSize(bytes: number): string {
 export const PROMPT_GUIDELINES = [
   "Use typescript for host work. Inject each function you call by destructuring its namespace in the first parameter, such as ({ git: { status } }); never inject a whole namespace.",
   "Prefer typed git/npm/gh functions; use shell.execFile for other commands, and shell.exec only for shell syntax.",
-  "Run independent calls together with Promise.all (Promise.allSettled for optional probes); sequence dependent work and edits to the same file.",
+  "Plan each step before calling: one program should gather every read, search, and probe the step needs (Promise.all, or workspace.batch for files; Promise.allSettled for optional probes), and one should make all its edits to different files. Each tool call is a round trip that resends the context. Sequence only dependent work and edits to the same file.",
   "Reuse or extend saved functions before writing one-off code; save one parameterized function per recurring task.",
   `Process data inside the program: raw reads and command output can reach ${proseSize(LIMITS.programData.maxBytes)}, but only the returned value reaches you, within ${proseSize(LIMITS.result.maxBytes)}. Return filtered, bounded results.`,
   "When a call fails, simplify it; after two similar failures, check the declared types or current state instead of varying syntax.",
