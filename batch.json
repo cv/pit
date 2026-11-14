@@ -1,1 +1,1 @@
-{"format":1,"seq":911,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",2,"output"]," M src/functions/commands/gh.ts M src/functions/globals/gh.ts M src/sandbox/injection-hints.ts M test/functions/globals-integration.test.ts M test/globals/gh.test.ts M test/sandbox/run.test.tsFinished in 4ms on 6 files using 4 threads.\n\n"]]}}]}
+{"format":1,"seq":912,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",2,"output"]," RUN  v5.1.0 /home/runner/work/pit/pit\n\n"]]}}]}
