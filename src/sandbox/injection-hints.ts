@@ -122,15 +122,26 @@ export function injectionHint(name: string, names: readonly string[]): string {
   }
   const candidates = [...names, ...namespaces];
   const threshold = Math.max(2, Math.floor(leaf.length / 3));
-  const ranked = candidates
+  // A truncated method name, such as gh.pr for gh.prCreate, names the methods that extend it
+  // ahead of near misses elsewhere (#379).
+  const extensions = namespaces.includes(namespace)
+    ? names.filter(
+        (id) =>
+          id.startsWith(`${namespace}.${leaf}`) && !id.slice(namespace.length + 1).includes("."),
+      )
+    : [];
+  const near = candidates
     .map((id) => {
       const idLeaf = id.slice(id.lastIndexOf(".") + 1);
       return { id, distance: Math.min(editDistance(name, id), editDistance(leaf, idLeaf)) };
     })
-    .filter((candidate) => candidate.distance <= threshold)
+    .filter((candidate) => candidate.distance <= threshold && !extensions.includes(candidate.id))
     .sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id))
-    .slice(0, MAX_SUGGESTIONS)
     .map((candidate) => candidate.id);
+  const ranked = [...extensions.slice(0, MAX_LISTED_METHODS), ...near].slice(
+    0,
+    Math.max(MAX_SUGGESTIONS, Math.min(extensions.length, MAX_LISTED_METHODS)),
+  );
   const methods = namespaces.includes(namespace)
     ? names.filter(
         (id) => id.startsWith(`${namespace}.`) && !id.slice(namespace.length + 1).includes("."),

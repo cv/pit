@@ -120,7 +120,8 @@ export const ghFunctions = [
     resultRenderer: "gh",
     declaration:
       "api(endpoint: string, args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;",
-    documentation: "gh.api(endpoint, args?, options?) is a bounded argument-safe escape hatch",
+    documentation:
+      "gh.api(endpoint, args?, options?) is a bounded argument-safe escape hatch; args are gh api flags, and stdout holds the whole response (up to 4 MB) so JSON parses",
     minimumArguments: 1,
     maximumArguments: 3,
   }),
