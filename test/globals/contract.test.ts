@@ -22,6 +22,12 @@ async function accepted(c: PitDependencies) {
   const process = await c.git.status(["--short"]);
   const exitCode: number = process.code;
   await c.npm.test({ coverage: true });
+  await c.npm.run("check", { maxBytes: 3000 });
+  await c.npm.ci({ includeDev: false });
+  const head: string = (await c.git.revParse(["HEAD"])).stdout;
+  const anchors: string[] = ["1:abcde"];
+  const mapped = anchors.map((start) => ({ kind: "replace" as const, start, content: text }));
+  await c.workspace.edit("a.ts", { revision: "r1", changes: mapped });
   await c.gh.prList({ json: ["number"], limit: 5 });
   await c.shell.execFile("node", ["--version"], { raise: true });
   const response = await c.http.request("https://example.invalid");
@@ -49,8 +55,10 @@ async function rejected(c: PitDependencies) {
   await c.workspace.read(42);
   // @ts-expect-error format is a supported enum, not arbitrary text
   await c.workspace.read("a.ts", { format: "yaml" });
-  // @ts-expect-error edits require at least one change
-  await c.workspace.edit("a.ts", { revision: null, changes: [] });
+  // @ts-expect-error edit changes name a supported kind
+  await c.workspace.edit("a.ts", { revision: null, changes: [{ kind: "rewrite", content: "x" }] });
+  // @ts-expect-error npm.ci's includeDev is a boolean
+  await c.npm.ci({ includeDev: "no" });
   // @ts-expect-error argv is an array of strings
   await c.git.status([1]);
   // @ts-expect-error process limits are numeric
