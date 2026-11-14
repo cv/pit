@@ -29,7 +29,6 @@ import {
 import { appliedEditDetails, buildToolResult } from "../tool/result.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
 import { applySourceOptions } from "../tool/source-options.js";
-import { TYPESCRIPT_PRESENTATION, type ToolPresentation } from "./present.js";
 import { StagedContextChanges } from "./context/staging.js";
 import { createDurableModelsHandler, createDurableRuntimeHandler } from "./handlers.js";
 import {
@@ -44,6 +43,7 @@ import {
   unavailableNamespace,
 } from "./host.js";
 import { createDurableImageCollector } from "./images.js";
+import { TYPESCRIPT_PRESENTATION, type ToolPresentation } from "./present.js";
 import { DurableQuestions, type QuestionPosted } from "./questions.js";
 import { createDurableSessionHandler } from "./session.js";
 import {
