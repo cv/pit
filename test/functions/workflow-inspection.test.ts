@@ -41,7 +41,7 @@ describe("tests.runTargeted behavior", () => {
     expect(result).not.toHaveProperty("slowestFiles");
     const invocations = vitestArgs(execFile);
     expect(invocations).toHaveLength(1);
-    expect(invocations[0]?.slice(0, 3)).toEqual(["--no-install", "vitest", "run"]);
+    expect(invocations[0]?.slice(0, 2)).toEqual(["vitest", "run"]);
     expect(invocations[0]?.filter((arg) => arg.startsWith("test/")).sort()).toEqual([
       "test/a.test.ts",
       "test/b.test.ts",

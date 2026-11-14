@@ -3,8 +3,7 @@
  *
  * @param input.discoveryAttempts - Run searches before failing (1-12). The default is 3.
  * @param input.discoveryIntervalMs - Delay between searches (1000-30000). The default is 5000 ms.
- * @param input.timeoutMs - Wall-clock limit for discovery and the wait together (at least 1000;
- *   larger values are capped at 285000, under the tool's 300 s call limit).
+ * @param input.timeoutMs - Wall-clock limit for discovery and the wait together (1000-285000).
  *   The default is 240000 ms; ci.waitForRun gets what discovery leaves.
  *   ci.findRun and ci.waitForRun validate the remaining inputs.
  */
@@ -45,10 +44,7 @@ async function waitForCommit(
     1000,
     30000,
   );
-  // A larger limit could not finish inside one tool call, so cap it rather than reject it (#379).
-  const requestedTimeoutMs =
-    input.timeoutMs === undefined ? undefined : Math.min(input.timeoutMs, 285000);
-  const timeoutMs = integerInput("timeoutMs", requestedTimeoutMs, 240000, 1000, 285000);
+  const timeoutMs = integerInput("timeoutMs", input.timeoutMs, 240000, 1000, 285000);
   const deadline = Date.now() + timeoutMs;
   let match: Awaited<ReturnType<typeof findRun>>["matches"][number] | undefined;
   let slowestFindMs = 0;

@@ -5,8 +5,7 @@
  * @param input.intervalMs - Delay between checks (1000-30000). The default is 15000 ms.
  * @param input.initialDelayMs - Delay before the first check (0-120000). The default is 120000 ms.
  *   It counts toward timeoutMs.
- * @param input.timeoutMs - Wall-clock limit for the whole wait (at least 1000; larger values are
- *   capped at 285000, under the tool's 300 s call limit). The default is
+ * @param input.timeoutMs - Wall-clock limit for the whole wait (1000-285000). The default is
  *   240000 ms, safely inside the 300 s tool limit. The wait stops early when another interval plus
  *   its slowest check so far would pass it; a timeout reports attempts made, requestedAttempts,
  *   timeoutMs, elapsedMs, and the last observed run status, URL, and jobs.
@@ -40,10 +39,7 @@ async function waitForRun(
   const intervalMs = integerInput("intervalMs", input.intervalMs, 15000, 1000, 30000);
   const initialDelayMs = integerInput("initialDelayMs", input.initialDelayMs, 120000, 0, 120000);
   const requestedAttempts = integerInput("attempts", input.attempts, 12, 1, 120);
-  // A larger limit could not finish inside one tool call, so cap it rather than reject it (#379).
-  const requestedTimeoutMs =
-    input.timeoutMs === undefined ? undefined : Math.min(input.timeoutMs, 285000);
-  const timeoutMs = integerInput("timeoutMs", requestedTimeoutMs, 240000, 1000, 285000);
+  const timeoutMs = integerInput("timeoutMs", input.timeoutMs, 240000, 1000, 285000);
   const raise = input.raise ?? true;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // A deadline, not an attempt count: GitHub's response time also spends the tool's 300 s.

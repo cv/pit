@@ -40,7 +40,7 @@ async function format(
   if (files.length === 0) {
     return { files, changed: false, message: "No changed Oxfmt-supported files" };
   }
-  const args = ["--no-install", "oxfmt", input.checkOnly ? "--check" : "--write", "--", ...files];
+  const args = ["oxfmt", input.checkOnly ? "--check" : "--write", "--", ...files];
   const result = await execFile("npx", args, {
     raise: false,
     timeoutMs: 120000,
