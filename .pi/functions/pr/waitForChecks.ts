@@ -10,8 +10,10 @@
  * @param input.timeoutMs - Wall-clock limit for the whole wait (at least 1000; larger values are
  *   capped at 285000, under the tool's 300 s call limit). The default is
  *   240000 ms, safely inside the 300 s tool limit. The wait stops early when another interval plus
- *   its slowest poll so far would pass it, and a timeout reports timeoutMs and elapsedMs.
- * @param input.raise - Fail when a check fails or checks are still pending. The default is true.
+ *   its slowest poll so far would pass it. A timeout is not a failure, since long CI outlasts one
+ *   tool call: it returns outcome "pending" with a note, timeoutMs, elapsedMs, and a hint to
+ *   call again.
+ * @param input.raise - Fail when a check fails. The default is true.
  */
 async function waitForChecks(
   { gh: { prView } },
@@ -32,13 +34,14 @@ async function waitForChecks(
     state: string;
     headSha: string;
     mergeStateStatus: string;
-    outcome: "passed" | "failed" | "pending" | "timed_out";
+    outcome: "passed" | "failed" | "pending";
     attempt: number;
     requestedAttempts: number;
     timeoutMs?: number;
     elapsedMs?: number;
     checks: { total: number; passed: number; failed: Names; pending: Names };
     note?: string;
+    hint?: string;
   };
   type Check = {
     __typename?: string;
@@ -164,14 +167,17 @@ async function waitForChecks(
   const elapsedMs = Date.now() - startedAt;
   const limitNote =
     attempt < requestedAttempts ? ` (it stopped at its ${timeoutMs / 1000} s time limit)` : "";
-  const note =
+  const pendingNote =
     last.checks.total === 0
       ? "no checks were reported"
       : `${last.checks.pending.names.length + last.checks.pending.omitted} checks are still pending`;
-  if (raise) {
-    throw new Error(
-      `Pull request #${number} did not settle after ${attempt} polls${limitNote}: ${note}`,
-    );
-  }
-  return { ...last, outcome: "timed_out", note, timeoutMs, elapsedMs };
+  // Not a failure even with raise: long CI outlasts one tool call, so the caller waits again (#383).
+  return {
+    ...last,
+    outcome: "pending",
+    note: `Pull request #${number} did not settle after ${attempt} polls${limitNote}: ${pendingNote}`,
+    hint: `Call pr.waitForChecks({ number: ${number}${input.repo ? `, repo: ${JSON.stringify(input.repo)}` : ""} }) again to keep waiting.`,
+    timeoutMs,
+    elapsedMs,
+  };
 }
