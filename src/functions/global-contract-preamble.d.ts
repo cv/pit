@@ -30,6 +30,12 @@ type PitNpmInstallOptions = PitProcessOptions & {
   ignoreScripts?: boolean;
 };
 
+type PitNpmCiOptions = PitProcessOptions & {
+  /** false adds --omit=dev; true adds --include=dev; unset follows npm's configuration. */
+  includeDev?: boolean;
+  ignoreScripts?: boolean;
+};
+
 type PitNpmAuditOptions = PitProcessOptions & {
   omitDev?: boolean;
 };
@@ -74,16 +80,21 @@ type PitGhPrMergeOptions = PitGhOptions & {
 type PitReadFormat = "hashed" | "raw";
 type PitLineAnchor = `${number}:${string}`;
 
+/**
+ * Anchors are `line:hash` strings from the latest read, search, or edit. Any string type-checks so
+ * computed anchors need no cast; edit checks each one at runtime against the file's revision.
+ */
 type PitEditChange =
-  | { kind: "replace"; start: PitLineAnchor; end?: PitLineAnchor; content: string }
-  | { kind: "delete"; start: PitLineAnchor; end?: PitLineAnchor }
-  | { kind: "insertBefore" | "insertAfter"; anchor: PitLineAnchor; content: string }
+  | { kind: "replace"; start: string; end?: string; content: string }
+  | { kind: "delete"; start: string; end?: string }
+  | { kind: "insertBefore" | "insertAfter"; anchor: string; content: string }
   | { kind: "replaceFile"; content: string }
   | { kind: "deleteFile" };
 
 type PitEditChangeSpec = {
   revision: string | null;
-  changes: [PitEditChange, ...PitEditChange[]];
+  /** At least one change, checked at runtime, so a mapped `PitEditChange[]` is accepted. */
+  changes: PitEditChange[];
   /** Return hashed ranges with this many lines (0-20) around each change. */
   context?: number;
 };
@@ -138,6 +149,7 @@ type PitBatchReadOperation = {
   options?: { format?: PitReadFormat; offset?: number; limit?: number };
 };
 
+/** `changes` is the same `{ revision, changes: [...] }` object workspace.edit takes second. */
 type PitBatchEditOperation = { kind: "edit"; file: string; changes: PitEditChangeSpec };
 
 type PitBatchOperation = PitBatchReadOperation | PitBatchEditOperation;
