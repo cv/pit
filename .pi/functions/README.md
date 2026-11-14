@@ -9,16 +9,16 @@ these namespaces.
 
 ## Layout
 
-| Namespace   | Operation                                          | Functions                                                                                                          | Owning skill    |
-| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------- |
+| Namespace   | Operation                                          | Functions                                                                                                                             | Owning skill    |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
 | `delivery`  | Validate, format, review, and commit local changes | `validate`, `format`, `listChangedFiles`, `review`, `prepare`, `commit`, `openPullRequest`, `auditCodeQuality`, `inspectDependencies` | pit-delivery    |
-| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`, `inspectTimings`                                       | pit-delivery    |
-| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `merge`, `manageWorktree`, `editBody`                                                  | pit-delivery    |
-| `release`   | Published releases                                 | `verifyPublished`                                                                                                  | pit-delivery    |
-| `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                              | pit-test-audit  |
-| `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                       | pit-terminal-ux |
-| `sessions`  | Audit Pi session transcripts                       | `analyze`, `analyzeRecent`, `readEvents`                                                                           | none            |
-| (top level) | Shared query primitive                             | `jq`                                                                                                               | none            |
+| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`, `inspectTimings`                                                          | pit-delivery    |
+| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `merge`, `manageWorktree`, `editBody`                                                                     | pit-delivery    |
+| `release`   | Published releases                                 | `verifyPublished`                                                                                                                     | pit-delivery    |
+| `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                                                 | pit-test-audit  |
+| `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                                          | pit-terminal-ux |
+| `sessions`  | Audit Pi session transcripts                       | `analyze`, `analyzeRecent`, `readEvents`                                                                                              | none            |
+| (top level) | Shared query primitive                             | `jq`                                                                                                                                  | none            |
 
 A directory is a namespace: `ci/inspectFailure.ts` declares `inspectFailure`, and
 programs call it as `ci.inspectFailure` after injecting `{ ci: { inspectFailure } }`. A
