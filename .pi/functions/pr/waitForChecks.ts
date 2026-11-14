@@ -7,7 +7,8 @@
  * @param input.intervalMs - Delay between polls (1000-30000). The default is 15000 ms.
  * @param input.initialDelayMs - Delay before the first poll (0-120000). The default is 0 ms. It
  *   counts toward timeoutMs.
- * @param input.timeoutMs - Wall-clock limit for the whole wait (1000-285000). The default is
+ * @param input.timeoutMs - Wall-clock limit for the whole wait (at least 1000; larger values are
+ *   capped at 285000, under the tool's 300 s call limit). The default is
  *   240000 ms, safely inside the 300 s tool limit. The wait stops early when another interval plus
  *   its slowest poll so far would pass it, and a timeout reports timeoutMs and elapsedMs.
  * @param input.raise - Fail when a check fails or checks are still pending. The default is true.
@@ -67,7 +68,10 @@ async function waitForChecks(
   if (input.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(input.repo)) {
     throw new Error("repo must be owner/name");
   }
-  const timeoutMs = integerInput("timeoutMs", input.timeoutMs, 240000, 1000, 285000);
+  // A larger limit could not finish inside one tool call, so cap it rather than reject it (#379).
+  const requestedTimeoutMs =
+    input.timeoutMs === undefined ? undefined : Math.min(input.timeoutMs, 285000);
+  const timeoutMs = integerInput("timeoutMs", requestedTimeoutMs, 240000, 1000, 285000);
   // A deadline, not an attempt count: GitHub's response time also spends the tool's 300 s.
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
