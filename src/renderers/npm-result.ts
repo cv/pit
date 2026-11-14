@@ -120,14 +120,18 @@ const test = renderer("test", (result) => {
     ...(failed > 0 ? { outcome: "warning" as const } : {}),
   };
 });
-const install = renderer("install", (result) => {
-  const output = lines(result.stdout);
-  const summaryLine = output.find((line) => INSTALL_SUMMARY_PATTERN.test(line));
-  return {
-    summary: summaryLine ? `install, ${summaryLine}` : `install, exit ${result.code}`,
-    output,
-  };
-});
+function installRenderer(method: "install" | "ci"): ValueRenderer {
+  return renderer(method, (result) => {
+    const output = lines(result.stdout);
+    const summaryLine = output.find((line) => INSTALL_SUMMARY_PATTERN.test(line));
+    return {
+      summary: summaryLine ? `${method}, ${summaryLine}` : `${method}, exit ${result.code}`,
+      output,
+    };
+  });
+}
+const install = installRenderer("install");
+const ci = installRenderer("ci");
 function severityRank(severity: unknown): number {
   const rank = SEVERITIES.findIndex((known) => known === severity);
   return rank === -1 ? SEVERITIES.length : rank;
@@ -283,6 +287,7 @@ export const NPM_RESULT_RENDERERS = {
   run,
   test,
   install,
+  ci,
   audit,
   outdated,
   pack,
