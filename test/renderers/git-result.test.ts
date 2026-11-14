@@ -160,6 +160,45 @@ describe("Git result renderers", () => {
     expect(render("tag", processResult("", "bad pattern", 1)).summary).toBe("tag, exit 1");
   });
 
+  it.each<{ method: string; result: ReturnType<typeof processResult>; summary: string }>([
+    {
+      method: "switch",
+      result: processResult("", "Switched to a new branch 'topic'\n"),
+      summary: "switch, topic",
+    },
+    { method: "switch", result: processResult("", "Already on 'main'\n"), summary: "switch, main" },
+    {
+      method: "switch",
+      result: processResult("", "fatal: invalid reference: nope\n", 128),
+      summary: "switch, exit 128",
+    },
+    { method: "fetch", result: processResult(), summary: "fetch, up to date" },
+    {
+      method: "fetch",
+      result: processResult("", "From github.com:cv/pit\n * branch main -> FETCH_HEAD\n"),
+      summary: "fetch, complete",
+    },
+    { method: "pull", result: processResult("Already up to date.\n"), summary: "pull, up to date" },
+    { method: "pull", result: processResult("Fast-forward\n a | 1 +\n"), summary: "pull, complete" },
+    { method: "revParse", result: processResult("abc1234\n"), summary: "rev-parse, abc1234" },
+    { method: "revParse", result: processResult("a\nb\n"), summary: "rev-parse, 2 lines" },
+    {
+      method: "lsRemote",
+      result: processResult("abc\trefs/heads/main\ndef\trefs/tags/v1\n"),
+      summary: "ls-remote, 2 refs",
+    },
+  ])("summarizes git.$method as $summary", ({ method, result, summary }) => {
+    expect(render(method, result).summary).toBe(summary);
+  });
+
+  it("shows branch and sync progress as output, not warnings", () => {
+    const switched = render("switch", processResult("", "Switched to branch 'main'\n"));
+    expect(switched.outcome).toBe("success");
+    expect(switched.lines.join("\n")).toContain("<accent>stderr</accent>");
+    expect(switched.lines[0]).toContain("git switch");
+    expect(render("lsRemote", processResult("abc\tHEAD\n")).lines[0]).toContain("git ls-remote");
+  });
+
   it("declines malformed process values so generic fallback can handle them", () => {
     expect(renderMaybe("status", "clean")).toBeUndefined();
     expect(renderMaybe("status", { stdout: "clean" })).toBeUndefined();
