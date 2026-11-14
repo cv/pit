@@ -9,6 +9,7 @@ function repository(options: {
   ignored?: string[];
   upstream?: string | null;
   prs?: Array<{ number: number; state: string }>;
+  branch?: string;
 }) {
   const staged = new Set(options.staged ?? []);
   const calls: string[][] = [];
@@ -48,9 +49,9 @@ function repository(options: {
             : processResult({ code: 128, stderr: "no upstream" });
         }
         if (command.join(" ") === "rev-parse --abbrev-ref HEAD") {
-          return processResult({ stdout: "feature\n" });
+          return processResult({ stdout: `${options.branch ?? "feature"}\n` });
         }
-        return processResult({ stdout: "abc123\nfeature\n" });
+        return processResult({ stdout: `abc123\n${options.branch ?? "feature"}\n` });
       default:
         throw new Error(`unexpected git ${command.join(" ")}`);
     }
@@ -68,6 +69,69 @@ function repository(options: {
 }
 
 describe("delivery.commit", () => {
+  it.each(["main", "master"])("refuses to push the default branch %s", async (branch) => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({
+      tracked: ["a.ts"],
+      changed: ["a.ts"],
+      upstream: `origin/${branch}`,
+      branch,
+    });
+    await expect(
+      commitChanges(repo.dependencies, { files: ["a.ts"], message: "fix: thing", push: true }),
+    ).rejects.toThrow(/Refusing to push [\s\S]*Nothing was staged or committed/);
+    expect(repo.calls.map((call) => call[0])).not.toContain("add");
+    expect(repo.commit).not.toHaveBeenCalled();
+    expect(repo.push).not.toHaveBeenCalled();
+  });
+
+  it("pushes the default branch with allowDefaultBranch", async () => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({
+      tracked: ["a.ts"],
+      changed: ["a.ts"],
+      upstream: "origin/main",
+      branch: "main",
+    });
+    await expect(
+      commitChanges(repo.dependencies, {
+        files: ["a.ts"],
+        message: "fix: thing",
+        push: true,
+        allowDefaultBranch: true,
+      }),
+    ).resolves.toMatchObject({ branch: "main", pushed: true });
+    expect(repo.push).toHaveBeenCalledOnce();
+  });
+
+  it("retries a push that GitHub rejects with a transient failed status once", async () => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], upstream: null });
+    repo.push.mockResolvedValueOnce(
+      processResult({ code: 1, stderr: " ! [remote rejected] feature -> feature (failed)\n" }),
+    );
+    await expect(
+      commitChanges(repo.dependencies, { files: ["a.ts"], message: "fix: thing", push: true }),
+    ).resolves.toMatchObject({ pushed: true, upstream: "origin/feature" });
+    expect(repo.push).toHaveBeenCalledTimes(2);
+    expect(repo.push).toHaveBeenLastCalledWith(["-u", "origin", "feature"], { raise: true });
+  });
+
+  it("reports a hook rejection without retrying it", async () => {
+    const commitChanges = await loadWorkflowFunction("delivery.commit");
+    const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], upstream: "origin/feature" });
+    repo.push.mockResolvedValueOnce(
+      processResult({
+        code: 1,
+        stderr: " ! [remote rejected] feature -> feature (pre-receive hook declined)\n",
+      }),
+    );
+    await expect(
+      commitChanges(repo.dependencies, { files: ["a.ts"], message: "fix: thing", push: true }),
+    ).rejects.toThrow(/git push failed with exit 1:[\s\S]*pre-receive hook declined/);
+    expect(repo.push).toHaveBeenCalledOnce();
+  });
+
   const pushOf = async (prs: Array<{ number: number; state: string }>) => {
     const commitChanges = await loadWorkflowFunction("delivery.commit");
     const repo = repository({
@@ -253,7 +317,7 @@ describe("delivery.commit", () => {
       message: "fix: a",
       push: true,
     });
-    expect(repo.push).toHaveBeenCalledWith(args, expect.objectContaining({ raise: true }));
+    expect(repo.push).toHaveBeenCalledWith(args, { raise: false });
     expect(result).toMatchObject({ pushed: true, upstream: expected });
   });
 
