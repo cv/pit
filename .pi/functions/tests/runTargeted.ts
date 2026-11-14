@@ -85,6 +85,7 @@ async function runTargeted(
   const result = await execFile(
     "npx",
     [
+      "--no-install",
       "vitest",
       "run",
       "--reporter=default",

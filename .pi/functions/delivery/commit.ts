@@ -13,10 +13,20 @@
  *   is staged, since its commits would never reach the base branch.
  * @param input.allowClosedPullRequest - Push even when the branch's pull request is merged or
  *   closed. The default is false.
+ * @param input.allowDefaultBranch - Push even when the current branch is `main` or `master`. The
+ *   default is false: Pit's default branch only accepts pull requests, so such a push fails
+ *   before anything is staged. A push that GitHub rejects with a transient `(failed)` status is
+ *   retried once.
  */
 async function commit(
   { shell: { execFile }, git: { commit: gitCommit, push }, gh: { prList } },
-  input: { files: string[]; message: string; push?: boolean; allowClosedPullRequest?: boolean },
+  input: {
+    files: string[];
+    message: string;
+    push?: boolean;
+    allowClosedPullRequest?: boolean;
+    allowDefaultBranch?: boolean;
+  },
 ) {
   const files = [...new Set(input.files.map((file) => file.replace(/^\.\//, "")))];
   if (files.length === 0 || files.length > 100) {
@@ -45,11 +55,35 @@ async function commit(
     return result.stdout.split("\0").filter(Boolean);
   };
   const stagedPaths = () => paths(["diff", "--cached", "--name-only", "--no-renames", "-z"]);
+  // GitHub sometimes rejects a new ref with a bare "(failed)" status and accepts the identical push
+  // moments later (#379). Retry that case once; report any other rejection with git's output.
+  const pushBranch = async (args: string[]) => {
+    const first = await push(args, { raise: false });
+    if (first.code === 0) return;
+    if (!/\[remote rejected\][^\n]*\(failed\)/.test(first.stderr)) {
+      throw new Error(
+        `git push failed with exit ${first.code}:\n${first.stderr.trim().slice(-2000)}`,
+      );
+    }
+    await push(args, { raise: true });
+  };
   const requested = new Set(files);
   // A merged or closed pull request's branch is a dead end: commits pushed there never reach the
   // base branch, as happened when PR #272 merged while more commits were on their way.
+  const headBranch = input.push
+    ? (await git(["rev-parse", "--abbrev-ref", "HEAD"])).stdout.trim()
+    : "";
+  if (
+    input.push &&
+    input.allowDefaultBranch !== true &&
+    (headBranch === "main" || headBranch === "master")
+  ) {
+    throw new Error(
+      `Refusing to push ${headBranch}: it only accepts pull requests. Create a branch first (git switch -c <name>), commit there, and open a pull request, or pass allowDefaultBranch: true for a repository that accepts direct pushes. Nothing was staged or committed.`,
+    );
+  }
   if (input.push && input.allowClosedPullRequest !== true) {
-    const branch = (await git(["rev-parse", "--abbrev-ref", "HEAD"])).stdout.trim();
+    const branch = headBranch;
     if (branch !== "HEAD") {
       const listed = await prList({
         head: branch,
@@ -111,10 +145,10 @@ async function commit(
     const current = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], false);
     // A branch created from origin/main tracks main; push it under its own name instead.
     if (current.code === 0 && current.stdout.trim().endsWith(`/${branch}`)) {
-      await push([], { raise: true });
+      await pushBranch([]);
       upstream = current.stdout.trim();
     } else {
-      await push(["-u", "origin", branch], { raise: true });
+      await pushBranch(["-u", "origin", branch]);
       upstream = `origin/${branch}`;
     }
   }
