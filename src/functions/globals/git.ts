@@ -1,10 +1,17 @@
 import { defineCommandFunction } from "../command-source.js";
 import type { ResultRendererKey } from "../global-definition.js";
 
-function gitFunction<const Method extends string>(method: Method, summary: string) {
+function gitFunction<const Method extends string>(
+  method: Method,
+  summary: string,
+  subcommand: string = method,
+) {
   return defineCommandFunction("git", method, {
     declaration: `${method}(args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;`,
-    documentation: `git.${method}(args?, options?)`,
+    documentation:
+      subcommand === method
+        ? `git.${method}(args?, options?)`
+        : `git.${method}(args?, options?) runs git ${subcommand}`,
     summary,
     resultRenderer: `git.${method}` as ResultRendererKey,
     minimumArguments: 0,
@@ -21,4 +28,10 @@ export const gitFunctions = [
   gitFunction("show", "Inspect a Git object"),
   gitFunction("push", "Push Git changes"),
   gitFunction("tag", "Manage Git tags"),
+  // `switch` is a reserved word, so it could not be destructured from the git namespace.
+  gitFunction("switchBranch", "Switch Git branches", "switch"),
+  gitFunction("fetch", "Fetch Git refs"),
+  gitFunction("pull", "Pull Git changes"),
+  gitFunction("revParse", "Resolve Git revisions", "rev-parse"),
+  gitFunction("lsRemote", "List remote Git refs", "ls-remote"),
 ] as const;
