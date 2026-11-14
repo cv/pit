@@ -343,6 +343,27 @@ describe("gh renderer", () => {
       );
     });
 
+    it.each<{ name: string; options: Record<string, unknown> | undefined; expected: object }>([
+      {
+        name: "captures whole responses by default",
+        options: undefined,
+        expected: { maxBytes: 4_000_000, maxLines: 1_000_000 },
+      },
+      {
+        name: "keeps a caller's smaller budget",
+        options: { maxBytes: 1000, truncate: "head" },
+        expected: { maxBytes: 1000, maxLines: 1_000_000, truncate: "head" },
+      },
+    ])("gh.api $name", ({ options, expected }) => {
+      expect(prepareGhCommand("api", ["repos/cv/pit/pulls", [], options]).options).toEqual(expected);
+    });
+
+    it("explains gh.api process options passed in place of its flags", () => {
+      expect(() =>
+        prepareGhCommand("api", ["repos/cv/pit/pulls/1/merge", { method: "PUT" }] as any),
+      ).toThrow(/args must be an array of strings[\s\S]*third argument/);
+    });
+
     it("covers renderer primitive JSON, primitive lists, stderr, and malformed process values", () => {
       expect(render(result(JSON.stringify(["one", 2]))).summary).toBe("2 results");
       expect(
