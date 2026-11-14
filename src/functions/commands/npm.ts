@@ -40,16 +40,19 @@ export function prepareNpmCommand(method: NpmMethod, args: unknown[]): PreparedN
   switch (method) {
     case "run": {
       const script = string(args[0], "script");
-      // Options passed where args belong (possible only through a cast) name the signature.
-      if (args[1] !== null && typeof args[1] === "object" && !Array.isArray(args[1])) {
+      // A script without args may take its options second: npm.run(script, options).
+      const optionsSecond =
+        args[1] !== null && typeof args[1] === "object" && !Array.isArray(args[1]);
+      if (optionsSecond && args[2] !== undefined) {
         throw new TypeError(
-          "npm.run(script, args?, options?): args must be an array of strings; pass process options such as maxBytes as the third argument",
+          "npm.run(script, options) takes no third argument; pass script args as an array: npm.run(script, args, options)",
         );
       }
-      const scriptArgs = args[1] === undefined ? [] : stringArray(args[1], "args");
+      const scriptArgs =
+        args[1] === undefined || optionsSecond ? [] : stringArray(args[1], "args");
       return {
         args: ["run", script, ...(scriptArgs.length > 0 ? ["--", ...scriptArgs] : [])],
-        options: processOptions(args[2]),
+        options: processOptions(optionsSecond ? args[1] : args[2]),
       };
     }
     case "test": {
@@ -77,6 +80,19 @@ export function prepareNpmCommand(method: NpmMethod, args: unknown[]): PreparedN
       return {
         args: ["install", ...flags, ...packages],
         options: processOptions(raw, ["dev", "exact", "packageLockOnly", "ignoreScripts"]),
+      };
+    }
+    case "ci": {
+      const raw = args[0] === undefined ? {} : object(args[0], "options");
+      const includeDev =
+        raw.includeDev === undefined ? [] : boolean(raw.includeDev, "options.includeDev") ? ["--include=dev"] : ["--omit=dev"];
+      return {
+        args: [
+          "ci",
+          ...includeDev,
+          ...(boolean(raw.ignoreScripts, "options.ignoreScripts") ? ["--ignore-scripts"] : []),
+        ],
+        options: processOptions(raw, ["includeDev", "ignoreScripts"]),
       };
     }
     case "audit": {
