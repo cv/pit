@@ -1,6 +1,10 @@
 /**
  * Finds the exact GitHub Actions run for a commit and waits for its bounded completion.
  *
+ * The result's outcome ("passed", "failed", or "pending") and conclusion repeat ci.waitForRun's,
+ * beside the discovered match and the run's full result. A pending wait carries a hint that names
+ * the run to wait for again.
+ *
  * @param input.discoveryAttempts - Run searches before failing (1-12). The default is 3.
  * @param input.discoveryIntervalMs - Delay between searches (1000-30000). The default is 5000 ms.
  * @param input.timeoutMs - Wall-clock limit for discovery and the wait together (at least 1000;
@@ -88,5 +92,11 @@ async function waitForCommit(
     timeoutMs: Math.max(1000, deadline - Date.now()),
     raise: input.raise,
   });
-  return { match, run };
+  return {
+    outcome: run.outcome,
+    conclusion: run.conclusion,
+    ...(run.outcome === "pending" ? { hint: run.hint } : {}),
+    match,
+    run,
+  };
 }
