@@ -140,26 +140,23 @@ describe("ci.waitForRun", () => {
     );
     await vi.runAllTimersAsync();
     expect(await pending).toMatchObject({
-      status: "timed_out",
+      outcome: "pending",
       attempts: 3,
       requestedAttempts: 120,
       timeoutMs: 240_000,
-      lastStatus: "in_progress",
+      status: "in_progress",
     });
     expect(Date.now() - started).toBeLessThanOrEqual(240_000);
   });
 
-  it("names the time limit when it raises", async () => {
+  it("names the time limit in a pending result's note", async () => {
     const wait = await loadWorkflowFunction("ci.waitForRun");
-    const failure = wait(
+    const pending = wait(
       { gh: { runView: slowRunView() } },
       { id: 42, repo: "cv/pit", attempts: 120, intervalMs: 30_000, timeoutMs: 180_000 },
-    ).then(
-      () => "resolved",
-      (error: Error) => error.message,
     );
     await vi.runAllTimersAsync();
-    expect(await failure).toMatch(
+    expect((await pending).note).toMatch(
       /did not complete after 1 checks in 140 s; it stopped at its 180 s time limit with 119 checks unused; last status in_progress, unfinished jobs: build/,
     );
   });
@@ -183,7 +180,8 @@ describe("ci.waitForCommit composition", () => {
       .fn()
       .mockResolvedValueOnce({ found: false, matches: [] })
       .mockResolvedValueOnce({ found: true, matches: [match] });
-    const waitForRun = vi.fn().mockResolvedValue({ status: "completed" });
+    const ran = { outcome: "passed", conclusion: "success", status: "completed" };
+    const waitForRun = vi.fn().mockResolvedValue(ran);
     const pending = wait(
       { ci: { findRun, waitForRun } },
       {
@@ -199,7 +197,7 @@ describe("ci.waitForCommit composition", () => {
     expect(findRun).toHaveBeenCalledOnce();
     expect(waitForRun).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
-    expect(await pending).toEqual({ match, run: { status: "completed" } });
+    expect(await pending).toEqual({ outcome: "passed", conclusion: "success", match, run: ran });
     expect(findRun).toHaveBeenLastCalledWith(
       expect.objectContaining({ repo: "cv/pit", sha, runName: "CI" }),
     );
@@ -215,6 +213,22 @@ describe("ci.waitForCommit composition", () => {
     // Discovery waited 1 s, so the run's wait gets the rest of the 240 s default.
     expect(waitForRun.mock.calls[0]?.[0]?.timeoutMs).toBe(239_000);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // The result had no top-level conclusion, so `.conclusion` failed to type-check (#383).
+  it("lifts a pending run's outcome and hint to the top level", async () => {
+    const wait = await loadWorkflowFunction("ci.waitForCommit");
+    const match = { id: 42, headSha: sha, name: "CI", status: "in_progress", url: "url" };
+    const findRun = vi.fn().mockResolvedValue({ found: true, matches: [match] });
+    const ran = { outcome: "pending", conclusion: null, hint: "Call ci.waitForRun again" };
+    const waitForRun = vi.fn().mockResolvedValue(ran);
+    expect(await wait({ ci: { findRun, waitForRun } }, { repo: "cv/pit", sha })).toEqual({
+      outcome: "pending",
+      conclusion: null,
+      hint: "Call ci.waitForRun again",
+      match,
+      run: ran,
+    });
   });
 
   // Live acceptance found discovery taking 57 s against a 20 s limit.

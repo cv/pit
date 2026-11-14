@@ -9,16 +9,16 @@ these namespaces.
 
 ## Layout
 
-| Namespace   | Operation                                          | Functions                                                                                                          | Owning skill    |
-| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------- |
-| `delivery`  | Validate, format, review, and commit local changes | `validate`, `format`, `listChangedFiles`, `review`, `prepare`, `commit`, `auditCodeQuality`, `inspectDependencies` | pit-delivery    |
-| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`, `inspectTimings`                                       | pit-delivery    |
-| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `manageWorktree`, `editBody`                                                           | pit-delivery    |
-| `release`   | Published releases                                 | `verifyPublished`                                                                                                  | pit-delivery    |
-| `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                              | pit-test-audit  |
-| `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                       | pit-terminal-ux |
-| `sessions`  | Audit Pi session transcripts                       | `analyze`, `analyzeRecent`, `readEvents`                                                                           | none            |
-| (top level) | Shared query primitive                             | `jq`                                                                                                               | none            |
+| Namespace   | Operation                                          | Functions                                                                                                                             | Owning skill    |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `delivery`  | Validate, format, review, and commit local changes | `validate`, `format`, `listChangedFiles`, `review`, `prepare`, `commit`, `openPullRequest`, `auditCodeQuality`, `inspectDependencies` | pit-delivery    |
+| `ci`        | GitHub Actions runs                                | `findRun`, `waitForRun`, `waitForCommit`, `inspectFailure`, `inspectTimings`                                                          | pit-delivery    |
+| `pr`        | Pull requests                                      | `inspect`, `waitForChecks`, `merge`, `manageWorktree`, `editBody`                                                                     | pit-delivery    |
+| `release`   | Published releases                                 | `verifyPublished`                                                                                                                     | pit-delivery    |
+| `tests`     | Run and audit tests                                | `runTargeted`, `inspectCoverageGaps`, `probeMutation`                                                                                 | pit-test-audit  |
+| `ux`        | Isolated terminal acceptance                       | `manageSession`, `runCase`, `runFixtures`, `inspectRowStyle`                                                                          | pit-terminal-ux |
+| `sessions`  | Audit Pi session transcripts                       | `analyze`, `analyzeRecent`, `readEvents`                                                                                              | none            |
+| (top level) | Shared query primitive                             | `jq`                                                                                                                                  | none            |
 
 A directory is a namespace: `ci/inspectFailure.ts` declares `inspectFailure`, and
 programs call it as `ci.inspectFailure` after injecting `{ ci: { inspectFailure } }`. A
@@ -37,7 +37,9 @@ whole namespace cannot be captured. Namespaces avoid Pit's global namespaces (`g
   invalidation. It does not parse Git output.
 - **Orchestration** composes existing operations. `delivery.review()` adds diffs and
   history to `delivery.prepare()`; `ci.waitForCommit()` discovers a run
-  and delegates completion polling to `ci.waitForRun()`.
+  and delegates completion polling to `ci.waitForRun()`. `delivery.openPullRequest()`
+  composes branch creation, `delivery.commit()`, and `gh.prCreate()`; `pr.merge()` composes
+  `gh.prMerge()` with an optional switch to the base branch and `git pull --ff-only`.
 - **Policy** stays in the delivery skill: when to validate, push, reload, accept,
   or close an issue. A saved function should not silently make those decisions.
 
@@ -53,7 +55,10 @@ result types from injected functions instead of copying their schemas.
   instead of being silently clamped. The only derived cap is the 285-second polling
   budget shared by `ci.waitForRun()` and `pr.waitForChecks()`: polls
   that would not fit after the initial delay are skipped, and a timeout reports both the
-  `attempts` made and `requestedAttempts`.
+  `attempts` made and `requestedAttempts`. A timeout never throws: both return
+  `outcome: "pending"` with a `note` and a `hint` naming the call that continues the wait.
+  Every `ci.waitForRun()` and `ci.waitForCommit()` result has `outcome` and `conclusion`
+  (null while pending).
 - `pr.waitForChecks()` treats SUCCESS, NEUTRAL, and SKIPPED as passing,
   stops at the first failed check, and treats an empty check rollup as pending.
 - `tests.runTargeted()` reads Vitest's JSON report through `jq`. It returns at most 15

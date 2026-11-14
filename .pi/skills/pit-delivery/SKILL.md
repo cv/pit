@@ -115,7 +115,7 @@ async ({ pr: { waitForChecks } }, input: { number: number; repo: string }) =>
   waitForChecks({ ...input, raise: true })
 ```
 
-Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed when using `raise: false`. To compare durations, such as before and after a CI change or cold and warm native builds, time the exact run:
+Inspect the returned commit identity, outcome, and merge state; a fulfilled request is not evidence that CI passed: check `outcome`, which is `"passed"`, `"failed"` (returned only with `raise: false`), or `"pending"`. `ci.waitForCommit()` repeats its run's `outcome` and `conclusion` at the top level. To compare durations, such as before and after a CI change or cold and warm native builds, time the exact run:
 
 ```ts pit-example
 async ({ ci: { inspectTimings } }, input: { repo: string; id: number }) =>
@@ -124,13 +124,31 @@ async ({ ci: { inspectTimings } }, input: { repo: string; id: number }) =>
 
 When a run fails, call `ci.inspectFailure({ repo, id })` and read its excerpts before changing the workflow or rerunning it. For test jobs, `testFailures` lists each failed Vitest test with its first error line and `testSummary` holds Vitest's totals; `testFailuresOmitted` counts failures that the list or the fetched log window did not include. Distinguish timeouts from assertion failures before deciding whether a change or the runner is at fault.
 
-A wait that times out with no failed check is not a failure: long CI and release runs can outlast one 285 s budget. Continue from the timed-out result: call `pr.waitForChecks()` again, or pass the discovered run ID to `ci.waitForRun()` instead of rediscovering. Start each wait only after the merge, push, or discovery result that supplies its SHA or run ID has returned.
+A wait that times out is not a failure: long CI and release runs can outlast one 285 s budget, so every wait returns `outcome: "pending"` with a `note` and a `hint` instead of throwing, even with `raise: true`. Follow the hint: call `pr.waitForChecks()` again, or pass the discovered run ID to `ci.waitForRun()` instead of rediscovering. Start each wait only after the merge, push, or discovery result that supplies its SHA or run ID has returned.
 
 Record verified outcomes in the pull request description with `pr.editBody()`. It replaces exact text, ticks `- [ ]` items, and appends sections, but writes nothing when an expected text is missing or ambiguous; a stale checklist is a signal to re-read the description, not to loosen the expectation. Preview with `dryRun: true`:
 
 ```ts pit-example
 async ({ pr: { editBody } }, input: { number: number; repo: string; check: string[] }) =>
   editBody({ ...input, dryRun: true })
+```
+
+## Open and merge pull requests
+
+After commit/push authorization, `delivery.openPullRequest()` creates the branch from the current HEAD (uncommitted changes move with it), commits and pushes the listed files through `delivery.commit()`, and opens the pull request, or returns the branch's open one. It reuses the branch when it is already checked out:
+
+```ts pit-example
+async (
+  { delivery: { openPullRequest } },
+  input: { branch: string; files: string[]; message: string; body: string },
+) => openPullRequest(input)
+```
+
+After merge authorization and passing checks, `pr.merge()` merges an open pull request. With `sync: true` it then switches to the base branch and runs `git pull --ff-only`; a failed sync returns `synced.ok: false` with the failing step, since the merge already happened:
+
+```ts pit-example
+async ({ pr: { merge } }, input: { number: number }) =>
+  merge({ ...input, method: "squash", sync: true })
 ```
 
 ## Finish an issue
