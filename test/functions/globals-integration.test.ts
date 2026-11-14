@@ -134,7 +134,7 @@ describe("source-backed command globals", () => {
       expect(JSON.parse(result.stdout)).toEqual({
         program,
         args: argv,
-        options: expect.objectContaining({ maxBytes: 123 }),
+        options: { maxBytes: 123 },
       });
       expect(execMock).not.toHaveBeenCalled();
       const inspected = await value(
