@@ -174,7 +174,7 @@ async function waitForChecks(
   // Not a failure even with raise: long CI outlasts one tool call, so the caller waits again (#383).
   return {
     ...last,
-    outcome: "pending",
+    outcome: "pending" as const,
     note: `Pull request #${number} did not settle after ${attempt} polls${limitNote}: ${pendingNote}`,
     hint: `Call pr.waitForChecks({ number: ${number}${input.repo ? `, repo: ${JSON.stringify(input.repo)}` : ""} }) again to keep waiting.`,
     timeoutMs,
