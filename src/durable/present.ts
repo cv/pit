@@ -127,6 +127,14 @@ function resultSummary(call: CallArguments, details: Record<string, unknown>): s
 export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
   call(args) {
     const call = callArguments(args);
+    const body = [
+      call.code,
+      ...(call.params === undefined ? [] : [field("params", call.params)]),
+      ...(call.functionId === undefined ? [] : [`functionId: ${call.functionId}`]),
+      ...(call.saveOnly ? ["saveOnly: true"] : []),
+    ]
+      .filter((section) => section !== "")
+      .join("\n");
     return {
       title: call.label ?? (firstLine(call.code) || call.functionId || "typescript"),
       ...(body === "" ? {} : { body }),
@@ -144,7 +152,7 @@ export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
     const details = isRecord(result.details) ? result.details : {};
     const summary = resultSummary(call, details);
     // A program that returns nothing has no value; its text says so.
-    const shown = "value" in details ? readableValue(details.value) : text;
+    const shown = details.value === undefined ? text : readableValue(details.value);
     const body =
       details.truncated === true ? `${shown}\n[Result truncated to fit the output budget]` : shown;
     return {
