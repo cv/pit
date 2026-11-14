@@ -102,23 +102,22 @@ describe("pr.waitForChecks", () => {
     expect(prView).toHaveBeenCalledOnce();
   });
 
-  it("explains a timeout when no checks were reported", async () => {
+  // A timeout threw by default, so callers lost the checks' state and retried by hand (#383).
+  it("returns a pending outcome with a hint instead of raising on timeout", async () => {
     const wait = await loadWorkflowFunction("pr.waitForChecks");
     const prView = vi.fn().mockResolvedValue(pullRequest(null));
-    const input = { number: 7, attempts: 3, intervalMs: 1000 };
-    const returned = wait({ gh: { prView } }, { ...input, raise: false });
-    const failure = wait({ gh: { prView } }, input).then(
-      () => "resolved",
-      (error: Error) => error.message,
+    const pending = wait(
+      { gh: { prView } },
+      { number: 7, repo: "cv/pit", attempts: 3, intervalMs: 1000 },
     );
     await vi.runAllTimersAsync();
-    expect(await returned).toMatchObject({
-      outcome: "timed_out",
+    expect(await pending).toMatchObject({
+      outcome: "pending",
       attempt: 3,
-      note: "no checks were reported",
+      note: "Pull request #7 did not settle after 3 polls: no checks were reported",
+      hint: 'Call pr.waitForChecks({ number: 7, repo: "cv/pit" }) again to keep waiting.',
     });
-    expect(await failure).toContain("did not settle after 3 polls: no checks were reported");
-    expect(prView).toHaveBeenCalledTimes(6);
+    expect(prView).toHaveBeenCalledTimes(3);
   });
 
   it.each([
@@ -140,7 +139,7 @@ describe("pr.waitForChecks", () => {
     );
     await vi.runAllTimersAsync();
     expect(await pending).toMatchObject({
-      outcome: "timed_out",
+      outcome: "pending",
       attempt,
       requestedAttempts: 120,
       timeoutMs: 240_000,

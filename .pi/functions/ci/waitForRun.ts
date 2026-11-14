@@ -1,5 +1,6 @@
 /**
- * Waits for a GitHub Actions run and fails by default on timeout or unsuccessful completion.
+ * Waits for a GitHub Actions run and fails by default on unsuccessful completion. A timeout
+ * returns outcome "pending" with a hint to call again.
  *
  * @param input.attempts - Maximum status checks (1-120). The default is 12.
  * @param input.intervalMs - Delay between checks (1000-30000). The default is 15000 ms.
@@ -8,9 +9,11 @@
  * @param input.timeoutMs - Wall-clock limit for the whole wait (at least 1000; larger values are
  *   capped at 285000, under the tool's 300 s call limit). The default is
  *   240000 ms, safely inside the 300 s tool limit. The wait stops early when another interval plus
- *   its slowest check so far would pass it; a timeout reports attempts made, requestedAttempts,
- *   timeoutMs, elapsedMs, and the last observed run status, URL, and jobs.
- * @param input.raise - Fail on timeout or unsuccessful completion. The default is true.
+ *   its slowest check so far would pass it. A timeout is not a failure, since long runs outlast one
+ *   tool call: it returns outcome "pending", conclusion null, attempts made, requestedAttempts,
+ *   timeoutMs, elapsedMs, the last observed run status, URL, and jobs, and a hint to call again.
+ * @param input.raise - Fail on unsuccessful completion. The default is true. Every result has
+ *   outcome "passed", "failed", or "pending", and conclusion.
  */
 async function waitForRun(
   { gh: { runView } },
@@ -66,10 +69,16 @@ async function waitForRun(
     const checkStarted = Date.now();
     const result = await runView(input.id, { repo: input.repo, raise: true });
     slowestCheckMs = Math.max(slowestCheckMs, Date.now() - checkStarted);
-    const run = JSON.parse(result.stdout);
+    const run = JSON.parse(result.stdout) as {
+      status: string;
+      conclusion: string;
+      url: string;
+      jobs?: Job[];
+    };
     last = run;
     if (run.status === "completed") {
       const summary = {
+        outcome: run.conclusion === "success" ? ("passed" as const) : ("failed" as const),
         attempt,
         status: run.status,
         conclusion: run.conclusion,
@@ -90,7 +99,7 @@ async function waitForRun(
   const limitNote =
     attempt < requestedAttempts
       ? `; it stopped at its ${timeoutMs / 1000} s time limit with ${requestedAttempts - attempt} checks unused`
-      : "";
+      : `; it made all ${requestedAttempts} requested checks`;
   const unfinished = (last?.jobs ?? [])
     .filter((job) => job.status !== "completed")
     .map((job) => job.name);
@@ -98,20 +107,19 @@ async function waitForRun(
     ? `, unfinished jobs: ${unfinished.slice(0, 10).join(", ")}${unfinished.length > 10 ? ` and ${unfinished.length - 10} more` : ""}`
     : "";
   const progressNote = last ? `; last status ${last.status}${unfinishedNote}` : "";
-  if (raise) {
-    throw new Error(
-      `GitHub Actions run ${input.id} did not complete after ${attempt} checks in ${Math.round(elapsedMs / 1000)} s${limitNote}${progressNote}`,
-    );
-  }
+  // Not a failure even with raise: long runs outlast one tool call, so the caller waits again (#383).
   return {
-    status: "timed_out",
+    outcome: "pending" as const,
+    status: last?.status ?? "unknown",
+    conclusion: null,
     id: input.id,
     attempts: attempt,
     requestedAttempts,
     timeoutMs,
     elapsedMs,
-    lastStatus: last?.status,
     url: last?.url,
     jobs: summarizeJobs(last?.jobs),
+    note: `GitHub Actions run ${input.id} did not complete after ${attempt} checks in ${Math.round(elapsedMs / 1000)} s${limitNote}${progressNote}`,
+    hint: `Still running. Call ci.waitForRun({ id: ${input.id}, repo: ${JSON.stringify(input.repo)}, initialDelayMs: 0 }) again to keep waiting.`,
   };
 }
