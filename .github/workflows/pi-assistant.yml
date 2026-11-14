@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0 # tags and history, for release notes and version bumps
 
       - name: Run pi-action
-        uses: cv/pi-action@74e578aa20a9b74b041118b1b8fdb784db7680fc # v2.4.0
+        uses: cv/pi-action@0c28cb8965aaef821b2dccfa23ebd20e1ca8b002 # v2.5.1
         with:
           github_token: ${{ steps.app.outputs.token }}
           provider: nvidia
