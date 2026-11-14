@@ -5,8 +5,9 @@ export const npmFunctions = [
     summary: "Run an npm script",
     resultRenderer: "npm.run",
     declaration:
-      "run(script: string, args?: string[], options?: PitProcessOptions): Promise<PitProcessResult>;",
-    documentation: "npm.run(script, args?, options?) runs a package script with argument-safe args",
+      "run(script: string, args?: string[] | PitProcessOptions, options?: PitProcessOptions): Promise<PitProcessResult>;",
+    documentation:
+      "npm.run(script, args?, options?) runs a package script with argument-safe args; without args, options may come second: npm.run(script, options)",
     minimumArguments: 1,
     maximumArguments: 3,
   }),
@@ -28,6 +29,15 @@ export const npmFunctions = [
       "npm.install(packages?, { dev?, exact?, packageLockOnly?, ignoreScripts?, ...processOptions }?)",
     minimumArguments: 0,
     maximumArguments: 2,
+  }),
+  defineCommandFunction("npm", "ci", {
+    summary: "Install the locked npm dependencies",
+    resultRenderer: "npm.ci",
+    declaration: "ci(options?: PitNpmCiOptions): Promise<PitProcessResult>;",
+    documentation:
+      "npm.ci({ includeDev?, ignoreScripts?, ...processOptions }?) runs npm ci; includeDev: false omits dev dependencies, true includes them even under NODE_ENV=production",
+    minimumArguments: 0,
+    maximumArguments: 1,
   }),
   defineCommandFunction("npm", "audit", {
     summary: "Audit npm dependencies",
