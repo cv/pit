@@ -30,6 +30,16 @@ const prFields =
 const runFields = "databaseId,status,conclusion,url,name,headSha";
 const releaseFields = "tagName,name,url,isDraft,isPrerelease,publishedAt";
 
+describe("sandbox globals", () => {
+  // atob and btoa ran but failed type-checking (#383).
+  it("type-checks and runs atob and btoa", async () => {
+    expect(await value('async () => ({ encoded: btoa("pit"), decoded: atob("cGl0") })')).toEqual({
+      encoded: "cGl0",
+      decoded: "pit",
+    });
+  });
+});
+
 describe("source-backed command globals", () => {
   it.each<{ id: string; args: unknown[]; argv: string[] }>([
     { id: "git.status", args: [], argv: ["status"] },
@@ -44,7 +54,14 @@ describe("source-backed command globals", () => {
     { id: "git.show", args: [["HEAD"]], argv: ["show", "HEAD"] },
     { id: "git.push", args: [], argv: ["push"] },
     { id: "git.tag", args: [["--list"]], argv: ["tag", "--list"] },
+    { id: "git.switch", args: [["-c", "topic"]], argv: ["switch", "-c", "topic"] },
+    { id: "git.fetch", args: [["origin", "main"]], argv: ["fetch", "origin", "main"] },
+    { id: "git.pull", args: [["--ff-only"]], argv: ["pull", "--ff-only"] },
+    { id: "git.revParse", args: [["HEAD"]], argv: ["rev-parse", "HEAD"] },
+    { id: "git.lsRemote", args: [["origin"]], argv: ["ls-remote", "origin"] },
     { id: "npm.run", args: ["check", ["--fix"]], argv: ["run", "check", "--", "--fix"] },
+    { id: "npm.run", args: ["check", { maxBytes: 100 }], argv: ["run", "check"] },
+    { id: "npm.ci", args: [{ includeDev: false }], argv: ["ci", "--omit=dev"] },
     { id: "npm.test", args: [{ coverage: true }], argv: ["run", "coverage"] },
     { id: "npm.install", args: [["pkg"], { dev: true }], argv: ["install", "--save-dev", "pkg"] },
     { id: "npm.audit", args: [], argv: ["audit", "--json"] },
