@@ -73,7 +73,8 @@ describe("emitted Pit prompt", () => {
     // Raised again for the LABEL section: grammar-sampled providers reach a transcript
     // title only through the program's leading // @pit: line.
     // #375 raised it for planning each step's calls into one round trip.
-    expect(size.fixed.characters).toBeLessThanOrEqual(6_200);
+    // #383 raised it for npm.ci, the Git branch and sync methods, and the batch edit shape.
+    expect(size.fixed.characters).toBeLessThanOrEqual(6_280);
     expect(size.fixed.bytes).toBeGreaterThanOrEqual(size.fixed.characters);
     expect(
       measurePrompt({
