@@ -17,7 +17,7 @@ export interface PresentedToolResult {
 }
 
 export interface ToolPresentation {
-  call(args: unknown): { title: string; body: string };
+  call(args: unknown): { title: string; body?: string };
   result(args: unknown, result: PresentedToolResult): { summary?: string; body?: string };
 }
 
@@ -129,14 +129,7 @@ export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
     const call = callArguments(args);
     return {
       title: call.label ?? (firstLine(call.code) || call.functionId || "typescript"),
-      body: [
-        call.code,
-        ...(call.params === undefined ? [] : [field("params", call.params)]),
-        ...(call.functionId === undefined ? [] : [`functionId: ${call.functionId}`]),
-        ...(call.saveOnly ? ["saveOnly: true"] : []),
-      ]
-        .filter((section) => section !== "")
-        .join("\n"),
+      ...(body === "" ? {} : { body }),
     };
   },
 
