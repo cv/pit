@@ -4,6 +4,16 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.36.5] - 2026-11-14
+
+### Fixed
+
+- The `typescript` tool's `present` field handles every stored call and result a host passes it (#372). A call with no label and blank code gets a title (its `functionId`, or `typescript`) instead of an empty one, which pi-action rejected. A `saveOnly` result without a saved name shows the `functionId` or the declared function's name, or no summary, instead of `saved undefined`. Results without Pit's details, such as those pi-durable writes itself, and arguments whose `code` isn't a string, are shown by their text instead of throwing.
+
+### Changed
+
+- A call that asked a question is summarized as `asked: <title>` in the host's log, which says why the turn ended.
+
 ## [0.36.4] - 2026-11-14
 
 ### Added
