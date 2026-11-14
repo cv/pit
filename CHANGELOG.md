@@ -4,7 +4,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
-## [0.36.3] - 2026-11-13
+## [0.36.3] - 2026-11-14
 
 ### Fixed
 
