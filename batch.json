@@ -1,1 +1,1 @@
-{"format":1,"seq":403,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","params","content"],"resentedToolResult): { summary?: string; body?: string };\n}\n\n/** Compact"]]}}]}
+{"format":1,"seq":404,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"arguments","params","content"]," JSON longer than this goes on the lines after its key, indented. */\nconst COMPACT_JSON_LENGTH"]]}}]}
