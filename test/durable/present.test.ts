@@ -183,7 +183,11 @@ describe("the typescript tool's present field", () => {
 
   it.each([
     { name: "blank code", args: { code: "   " }, title: "typescript" },
-    { name: "blank code with a functionId", args: { code: "", functionId: "notes.f" }, title: "notes.f" },
+    {
+      name: "blank code with a functionId",
+      args: { code: "", functionId: "notes.f" },
+      title: "notes.f",
+    },
     { name: "code that is not a string", args: { code: 42 }, title: "typescript" },
     { name: "arguments that are not an object", args: null, title: "typescript" },
   ])("gives a call with $name a title that is not empty", ({ args }) => {
@@ -193,9 +197,21 @@ describe("the typescript tool's present field", () => {
   });
 
   it.each([
-    { name: "the call's functionId", args: { code: "async function f({}) {}", functionId: "notes.f" }, summary: "saved notes.f" },
-    { name: "the function the code declares", args: { code: "async function hello({}) {}" }, summary: "saved hello" },
-    { name: "nothing when no name is known", args: { code: "async ({}) => 1" }, summary: undefined },
+    {
+      name: "the call's functionId",
+      args: { code: "async function f({}) {}", functionId: "notes.f" },
+      summary: "saved notes.f",
+    },
+    {
+      name: "the function the code declares",
+      args: { code: "async function hello({}) {}" },
+      summary: "saved hello",
+    },
+    {
+      name: "nothing when no name is known",
+      args: { code: "async ({}) => 1" },
+      summary: undefined,
+    },
   ])("names a saveOnly result without a savedFunction by $name", ({ args, summary }) => {
     const shown = presentation().result(
       { ...args, saveOnly: true },
