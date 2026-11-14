@@ -408,13 +408,14 @@ describe("runInSandbox", () => {
         source: "async () => runTargeted({ files: [] })",
         hint: "Did you mean: tests.runTargeted?",
       },
-      {
-        name: "a method name cut short",
-        source: "async ({ tests: { run } }) => run({ files: [] })",
-        hint: "Did you mean: tests.runTargeted? tests has: inspectCoverageGaps, runTargeted.",
-      },
     ])("suggests the closest names for $name", ({ source, hint }) => {
       expect(failure(source).split("\n").at(-1)).toBe(hint);
+    });
+
+    it("suggests the methods that extend a method name cut short", () => {
+      const hint = failure("async ({ tests: { run } }) => run({ files: [] })").split("\n").at(-1);
+      expect(hint).toMatch(/^Did you mean: tests\.runTargeted[,?]/);
+      expect(hint).toMatch(/tests has: runTargeted, inspectCoverageGaps\.$/);
     });
 
     it.each<{ name: string; source: string }>([

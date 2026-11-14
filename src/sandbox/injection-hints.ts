@@ -138,14 +138,18 @@ export function injectionHint(name: string, names: readonly string[]): string {
     .filter((candidate) => candidate.distance <= threshold && !extensions.includes(candidate.id))
     .sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id))
     .map((candidate) => candidate.id);
-  const ranked = [...extensions.slice(0, MAX_LISTED_METHODS), ...near].slice(
-    0,
-    Math.max(MAX_SUGGESTIONS, Math.min(extensions.length, MAX_LISTED_METHODS)),
-  );
+  const ranked = [...extensions, ...near].slice(0, MAX_SUGGESTIONS);
+  // Methods that extend the name come first, so a bounded listing still shows them all.
   const methods = namespaces.includes(namespace)
-    ? names.filter(
-        (id) => id.startsWith(`${namespace}.`) && !id.slice(namespace.length + 1).includes("."),
-      )
+    ? [
+        ...extensions,
+        ...names.filter(
+          (id) =>
+            id.startsWith(`${namespace}.`) &&
+            !id.slice(namespace.length + 1).includes(".") &&
+            !extensions.includes(id),
+        ),
+      ]
     : [];
   const parts = [
     ranked.length > 0
