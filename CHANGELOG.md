@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.36.6] - 2026-11-14
+
+### Changed
+
+- The `typescript` tool's guidelines tell the model to plan each step before calling (#375): gather every read, search, and probe a step needs in one program, and make all its edits to different files in one, since each tool call is a round trip that resends the context. Sessions that read one file per call, then edit one file per call, should need fewer turns.
+
 ## [0.36.5] - 2026-11-14
 
 ### Fixed
