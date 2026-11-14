@@ -3,7 +3,6 @@ import {
   recordValue as object,
   stringValue as text,
 } from "../../shared/argument-values.js";
-import { LIMITS } from "../../shared/bounds.js";
 
 type GhMethod = keyof PitGhFunctions;
 interface PreparedGhCommand {
@@ -367,8 +366,9 @@ function prepareReleaseCommand(method: GhMethod, args: unknown[]): PreparedGhCom
         // A response is data the program parses, not tool output: capture whole JSON documents.
         // The default 50 KB stream budget cut them mid-document, so JSON.parse failed (#379).
         options: {
-          maxBytes: LIMITS.programData.maxBytes,
-          maxLines: LIMITS.programData.maxLines,
+          // LIMITS.programData; this module runs as sandbox source, so it cannot import it.
+          maxBytes: 4_000_000,
+          maxLines: 1_000_000,
           ...options(o),
         },
       };
