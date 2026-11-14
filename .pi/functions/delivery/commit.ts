@@ -61,7 +61,9 @@ async function commit(
     const first = await push(args, { raise: false });
     if (first.code === 0) return;
     if (!/\[remote rejected\][^\n]*\(failed\)/.test(first.stderr)) {
-      throw new Error(`git push failed with exit ${first.code}:\n${first.stderr.trim().slice(-2000)}`);
+      throw new Error(
+        `git push failed with exit ${first.code}:\n${first.stderr.trim().slice(-2000)}`,
+      );
     }
     await push(args, { raise: true });
   };

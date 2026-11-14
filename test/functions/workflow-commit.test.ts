@@ -71,7 +71,12 @@ function repository(options: {
 describe("delivery.commit", () => {
   it.each(["main", "master"])("refuses to push the default branch %s", async (branch) => {
     const commitChanges = await loadWorkflowFunction("delivery.commit");
-    const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], upstream: `origin/${branch}`, branch });
+    const repo = repository({
+      tracked: ["a.ts"],
+      changed: ["a.ts"],
+      upstream: `origin/${branch}`,
+      branch,
+    });
     await expect(
       commitChanges(repo.dependencies, { files: ["a.ts"], message: "fix: thing", push: true }),
     ).rejects.toThrow(/Refusing to push [\s\S]*Nothing was staged or committed/);
@@ -82,7 +87,12 @@ describe("delivery.commit", () => {
 
   it("pushes the default branch with allowDefaultBranch", async () => {
     const commitChanges = await loadWorkflowFunction("delivery.commit");
-    const repo = repository({ tracked: ["a.ts"], changed: ["a.ts"], upstream: "origin/main", branch: "main" });
+    const repo = repository({
+      tracked: ["a.ts"],
+      changed: ["a.ts"],
+      upstream: "origin/main",
+      branch: "main",
+    });
     await expect(
       commitChanges(repo.dependencies, {
         files: ["a.ts"],

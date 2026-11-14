@@ -96,7 +96,15 @@ describe("ci.waitForRun behavior", () => {
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
     const pending = wait(
       { gh: { runView } },
-      { id: 42, repo: "cv/pit", attempts: 120, intervalMs: 30_000, initialDelayMs: 0, timeoutMs: 600_000, raise: false },
+      {
+        id: 42,
+        repo: "cv/pit",
+        attempts: 120,
+        intervalMs: 30_000,
+        initialDelayMs: 0,
+        timeoutMs: 600_000,
+        raise: false,
+      },
     );
     await vi.runAllTimersAsync();
     expect(await pending).toMatchObject({ status: "timed_out", timeoutMs: 285_000 });
