@@ -1,1 +1,1 @@
-{"format":1,"seq":124,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"I'm puzzling over why JSON.parse is choking on the gh.api output with an \"unexpected token: 'web'\" error — possibly the response got truncated or the parser"]]}}]}
+{"format":1,"seq":125,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"]," is misinterpreting part of the payload.\n\n"]]}}]}
