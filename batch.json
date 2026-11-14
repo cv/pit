@@ -1,1 +1,1 @@
-{"format":1,"seq":196,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"arguments","code"]," {\n  const f = await format({ checkOnly: true });\n  const pc = await run(\"package:check\", [], { maxLines: 20, truncate: \"tail\" });\n  const pr = await prepare();\n  return { f: f.format"]]}}]}
+{"format":1,"seq":197,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"arguments","code"],"ted, pc: { code:"]]}}]}
