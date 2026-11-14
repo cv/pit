@@ -63,6 +63,25 @@ describe("workspace read and edit", () => {
 
   // In #205, a 52,789-byte state file read as 51,200 characters broke JSON.parse, and the
   // program rewrote the file from the fragment.
+  // Mapped arrays and computed anchors needed casts to type-check (#383).
+  it("accepts mapped change arrays with computed string anchors", async () => {
+    await writeFile(join(cwd, "mapped.txt"), "a\nb\n", "utf8");
+    await writeFile(join(cwd, "batched.txt"), "c\n", "utf8");
+    const result = await value(`async ({ workspace: { read, edit, batch } }) => {
+      const first = await read("mapped.txt");
+      const anchors: string[] = first.content.split("\\n").slice(0, 2).map((line) => line.split("|")[0]);
+      const changes = anchors.map((start) => ({ kind: "replace" as const, start, content: "x" }));
+      await edit("mapped.txt", { revision: first.revision, changes });
+      const other = await read("batched.txt");
+      const anchor: string = other.content.split("|")[0];
+      await batch([{ kind: "edit", file: "batched.txt", changes: { revision: other.revision, changes: [{ kind: "insertAfter", anchor, content: "d" }] } }]);
+      return null;
+    }`);
+    expect(result).toBeNull();
+    expect(await readFile(join(cwd, "mapped.txt"), "utf8")).toBe("x\nx\n");
+    expect(await readFile(join(cwd, "batched.txt"), "utf8")).toBe("c\nd\n");
+  });
+
   it("reads, rewrites, and re-reads a 1 MB JSON state file intact", async () => {
     const ledger = Array.from({ length: 20_000 }, (_, index) => ({
       id: `TX-${index}`,
