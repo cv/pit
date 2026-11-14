@@ -1,1 +1,1 @@
-{"format":1,"seq":801,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\n RUN  v5.1.0 /home/runner/work/pit/pit\n\n"]]}}]}
+{"format":1,"seq":802,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ test/globals/gh.test.ts (21 tests) 24ms\n"]]}}]}
