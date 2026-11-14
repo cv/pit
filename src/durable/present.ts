@@ -2,7 +2,8 @@
  * How hosts such as pi-action show `typescript` calls in a log: the call's label and program, and
  * the functions it injected and the value it returned as readable text. pi-durable does not read
  * this; hosts that do call it for stored entries, so it is synchronous, pure, and plain text. A
- * host falls back to its generic view when a function throws.
+ * host passes whatever it stored, including results pi-durable wrote itself, so neither function
+ * assumes the shape of Pit's own arguments or details.
  */
 import { getFunctionDependencies } from "../functions/dependencies.js";
 import { isRecord } from "../shared/records.js";
@@ -10,19 +11,20 @@ import { applySourceOptions } from "../tool/source-options.js";
 
 /** The parts of a stored tool result that the presentation reads. */
 export interface PresentedToolResult {
-  content: ReadonlyArray<{ type: string; text?: string }>;
+  content?: unknown;
   details?: unknown;
   isError?: boolean;
 }
 
 export interface ToolPresentation {
-  call(args: unknown): { title: string; body: string };
+  call(args: unknown): { title: string; body?: string };
   result(args: unknown, result: PresentedToolResult): { summary?: string; body?: string };
 }
 
 /** Compact JSON longer than this goes on the lines after its key, indented. */
 const COMPACT_JSON_LENGTH = 80;
 const HEADER_LINE = /^[ \t]*\/\/ @pit:[^\r\n]*(?:\r?\n|$)/;
+const FUNCTION_NAME = /^\s*(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/;
 
 interface CallArguments {
   label?: string;
@@ -41,19 +43,20 @@ const nonEmpty = (value: unknown): value is string =>
  * which the tool rejected, still leaves the program shown without it.
  */
 function callArguments(args: unknown): CallArguments {
-  const record = args as Record<string, unknown> & { code: string };
-  let applied: typeof record;
+  const record = isRecord(args) ? args : {};
+  const code = typeof record.code === "string" ? record.code : "";
+  let applied: Record<string, unknown>;
   try {
-    applied = applySourceOptions(record) as typeof record;
+    applied = { ...(applySourceOptions({ ...record, code }) as Record<string, unknown>) };
   } catch {
-    applied = { ...record, code: record.code.replace(HEADER_LINE, "") };
+    applied = { ...record, code: code.replace(HEADER_LINE, "") };
   }
   return {
     ...(nonEmpty(applied.label) ? { label: applied.label.trim() } : {}),
     // Applying the header leaves an empty first line in its place.
-    code: applied.code.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd(),
+    code: (applied.code as string).replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd(),
     ...(applied.params === undefined || applied.params === null ? {} : { params: applied.params }),
-    ...(nonEmpty(applied.functionId) ? { functionId: applied.functionId } : {}),
+    ...(nonEmpty(applied.functionId) ? { functionId: applied.functionId.trim() } : {}),
     ...(applied.saveOnly === true ? { saveOnly: true } : {}),
   };
 }
@@ -81,47 +84,80 @@ function readableValue(value: unknown): string {
 }
 
 function resultText(result: PresentedToolResult): string {
-  return result.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
+  const content: unknown[] = Array.isArray(result.content) ? result.content : [];
+  return content
+    .map((block) =>
+      isRecord(block) && block.type === "text" && typeof block.text === "string" ? block.text : "",
+    )
     .join("")
     .trim();
 }
 
 const firstLine = (text: string) => (text.trimStart().split("\n", 1)[0] as string).trim();
 
+/** The functions a program injects, such as `workspace.read · git.status`; none when it does not parse. */
+function injected(code: string): string {
+  try {
+    return getFunctionDependencies(code)
+      .dependencies.map(({ id }) => id)
+      .join(" · ");
+  } catch {
+    return "";
+  }
+}
+
+/** The function a `saveOnly` call saved: from its result, else its `functionId` or declaration. */
+function savedName(call: CallArguments, value: unknown): string | undefined {
+  if (isRecord(value) && nonEmpty(value.savedFunction)) return value.savedFunction;
+  return call.functionId ?? FUNCTION_NAME.exec(call.code)?.[1];
+}
+
+function resultSummary(call: CallArguments, details: Record<string, unknown>): string {
+  // A question ends the turn; the log says why.
+  if (isRecord(details.question) && nonEmpty(details.question.title)) {
+    return `asked: ${details.question.title}`;
+  }
+  if (call.saveOnly) {
+    const name = savedName(call, details.value);
+    return name === undefined ? "" : `saved ${name}`;
+  }
+  return injected(call.code);
+}
+
 export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
   call(args) {
     const call = callArguments(args);
+    const body = [
+      call.code,
+      ...(call.params === undefined ? [] : [field("params", call.params)]),
+      ...(call.functionId === undefined ? [] : [`functionId: ${call.functionId}`]),
+      ...(call.saveOnly ? ["saveOnly: true"] : []),
+    ]
+      .filter((section) => section !== "")
+      .join("\n");
     return {
-      title: call.label ?? firstLine(call.code),
-      body: [
-        call.code,
-        ...(call.params === undefined ? [] : [field("params", call.params)]),
-        ...(call.functionId === undefined ? [] : [`functionId: ${call.functionId}`]),
-        ...(call.saveOnly ? ["saveOnly: true"] : []),
-      ].join("\n"),
+      title: call.label ?? (firstLine(call.code) || call.functionId || "typescript"),
+      ...(body === "" ? {} : { body }),
     };
   },
 
   result(args, result) {
+    const text = resultText(result);
     if (result.isError) {
       // The text is the root error, with the recovery notice when calls can be recovered.
-      const text = resultText(result);
-      return { summary: firstLine(text), body: text };
+      return text === "" ? {} : { summary: firstLine(text), body: text };
     }
     const call = callArguments(args);
-    const details = result.details as { value?: unknown; truncated?: boolean };
-    const summary = call.saveOnly
-      ? `saved ${(details.value as { savedFunction: string }).savedFunction}`
-      : getFunctionDependencies(call.code)
-          .dependencies.map(({ id }) => id)
-          .join(" · ");
+    // Results pi-durable writes itself may carry no details, or details of another shape.
+    const details = isRecord(result.details) ? result.details : {};
+    const summary = resultSummary(call, details);
     // A program that returns nothing has no value; its text says so.
-    const shown = "value" in details ? readableValue(details.value) : resultText(result);
+    const shown = details.value === undefined ? text : readableValue(details.value);
+    const body =
+      details.truncated === true ? `${shown}\n[Result truncated to fit the output budget]` : shown;
     return {
       ...(summary === "" ? {} : { summary }),
-      body: details.truncated ? `${shown}\n[Result truncated to fit the output budget]` : shown,
+      ...(body === "" ? {} : { body }),
     };
   },
 };
