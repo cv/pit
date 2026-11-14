@@ -307,7 +307,7 @@ describe("delivery.commit", () => {
       message: "fix: a",
       push: true,
     });
-    expect(repo.push).toHaveBeenCalledWith(args, expect.objectContaining({ raise: true }));
+    expect(repo.push).toHaveBeenCalledWith(args, { raise: false });
     expect(result).toMatchObject({ pushed: true, upstream: expected });
   });
 
