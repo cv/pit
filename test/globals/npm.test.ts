@@ -21,11 +21,33 @@ function render(method: string, value: unknown) {
 }
 
 describe("npm namespace", () => {
-  // A cast call can pass options where args belong; the error names the signature.
-  it("explains that npm.run options go after args", () => {
-    expect(() => prepareNpmCommand("run", ["check", { maxBytes: 3000 }])).toThrow(
-      "npm.run(script, args?, options?): args must be an array of strings; pass process options such as maxBytes as the third argument",
+  // Sessions passed options second and hit a type error (#383).
+  it("accepts npm.run options second when the script takes no args", () => {
+    expect(prepareNpmCommand("run", ["check", { maxBytes: 3000 }])).toEqual({
+      args: ["run", "check"],
+      options: { maxBytes: 3000 },
+    });
+    expect(() => prepareNpmCommand("run", ["check", { raise: true }, { maxBytes: 1 }])).toThrow(
+      "npm.run(script, options) takes no third argument",
     );
+  });
+
+  it.each<{ name: string; options?: Record<string, unknown>; argv: string[] }>([
+    { name: "npm's configuration by default", argv: ["ci"] },
+    {
+      name: "omitted dev dependencies",
+      options: { includeDev: false },
+      argv: ["ci", "--omit=dev"],
+    },
+    {
+      name: "included dev dependencies without scripts",
+      options: { includeDev: true, ignoreScripts: true, raise: true },
+      argv: ["ci", "--include=dev", "--ignore-scripts"],
+    },
+  ])("prepares npm ci with $name", ({ options, argv }) => {
+    const prepared = prepareNpmCommand("ci", options === undefined ? [] : [options]);
+    expect(prepared.args).toEqual(argv);
+    expect(prepared.options).toEqual(options?.raise === undefined ? {} : { raise: true });
   });
 
   it("prepares scripts and tests", () => {
@@ -80,6 +102,9 @@ describe("npm namespace", () => {
     expect(() => prepareNpmCommand("test", [{ coverage: "yes" }])).toThrow(
       "options.coverage must be a boolean",
     );
+    expect(() => prepareNpmCommand("ci", [{ includeDev: "no" }])).toThrow(
+      "options.includeDev must be a boolean",
+    );
     expect(() => prepareNpmCommand("install", ["pkg"])).toThrow(
       "packages must be an array of strings",
     );
@@ -96,6 +121,9 @@ describe("npm result renderers", () => {
     expect(render("test", result("Tests 12 passed\n")).summary).toBe("test, 12 tests passed");
     expect(render("install", result("added 2 packages\n")).summary).toBe(
       "install, added 2 packages",
+    );
+    expect(render("ci", result("\nadded 310 packages in 4s\n")).summary).toBe(
+      "ci, added 310 packages in 4s",
     );
     const audit = render(
       "audit",
