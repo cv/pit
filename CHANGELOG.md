@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.36.3] - 2026-11-13
+
+### Fixed
+
+- A `params` string sent as a JSON string literal, with its quotes and `\n` escapes, reaches the program decoded, also when the program declares a string input (#368). Such a program got the encoded text, so a PR body passed to `gh pr create --body` started with `"` and showed `\n` instead of line breaks. A quoted string that is not valid JSON is passed through unchanged.
+
 ## [0.36.2] - 2026-11-13
 
 ### Added
