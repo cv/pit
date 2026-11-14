@@ -103,6 +103,30 @@ describe("resolveToolInput", () => {
       expected: "42",
     },
     {
+      name: "a JSON-encoded string for a string input",
+      source: "async ({}, body: string) => body",
+      params: JSON.stringify("Title\n\n## Section"),
+      expected: "Title\n\n## Section",
+    },
+    {
+      name: "a JSON-encoded string for an unannotated input",
+      source: "async ({}, input) => input",
+      params: ` ${JSON.stringify('say "hi"')} `,
+      expected: 'say "hi"',
+    },
+    {
+      name: "a quoted string that is not JSON",
+      source: "async ({}, body: string) => body",
+      params: '"a\\q"',
+      expected: '"a\\q"',
+    },
+    {
+      name: "a lone quote",
+      source: "async ({}, body: string) => body",
+      params: '"',
+      expected: '"',
+    },
+    {
       name: "an already decoded object",
       source: "async ({}, input: { value: number }) => input",
       params: { value: 21 },
