@@ -101,7 +101,7 @@ describe("delivery.format", () => {
     });
     expect(execFile).toHaveBeenCalledWith(
       "npx",
-      ["oxfmt", checkOnly ? "--check" : "--write", "--", ...files],
+      ["--no-install", "oxfmt", checkOnly ? "--check" : "--write", "--", ...files],
       expect.objectContaining({ raise: false }),
     );
     expect(listChangedFiles).toHaveBeenCalledOnce();

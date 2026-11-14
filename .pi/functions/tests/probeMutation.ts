@@ -132,6 +132,7 @@ async function probeMutation(
     const result = await execFile(
       "npx",
       [
+        "--no-install",
         "vitest",
         "run",
         ...files,
