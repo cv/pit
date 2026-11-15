@@ -55,7 +55,8 @@ result types from injected functions instead of copying their schemas.
   instead of being silently clamped. The only derived cap is the 285-second polling
   budget shared by `ci.waitForRun()` and `pr.waitForChecks()`: polls
   that would not fit after the initial delay are skipped, and a timeout reports both the
-  `attempts` made and `requestedAttempts`. A timeout never throws: both return
+  `attempts` made and `requestedAttempts`. Without `attempts`, both poll until the budget
+  is spent. A timeout never throws: both return
   `outcome: "pending"` with a `note` and a `hint` naming the call that continues the wait.
   Every `ci.waitForRun()` and `ci.waitForCommit()` result has `outcome` and `conclusion`
   (null while pending).

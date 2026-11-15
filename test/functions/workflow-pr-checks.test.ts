@@ -120,6 +120,20 @@ describe("pr.waitForChecks", () => {
     expect(prView).toHaveBeenCalledTimes(3);
   });
 
+  // A fixed 12 polls ended the wait after about 174 s of a 285 s budget (#390).
+  it("polls until its time budget is spent when attempts are not given", async () => {
+    const wait = await loadWorkflowFunction("pr.waitForChecks");
+    const prView = vi.fn().mockResolvedValue(pullRequest([check("test", "QUEUED")]));
+    const pending = wait({ gh: { prView } }, { number: 7, timeoutMs: 285_000 });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({
+      outcome: "pending",
+      attempt: 20,
+      note: "Pull request #7 did not settle after 20 polls (it stopped at its 285 s time limit): 1 check is still pending",
+    });
+    expect(prView).toHaveBeenCalledTimes(20);
+  });
+
   it.each([
     { name: "instant polls", pollMs: 0, attempt: 5 },
     // Slow polls spend the time limit too, so fewer fit than intervals alone would allow.

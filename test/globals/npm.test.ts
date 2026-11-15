@@ -118,6 +118,15 @@ describe("npm namespace", () => {
 describe("npm result renderers", () => {
   it("renders scripts, tests, installs, and audit summaries", () => {
     expect(render("run", result("done")).summary).toBe("run, exit 0");
+    // The collapsed summary did not say which script ran (#390).
+    expect(render("run", result("\n> pit@0.37.0 package:check\n> node x\n\nok\n")).summary).toBe(
+      "run package:check, exit 0",
+    );
+    expect(render("run", result("> @scope/app@1.0.0 build\n> tsc\n", "", 2)).summary).toBe(
+      "run build, exit 2",
+    );
+    const npm12 = result("ok\n", "npm notice run pit@0.37.0 check\nnpm notice run tsc\n");
+    expect(render("run", npm12).summary).toBe("run check, exit 0");
     expect(render("test", result("Tests 12 passed\n")).summary).toBe("test, 12 tests passed");
     expect(render("install", result("added 2 packages\n")).summary).toBe(
       "install, added 2 packages",
