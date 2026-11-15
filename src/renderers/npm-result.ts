@@ -104,7 +104,12 @@ function renderer(
   };
 }
 
-const run = renderer("run", (result) => ({ summary: `run, exit ${result.code}` }));
+// npm announces the script it runs with a "> name@version script" banner before its output.
+const SCRIPT_BANNER_PATTERN = /^\s*> \S+@\S* (\S+)/;
+const run = renderer("run", (result) => {
+  const script = result.stdout.replace(ANSI_PATTERN, "").match(SCRIPT_BANNER_PATTERN)?.[1];
+  return { summary: `run${script ? ` ${script}` : ""}, exit ${result.code}` };
+});
 const test = renderer("test", (result) => {
   const plain = result.stdout.replace(ANSI_PATTERN, "");
   const counts = plain.match(TEST_COUNTS_PATTERN)?.[1] ?? "";
