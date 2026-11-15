@@ -4,18 +4,26 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-15
+
 ### Added
 
 - `npm.ci({ includeDev?, ignoreScripts? })` runs `npm ci`, which `npm.install` could not (#383). `includeDev: false` adds `--omit=dev`; `true` adds `--include=dev`.
 - Git branch and sync globals (#383): `git.switchBranch` (`git switch`; `switch` is a reserved word), `git.fetch`, `git.pull`, `git.revParse` (`git rev-parse`), and `git.lsRemote` (`git ls-remote`). Each takes an argument array and process options like the other `git.*` functions, and its result summary names the branch switched to, `up to date`, the resolved revision, or the ref count.
 - Programs can call `atob` and `btoa`, which the sandbox provided but its type definitions omitted (#383).
 - Repository maintainer functions: `delivery.openPullRequest` creates a branch, commits and pushes through `delivery.commit`, and opens the pull request; `pr.merge({ sync: true })` merges, then switches to the base branch and fast-forwards it (#383).
+- `gh.api` explains a misplaced options object, and `gh` suggestions put likely methods first (#382). A call such as `gh.api(endpoint, { method })` gets an error that shows `gh api` flag examples and says process options go third. `Did you mean` and the `gh has:` list put methods whose names start with the missing name first, so `gh.pr` suggests `prCreate`, `prList`, `prMerge`, and `prView`.
 
 ### Changed
 
 - Repository maintainer functions: `ci.waitForRun`, `ci.waitForCommit`, and `pr.waitForChecks` return `outcome: "pending"` with a hint to call again when they time out, instead of throwing (#383). `ci.waitForRun` and `ci.waitForCommit` results always carry `outcome` and `conclusion`.
 - `npm.run(script, options)` takes process options second when the script has no args (#383); `npm.run(script, args, options)` still works.
 - `workspace.edit` and batch edits accept a mapped `PitEditChange[]` and anchors typed as plain `string` (#383). Edit already checked at runtime that changes are non-empty and anchors match the file. The tool description shows a batch edit's `changes: { revision, changes: [...] }` shape.
+- Repository maintainer functions (#381): `tests.runTargeted`, `tests.probeMutation`, and `delivery.format` run `npx --no-install`. `delivery.commit({ push: true })` refuses `main`/`master` before staging anything (`allowDefaultBranch: true` overrides) and retries a `[remote rejected] … (failed)` push once. The waits cap `timeoutMs` at 285000 instead of rejecting larger values.
+
+### Fixed
+
+- `gh.api` uses the program-data budget by default (4 MB, 1,000,000 lines) instead of 50 KB, so large responses are no longer cut mid-JSON (#382). A caller's `maxBytes`/`maxLines` still win.
 
 ## [0.36.6] - 2026-11-14
 
