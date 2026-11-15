@@ -77,11 +77,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Run pi-action
-        uses: cv/pi-action@753f11099794ad93567438fdd1b94f1fd2f79d59 # v2.5.2
-        env:
-          # npm 12, installed above, refuses git specs by default (allow-git=none); pi-action installs
-          # `extensions` with it, and github:cv/pit is a git spec.
-          NPM_CONFIG_ALLOW_GIT: all
+        uses: cv/pi-action@27723deedf4b41e99924171402c657c8d4e9ff69 # v2.5.4
         with:
           github_token: ${{ steps.app.outputs.token }}
           provider: nvidia
