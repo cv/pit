@@ -12,7 +12,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - Git branch and sync globals (#383): `git.switchBranch` (`git switch`; `switch` is a reserved word), `git.fetch`, `git.pull`, `git.revParse` (`git rev-parse`), and `git.lsRemote` (`git ls-remote`). Each takes an argument array and process options like the other `git.*` functions, and its result summary names the branch switched to, `up to date`, the resolved revision, or the ref count.
 - Programs can call `atob` and `btoa`, which the sandbox provided but its type definitions omitted (#383).
 - Repository maintainer functions: `delivery.openPullRequest` creates a branch, commits and pushes through `delivery.commit`, and opens the pull request; `pr.merge({ sync: true })` merges, then switches to the base branch and fast-forwards it (#383).
-- `gh.api` error messages and `Did you mean` suggestions name the methods you probably meant (#382): a misplaced options object, such as `gh.api(endpoint, { method })`, gets an error that shows `gh api` flag examples and says process options go third. `Did you mean` and the `gh has:` list put methods whose names start with the missing name first, so `gh.pr` suggests `prCreate`, `prList`, `prMerge`, and `prView`.
+- `gh.api` explains a misplaced options object, and `gh` suggestions put likely methods first (#382). A call such as `gh.api(endpoint, { method })` gets an error that shows `gh api` flag examples and says process options go third. `Did you mean` and the `gh has:` list put methods whose names start with the missing name first, so `gh.pr` suggests `prCreate`, `prList`, `prMerge`, and `prView`.
 
 ### Changed
 
