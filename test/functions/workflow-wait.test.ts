@@ -163,6 +163,23 @@ describe("ci.waitForRun behavior", () => {
     expect(result.note).not.toContain("build");
   });
 
+  // A fixed 12 checks ended the wait before its time budget was spent (#390).
+  it("checks until its time budget is spent when attempts are not given", async () => {
+    const wait = await loadWorkflowFunction("ci.waitForRun");
+    const runView = vi.fn().mockResolvedValue(response("in_progress"));
+    const pending = wait(
+      { gh: { runView } },
+      { id: 42, repo: "cv/pit", initialDelayMs: 0, timeoutMs: 285_000 },
+    );
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result).toMatchObject({ outcome: "pending", attempts: 20, elapsedMs: 285_000 });
+    expect(result.note).toContain(
+      "did not complete after 20 checks in 285 s; it stopped at its 285 s time limit",
+    );
+    expect(runView).toHaveBeenCalledTimes(20);
+  });
+
   it("reports pending rather than success when the requested attempts are exhausted", async () => {
     const wait = await loadWorkflowFunction("ci.waitForRun");
     const runView = vi.fn().mockResolvedValue(response("in_progress"));
