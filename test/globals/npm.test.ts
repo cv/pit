@@ -125,6 +125,8 @@ describe("npm result renderers", () => {
     expect(render("run", result("> @scope/app@1.0.0 build\n> tsc\n", "", 2)).summary).toBe(
       "run build, exit 2",
     );
+    const npm12 = result("ok\n", "npm notice run pit@0.37.0 check\nnpm notice run tsc\n");
+    expect(render("run", npm12).summary).toBe("run check, exit 0");
     expect(render("test", result("Tests 12 passed\n")).summary).toBe("test, 12 tests passed");
     expect(render("install", result("added 2 packages\n")).summary).toBe(
       "install, added 2 packages",
