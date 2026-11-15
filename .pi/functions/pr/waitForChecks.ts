@@ -3,7 +3,7 @@
  * It stops early when any check fails. Use ci.waitForCommit for one workflow run.
  *
  * @param input.repo - GitHub owner/name. The default is the current repository.
- * @param input.attempts - Maximum polls (1-120). The default is 12.
+ * @param input.attempts - Maximum polls (1-120). By default, it polls until timeoutMs is spent.
  * @param input.intervalMs - Delay between polls (1000-30000). The default is 15000 ms.
  * @param input.initialDelayMs - Delay before the first poll (0-120000). The default is 0 ms. It
  *   counts toward timeoutMs.
@@ -67,7 +67,6 @@ async function waitForChecks(
   const number = integerInput("number", input.number, 0, 1, Number.MAX_SAFE_INTEGER);
   const intervalMs = integerInput("intervalMs", input.intervalMs, 15000, 1000, 30000);
   const initialDelayMs = integerInput("initialDelayMs", input.initialDelayMs, 0, 0, 120000);
-  const requestedAttempts = integerInput("attempts", input.attempts, 12, 1, 120);
   if (input.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(input.repo)) {
     throw new Error("repo must be owner/name");
   }
@@ -75,6 +74,12 @@ async function waitForChecks(
   const requestedTimeoutMs =
     input.timeoutMs === undefined ? undefined : Math.min(input.timeoutMs, 285000);
   const timeoutMs = integerInput("timeoutMs", requestedTimeoutMs, 240000, 1000, 285000);
+  // By default the time budget, not a poll count, ends the wait: a fixed 12 polls stopped it
+  // about 110 s early (#390).
+  const requestedAttempts =
+    input.attempts === undefined
+      ? Math.floor(Math.max(0, timeoutMs - initialDelayMs) / intervalMs) + 1
+      : integerInput("attempts", input.attempts, 1, 1, 120);
   // A deadline, not an attempt count: GitHub's response time also spends the tool's 300 s.
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
@@ -166,11 +171,14 @@ async function waitForChecks(
   if (!last) throw new Error(`Pull request #${number} was not polled`);
   const elapsedMs = Date.now() - startedAt;
   const limitNote =
-    attempt < requestedAttempts ? ` (it stopped at its ${timeoutMs / 1000} s time limit)` : "";
+    input.attempts === undefined || attempt < requestedAttempts
+      ? ` (it stopped at its ${timeoutMs / 1000} s time limit)`
+      : "";
+  const pendingCount = last.checks.pending.names.length + last.checks.pending.omitted;
   const pendingNote =
     last.checks.total === 0
       ? "no checks were reported"
-      : `${last.checks.pending.names.length + last.checks.pending.omitted} checks are still pending`;
+      : `${pendingCount} ${pendingCount === 1 ? "check is" : "checks are"} still pending`;
   // Not a failure even with raise: long CI outlasts one tool call, so the caller waits again (#383).
   return {
     ...last,

@@ -103,6 +103,18 @@ describe("tool rendering", () => {
     );
     expect(singleArrayResult).toContain("Returned 1 item");
 
+    // A pending wait read as success because the summary hid its outcome (#390).
+    const pendingResult = renderToolResult(
+      {
+        content: [],
+        details: { value: { status: "in_progress", outcome: "pending" }, truncated: false },
+      },
+      { expanded: false, isPartial: false },
+    );
+    expect(pendingResult).toContain(
+      'Returned 2 fields: status, outcome · outcome: "pending" (0.0s)',
+    );
+
     const emptyObjectResult = renderToolResult(
       { content: [], details: { value: {}, truncated: false } },
       { expanded: false, isPartial: false },

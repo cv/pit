@@ -157,7 +157,7 @@ describe("ci.waitForRun", () => {
     );
     await vi.runAllTimersAsync();
     expect((await pending).note).toMatch(
-      /did not complete after 1 checks in 140 s; it stopped at its 180 s time limit with 119 checks unused; last status in_progress, unfinished jobs: build/,
+      /did not complete after 1 check in 140 s; it stopped at its 180 s time limit with 119 checks unused; last status in_progress, unfinished jobs: build/,
     );
   });
 });

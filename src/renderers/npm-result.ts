@@ -104,7 +104,18 @@ function renderer(
   };
 }
 
-const run = renderer("run", (result) => ({ summary: `run, exit ${result.code}` }));
+// npm announces the script it runs before its output: npm 10 prints "> name@version script"
+// to stdout and npm 11+ prints "npm notice run name@version script" to stderr.
+const SCRIPT_BANNER_PATTERNS = [/^\s*> \S+@\S* (\S+)/, /^npm notice run \S+@\S* (\S+)$/m];
+const run = renderer("run", (result) => {
+  const [stdout, stderr] = [result.stdout, result.stderr].map((text) =>
+    text.replace(ANSI_PATTERN, ""),
+  );
+  const script =
+    stdout?.match(SCRIPT_BANNER_PATTERNS[0] as RegExp)?.[1] ??
+    stderr?.match(SCRIPT_BANNER_PATTERNS[1] as RegExp)?.[1];
+  return { summary: `run${script ? ` ${script}` : ""}, exit ${result.code}` };
+});
 const test = renderer("test", (result) => {
   const plain = result.stdout.replace(ANSI_PATTERN, "");
   const counts = plain.match(TEST_COUNTS_PATTERN)?.[1] ?? "";
