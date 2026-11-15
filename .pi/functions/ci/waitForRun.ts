@@ -2,7 +2,8 @@
  * Waits for a GitHub Actions run and fails by default on unsuccessful completion. A timeout
  * returns outcome "pending" with a hint to call again.
  *
- * @param input.attempts - Maximum status checks (1-120). The default is 12.
+ * @param input.attempts - Maximum status checks (1-120). By default, it checks until timeoutMs is
+ *   spent.
  * @param input.intervalMs - Delay between checks (1000-30000). The default is 15000 ms.
  * @param input.initialDelayMs - Delay before the first check (0-120000). The default is 120000 ms.
  *   It counts toward timeoutMs.
@@ -42,11 +43,16 @@ async function waitForRun(
   };
   const intervalMs = integerInput("intervalMs", input.intervalMs, 15000, 1000, 30000);
   const initialDelayMs = integerInput("initialDelayMs", input.initialDelayMs, 120000, 0, 120000);
-  const requestedAttempts = integerInput("attempts", input.attempts, 12, 1, 120);
   // A larger limit could not finish inside one tool call, so cap it rather than reject it (#379).
   const requestedTimeoutMs =
     input.timeoutMs === undefined ? undefined : Math.min(input.timeoutMs, 285000);
   const timeoutMs = integerInput("timeoutMs", requestedTimeoutMs, 240000, 1000, 285000);
+  // By default the time budget, not a check count, ends the wait: a fixed 12 checks stopped it
+  // early (#390).
+  const requestedAttempts =
+    input.attempts === undefined
+      ? Math.floor(Math.max(0, timeoutMs - initialDelayMs) / intervalMs) + 1
+      : integerInput("attempts", input.attempts, 1, 1, 120);
   const raise = input.raise ?? true;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   // A deadline, not an attempt count: GitHub's response time also spends the tool's 300 s.
@@ -96,10 +102,15 @@ async function waitForRun(
     await sleep(intervalMs);
   }
   const elapsedMs = Date.now() - startedAt;
+  const checks = (count: number) => `${count} ${count === 1 ? "check" : "checks"}`;
   const limitNote =
-    attempt < requestedAttempts
-      ? `; it stopped at its ${timeoutMs / 1000} s time limit with ${requestedAttempts - attempt} checks unused`
-      : `; it made all ${requestedAttempts} requested checks`;
+    input.attempts === undefined
+      ? `; it stopped at its ${timeoutMs / 1000} s time limit`
+      : attempt < requestedAttempts
+        ? `; it stopped at its ${timeoutMs / 1000} s time limit with ${checks(requestedAttempts - attempt)} unused`
+        : requestedAttempts === 1
+          ? "; it made its 1 requested check"
+          : `; it made all ${requestedAttempts} requested checks`;
   const unfinished = (last?.jobs ?? [])
     .filter((job) => job.status !== "completed")
     .map((job) => job.name);
@@ -119,7 +130,7 @@ async function waitForRun(
     elapsedMs,
     url: last?.url,
     jobs: summarizeJobs(last?.jobs),
-    note: `GitHub Actions run ${input.id} did not complete after ${attempt} checks in ${Math.round(elapsedMs / 1000)} s${limitNote}${progressNote}`,
+    note: `GitHub Actions run ${input.id} did not complete after ${checks(attempt)} in ${Math.round(elapsedMs / 1000)} s${limitNote}${progressNote}`,
     hint: `Still running. Call ci.waitForRun({ id: ${input.id}, repo: ${JSON.stringify(input.repo)}, initialDelayMs: 0 }) again to keep waiting.`,
   };
 }

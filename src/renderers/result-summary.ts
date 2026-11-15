@@ -62,7 +62,12 @@ export function describeResult(
   if (typeof value === "object") {
     const keys = Object.keys(value);
     const names = keys.slice(0, 3).join(", ");
-    return `Returned ${plural(keys.length, "field")}${names ? `: ${names}` : ""}`;
+    // The call completed, but its domain outcome may be pending or failed; show it (#390).
+    const outcome = Object.hasOwn(value, "outcome")
+      ? (value as { outcome: unknown }).outcome
+      : undefined;
+    const preview = typeof outcome === "string" ? inlineValue(outcome) : undefined;
+    return `Returned ${plural(keys.length, "field")}${names ? `: ${names}` : ""}${preview === undefined ? "" : ` · outcome: ${preview}`}`;
   }
   const preview = expanded ? undefined : inlineValue(value);
   return `Returned ${typeof value}${preview === undefined ? "" : `: ${preview}`}`;
