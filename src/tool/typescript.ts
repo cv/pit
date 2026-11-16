@@ -244,6 +244,7 @@ async function executeTypeScriptTool(request: TypeScriptToolExecution) {
     const attached = images.attached();
     const result = await buildToolResult({
       value,
+      cwd: request.ctx.cwd,
       ...(preparedFunction.name ? { namedFunction: preparedFunction.name } : {}),
       projectFunction: preparedFunction.projectMetadata !== undefined,
       saveOnly: request.params.saveOnly === true,

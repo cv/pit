@@ -17,6 +17,8 @@
  * @param input.mcpServers - Offline fixture MCP servers to configure in the isolated agent
  *   directory, by name, with each server's exposure. Needs `builtins` to include `mcp`.
  * @param input.codemodeMode - Pi's `codemode.mode` setting for the isolated agent.
+ * @param input.skills - Skill files or directories to load, relative to `cwd`, such as
+ *   `.pi/skills/pit-delivery`. Skill discovery stays off; only these load. The default is none.
  * @param input.root - Run directory returned by start; stop kills its server and removes it.
  */
 async function manageSession(
@@ -37,6 +39,7 @@ async function manageSession(
           { exposure?: "codemode" | "codemode-deferred" | "deferred" | "direct" | "hidden" }
         >;
         codemodeMode?: "on" | "only";
+        skills?: string[];
       }
     | { action: "stop"; socket: string; root: string },
 ) {
@@ -156,6 +159,7 @@ async function manageSession(
     ...builtins.flatMap((name) => ["-e", `builtin:${name}`]),
     "--no-extensions",
     "--no-skills",
+    ...(input.skills ?? []).flatMap((skill) => ["--skill", `${cwd}/${skill}`]),
     "--no-context-files",
     "--no-prompt-templates",
     "--no-themes",

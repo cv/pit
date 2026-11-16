@@ -136,7 +136,10 @@ function renderStructuredToolValue(input: {
   }
   const source = typeof context.args?.code === "string" ? context.args.code : "";
   const functionCall = details.traces ? runtimeFunctionCall(details) : inferFunctionCall(source);
-  const structuredResult = renderResultValue(details.value, theme, functionCall, input.expanded);
+  const structuredResult = renderResultValue(details.value, theme, functionCall, {
+    details: input.expanded,
+    ...(details.skillFiles ? { skillFiles: details.skillFiles } : {}),
+  });
   if (structuredResult) {
     return {
       lines: structuredResult.detailLines ?? structuredResult.lines,
@@ -233,7 +236,7 @@ function renderCompletedToolResult(input: {
   const header = theme.bold(
     `${outcomeMarker(theme, outcome)} ` +
       (headlineSkill
-        ? `${skillLabel(theme, headlineSkill.name)}${theme.fg("dim", `, ${headlineSkill.detail}`)}`
+        ? `${skillLabel(theme, headlineSkill.name, headlineSkill.kind)}${theme.fg("dim", `, ${headlineSkill.reference ? `${headlineSkill.reference}, ` : ""}${headlineSkill.detail}`)}`
         : theme.fg("toolTitle", resultLabel(details, rendering, input.fallback, expanded))) +
       notices.map((notice) => theme.fg("warning", ` · ${notice}`)).join("") +
       theme.fg(

@@ -279,6 +279,7 @@ async function runDurableProgram(call: DurableCall) {
     const attached = images.attached();
     const result = await buildToolResult({
       value,
+      cwd: call.cwd,
       ...(prepared.name ? { namedFunction: prepared.name } : {}),
       projectFunction: false,
       saveOnly: params.saveOnly === true,

@@ -1,3 +1,4 @@
+import type { KnownSkill } from "../execution/skill-files.js";
 import type { FunctionRegistry } from "./core.js";
 import type { FunctionEnvironment } from "./environment.js";
 import { reconcileProjectFunctionsForSession } from "./persistent-functions.js";
@@ -42,6 +43,8 @@ export interface FunctionState {
    * omits them, so `typescript` calls read them here for `toolIndex.describe`.
    */
   toolGuidelines?: ReadonlyMap<string, readonly string[]>;
+  /** Skills Pi loaded, from the latest prompt; results name the skills of returned reads. */
+  skills: readonly KnownSkill[];
 }
 
 export type FunctionStateCommit = <T>(operation: () => Promise<T> | T) => Promise<T>;
@@ -62,6 +65,7 @@ export function createFunctionState(): FunctionState {
     promotionSuggested: new Set(),
     announcedSessionCatalog: "",
     projectDirectory: "",
+    skills: [],
     userDirectory: "",
   };
 }

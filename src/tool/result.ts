@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import type { CompletedCallJournal } from "../execution/completed-calls.js";
 import type { ExecutionProgressController } from "../execution/progress.js";
+import { returnedSkillFiles } from "../execution/skill-files.js";
 import type { FunctionActivity } from "../functions/core.js";
 import { functionDependencyBinding } from "../functions/identifier.js";
 import { getSavedFunctionCallSignature } from "../functions/source.js";
@@ -72,6 +73,8 @@ export function promotionSuggestionNotice(names: readonly string[]): string {
 
 export async function buildToolResult(input: {
   value: unknown;
+  /** The working directory returned read paths are relative to. */
+  cwd: string;
   namedFunction?: string;
   projectFunction: boolean;
   saveOnly: boolean;
@@ -111,6 +114,7 @@ export async function buildToolResult(input: {
     maxLines: LIMITS.result.maxLines - (reserved.split("\n").length - 1),
   });
   const resultFile = output.truncated ? await spillResult(spillPath, input.value) : undefined;
+  const skillFiles = returnedSkillFiles(output.value, input.cwd, input.functionState.skills);
   return {
     content: [
       {
@@ -129,6 +133,7 @@ export async function buildToolResult(input: {
 
       truncated: output.truncated,
       ...(resultFile ? { resultFile } : {}),
+      ...(skillFiles ? { skillFiles } : {}),
       ...(input.functionActivity.length > 0 ? { functions: input.functionActivity } : {}),
       ...input.executionProgress.snapshot(),
     },

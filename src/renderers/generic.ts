@@ -197,7 +197,7 @@ export function renderResultValue(
   value: unknown,
   theme: ResultTheme,
   functionCall?: FunctionCall,
-  details = true,
+  { details = true, skillFiles }: Pick<RenderContext, "details" | "skillFiles"> = {},
 ): RenderedResultValue | undefined {
   return renderKnownValue(value, {
     theme,
@@ -205,5 +205,6 @@ export function renderResultValue(
     depth: 0,
     details,
     ...(functionCall ? { functionCall } : {}),
+    ...(skillFiles ? { skillFiles } : {}),
   });
 }

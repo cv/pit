@@ -57,7 +57,7 @@ describe("trace cleanup rendering", () => {
     { name: "multiline string", value: "ONE\nTWO" },
   ])("defers $name bodies without changing summaries or outcomes", ({ value }) => {
     const before = JSON.stringify(value);
-    const summary = renderResultValue(value, theme, undefined, false);
+    const summary = renderResultValue(value, theme, undefined, { details: false });
     const detail = renderResultValue(value, theme);
     expect(summary).toMatchObject({ kind: detail?.kind, summary: detail?.summary });
     expect(summary?.outcome).toBe(detail?.outcome);
