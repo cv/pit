@@ -12,6 +12,7 @@ import {
   renderJson,
   syntaxLanguageForHint,
 } from "./shared.js";
+import { nestedSkills } from "./skill-reads.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 type NestedRenderer = (value: unknown, context: RenderContext) => RenderedResultValue | undefined;
@@ -128,7 +129,10 @@ export function renderCompound(
 
   const summary = plural(entries.length, "field");
   const outcome = combinedOutcome(entries.map(([, , rendered]) => rendered));
-  if (context.details === false) return { kind: "compound", summary, outcome, lines: [] };
+  const skills = nestedSkills(entries.map(([, , rendered]) => rendered));
+  if (context.details === false) {
+    return { kind: "compound", summary, outcome, lines: [], ...skills };
+  }
   const lines: string[] = [];
   const hangingIndents: Record<number, number> = {};
   for (const [key, entryValue, known] of entries) {
@@ -160,6 +164,7 @@ export function renderCompound(
     lines,
     summary,
     outcome,
+    ...skills,
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,
@@ -185,7 +190,8 @@ export function renderArrayCompound(
   const kind = renderedEntries.every((entry) => entry?.kind === "read") ? "reads" : "array";
   const summary = plural(value.length, kind === "reads" ? "file" : "item");
   const outcome = combinedOutcome(renderedEntries);
-  if (context.details === false) return { kind, summary, outcome, lines: [] };
+  const skills = nestedSkills(renderedEntries);
+  if (context.details === false) return { kind, summary, outcome, lines: [], ...skills };
   const lines: string[] = [];
   const hangingIndents: Record<number, number> = {};
   for (const [index, entry] of value.entries()) {
@@ -213,6 +219,7 @@ export function renderArrayCompound(
     lines,
     summary,
     outcome,
+    ...skills,
     detailLines: lines,
     hangingIndents,
     detailHangingIndents: hangingIndents,

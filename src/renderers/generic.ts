@@ -17,6 +17,7 @@ import {
   plural,
   renderJson,
 } from "./shared.js";
+import { nestedSkills } from "./skill-reads.js";
 import type {
   RenderContext,
   RenderedResultValue,
@@ -138,6 +139,7 @@ function renderBatch(value: unknown, context: RenderContext): RenderedResultValu
     lines,
     summary,
     outcome: failed ? "error" : combinedOutcome(children),
+    ...nestedSkills(children),
     detailLines: lines.slice(1),
     hangingIndents,
     detailHangingIndents: offsetHangingIndents(hangingIndents, { lines: -1 }),
