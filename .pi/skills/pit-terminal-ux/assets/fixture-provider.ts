@@ -95,6 +95,16 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     code: 'async ({ shell: { execFile } }, scripts: string[]) => { const [left, right] = await Promise.all(scripts.map(script => execFile("node", ["--eval", script], { timeoutMs: 5000 }))); return { left, right }; }',
     params: ["console.log('LEFT_SENTINEL');", "console.log('RIGHT_SENTINEL');"],
   },
+  skill: {
+    label: "UX SKILL: full and partial skill reads",
+    code: 'async ({ workspace: { read, batch } }) => { await read(".pi/skills/pit-delivery/SKILL.md", { format: "raw" }); return batch([{ kind: "read", file: ".pi/skills/pit-test-audit/SKILL.md", options: { limit: 20 } }, { kind: "read", file: ".pi/skills/missing/SKILL.md" }], { failure: "settled" }); }',
+    timeoutMs: 10000,
+  },
+  "skill-return": {
+    label: "UX SKILL: returned skill read",
+    code: 'async ({ workspace: { read } }) => read(".pi/skills/pit-delivery/SKILL.md", { format: "raw" })',
+    timeoutMs: 10000,
+  },
   read: {
     label: "UX READ: explicit params",
     code: "async ({ workspace: { read } }, input: { file: string }) => read(input.file, { limit: 7 })",

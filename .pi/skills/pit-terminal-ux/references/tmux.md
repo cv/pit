@@ -43,6 +43,8 @@ Submit one fixture name as ordinary prompt text:
 | `promote-timeout`   | User promotion whose confirmation outlives its 3 s call; the dialog closes and no `probeSaved.ts` is written.          |
 | `json`              | Heterogeneous fields and multiline patch content without field loss.                                                   |
 | `batch`             | Real settled read batch with one deliberate missing-file failure.                                                      |
+| `skill`             | An unreturned skill read, then a batch with a 20-line partial one and a missing file: one `⚠ partial` skill row.       |
+| `skill-return`      | A returned skill read: one `[skill] pit-delivery, 1-176 of 176, raw` headline and no separate skill row.               |
 | `calls`             | Sixty interleaved call groups, then a slow subprocess; live and settled dashboards stay honest and usable.             |
 | `http`              | Synthetic HTTP 503 data exercises domain-error presentation without a network request.                                 |
 | `transport`         | Simulated provider-stream error before arguments complete; the call must be identified as not executed.                |

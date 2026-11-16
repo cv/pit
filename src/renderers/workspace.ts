@@ -9,6 +9,7 @@ import {
   plural,
   renderHashedFile,
 } from "./shared.js";
+import { skillMention } from "./skill-reads.js";
 import type { RenderContext, RenderedResultValue } from "./types.js";
 
 const isReadResult = shapeGuard(
@@ -137,7 +138,14 @@ function renderRangeRead(value: RangeRead, { theme, details }: RenderContext): R
   const flags = value.truncated ? "hashed, truncated" : "hashed";
   const summary = `${value.file}, ${where}, ${flags}`;
   const outcome = value.truncated ? "warning" : "success";
-  if (details === false) return { kind: "read", summary, outcome, lines: [] };
+  const skills = skillMention(
+    value.file,
+    value.ranges.map(({ start, end }) => [start, end]),
+    value.totalLines,
+    `${where}, ${flags}`,
+  );
+  const skill = skills ? { skills } : {};
+  if (details === false) return { kind: "read", summary, outcome, lines: [], ...skill };
   const lines = [
     `${theme.fg("toolTitle", theme.bold(value.file))} ${theme.fg("dim", `(${where}; ${flags}; rev ${value.revision})`)}`,
   ];
@@ -157,6 +165,7 @@ function renderRangeRead(value: RangeRead, { theme, details }: RenderContext): R
     lines,
     summary,
     detailLines: [theme.fg("dim", `revision: ${value.revision}`), ...lines.slice(1)],
+    ...skill,
     hangingIndents: offsetHangingIndents(indents, { lines: 1 }),
     detailHangingIndents: offsetHangingIndents(indents, { lines: 1 }),
   };
@@ -182,7 +191,14 @@ export function renderRead(
     .join(", ");
   const summary = `${value.file}, ${range}, ${flags}`;
   const outcome = value.truncated || value.hasMore ? "warning" : "success";
-  if (details === false) return { kind: "read", summary, outcome, lines: [] };
+  const skills = skillMention(
+    value.file,
+    value.lines === 0 ? [] : [[offset, offset + value.lines - 1]],
+    total,
+    `${range}, ${flags}`,
+  );
+  const skill = skills ? { skills } : {};
+  if (details === false) return { kind: "read", summary, outcome, lines: [], ...skill };
   const lines = [
     `${theme.fg("toolTitle", theme.bold(value.file))} ${theme.fg("dim", `(${range}; ${flags}; rev ${value.revision})`)}`,
   ];
@@ -206,6 +222,7 @@ export function renderRead(
     lines,
     summary,
     detailLines: [theme.fg("dim", `revision: ${value.revision}`), ...lines.slice(1)],
+    ...skill,
     hangingIndents: offsetHangingIndents(detailHangingIndents, { lines: 1 }),
     detailHangingIndents: offsetHangingIndents(detailHangingIndents, { lines: 1 }),
   };

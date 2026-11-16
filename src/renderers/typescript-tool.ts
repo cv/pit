@@ -12,6 +12,7 @@ import { renderResultValue } from "./generic.js";
 import { HangingIndentText } from "./hanging-indent-text.js";
 import { describeResult } from "./result-summary.js";
 import { offsetHangingIndents, outcomeMarker, renderJson } from "./shared.js";
+import { renderSkillRows, skillLabel } from "./skill-reads.js";
 import type { RenderedResultValue } from "./types.js";
 import { displayedFailure, displayedFunctionPath } from "./typescript-failure.js";
 import { renderPartialToolResult } from "./typescript-progress.js";
@@ -226,9 +227,14 @@ function renderCompletedToolResult(input: {
   const leafOutcome = rendering.structuredResult?.outcome ?? "success";
   const notices = executionNotices(details, leafOutcome);
   const outcome = resultOutcome(leafOutcome, details, notices);
+  const skills = rendering.structuredResult?.skills ?? [];
+  // A returned skill read is headed by its skill, as Pi's own read is, instead of by its path.
+  const [headlineSkill] = rendering.structuredResult?.kind === "read" ? skills : [];
   const header = theme.bold(
     `${outcomeMarker(theme, outcome)} ` +
-      theme.fg("toolTitle", resultLabel(details, rendering, input.fallback, expanded)) +
+      (headlineSkill
+        ? `${skillLabel(theme, headlineSkill.name)}${theme.fg("dim", `, ${headlineSkill.detail}`)}`
+        : theme.fg("toolTitle", resultLabel(details, rendering, input.fallback, expanded))) +
       notices.map((notice) => theme.fg("warning", ` · ${notice}`)).join("") +
       theme.fg(
         outcome === "success" ? "dim" : outcome,
@@ -243,6 +249,7 @@ function renderCompletedToolResult(input: {
     text += renderExecutionDetails(details, theme, rendering.lines);
   } else {
     const expandKey = input.context.keyText?.("app.tools.expand") ?? "";
+    if (!headlineSkill) text += renderSkillRows(skills, theme);
     text += collapsedImages(details?.imageAttachments ?? [], theme, expandKey);
   }
   const displayedHangingIndents = offsetHangingIndents(rendering.hangingIndents, {

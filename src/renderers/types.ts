@@ -18,6 +18,17 @@ export interface RenderContext {
   functionCall?: FunctionCall;
 }
 
+/** A returned read of a skill file: what the transcript shows in Pi's `[skill] name` style. */
+export interface SkillMention {
+  /** The skill's directory name, which Pi requires to match the skill's name. */
+  name: string;
+  /** Line spans the read returned. */
+  spans: Array<[number, number]>;
+  totalLines: number;
+  /** The read's range and flags, as its `Read` headline shows them after the file. */
+  detail: string;
+}
+
 export interface RenderedResultValue {
   kind: string;
   lines: string[];
@@ -28,6 +39,8 @@ export interface RenderedResultValue {
   detailLines?: string[];
   hangingIndents?: Record<number, number>;
   detailHangingIndents?: Record<number, number>;
+  /** Skill files this value returned the reads of, in order, for `[skill]` rows. */
+  skills?: SkillMention[];
 }
 
 export type ValueRenderer = (
