@@ -195,6 +195,10 @@ function applyPromptAdditions(
   ctx: ExtensionContext,
 ) {
   const { functionState } = state;
+  functionState.skills = event.systemPromptOptions.skills.map(({ name, filePath }) => ({
+    name,
+    filePath,
+  }));
   // Pi renders its own list only while a file-reading tool is selected, and an earlier handler
   // can replace the prompt entirely, so the rendered prompt is the reliable record.
   const promptAlreadyHasSkills = event.systemPrompt.includes("<available_skills>");

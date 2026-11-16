@@ -129,7 +129,8 @@ type RangeRead = typeof isRangeReadResult extends ((value: unknown) => value is 
   : never;
 
 /** A read of several line ranges: each is shown like a hashed read, with a gap marker between. */
-function renderRangeRead(value: RangeRead, { theme, details }: RenderContext): RenderedResultValue {
+function renderRangeRead(value: RangeRead, context: RenderContext): RenderedResultValue {
+  const { theme, details } = context;
   const spans = value.ranges.map(({ start, end }) =>
     start === end ? `${start}` : `${start}-${end}`,
   );
@@ -138,12 +139,11 @@ function renderRangeRead(value: RangeRead, { theme, details }: RenderContext): R
   const flags = value.truncated ? "hashed, truncated" : "hashed";
   const summary = `${value.file}, ${where}, ${flags}`;
   const outcome = value.truncated ? "warning" : "success";
-  const skills = skillMention(
-    value.file,
-    value.ranges.map(({ start, end }) => [start, end]),
-    value.totalLines,
-    `${where}, ${flags}`,
-  );
+  const skills = skillMention(context, value.file, {
+    spans: value.ranges.map(({ start, end }) => [start, end]),
+    totalLines: value.totalLines,
+    detail: `${where}, ${flags}`,
+  });
   const skill = skills ? { skills } : {};
   if (details === false) return { kind: "read", summary, outcome, lines: [], ...skill };
   const lines = [
@@ -191,12 +191,11 @@ export function renderRead(
     .join(", ");
   const summary = `${value.file}, ${range}, ${flags}`;
   const outcome = value.truncated || value.hasMore ? "warning" : "success";
-  const skills = skillMention(
-    value.file,
-    value.lines === 0 ? [] : [[offset, offset + value.lines - 1]],
-    total,
-    `${range}, ${flags}`,
-  );
+  const skills = skillMention(context, value.file, {
+    spans: value.lines === 0 ? [] : [[offset, offset + value.lines - 1]],
+    totalLines: total,
+    detail: `${range}, ${flags}`,
+  });
   const skill = skills ? { skills } : {};
   if (details === false) return { kind: "read", summary, outcome, lines: [], ...skill };
   const lines = [

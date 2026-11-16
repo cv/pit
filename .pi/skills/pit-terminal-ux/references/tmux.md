@@ -45,6 +45,7 @@ Submit one fixture name as ordinary prompt text:
 | `batch`             | Real settled read batch with one deliberate missing-file failure.                                                      |
 | `skill`             | An unreturned skill read, then a batch with a 20-line partial one and a missing file: one `⚠ partial` skill row.       |
 | `skill-return`      | A returned skill read: one `[skill] pit-delivery, 1-176 of 176, raw` headline and no separate skill row.               |
+| `skill-ref`         | Returns a reference read and a batch with a partial skill read; start with `skills: [".pi/skills/pit-terminal-ux"]`.   |
 | `calls`             | Sixty interleaved call groups, then a slow subprocess; live and settled dashboards stay honest and usable.             |
 | `http`              | Synthetic HTTP 503 data exercises domain-error presentation without a network request.                                 |
 | `transport`         | Simulated provider-stream error before arguments complete; the call must be identified as not executed.                |
@@ -57,6 +58,8 @@ Submit one fixture name as ordinary prompt text:
 | `context-note`      | `session.setNote("progress", …)`: a labelled note box and a provenance row follow the turn.                            |
 | `context-summarize` | Summarizes the first completed turn; its carrier keeps the tool call and the result becomes a stub.                    |
 | `context-view`      | No tool call: the provider reports the stubs, summaries, notes, and notices it actually received.                      |
+
+Skill fixtures name loaded skills and `[skill ref]` rows only for skills Pi loaded: pass `skills` (paths relative to `cwd`) to `ux.manageSession`. Without them, only a `SKILL.md` is marked, named after its directory.
 
 Use `/new` between cases when independent captures are useful. Expansion state persists across new sessions: track it rather than blindly toggling twice. Use the configured expand action (the isolated default is Ctrl+O).
 

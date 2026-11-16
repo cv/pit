@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { cleanupHarness, context, cwd, setupHarness, tool } from "../support/extension-fixture.js";
+import {
+  beforeAgentStart,
+  cleanupHarness,
+  context,
+  cwd,
+  setupHarness,
+  tool,
+} from "../support/extension-fixture.js";
 
 beforeEach(setupHarness);
 afterEach(cleanupHarness);
@@ -113,6 +120,63 @@ describe("skill reads", () => {
       "… 2 more: e, f",
     ]);
     expect(render(result, { width: 20 }).every((row) => visibleWidth(row) <= 20)).toBe(true);
+  });
+
+  it("names loaded skills and their references from the skills Pi listed", async () => {
+    await installSkill("review");
+    await mkdir(join(cwd, "skills/review/nested"), { recursive: true });
+    await writeFile(join(cwd, "skills/review/nested/SKILL.md"), "nested\n");
+    await writeFile(join(cwd, "skills/review/nested/notes.md"), "notes\n");
+    await writeFile(join(cwd, "skills/solo.md"), "solo\n");
+    await writeFile(join(cwd, "skills/sibling.md"), "sibling\n");
+    beforeAgentStart({
+      systemPrompt: "base",
+      systemPromptOptions: {
+        skills: [
+          {
+            name: "code-review",
+            description: "Review",
+            filePath: join(cwd, "skills/review/SKILL.md"),
+          },
+          {
+            name: "nested",
+            description: "Nested",
+            filePath: join(cwd, "skills/review/nested/SKILL.md"),
+          },
+          { name: "solo", description: "Solo", filePath: join(cwd, "skills/solo.md") },
+        ],
+      },
+    });
+
+    const reference = await execute(
+      `async ({ workspace: { read } }) => read("skills/review/references/guide.md", { format: "raw" })`,
+    );
+    expect(reference.details.skillFiles).toEqual({
+      "skills/review/references/guide.md": {
+        name: "code-review",
+        kind: "reference",
+        reference: "references/guide.md",
+      },
+    });
+    expect(render(reference)).toEqual([
+      expect.stringMatching(
+        /^✓ \[skill ref\] code-review, references\/guide\.md, 1-2 of 2, raw \(/,
+      ),
+    ]);
+
+    const batch = await execute(`async ({ workspace: { batch } }) => batch([
+      { kind: "read", file: "skills/review/SKILL.md", options: { limit: 10 } },
+      { kind: "read", file: "skills/review/references/guide.md" },
+      { kind: "read", file: "skills/review/nested/notes.md" },
+      { kind: "read", file: "skills/solo.md" },
+      { kind: "read", file: "skills/sibling.md" },
+    ])`);
+    expect(render(batch).slice(1)).toEqual([
+      "[skill] code-review ⚠ partial: lines 1-10 of 30 + references/guide.md",
+      // The innermost skill owns a file; a loose skill file owns no directory.
+      "[skill ref] nested + notes.md",
+      "[skill] solo",
+    ]);
   });
 
   it("keeps the skill headline when expanded", async () => {

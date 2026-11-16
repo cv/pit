@@ -3,9 +3,12 @@ import type { ExecutionProgressSnapshot } from "../execution/types.js";
 import type { FunctionActivity } from "../functions/core.js";
 import type { RecoverableCalls, StructuredTypeScriptFailure } from "../tool/failure-context.js";
 import { renderExecutionDashboard } from "./execution-dashboard.js";
+import type { SkillFile } from "./types.js";
 import { renderRetainedShellOutput } from "./typescript-progress.js";
 
 export interface TypeScriptDetails extends ExecutionProgressSnapshot {
+  /** The skills of returned reads, by file, from the skills Pi loaded when the call ran. */
+  skillFiles?: Record<string, SkillFile>;
   value: unknown;
   truncated: boolean;
   functions?: FunctionActivity[];

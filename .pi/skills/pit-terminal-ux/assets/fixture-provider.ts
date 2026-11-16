@@ -100,6 +100,11 @@ const fixtures: Record<string, ToolCall["arguments"]> = {
     code: 'async ({ workspace: { read, batch } }) => { await read(".pi/skills/pit-delivery/SKILL.md", { format: "raw" }); return batch([{ kind: "read", file: ".pi/skills/pit-test-audit/SKILL.md", options: { limit: 20 } }, { kind: "read", file: ".pi/skills/missing/SKILL.md" }], { failure: "settled" }); }',
     timeoutMs: 10000,
   },
+  "skill-ref": {
+    label: "UX SKILL: returned skill reference",
+    code: 'async ({ workspace: { read, batch } }) => { const guide = await read(".pi/skills/pit-terminal-ux/references/tmux.md", { limit: 5 }); const skills = await batch([{ kind: "read", file: ".pi/skills/pit-terminal-ux/SKILL.md", options: { limit: 10 } }, { kind: "read", file: ".pi/skills/pit-terminal-ux/references/tmux.md", options: { limit: 5 } }]); return { guide, skills }; }',
+    timeoutMs: 10000,
+  },
   "skill-return": {
     label: "UX SKILL: returned skill read",
     code: 'async ({ workspace: { read } }) => read(".pi/skills/pit-delivery/SKILL.md", { format: "raw" })',

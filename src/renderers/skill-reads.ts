@@ -1,21 +1,27 @@
 import { basename, dirname } from "node:path";
 
-import type { ResultTheme, SkillMention } from "./types.js";
+import type { RenderContext, ResultTheme, SkillMention } from "./types.js";
 
 const SKILL_FILE = "SKILL.md";
 /** Skill rows a collapsed result lists before naming the rest. */
 const COLLAPSED_SKILLS = 4;
+/** References a skill row names before counting the rest. */
+const COLLAPSED_REFERENCES = 2;
 
-/** The skill a read file belongs to, when it is a `SKILL.md`. */
+/**
+ * The skill a read file belongs to: as the tool recorded it from Pi's loaded skills, else any
+ * `SKILL.md`, named after its directory as Pi's own read renderer does.
+ */
 export function skillMention(
+  context: Pick<RenderContext, "skillFiles">,
   file: string,
-  spans: Array<[number, number]>,
-  totalLines: number,
-  detail: string,
+  read: Pick<SkillMention, "spans" | "totalLines" | "detail">,
 ): SkillMention[] | undefined {
+  const recorded = context.skillFiles?.[file];
+  if (recorded) return [{ ...recorded, ...read }];
   if (basename(file) !== SKILL_FILE) return undefined;
   const name = basename(dirname(file));
-  return name && name !== "." ? [{ name, spans, totalLines, detail }] : undefined;
+  return name && name !== "." ? [{ name, kind: "skill", ...read }] : undefined;
 }
 
 /** The skill mentions of nested renderings, in order. */
@@ -49,13 +55,24 @@ function partialCoverage(mentions: readonly SkillMention[]): string | undefined 
   return `lines ${shown.join(", ")} of ${totalLines}`;
 }
 
-export function skillLabel(theme: ResultTheme, name: string): string {
-  return `${theme.fg("customMessageLabel", theme.bold("[skill]"))} ${theme.fg("customMessageText", name)}`;
+export function skillLabel(
+  theme: ResultTheme,
+  name: string,
+  kind: SkillMention["kind"] = "skill",
+): string {
+  const label = kind === "skill" ? "[skill]" : "[skill ref]";
+  return `${theme.fg("customMessageLabel", theme.bold(label))} ${theme.fg("customMessageText", name)}`;
+}
+
+function referenceList(references: readonly SkillMention[]): string {
+  const names = [...new Set(references.map((mention) => mention.reference))];
+  const hidden = names.length - COLLAPSED_REFERENCES;
+  return names.slice(0, COLLAPSED_REFERENCES).join(", ") + (hidden > 0 ? ` +${hidden} more` : "");
 }
 
 /**
  * Collapsed rows for the skills a result returned: one per skill, in first-read order, with a
- * warning when its reads did not cover the whole file.
+ * warning when its file's reads missed lines and the references it returned.
  */
 export function renderSkillRows(skills: readonly SkillMention[], theme: ResultTheme): string {
   const byName = new Map<string, SkillMention[]>();
@@ -63,9 +80,13 @@ export function renderSkillRows(skills: readonly SkillMention[], theme: ResultTh
   const names = [...byName.keys()];
   let text = "";
   for (const name of names.slice(0, COLLAPSED_SKILLS)) {
-    const partial = partialCoverage(byName.get(name) ?? []);
-    text += `\n${skillLabel(theme, name)}`;
+    const mentions = byName.get(name) ?? [];
+    const file = mentions.filter((mention) => mention.kind === "skill");
+    const references = mentions.filter((mention) => mention.kind === "reference");
+    const partial = file.length > 0 ? partialCoverage(file) : undefined;
+    text += `\n${skillLabel(theme, name, file.length > 0 ? "skill" : "reference")}`;
     if (partial) text += ` ${theme.fg("warning", `⚠ partial: ${partial}`)}`;
+    if (references.length > 0) text += ` ${theme.fg("dim", `+ ${referenceList(references)}`)}`;
   }
   const hidden = names.slice(COLLAPSED_SKILLS);
   if (hidden.length > 0)

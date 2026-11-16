@@ -16,12 +16,20 @@ export interface RenderContext {
   details?: boolean;
   /** The first statically identifiable host call in submitted source. */
   functionCall?: FunctionCall;
+  /** The skills of returned reads, recorded by file when the call finished. */
+  skillFiles?: Readonly<Record<string, SkillFile>>;
 }
 
-/** A returned read of a skill file: what the transcript shows in Pi's `[skill] name` style. */
-export interface SkillMention {
-  /** The skill's directory name, which Pi requires to match the skill's name. */
+/** The skill a returned read's file belongs to, as the tool recorded it. */
+export interface SkillFile {
   name: string;
+  kind: "skill" | "reference";
+  /** A reference's path relative to its skill's directory. */
+  reference?: string;
+}
+
+/** A returned read of a skill's file: what the transcript shows in Pi's `[skill] name` style. */
+export interface SkillMention extends SkillFile {
   /** Line spans the read returned. */
   spans: Array<[number, number]>;
   totalLines: number;
