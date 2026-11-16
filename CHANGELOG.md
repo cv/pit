@@ -4,6 +4,18 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-11-16
+
+### Added
+
+- `typescript` results mark skill reads the way Pi's own read tool does (#394). A returned read of a loaded skill's file is headed `[skill] <name>` instead of its path, such as `✓ [skill] pit-delivery, 1-176 of 176, raw`; a returned read of another file in a skill's folder is headed `[skill ref] <name>`. Skill reads inside a returned batch, array, or object get one row per skill, with `⚠ partial: lines …` when the reads miss lines of the skill file and `+ references/guide.md` for its other files. Only reads the program returned are marked. Saved sessions keep the skills they ran with; older sessions mark any `SKILL.md`, named after its folder.
+
+### Changed
+
+- A returned object with a string `outcome` field shows it in the result headline, such as `Returned 4 fields: … · outcome: pending`, so a completed call whose work is still pending or failed no longer reads as plain success (#391).
+- `npm.run` results name the script they ran, such as `run check, exit 0` (#391).
+- Repository maintainer functions: `ci.waitForRun` and `pr.waitForChecks` without `attempts` poll until their 285-second budget is spent (#391). `ux.manageSession` takes a `skills` option for loading skills in the isolated Pi (#394).
+
 ## [0.37.0] - 2026-11-15
 
 ### Added
