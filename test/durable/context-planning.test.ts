@@ -1,8 +1,10 @@
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { describe, expect, it } from "vitest";
 
-import { APPLY_STAGED_EDITS, APPLY_STAGED_EDITS_HOOK } from "../../src/durable/context/apply.js";
+import { APPLY_STAGED_EDITS, createApplyEditsHook } from "../../src/durable/context/apply.js";
+import { planCollapse } from "../../src/durable/context/collapse.js";
 import { planElide, planSummarize } from "../../src/durable/context/edits.js";
+import { createPitDurableExtension } from "../../src/durable/index.js";
 import { StagedContextChanges } from "../../src/durable/context/staging.js";
 import { readContextView } from "../../src/durable/context/view.js";
 import { createDurableSessionHandler } from "../../src/durable/session.js";
@@ -430,7 +432,7 @@ describe("durable session handler", () => {
 });
 
 describe("staged rewrites at the end of a run", () => {
-  const afterRun = (APPLY_STAGED_EDITS_HOOK.handlers as any).afterRun;
+  const afterRun = (createApplyEditsHook(undefined).handlers as any).afterRun;
 
   function runApi(pages: any[][]) {
     return {
@@ -455,6 +457,175 @@ describe("staged rewrites at the end of a run", () => {
     await expect(
       afterRun({ first: 1, last: 2 }, runApi([[{ id: 1, kind: "pi.user" }]]), context),
     ).resolves.toBeUndefined();
+  });
+
+  it("asks for the collapse after every answered run, from the run's first entry", async () => {
+    const collapse = (createApplyEditsHook({ keepRuns: 1, minTokens: 0 }).handlers as any).afterRun;
+    await expect(
+      collapse({ first: 4, last: 6 }, runApi([[{ id: 4, kind: "pi.user" }]]), context),
+    ).resolves.toEqual({
+      tasks: [
+        {
+          task: APPLY_STAGED_EDITS,
+          input: { pending: [], collapse: { keepRuns: 1, minTokens: 0, first: 4 } },
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["keepRuns below one", { keepRuns: 0 }, /keepRuns must be a positive integer/],
+    ["a negative minTokens", { minTokens: -1 }, /minTokens must be a non-negative integer/],
+  ])("rejects a collapse option with %s", (_name, collapse, message) => {
+    expect(() => createPitDurableExtension({ collapse })).toThrow(message);
+  });
+});
+
+describe("collapsing finished runs' tool calls", () => {
+  const ALL = { keepRuns: 1, minTokens: 0 };
+
+  function ts(id: string, code: string, extra: Record<string, unknown> = {}) {
+    return { type: "toolCall", id, name: "typescript", arguments: { code, ...extra } };
+  }
+
+  /** One finished run whose tool-calling entry has `blocks`, then the current run's input. */
+  function finished(blocks: any[], results: any[]) {
+    const answer = 3 + results.length;
+    return {
+      entries: [
+        user(1, "start"),
+        assistant(2, blocks),
+        ...results,
+        assistant(answer, [{ type: "text", text: "answer" }], "stop"),
+        user(answer + 1, "next"),
+      ],
+      first: answer + 1,
+    };
+  }
+
+  async function line(blocks: any[], results: any[]): Promise<string> {
+    const { entries, first } = finished(blocks, results);
+    const plan = planCollapse(await view(entries), first, ALL);
+    return (plan?.edits[0] as any).messages[0].content.at(-1).text;
+  }
+
+  const sized = (text: string) => text.replace(/~[\d.]+K? tokens/, "~N tokens");
+  const READ = 'async ({ workspace: { read, search } }) => read("a")';
+
+  it.each([
+    [
+      "a labelled typescript call",
+      [ts("a", `// @pit: {"label": "Read the sources"}\n${READ}`)],
+      [result(3, "a", BIG)],
+      '[Pit: collapsed typescript call · "Read the sources" · workspace.read, workspace.search · ok · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
+    [
+      "an unlabelled call, by its program's first line",
+      [ts("a", "async ({ git: { status } }) => status([])\n// more")],
+      [result(3, "a", BIG)],
+      '[Pit: collapsed typescript call · "async ({ git: { status } }) => status([])" · git.status · ok · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
+    [
+      "a failed call, by its error's first line",
+      [ts("a", "async ({ git: { status } }) => status([])", { label: "Check status" })],
+      [result(3, "a", `fatal: not a git repository\n${BIG}`, { isError: true })],
+      '[Pit: collapsed typescript call · "Check status" · git.status · failed: fatal: not a git repository · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
+    [
+      "a call of another tool, by its name",
+      [call("a", "read")],
+      [result(3, "a", BIG, { tool: "read" })],
+      '[Pit: collapsed read call · ok · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
+    [
+      "an entry with several calls and results",
+      [ts("a", READ, { label: "Read" }), call("b", "echo")],
+      [result(3, "a", BIG), result(4, "b", `boom\n${BIG}`, { isError: true, tool: "echo" })],
+      '[Pit: collapsed 2 tool calls · typescript "Read" · workspace.read, workspace.search · ok; echo · failed: boom · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3"), session.inspectEntry("4")]',
+    ],
+  ])("writes one line for %s", async (_name, blocks, results, expected) => {
+    expect(sized(await line(blocks, results))).toBe(expected);
+  });
+
+  it("bounds a line to 512 bytes: functions go first, then the description's end, never the IDs", async () => {
+    const names = Array.from({ length: 30 }, (_, index) => `n${index}: { f${index} }`).join(", ");
+    const label = "Labél 🙂 ".repeat(40);
+    const long = await line(
+      [ts("a", `async ({ ${names} }) => 1`, { label })],
+      [result(3, "a", `${"error ".repeat(60)}\n${BIG}`, { isError: true })],
+    );
+    expect(new TextEncoder().encode(long).length).toBeLessThanOrEqual(512);
+    expect(long).not.toContain("n0.f0");
+    expect(long).toContain("· failed: error error");
+    expect(sized(long)).toMatch(
+      / · ~N tokens · originals: session\.inspectEntry\("2"\), session\.inspectEntry\("3"\)\]$/,
+    );
+
+    const steps = Array.from({ length: 30 }, (_, index) =>
+      ts(`c${index}`, "async () => 1", { label: `Step ${index} of a long series` }),
+    );
+    const many = await line(
+      steps,
+      steps.map((_, index) => result(3 + index, `c${index}`, BIG)),
+    );
+    expect(new TextEncoder().encode(many).length).toBeLessThanOrEqual(512);
+    expect(many).not.toContain("\uFFFD");
+    expect(many).toMatch(/^\[Pit: collapsed 30 tool calls · typescript "Step 0 of a long series" · ok; .*… · ~/);
+    const ids = Array.from({ length: 31 }, (_, index) => `"${index + 2}"`).join(", ");
+    expect(many).toContain(`originals: session.inspectEntry(id) for ${ids}]`);
+  });
+
+  it("leaves a call its line would not shrink", async () => {
+    const { entries, first } = finished([ts("a", "1")], [result(3, "a", "ok")]);
+    expect(planCollapse(await view(entries), first, ALL)).toBeUndefined();
+  });
+
+  const answer = (id: number) => assistant(id, [{ type: "text", text: BIG }], "stop");
+  const THINKING = { type: "thinking", thinking: "why", thinkingSignature: "sig" };
+  const RUNS = [
+    user(1, "one"),
+    assistant(2, [ts("a", "async () => 1", { label: "A" })]),
+    result(3, "a", BIG),
+    answer(4),
+    user(5, "two"),
+    assistant(6, [ts("b", "async () => 1", { label: "B" })]),
+    result(7, "b", BIG),
+    answer(8),
+    // A host message, then the user's, start run three.
+    user(9, "host note", "app.note"),
+    user(10, "three"),
+    assistant(11, [THINKING, { type: "text", text: "Reading." }, ts("c", "async () => 1")]),
+    result(12, "c", BIG),
+    answer(13),
+    user(14, "four"),
+    assistant(15, [ts("d", "async () => 1", { label: "D" })]),
+    result(16, "d", BIG),
+    answer(17),
+    user(18, "current"),
+    assistant(19, [ts("e", "async () => 1")]),
+    result(20, "e", BIG),
+  ];
+
+  it.each([
+    ["every finished run but the newest", 1, ["2", "3", "6", "7", "11", "12", "15", "16"]],
+    ["all but the newest two runs", 2, ["2", "3", "6", "7", "11", "12"]],
+    ["no run when keeping as many as there are", 5, undefined],
+  ])("collapses %s, never an answer or a message", async (_name, keepRuns, covers) => {
+    const plan = planCollapse(await view(RUNS), 18, { keepRuns, minTokens: 0 });
+    expect(plan?.provenance.covers).toEqual(covers);
+  });
+
+  it("keeps an entry's thinking and text, and collapses only after the compaction head", async () => {
+    const plan = planCollapse(await view(RUNS), 18, ALL);
+    const carrier = (plan?.edits.find((edit) => edit.target === 11) as any).messages[0];
+    expect(carrier.content.slice(0, 2)).toEqual([THINKING, { type: "text", text: "Reading." }]);
+    expect(carrier.content[2].text).toMatch(/^\[Pit: collapsed typescript call · "async \(\) => 1" · ok/);
+    expect(carrier.stopReason).toBe("stop");
+
+    const head = { ...user(21, "[summary]", "pi.compaction"), head: 10 };
+    const compacted = planCollapse(await view([...RUNS, head], { head }), 18, ALL);
+    expect(compacted?.provenance.targets).toEqual(["11", "15"]);
+    expect(planCollapse(await view(RUNS), 18, { keepRuns: 1, minTokens: 100_000 })).toBeUndefined();
   });
 });
 
