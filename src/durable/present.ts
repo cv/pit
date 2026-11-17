@@ -95,15 +95,20 @@ function resultText(result: PresentedToolResult): string {
 
 const firstLine = (text: string) => (text.trimStart().split("\n", 1)[0] as string).trim();
 
-/** The functions a program injects, such as `workspace.read · git.status`; none when it does not parse. */
-function injected(code: string): string {
+/** The functions a program injects, such as `workspace.read` and `git.status`; none when it does not parse. */
+function injectedFunctions(code: string): string[] {
   try {
-    return getFunctionDependencies(code)
-      .dependencies.map(({ id }) => id)
-      .join(" · ");
+    return getFunctionDependencies(code).dependencies.map(({ id }) => id);
   } catch {
-    return "";
+    return [];
   }
+}
+
+const injected = (code: string) => injectedFunctions(code).join(" · ");
+
+/** A call's title: its label, else the program's first line, its `functionId`, or `typescript`. */
+function callTitle(call: CallArguments): string {
+  return call.label ?? (firstLine(call.code) || call.functionId || "typescript");
 }
 
 /** The function a `saveOnly` call saved: from its result, else its `functionId` or declaration. */
@@ -136,7 +141,7 @@ export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
       .filter((section) => section !== "")
       .join("\n");
     return {
-      title: call.label ?? (firstLine(call.code) || call.functionId || "typescript"),
+      title: callTitle(call),
       ...(body === "" ? {} : { body }),
     };
   },
@@ -161,3 +166,30 @@ export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
     };
   },
 };
+
+/** What a `typescript` call did, in the parts a one-line digest of a finished call names. */
+export interface TypeScriptCallDigest {
+  /** The call's label, else the program's first line, as `present.call` titles it. */
+  title: string;
+  /** The functions the program injected; none for `saveOnly` or a program that does not parse. */
+  functions: string[];
+  /** `ok`, `failed: <error's first line>`, `asked: <title>`, `saved <name>`, or `no result`. */
+  outcome: string;
+}
+
+/** A finished `typescript` call as `present` reads it, for hosts and Pit's collapsed lines. */
+export function digestTypeScriptCall(
+  args: unknown,
+  result: PresentedToolResult | undefined,
+): TypeScriptCallDigest {
+  const call = callArguments(args);
+  const functions = call.saveOnly ? [] : injectedFunctions(call.code);
+  const title = callTitle(call);
+  if (result === undefined || result.isError) return { title, functions, outcome: toolOutcome(result) };
+  const details = isRecord(result.details) ? result.details : {};
+  if (isRecord(details.question) && nonEmpty(details.question.title)) {
+    return { title, functions, outcome: `asked: ${details.question.title}` };
+  }
+  const saved = call.saveOnly ? savedName(call, details.value) : undefined;
+  return { title, functions, outcome: saved === undefined ? "ok" : `saved ${saved}` };
+}
