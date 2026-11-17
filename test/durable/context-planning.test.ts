@@ -506,7 +506,8 @@ describe("collapsing finished runs' tool calls", () => {
   async function line(blocks: any[], results: any[]): Promise<string> {
     const { entries, first } = finished(blocks, results);
     const plan = planCollapse(await view(entries), first, ALL);
-    return (plan?.edits[0] as any).messages[0].content.at(-1).text;
+    if (!plan) throw new Error("Nothing collapsed");
+    return (plan.edits[0] as any).messages[0].content.at(-1).text;
   }
 
   const sized = (text: string) => text.replace(/~[\d.]+K? tokens/, "~N tokens");
@@ -619,7 +620,8 @@ describe("collapsing finished runs' tool calls", () => {
 
   it("keeps an entry's thinking and text, and collapses only after the compaction head", async () => {
     const plan = planCollapse(await view(RUNS), 18, ALL);
-    const carrier = (plan?.edits.find((edit) => edit.target === 11) as any).messages[0];
+    if (!plan) throw new Error("Nothing collapsed");
+    const carrier = (plan.edits.find((edit) => edit.target === 11) as any).messages[0];
     expect(carrier.content.slice(0, 2)).toEqual([THINKING, { type: "text", text: "Reading." }]);
     expect(carrier.content[2].text).toMatch(
       /^\[Pit: collapsed typescript call · "async \(\) => 1" · ok/,
