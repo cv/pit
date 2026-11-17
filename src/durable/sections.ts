@@ -5,7 +5,6 @@ import { PROMPT_GUIDELINES, PROMPT_SNIPPET } from "../tool/metadata.js";
 import type { DurableFunctionStore } from "./state.js";
 import { createDurableToolCatalog, durableToolsPrompt } from "./tools.js";
 
-/** How to use the `typescript` tool: Pi's prompt snippet and guidelines for it. */
 /** Calls from finished runs collapse to their labels; this tells the model to write labels for it. */
 export const COLLAPSE_GUIDELINE =
   "Calls from finished runs collapse to their labels: give each call a specific label, and say in your answer what a later run will need.";

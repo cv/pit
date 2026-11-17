@@ -121,10 +121,10 @@ function cutToBytes(text: string, bytes: number): string {
 
 function describeCall(call: CollapsedCall, functions: boolean, named: boolean): string {
   const title = call.title === undefined ? undefined : `"${clip(call.title, MAX_TITLE_CHARS)}"`;
-  const name = named ? [title === undefined ? call.tool : `${call.tool} ${title}`] : [];
+  // With several calls each names its tool; a single call's tool is already in the line's head.
+  const name = named ? [call.tool, ...(title === undefined ? [] : [title])].join(" ") : title;
   return [
-    ...name,
-    ...(!named && title !== undefined ? [title] : []),
+    ...(name === undefined ? [] : [name]),
     ...(functions && call.functions.length > 0 ? [call.functions.join(", ")] : []),
     clip(call.outcome, MAX_OUTCOME_CHARS),
   ].join(" · ");

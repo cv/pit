@@ -97,6 +97,7 @@ export function planCollapse(
 ): PlannedEdit | undefined {
   if (view.tokens - view.systemTokens <= settings.minTokens) return undefined;
   const runs = finishedRuns(view, first);
+  // The run that just answered is one of the `keepRuns` kept whole, and `runs` excludes it.
   const older = runs.slice(0, Math.max(0, runs.length - (settings.keepRuns - 1)));
   const edits: ContextEdit[] = [];
   const targets: string[] = [];
@@ -107,11 +108,12 @@ export function planCollapse(
     if (!results) continue;
     const message = item.messages[0] as AssistantMessage;
     const calls = message.content.flatMap((block) => (block.type === "toolCall" ? [block] : []));
-    const tokens = item.tokens + results.reduce((sum, result) => sum + result.tokens, 0);
+    const ids = [item.id, ...results.map((result) => result.id)];
+    const tokens = [item, ...results].reduce((sum, entry) => sum + entry.tokens, 0);
     const note = collapsedCallNote(
       calls.map((call) => describe(call, view.results.get(call.id))),
       tokens,
-      [item.id, ...results.map((result) => result.id)],
+      ids,
     );
     const replacement = collapsedMessage(message, note);
     const kept = messageTokens(replacement);
@@ -119,7 +121,7 @@ export function planCollapse(
     edits.push({ target: item.entry.id, action: "replace", messages: [replacement] });
     for (const result of results) edits.push({ target: result.entry.id, action: "omit" });
     targets.push(item.id);
-    covers.push(item.id, ...results.map((result) => result.id));
+    covers.push(...ids);
     tokensFreed += tokens - kept;
   }
   if (edits.length === 0) return undefined;

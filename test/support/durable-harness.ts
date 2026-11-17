@@ -186,7 +186,7 @@ export class DurableTestHost {
     const before = await this.#latestEntry(target);
     const submission = await target.submit({ type: "input", ...input }, context);
     const settled = await submission.wait(context);
-    if ((settled.status === "done") === (options.fail === true)) {
+    if (options.fail ? settled.status === "done" : settled.status !== "done") {
       throw new Error(`Run ended ${settled.status}`);
     }
     // Work the run started after its answer, such as staged context edits, finishes first.
