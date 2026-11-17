@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-17
+
 ### Changed
 
 - On pi-durable hosts, Pit collapses the tool calls of finished runs to one line each after every run (#396). This changes what pi-durable hosts such as pi-action send the model: once a conversation's messages pass 32,000 tokens, calls from runs before the newest are replaced by a line naming their label, injected functions, outcome, size, and `session.inspectEntry` IDs, with their results omitted. Answers, user messages, and thinking stay. Configure it with `collapse: { keepRuns, minTokens }`, or turn it off with `collapse: false`. A durable guideline asks the model for specific labels and answers that say what a later run will need.
