@@ -167,6 +167,14 @@ export const TYPESCRIPT_PRESENTATION: ToolPresentation = {
   },
 };
 
+/** Any tool's stored result as `ok`, `failed: <error's first line>`, `failed`, or `no result`. */
+export function toolOutcome(result: PresentedToolResult | undefined): string {
+  if (result === undefined) return "no result";
+  if (!result.isError) return "ok";
+  const line = firstLine(resultText(result));
+  return line === "" ? "failed" : `failed: ${line}`;
+}
+
 /** What a `typescript` call did, in the parts a one-line digest of a finished call names. */
 export interface TypeScriptCallDigest {
   /** The call's label, else the program's first line, as `present.call` titles it. */
