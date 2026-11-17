@@ -1,1 +1,1 @@
-{"format":1,"seq":207,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"attern before writing a new one.\n\n"]]}}]}
+{"format":1,"seq":208,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"For the elision scenario, I'm realizing keepRuns needs to be set carefully so run 1 isn't already collapsed before the model tries to elide it—using keepRuns:2 means nothing collapses after"]]}}]}
