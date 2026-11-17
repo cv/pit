@@ -91,14 +91,13 @@ jobs:
           extension="$RELEASED"
           if [ "$IS_PR" = "true" ]; then
             read -r head sha labelled < <(gh api "repos/$REPO/pulls/$NUMBER" \
-              --jq '[.head.repo.full_name // "", .head.sha, (any(.labels[]; .name == "pi:pit-from-pr"))] | @tsv')
+              --jq '[.head.repo.full_name // "", .head.sha, (any(.labels[]; .name == "pi:pit-from-pr"))] | @tsv') || true
             if [ "$labelled" = "true" ] && [ "$head" = "$REPO" ]; then
               extension="github:$REPO#$sha"
               echo "::notice title=Pit under test::PR #$NUMBER is labelled pi:pit-from-pr: loading $extension"
             fi
           fi
           echo "extension=$extension" >> "$GITHUB_OUTPUT"
-
 
       - name: Run pi-action
         uses: cv/pi-action@27723deedf4b41e99924171402c657c8d4e9ff69 # v2.5.4
@@ -115,7 +114,8 @@ jobs:
           model_context_window: 1050000
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
-          # A released pit, not this checkout: pi edits the checkout, and its tools shouldn't change under it.
+          # A released pit (or a PR's pinned head, above), not this checkout: pi edits the checkout, and its
+          # tools shouldn't change under it.
           extensions: ${{ steps.pit.outputs.extension }}
           # Load this repository's .pi/pit.json and .pi/functions (delivery.*, tests.*, pr.*), which AGENTS.md
           # relies on. Safe here: only OWNER/MEMBER can start a run, comment runs check out main, and fork PRs
