@@ -40,6 +40,7 @@ The durable entry imports neither Pi's coding agent, Pi's TUI, nor TypeBox, and 
 | `log`          | none                                                                           | `info` and `warning` callbacks for what Pi would show as notifications: saved functions that failed to load, an unreadable `pit.json`, and project functions left unloaded by trust.                                                                                                             |
 | `images`       | none                                                                           | An `ImageProcessor` that resizes and converts the images `workspace.viewImage` attaches to fit the model, such as `await createNodePhotonImages()` from `@earendil-works/pi-durable/images/node`. Without one, supported images within the byte limit attach as they are. See [Images](#images). |
 | `hideTools`    | `true`                                                                         | Tools to stop offering to the model; they stay enabled for other tools. `true` hides pi-durable's coding tools (`read`, `write`, `edit`, `bash`, `powershell`), an array names the tools instead, and `false` hides none. See [Tools the model sees](#tools-the-model-sees).                     |
+| `collapse`     | `{ keepRuns: 1, minTokens: 32000 }`                                            | After each run, collapses the tool calls of finished runs older than the newest `keepRuns` to one line each, once the conversation's messages pass `minTokens`. `false` turns it off. See [Collapsing finished runs](#collapsing-finished-runs). |
 
 ## What works
 
@@ -142,7 +143,24 @@ When edits apply, as on Pi:
 
 Receipts report `appliesAt` (`turn_end` or `run_end`), the estimated tokens freed, and `cacheMode: "unknown"`: pi-durable does not report the provider's cache, so the re-prefill estimate assumes the whole conversation is sent again.
 
-What the prototype established (pi-durable 1.5): replacing an assistant tool-call entry with text while omitting its result keeps the context valid; omitting only a result makes pi-durable answer the call with a placeholder ("Tool result unavailable"), and omitting only a call drops its now-orphaned result. Pit always edits a call and its results together. A replaced call can leave two assistant messages in a row; the prototype used pi-ai's faux provider, so check a strict provider before relying on it.
+What the prototype established (pi-durable 1.5): replacing an assistant tool-call entry with text while omitting its result keeps the context valid; omitting only a result makes pi-durable answer the call with a placeholder ("Tool result unavailable"), and omitting only a call drops its now-orphaned result. Pit always edits a call and its results together. A replaced call can leave two or more assistant messages in a row. Anthropic's Messages API, through the NVIDIA route pi-action uses, accepts that, also when each message keeps its signed thinking block; see below.
+
+### Collapsing finished runs
+
+A durable conversation, such as a pi-action thread, keeps every tool call and result until pi-durable's threshold compaction runs, and each follow-up sends the whole thread again, usually on a cold prompt cache. So after every run that answers, Pit collapses the tool calls of older finished runs to one line each:
+
+```
+[Pit: collapsed typescript call · "Read npm and git global and command sources" · workspace.read, workspace.search · ok · ~18.2K tokens · originals: session.inspectEntry("212"), session.inspectEntry("213")]
+```
+
+- **The line** names the call's label (the `// @pit:` header or `label` argument, else the program's first line), the functions it injected, its outcome (`ok`, `failed: <error's first line>`, `asked: <title>`, or `saved <name>`), its size, and the `session.inspectEntry` IDs of the call and every result. Other tools show their name and outcome. An entry with several calls lists each, separated by `;`. A line takes at most 512 bytes: labels and outcomes are cut to 160 characters each, then the injected functions go, then the description is cut at its end. The size and IDs are never cut; IDs switch to the shorter `session.inspectEntry(id) for "212", "213"` when the usual form does not fit.
+- **What collapses:** assistant tool calls and their results, the pairing `elide` uses. The assistant entry keeps its text and thinking, signatures included; its calls become the line and its results are omitted, so no call is left unanswered. User and host messages, answers, compaction summaries, notes, entries already rewritten or staged for a rewrite, and entries no larger than their line stay as they are. A model's own `elide` or `summarize` wins: the collapse skips its targets.
+- **When:** in the same `afterRun` write that applies the edits the run staged, so one `pit.context-edit` entry carries both; collapses are recorded as `operation: "collapse"`, and `session.outline()` shows collapsed entries as `elided` with the line as their preview. A failed or aborted run collapses nothing. A run that ended on a `terminate` round, such as a posted question, counts as finished.
+- **Which runs:** a run starts at the user or host messages after the previous run's entries. The newest `keepRuns` runs (default 1, the run that just answered) stay whole, since a follow-up usually refers to the run before it. The collapse reads only the active context, so it never crosses the newest compaction head, and a fork keeps the view it had at its fork point.
+- **`minTokens`** (default 32,000) counts the conversation's messages, not the system prompt, tools, and sections. Below it the transcript costs less than Pit's fixed prompt on pi-action (about 41K tokens), so collapsing saves little and short threads stay verbatim.
+- **The model is told.** With collapse on, the `pit_guidelines` section adds: "Calls from finished runs collapse to their labels: give each call a specific label, and say in your answer what a later run will need." Collapsed lines are only as good as their labels, and the run's answer is what a later run reads first.
+
+Pit checked the collapsed shape against Opus 5.5 through Anthropic's Messages API on NVIDIA's endpoint: a user message, two collapsed tool-calling turns each keeping its own signed thinking block, the answer, and a follow-up were accepted, and with the guideline in the prompt the model read the lines as its own earlier calls. Without the guideline it once took a collapsed line for text it had written instead of a call. Sending the same signed thinking block twice was refused as duplicating model output; collapsing never copies a block, since each entry keeps its own.
 
 ## Security notes
 
