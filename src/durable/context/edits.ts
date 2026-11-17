@@ -107,9 +107,8 @@ function clip(text: string, chars: number): string {
   return line.length > chars ? `${line.slice(0, chars - 1).trimEnd()}…` : line;
 }
 
-/** `text` within `bytes` UTF-8 bytes, cut at a code point and ending in "…" when cut. */
+/** `text` cut to `bytes` UTF-8 bytes at a code point, ending in "…"; only for text over the bound. */
 function cutToBytes(text: string, bytes: number): string {
-  if (byteLength(text) <= bytes) return text;
   let used = byteLength("…");
   let kept = "";
   for (const char of text) {
@@ -117,7 +116,7 @@ function cutToBytes(text: string, bytes: number): string {
     if (used > bytes) break;
     kept += char;
   }
-  return kept === "" ? "" : `${kept.trimEnd()}…`;
+  return `${kept.trimEnd()}…`;
 }
 
 function describeCall(call: CollapsedCall, functions: boolean, named: boolean): string {
@@ -166,7 +165,8 @@ export function collapsedCallNote(
   }
   const budget = MAX_COLLAPSED_LINE_BYTES - byteLength(line("", originals)) - byteLength(" · ");
   const description = calls.map((call) => describeCall(call, false, named)).join("; ");
-  return line(budget > 0 ? cutToBytes(description, budget) : "", originals);
+  // When the IDs leave no room for a cut description and its "…", the line names none.
+  return line(budget > byteLength("…") ? cutToBytes(description, budget) : "", originals);
 }
 
 export function elisionStub(id: string, tokens: number, reason?: string): string {
