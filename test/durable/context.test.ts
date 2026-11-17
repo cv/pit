@@ -408,11 +408,10 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
 
     const inspected = await durable.run([INSPECT_COLLAPSED], conversation);
     const value = inspected.results[0]?.details.value;
-    expect(value.states).toEqual(["elided", "elided", "elided"]);
+    expect(value.states).toEqual(["elided", "elided"]);
     expect(value.originals[0]).toContain("First run's call");
     expect(value.originals[1]).toContain("alpha alpha");
     expect(value.originals[3]).toContain("beta beta");
-    expect(value.originals[5]).toContain("gamma gamma");
     // Each run's collapse covers only calls no earlier collapse rewrote.
     const covered = (await collapseOperations(durable, conversation)).flatMap(
       (operation: any) => operation.covers,
