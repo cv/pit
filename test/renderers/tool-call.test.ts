@@ -85,6 +85,64 @@ describe("tool rendering", () => {
     expect(waiting.split("\n")[1]).toContain("waiting for source…");
   });
 
+  it.each<{ name: string; argsComplete: boolean; isPartial: boolean }>([
+    { name: "generating", argsComplete: false, isPartial: true },
+    { name: "running", argsComplete: true, isPartial: true },
+    { name: "settled or replayed", argsComplete: true, isPartial: false },
+  ])("renders source-header labels while $name", ({ argsComplete, isPartial }) => {
+    const args = {
+      code: '// @pit: {"label": "Inspect publication changes"}\nasync ({ git: { status } }) => status(["--short"])',
+    };
+    const original = structuredClone(args);
+    const rendered = stripTerminalSequences(
+      renderToolCall(args, { expanded: false, argsComplete, isPartial }),
+    );
+    expect(rendered.split("\n")[0]).toContain("Inspect publication changes");
+    expect(args).toEqual(original);
+  });
+
+  it.each<{ name: string; isError: boolean }>([
+    { name: "successful", isError: false },
+    { name: "failed", isError: true },
+  ])("shows source-header options in expanded $name results", ({ isError }) => {
+    const args = {
+      code: '// @pit: {"functionId": "company.check", "saveOnly": true, "params": {"file": "INPUT_SENTINEL"}, "timeoutMs": 4321}\nasync function check({}, input: { file: string }) { return input.file; }',
+    };
+    const rendered = stripTerminalSequences(
+      renderToolResult(
+        {
+          content: [{ type: "text", text: "RESULT_SENTINEL" }],
+          details: { value: "RESULT_SENTINEL", truncated: false },
+        },
+        { expanded: true, isPartial: false },
+        { args, isError },
+      ),
+    );
+    expect(rendered).toContain("functionId: company.check");
+    expect(rendered).toContain("saveOnly: true");
+    expect(rendered).toContain("timeoutMs: 4321");
+    expect(rendered).toContain("Params");
+    expect(rendered).toContain("INPUT_SENTINEL");
+    expect(rendered).toContain("async function check");
+    expect(rendered.indexOf("RESULT_SENTINEL")).toBeLessThan(rendered.indexOf("Inputs"));
+  });
+
+  it.each<{ name: string; header: string; label?: string }>([
+    { name: "incomplete JSON", header: '// @pit: {"label": "unfinished' },
+    { name: "malformed JSON", header: "// @pit: {label: 1}" },
+    { name: "unknown option", header: '// @pit: {"unknown": true}' },
+    { name: "conflicting label", header: '// @pit: {"label": "header"}', label: "explicit" },
+  ])("keeps $name headers inspectable without breaking rendering", ({ header, label }) => {
+    const code = header + "\nasync ({}) => 42";
+    const args = { code, ...(label === undefined ? {} : { label }) };
+    const rendered = stripTerminalSequences(
+      renderToolCall(args, { expanded: true, argsComplete: false }),
+    );
+    expect(rendered).toContain(header);
+    expect(rendered).toContain("async ({}) => 42");
+    expect(args.code).toBe(code);
+  });
+
   it("re-renders completed source with Oxfmt formatting", async () => {
     const args = {
       code: 'async({workspace,git})=>{const[file,status]=await Promise.all([workspace.read("package.json",{format:"raw"}),git.status(["--short"])]);return{file,status}}',
