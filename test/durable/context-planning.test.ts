@@ -544,6 +544,30 @@ describe("collapsing finished runs' tool calls", () => {
       [result(3, "a", BIG), result(4, "b", `boom\n${BIG}`, { isError: true, tool: "echo" })],
       '[Pit: collapsed 2 tool calls · typescript "Read" · workspace.read, workspace.search · ok; echo · failed: boom · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3"), session.inspectEntry("4")]',
     ],
+    [
+      "a call left without a result",
+      [{ type: "toolCall", id: "a", name: "write", arguments: { content: BIG } }],
+      [],
+      '[Pit: collapsed write call · no result · ~N tokens · original: session.inspectEntry("2")]',
+    ],
+    [
+      "a failed call without error text",
+      [{ type: "toolCall", id: "a", name: "bash", arguments: { command: BIG } }],
+      [result(3, "a", "", { isError: true, tool: "bash" })],
+      '[Pit: collapsed bash call · failed · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
+    [
+      "a call that posted a question",
+      [ts("a", READ, { label: "Ask which branch" })],
+      [withDetails(result(3, "a", BIG), { question: { title: "Which branch?" } })],
+      '[Pit: collapsed typescript call · "Ask which branch" · workspace.read, workspace.search · asked: Which branch? · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
+    [
+      "a saveOnly call, by the function it saved",
+      [ts("a", "async function check({ git: { status } }) { return status([]); }", { saveOnly: true })],
+      [withDetails(result(3, "a", BIG), { value: { savedFunction: "repo.check" } })],
+      '[Pit: collapsed typescript call · "async function check({ git: { status } }) { return status([]); }" · saved repo.check · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
+    ],
   ])("writes one line for %s", async (_name, blocks, results, expected) => {
     expect(sized(await line(blocks, results))).toBe(expected);
   });
@@ -576,6 +600,16 @@ describe("collapsing finished runs' tool calls", () => {
     );
     const ids = Array.from({ length: 31 }, (_, index) => `"${index + 2}"`).join(", ");
     expect(many).toContain(`originals: session.inspectEntry(id) for ${ids}]`);
+
+    // IDs alone over the bound: the line keeps every one and names no call.
+    const crowd = Array.from({ length: 120 }, (_, index) => ts(`d${index}`, "async () => 1"));
+    const crowded = await line(
+      crowd,
+      crowd.map((_, index) => result(3 + index, `d${index}`, BIG)),
+    );
+    expect(crowded).toMatch(
+      /^\[Pit: collapsed 120 tool calls · ~[\d.]+K tokens · originals: session\.inspectEntry\(id\) for "2", "3", .*, "122"\]$/,
+    );
   });
 
   it("leaves a call its line would not shrink", async () => {
