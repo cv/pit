@@ -1,1 +1,1 @@
-{"format":1,"seq":777,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":778,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"turn 0 -> toolUse  [\"thinking(sig:true)\",\"text\",\"toolCall\"] [\"Step 1: the first 8 primes are 2, 3, 5, 7, 11, 13, 17 and 19. They add up to 77.\"]\n"]]}}]}
