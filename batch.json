@@ -1,1 +1,1 @@
-{"format":1,"seq":1033,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ test/durable/context-planning.test.ts (42 tests) 65ms\n"]]}}]}
+{"format":1,"seq":1034,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ test/durable/present.test.ts (26 tests) 1593ms\n   ✓ the typescript tool's present field (26)\n     ✓ summarizes a result by the functions injected and shows string fields as they are 650ms\n"]]}}]}
