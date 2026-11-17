@@ -1,5 +1,6 @@
 import {
   type AssistantMessage,
+  COLLAPSED_CALLS_PREFIX,
   type ContextEdit,
   type ContextItem,
   type ContextView,
@@ -81,6 +82,91 @@ function callNote(item: ContextItem, results: ContextItem[], reason?: string): s
     `originals: ${[item.id, ...results.map((result) => result.id)].map((id) => `session.inspectEntry("${id}")`).join(", ")}`,
   ];
   return `${parts.join(" · ")}]`;
+}
+
+/** The most UTF-8 bytes a collapsed call's line takes, unless its entry IDs alone take more. */
+export const MAX_COLLAPSED_LINE_BYTES = 512;
+const MAX_TITLE_CHARS = 160;
+const MAX_OUTCOME_CHARS = 160;
+
+/** One finished call as its collapsed line names it. */
+export interface CollapsedCall {
+  tool: string;
+  /** A `typescript` call's label, else its program's first line. */
+  title?: string;
+  functions: readonly string[];
+  /** `ok`, `failed: <error's first line>`, or another short outcome. */
+  outcome: string;
+}
+
+const encoder = new TextEncoder();
+const byteLength = (text: string) => encoder.encode(text).length;
+
+function clip(text: string, chars: number): string {
+  const line = text.replaceAll(/\s+/g, " ").trim();
+  return line.length > chars ? `${line.slice(0, chars - 1).trimEnd()}…` : line;
+}
+
+/** `text` within `bytes` UTF-8 bytes, cut at a code point and ending in "…" when cut. */
+function cutToBytes(text: string, bytes: number): string {
+  if (byteLength(text) <= bytes) return text;
+  let used = byteLength("…");
+  let kept = "";
+  for (const char of text) {
+    used += byteLength(char);
+    if (used > bytes) break;
+    kept += char;
+  }
+  return kept === "" ? "" : `${kept.trimEnd()}…`;
+}
+
+function describeCall(call: CollapsedCall, functions: boolean, named: boolean): string {
+  const title = call.title === undefined ? undefined : `"${clip(call.title, MAX_TITLE_CHARS)}"`;
+  const name = named ? [title === undefined ? call.tool : `${call.tool} ${title}`] : [];
+  return [
+    ...name,
+    ...(!named && title !== undefined ? [title] : []),
+    ...(functions && call.functions.length > 0 ? [call.functions.join(", ")] : []),
+    clip(call.outcome, MAX_OUTCOME_CHARS),
+  ].join(" · ");
+}
+
+/**
+ * The note that replaces a finished entry's tool calls and their results when Pit collapses them:
+ * each call's label and outcome, their size, and how to read the originals, in one bounded line.
+ * Over the bound, the injected functions go first, then the description is cut at its end; the
+ * size and the entry IDs stay, the IDs in a shorter form when the usual one does not fit.
+ */
+export function collapsedCallNote(
+  calls: readonly CollapsedCall[],
+  tokens: number,
+  ids: readonly string[],
+): string {
+  const head =
+    calls.length === 1
+      ? `${COLLAPSED_CALLS_PREFIX}${(calls[0] as CollapsedCall).tool} call`
+      : `${COLLAPSED_CALLS_PREFIX}${calls.length} tool calls`;
+  const line = (description: string, originals: string) =>
+    `${head}${description === "" ? "" : ` · ${description}`} · ~${formatTokens(tokens)} tokens · ${originals}]`;
+  const verbose =
+    ids.length === 1
+      ? `original: session.inspectEntry("${ids[0]}")`
+      : `originals: ${ids.map((id) => `session.inspectEntry("${id}")`).join(", ")}`;
+  const originals =
+    byteLength(line("", verbose)) <= MAX_COLLAPSED_LINE_BYTES
+      ? verbose
+      : `originals: session.inspectEntry(id) for ${ids.map((id) => `"${id}"`).join(", ")}`;
+  const named = calls.length > 1;
+  for (const functions of [true, false]) {
+    const full = line(
+      calls.map((call) => describeCall(call, functions, named)).join("; "),
+      originals,
+    );
+    if (byteLength(full) <= MAX_COLLAPSED_LINE_BYTES) return full;
+  }
+  const budget = MAX_COLLAPSED_LINE_BYTES - byteLength(line("", originals)) - byteLength(" · ");
+  const description = calls.map((call) => describeCall(call, false, named)).join("; ");
+  return line(budget > 0 ? cutToBytes(description, budget) : "", originals);
 }
 
 export function elisionStub(id: string, tokens: number, reason?: string): string {

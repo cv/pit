@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createPitDurableExtension } from "../../src/durable/index.js";
+import { createPitDurableExtension, type PitDurableOptions } from "../../src/durable/index.js";
 import { DurableTestHost } from "../support/durable-harness.js";
 
 let root: string;
@@ -321,5 +321,177 @@ describe("session.* on a pi-durable Harness", () => {
     expect(results[0]?.details.value).toMatchObject({ cache: { state: "unknown" } });
     expect(results[0]?.details.value).not.toHaveProperty("file");
     expect(results[0]?.details.value.contextTokens).toBeGreaterThan(0);
+  });
+});
+
+describe("collapsing finished runs on a pi-durable Harness", () => {
+  function collapsing(
+    collapse: PitDurableOptions["collapse"],
+    settings?: ConstructorParameters<typeof DurableTestHost>[0]["settings"],
+  ) {
+    return new DurableTestHost({
+      extension: createPitDurableExtension({ agentDir: join(root, "agent"), collapse }),
+      cwd,
+      ...(settings ? { settings } : {}),
+    });
+  }
+
+  const labelled = (label: string, word: string) => ({
+    label,
+    code: `async () => "${word} ".repeat(400)`,
+  });
+
+  const COLLAPSED =
+    /\[Pit: collapsed typescript call · "([^"]+)" · ok · ~[\d.]+K? tokens · originals: session\.inspectEntry\("\d+"\), session\.inspectEntry\("\d+"\)\]/g;
+
+  /** The labels of the collapsed lines the model sees, in order. */
+  function collapsedLabels(messages: readonly any[]): string[] {
+    return texts(messages).flatMap((text) =>
+      [...text.matchAll(COLLAPSED)].map((match) => match[1] as string),
+    );
+  }
+
+  /** The labels of the tool calls the model still sees verbatim. */
+  function callLabels(messages: readonly any[]): string[] {
+    return messages.flatMap((message: any) =>
+      message.role === "assistant"
+        ? message.content.flatMap((block: any) =>
+            block.type === "toolCall" ? [block.arguments.label] : [],
+          )
+        : [],
+    );
+  }
+
+  const userTexts = (messages: readonly any[]) =>
+    messages
+      .filter((message: any) => message.role === "user")
+      .flatMap((message) => texts([message]));
+
+  async function collapseOperations(durable: DurableTestHost, conversation: any) {
+    return (await durable.entries(conversation, "pit.context-edit")).flatMap((entry: any) =>
+      entry.data.operations.filter((operation: any) => operation.operation === "collapse"),
+    );
+  }
+
+  const INSPECT_COLLAPSED = {
+    label: "Read the collapsed originals",
+    code: `async ({ session: { outline, inspectEntry } }) => {
+  const { entries } = await outline({ roles: ["assistant"], previewChars: 2000 });
+  const lines = entries.filter((entry) => entry.preview.startsWith("[Pit: collapsed"));
+  const ids = lines.flatMap((entry) => [...entry.preview.matchAll(/inspectEntry\\("(\\d+)"\\)/g)].map((match) => match[1]));
+  return {
+    states: lines.map((entry) => entry.state),
+    originals: await Promise.all(ids.map(async (id) => (await inspectEntry(id, { limit: 200 })).original.text)),
+  };
+}`,
+  };
+
+  it("collapses older runs' calls, keeping the newest run, answers, user messages, and forks as they were", async () => {
+    const durable = collapsing({ keepRuns: 1, minTokens: 0 });
+    const conversation = await durable.root();
+    await durable.run([labelled("First run's call", "alpha")], conversation, {
+      content: "first ask",
+    });
+    await durable.run([labelled("Second run's call", "beta")], conversation, {
+      content: "second ask",
+    });
+    const fork = await durable.fork(conversation);
+    const third = await durable.run([labelled("Third run's call", "gamma")], conversation, {
+      content: "third ask",
+    });
+
+    const messages = await durable.messages(conversation);
+    expect(collapsedLabels(messages)).toEqual(["First run's call", "Second run's call"]);
+    expect(callLabels(messages)).toEqual(["Third run's call"]);
+    const text = texts(messages).join("\n");
+    expect(text).toContain("gamma gamma");
+    expect(text).not.toContain("alpha alpha");
+    expect(text).not.toContain("beta beta");
+    expect(userTexts(messages)).toEqual(["first ask", "second ask", "third ask"]);
+    expect(texts(messages).filter((line) => line === "done")).toHaveLength(3);
+    expectPairedToolCalls(messages);
+    expect(third.sections.pit_guidelines).toContain(
+      "Calls from finished runs collapse to their labels",
+    );
+    // A fork keeps the view it inherited: the parent's later collapse leaves its second run whole.
+    const forked = await durable.messages(fork);
+    expect(collapsedLabels(forked)).toEqual(["First run's call"]);
+    expect(callLabels(forked)).toEqual(["Second run's call"]);
+
+    const inspected = await durable.run([INSPECT_COLLAPSED], conversation);
+    const value = inspected.results[0]?.details.value;
+    expect(value.states).toEqual(["elided", "elided"]);
+    expect(value.originals[0]).toContain("First run's call");
+    expect(value.originals[1]).toContain("alpha alpha");
+    expect(value.originals[3]).toContain("beta beta");
+    // Each run's collapse covers only calls no earlier collapse rewrote.
+    const covered = (await collapseOperations(durable, conversation)).flatMap(
+      (operation: any) => operation.covers,
+    );
+    expect(covered).toHaveLength(6);
+    expect(new Set(covered).size).toBe(6);
+  });
+
+  it.each([
+    ["the conversation is within minTokens", { minTokens: 1_000_000 }, true],
+    ["collapse is false", false as const, false],
+  ])("collapses nothing when %s", async (_name, collapse, guideline) => {
+    const durable = collapsing(collapse);
+    const conversation = await durable.root();
+    await durable.run([labelled("First run's call", "alpha")], conversation);
+    await durable.run([labelled("Second run's call", "beta")], conversation);
+    const { sections } = await durable.run([labelled("Third run's call", "gamma")], conversation);
+    const messages = await durable.messages(conversation);
+    expect(collapsedLabels(messages)).toEqual([]);
+    expect(callLabels(messages)).toEqual([
+      "First run's call",
+      "Second run's call",
+      "Third run's call",
+    ]);
+    expect(await durable.entries(conversation, "pit.context-edit")).toEqual([]);
+    expect(sections.pit_guidelines?.includes("collapse to their labels")).toBe(guideline);
+  });
+
+  it("collapses nothing after a failed run, which drops its staged edits", async () => {
+    const durable = collapsing({ minTokens: 0 }, { retry: { enabled: false } });
+    const conversation = await durable.root();
+    await durable.run([labelled("First run's call", "alpha")], conversation);
+    await durable.run(
+      [onFirst("toolResult", "elide([entry.id])")],
+      conversation,
+      { content: "run" },
+      {
+        fail: true,
+      },
+    );
+    const messages = await durable.messages(conversation);
+    expect(collapsedLabels(messages)).toEqual([]);
+    expect(callLabels(messages)[0]).toBe("First run's call");
+    expect(texts(messages).join("\n")).not.toContain("[Elided by the model");
+    expect(await durable.entries(conversation, "pit.context-edit")).toEqual([]);
+  });
+
+  it("writes the model's staged elide and the collapse in one entry, leaving the elided call to the model", async () => {
+    const durable = collapsing({ keepRuns: 2, minTokens: 0 });
+    const conversation = await durable.root();
+    await durable.run(
+      [labelled("Elided call", "alpha"), labelled("Collapsed call", "beta")],
+      conversation,
+    );
+    await durable.run([labelled("Kept call", "gamma")], conversation);
+    await durable.run([onFirst("toolResult", "elide([entry.id])")], conversation);
+
+    const edits = await durable.entries(conversation, "pit.context-edit");
+    expect(
+      edits.map((entry: any) => entry.data.operations.map((operation: any) => operation.operation)),
+    ).toEqual([["elide", "collapse"]]);
+    const messages = await durable.messages(conversation);
+    expect(collapsedLabels(messages)).toEqual(["Collapsed call"]);
+    expect(callLabels(messages).slice(0, 2)).toEqual(["Elided call", "Kept call"]);
+    const text = texts(messages).join("\n");
+    expect(text).toContain("[Elided by the model");
+    expect(text).not.toContain("alpha alpha");
+    expect(text).toContain("gamma gamma");
+    expectPairedToolCalls(messages);
   });
 });
