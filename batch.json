@@ -1,1 +1,1 @@
-{"format":1,"seq":266,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"Checking the odd object formatting in context.test.ts, then simplifying describeCall in edits.ts so it joins title,"]]}}]}
+{"format":1,"seq":267,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"]," tool name, functions, and outcome cleanly while handling empty-title edge cases correctly.\n\nMo"]]}}]}
