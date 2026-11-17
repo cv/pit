@@ -15,11 +15,12 @@ export const PENDING_EDIT_KIND = "pit.context-edit-pending";
 
 export const ELIDED_PREFIX = "[Elided by the model";
 export const ELIDED_CALLS_PREFIX = "[Pit: elided tool call";
+export const COLLAPSED_CALLS_PREFIX = "[Pit: collapsed ";
 export const SUMMARY_PREFIX = "[Model summary of ";
 
 export type ContextRole = "user" | "assistant" | "toolResult" | "custom" | "summary";
 export type ContextState = "original" | "elided" | "summarized" | "replaced";
-export type ContextOperation = "elide" | "summarize";
+export type ContextOperation = "elide" | "summarize" | "collapse";
 
 /** What Pit records with each rewrite, so an outline can say what changed an entry. */
 export interface EditProvenance {
@@ -120,27 +121,31 @@ function provenanceOf(entry: EntryRecord): EditProvenance[] {
   return data.operations.filter(isRecord) as unknown as EditProvenance[];
 }
 
-/** The entries from the newest head marker through the tail, read in one commit. */
-async function readActiveRange(
-  api: Pick<ToolExecutionApi, "commit" | "conversationId">,
-  context: ToolContext,
-): Promise<{ head: EntryRecord | undefined; entries: EntryRecord[] }> {
-  return api.commit(async (tx) => {
-    const head = await tx.latestHeadMarker(api.conversationId);
-    const entries: EntryRecord[] = [];
-    const query = {
-      conversationId: api.conversationId,
-      order: "ascending",
-      ...(head?.head === undefined ? {} : { minEntryId: head.head }),
-    } as const;
-    let page = await tx.scanEntries(query, SCAN_PAGE);
+/** The entries from the newest head marker through the tail. */
+export interface ActiveRange {
+  head: EntryRecord | undefined;
+  entries: EntryRecord[];
+}
+
+/** Reads the active range in the caller's commit. */
+export async function readActiveEntries(
+  tx: Pick<Tx, "latestHeadMarker" | "scanEntries">,
+  conversationId: EntryRecord["conversationId"],
+): Promise<ActiveRange> {
+  const head = await tx.latestHeadMarker(conversationId);
+  const entries: EntryRecord[] = [];
+  const query = {
+    conversationId,
+    order: "ascending",
+    ...(head?.head === undefined ? {} : { minEntryId: head.head }),
+  } as const;
+  let page = await tx.scanEntries(query, SCAN_PAGE);
+  entries.push(...page.items);
+  while (page.next !== undefined) {
+    page = await tx.scanEntries(query, SCAN_PAGE, page.next);
     entries.push(...page.items);
-    while (page.next !== undefined) {
-      page = await tx.scanEntries(query, SCAN_PAGE, page.next);
-      entries.push(...page.items);
-    }
-    return { head, entries };
-  }, context);
+  }
+  return { head, entries };
 }
 
 /** The newest edit of each target, what Pit recorded about it, and rewrites still staged. */
@@ -171,17 +176,25 @@ function collectEdits(entries: readonly EntryRecord[]) {
   return { edits, provenance, pending };
 }
 
-/**
- * The active context as pi-durable assembles it: the newest head marker, then the non-head entries
- * from its head through the tail, each contributing its messages after the newest edit that targets
- * it. `callId` is the running tool call; its turn is protected.
- */
+/** The active context of a running call, read in one commit; its turn is protected. */
 export async function readContextView(
   api: Pick<ToolExecutionApi, "commit" | "conversationId">,
   context: ToolContext,
   callId: string,
 ): Promise<ContextView> {
-  const { head, entries } = await readActiveRange(api, context);
+  const range = await api.commit((tx) => readActiveEntries(tx, api.conversationId), context);
+  return buildContextView(range, callId);
+}
+
+/**
+ * The active context as pi-durable assembles it: the newest head marker, then the non-head entries
+ * from its head through the tail, each contributing its messages after the newest edit that targets
+ * it. `callId` is the running tool call, if any; its turn is protected.
+ */
+export function buildContextView(
+  { head, entries }: ActiveRange,
+  callId: string | undefined,
+): ContextView {
   const { edits, provenance, pending } = collectEdits(entries);
   const active = [
     ...(head ? [head] : []),
@@ -212,7 +225,7 @@ export async function readContextView(
     const operation = edited ? provenance.get(id) : undefined;
     const state: ContextState = !edited
       ? "original"
-      : operation?.operation === "elide"
+      : operation?.operation === "elide" || operation?.operation === "collapse"
         ? "elided"
         : operation?.operation === "summarize"
           ? "summarized"
