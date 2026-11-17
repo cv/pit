@@ -3,11 +3,12 @@ import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 
 import { createCodemodeFunctionExecutor } from "../sandbox/codemode-executor.js";
 import { NODE_HOST_PLATFORM } from "../shared/host-platform.js";
-import { APPLY_STAGED_EDITS, APPLY_STAGED_EDITS_HOOK } from "./context/apply.js";
+import { APPLY_STAGED_EDITS, createApplyEditsHook } from "./context/apply.js";
+import { type CollapseOption, resolveCollapse } from "./context/collapse.js";
 import { notesSection } from "./context/notes.js";
 import { conversationCwd, type PitDurableLog, type PitDurableUi } from "./host.js";
 import { hideFromModel, resolveHiddenTools } from "./loadout.js";
-import { createCatalogSections, GUIDELINES_SECTION, TOOLS_SECTION } from "./sections.js";
+import { createCatalogSections, createGuidelinesSection, TOOLS_SECTION } from "./sections.js";
 import { DurableFunctionStore } from "./state.js";
 import { createDurableTypeScriptTool } from "./tool.js";
 
@@ -52,6 +53,14 @@ export interface PitDurableOptions {
    * within the byte limit attach as they are, and others fail, as with pi-durable's `read`.
    */
   images?: ImageProcessor;
+  /**
+   * Collapses the tool calls of finished runs to one line each after every run, so a follow-up
+   * starts from a bounded context: each call's label, injected functions, outcome, size, and the
+   * `session.inspectEntry` IDs of its originals. `keepRuns` (default 1) runs stay whole, counting
+   * the one that just answered; `minTokens` (default 32,000) leaves conversations whose messages
+   * stay within it verbatim. `false` turns it off.
+   */
+  collapse?: CollapseOption;
 }
 
 /**
@@ -73,6 +82,7 @@ export function createPitDurableExtension(options: PitDurableOptions = {}): Exte
     log: options.log,
   });
   const cwdOf = (input: PromptInput) => conversationCwd(options.cwd, input.env, input.agent);
+  const collapse = resolveCollapse(options.collapse);
   return {
     name: "pit",
     tools: [
@@ -87,14 +97,14 @@ export function createPitDurableExtension(options: PitDurableOptions = {}): Exte
       }),
     ],
     sections: [
-      GUIDELINES_SECTION,
+      createGuidelinesSection({ collapse: collapse !== undefined }),
       TOOLS_SECTION,
       ...createCatalogSections(store, cwdOf),
       notesSection(),
     ],
     wraps: hidden.map(hideFromModel),
     tasks: [APPLY_STAGED_EDITS],
-    hooks: [APPLY_STAGED_EDITS_HOOK],
+    hooks: [createApplyEditsHook(collapse)],
   };
 }
 
