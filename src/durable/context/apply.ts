@@ -140,16 +140,10 @@ export function createApplyEditsHook(collapse: CollapseSettings | undefined): Ho
           if (page.next === undefined) break;
           page = await api.entries(range, SCAN_PAGE, page.next, context);
         }
-        // The first run has no finished run before it to collapse.
-        const earlier =
-          collapse !== undefined &&
-          run.first > 1 &&
-          (await api.entries({ maxEntryId: (run.first - 1) as EntryId }, 1, undefined, context))
-            .items.length > 0;
-        if (pending.length === 0 && !earlier) return undefined;
+        if (pending.length === 0 && collapse === undefined) return undefined;
         const input: ApplyInput = {
           pending,
-          ...(earlier ? { collapse: { ...collapse, first: run.first } } : {}),
+          ...(collapse ? { collapse: { ...collapse, first: run.first } } : {}),
         };
         return { tasks: [{ task: APPLY_STAGED_EDITS, input }] };
       },
