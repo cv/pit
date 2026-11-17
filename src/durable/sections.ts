@@ -6,11 +6,18 @@ import type { DurableFunctionStore } from "./state.js";
 import { createDurableToolCatalog, durableToolsPrompt } from "./tools.js";
 
 /** How to use the `typescript` tool: Pi's prompt snippet and guidelines for it. */
-export const GUIDELINES_SECTION: PromptSection = {
-  key: "pit_guidelines",
-  render: () =>
-    [`typescript: ${PROMPT_SNIPPET}.`, ...PROMPT_GUIDELINES.map((line) => `- ${line}`)].join("\n"),
-};
+/** Calls from finished runs collapse to their labels; this tells the model to write labels for it. */
+export const COLLAPSE_GUIDELINE =
+  "Calls from finished runs collapse to their labels: give each call a specific label, and say in your answer what a later run will need.";
+
+/** How to use the `typescript` tool: Pi's prompt snippet and guidelines for it, and durable ones. */
+export function createGuidelinesSection(options: { collapse: boolean }): PromptSection {
+  const lines = [...PROMPT_GUIDELINES, ...(options.collapse ? [COLLAPSE_GUIDELINE] : [])];
+  return {
+    key: "pit_guidelines",
+    render: () => [`typescript: ${PROMPT_SNIPPET}.`, ...lines.map((line) => `- ${line}`)].join("\n"),
+  };
+}
 
 /**
  * The user and project function catalogs, as Pi's system prompt lists them. Both are empty, and
