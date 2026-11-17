@@ -6,13 +6,16 @@ import type {
   ToolExecutionApi,
 } from "@earendil-works/pi-durable";
 
+import { type CollapseSettings, planCollapse } from "./collapse.js";
 import type { PlannedEdit } from "./edits.js";
 import {
+  buildContextView,
   type ContextEdit,
   EDIT_KIND,
   type EntryId,
   type EntryRecord,
   PENDING_EDIT_KIND,
+  readActiveEntries,
 } from "./view.js";
 
 type ToolContext = Parameters<ToolExecutionApi["commit"]>[1];
@@ -57,6 +60,8 @@ export async function writeEdit(
 interface ApplyInput {
   /** The staged entries to apply, oldest first. */
   pending: number[];
+  /** Collapse finished runs before `first`, the run's first entry. Absent: collapse nothing. */
+  collapse?: CollapseSettings & { first: number };
 }
 
 // Staged entries are Pit's own writes, so their data has this shape.
@@ -70,7 +75,11 @@ function stagedOperations(entry: EntryRecord): Json[] {
   return (entry.data as { operations: Json[] }).operations;
 }
 
-/** Applies the rewrites a run staged, once it answered: one write, before the next input. */
+/**
+ * Applies the rewrites a run staged, once it answered, and collapses finished runs' tool calls:
+ * one write, before the next input. The collapse reads the context in the same commit, so it
+ * skips what the run staged and what an earlier collapse already rewrote.
+ */
 export const APPLY_STAGED_EDITS: Task<ApplyInput, { phase: "apply" }, null, object> = {
   definition: {
     name: "pit.apply-staged-edits",
@@ -83,17 +92,20 @@ export const APPLY_STAGED_EDITS: Task<ApplyInput, { phase: "apply" }, null, obje
           const staged = await Promise.all(task.input.pending.map((id) => tx.entry(id as EntryId)));
           const entries = staged.filter((entry): entry is EntryRecord => entry !== undefined);
           const edits = entries.flatMap(stagedEdits);
+          const operations = entries.flatMap(stagedOperations);
+          const { collapse } = task.input;
+          if (collapse) {
+            const range = await readActiveEntries(tx, runtime.conversationId);
+            const plan = planCollapse(buildContextView(range, undefined), collapse.first, collapse);
+            if (plan) {
+              edits.push(...plan.edits);
+              operations.push(plan.provenance as unknown as Json);
+            }
+          }
           if (handle && edits.length > 0) {
             await handle.submit(tx, {
               type: "write",
-              entry: {
-                kind: EDIT_KIND,
-                data: {
-                  operations: entries.flatMap(stagedOperations),
-                  pending: task.input.pending,
-                },
-                edits,
-              },
+              entry: { kind: EDIT_KIND, data: { operations, pending: task.input.pending }, edits },
             });
           }
           return { status: "terminal", outcome: { status: "completed", result: null } };
@@ -108,24 +120,39 @@ export const APPLY_STAGED_EDITS: Task<ApplyInput, { phase: "apply" }, null, obje
 
 const SCAN_PAGE = 256;
 
-/** After a run answers, applies the rewrites it staged; a failed or aborted run drops them. */
-export const APPLY_STAGED_EDITS_HOOK: HookRegistration = {
-  task: "pi.generation",
-  handlers: {
-    afterRun: async (run: RunSummary, api: HookApi, context: ToolContext) => {
-      const pending: number[] = [];
-      const range = { minEntryId: run.first, maxEntryId: run.last, order: "ascending" } as const;
-      let page = await api.entries(range, SCAN_PAGE, undefined, context);
-      for (;;) {
-        for (const entry of page.items) {
-          if (entry.kind === PENDING_EDIT_KIND) pending.push(entry.id);
+/**
+ * After a run answers, applies the rewrites it staged and, with `collapse`, collapses the tool
+ * calls of finished runs; a failed or aborted run does neither. A run that ends on a `terminate`
+ * round counts as answered.
+ */
+export function createApplyEditsHook(collapse: CollapseSettings | undefined): HookRegistration {
+  return {
+    task: "pi.generation",
+    handlers: {
+      afterRun: async (run: RunSummary, api: HookApi, context: ToolContext) => {
+        const pending: number[] = [];
+        const range = { minEntryId: run.first, maxEntryId: run.last, order: "ascending" } as const;
+        let page = await api.entries(range, SCAN_PAGE, undefined, context);
+        for (;;) {
+          for (const entry of page.items) {
+            if (entry.kind === PENDING_EDIT_KIND) pending.push(entry.id);
+          }
+          if (page.next === undefined) break;
+          page = await api.entries(range, SCAN_PAGE, page.next, context);
         }
-        if (page.next === undefined) break;
-        page = await api.entries(range, SCAN_PAGE, page.next, context);
-      }
-      if (pending.length === 0) return undefined;
-      const input: ApplyInput = { pending };
-      return { tasks: [{ task: APPLY_STAGED_EDITS, input }] };
+        // The first run has no finished run before it to collapse.
+        const earlier =
+          collapse !== undefined &&
+          run.first > 1 &&
+          (await api.entries({ maxEntryId: (run.first - 1) as EntryId }, 1, undefined, context))
+            .items.length > 0;
+        if (pending.length === 0 && !earlier) return undefined;
+        const input: ApplyInput = {
+          pending,
+          ...(earlier ? { collapse: { ...collapse, first: run.first } } : {}),
+        };
+        return { tasks: [{ task: APPLY_STAGED_EDITS, input }] };
+      },
     },
-  },
-};
+  };
+}
