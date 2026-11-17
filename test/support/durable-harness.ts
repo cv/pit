@@ -157,6 +157,8 @@ export class DurableTestHost {
     conversation?: Conversation,
     /** The user message that starts the run; a host can place it as its own entry kind. */
     input: { content: string; entry?: { kind: string; data: any } } = { content: "run" },
+    /** `fail`: the model's answer is an error, so the run fails instead of answering. */
+    options: { fail?: boolean } = {},
   ): Promise<DurableRun> {
     const target = conversation ?? (await this.root());
     let sections: Record<string, string> = {};
@@ -176,13 +178,15 @@ export class DurableTestHost {
       (request: ModelContext) => {
         record(request);
         sections = systemSections(request);
-        return fauxAssistantMessage("done");
+        return options.fail
+          ? fauxAssistantMessage("", { stopReason: "error", errorMessage: "model failed" })
+          : fauxAssistantMessage("done");
       },
     ]);
     const before = await this.#latestEntry(target);
     const submission = await target.submit({ type: "input", ...input }, context);
     const settled = await submission.wait(context);
-    if (settled.status !== "done") throw new Error(`Run ended ${settled.status}`);
+    if ((settled.status === "done") === options.fail) throw new Error(`Run ended ${settled.status}`);
     // Work the run started after its answer, such as staged context edits, finishes first.
     await target.waitForIdle(context);
     const page = await target.entries(
