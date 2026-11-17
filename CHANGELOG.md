@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-17
+
 ### Changed
 
 - On pi-durable hosts, Pit collapses the tool calls of finished runs to one line each after every run (#396). This changes what pi-durable hosts such as pi-action send the model: once a conversation's messages pass 32,000 tokens, calls from runs before the newest are replaced by a line naming their label, injected functions, outcome, size, and `session.inspectEntry` IDs, with their results omitted. Answers, user messages, and thinking stay. Configure it with `collapse: { keepRuns, minTokens }`, or turn it off with `collapse: false`. A durable guideline asks the model for specific labels and answers that say what a later run will need.
@@ -632,7 +634,19 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/cv/pit/compare/v0.37.1...v0.38.0
+[0.37.1]: https://github.com/cv/pit/compare/v0.37.0...v0.37.1
+[0.37.0]: https://github.com/cv/pit/compare/v0.36.6...v0.37.0
+[0.36.6]: https://github.com/cv/pit/compare/v0.36.5...v0.36.6
+[0.36.5]: https://github.com/cv/pit/compare/v0.36.4...v0.36.5
+[0.36.4]: https://github.com/cv/pit/compare/v0.36.3...v0.36.4
+[0.36.3]: https://github.com/cv/pit/compare/v0.36.2...v0.36.3
+[0.36.2]: https://github.com/cv/pit/compare/v0.36.1...v0.36.2
+[0.36.1]: https://github.com/cv/pit/compare/v0.36.0...v0.36.1
+[0.36.0]: https://github.com/cv/pit/compare/v0.35.1...v0.36.0
+[0.35.1]: https://github.com/cv/pit/compare/v0.35.0...v0.35.1
+[0.35.0]: https://github.com/cv/pit/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/cv/pit/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/cv/pit/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/cv/pit/compare/v0.31.0...v0.32.0
