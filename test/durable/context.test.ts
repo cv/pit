@@ -460,9 +460,7 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
       [onFirst("toolResult", "elide([entry.id])")],
       conversation,
       { content: "run" },
-      {
-        fail: true,
-      },
+      { fail: true },
     );
     const messages = await durable.messages(conversation);
     expect(collapsedLabels(messages)).toEqual([]);
