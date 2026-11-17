@@ -634,7 +634,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 Earlier release history is available on the [GitHub Releases](https://github.com/cv/pit/releases) page.
 
-[Unreleased]: https://github.com/cv/pit/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/cv/pit/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/cv/pit/compare/v0.37.1...v0.38.0
 [0.34.0]: https://github.com/cv/pit/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/cv/pit/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/cv/pit/compare/v0.31.0...v0.32.0
