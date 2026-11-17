@@ -512,6 +512,10 @@ describe("collapsing finished runs' tool calls", () => {
 
   const sized = (text: string) => text.replace(/~[\d.]+K? tokens/, "~N tokens");
   const READ = 'async ({ workspace: { read, search } }) => read("a")';
+  const withDetails = (entry: any, details: unknown) => ({
+    ...entry,
+    model: [{ ...entry.model[0], details }],
+  });
 
   it.each([
     [
