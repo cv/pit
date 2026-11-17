@@ -76,6 +76,30 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      # A PR labelled pi:pit-from-pr runs pi with that PR's Pit, pinned to its head commit when the job
+      # starts, so a change to Pit can be tried on a real thread before it is merged and released. Only
+      # same-repository PRs qualify, and only people with triage access can add the label.
+      - name: Choose the Pit extension
+        id: pit
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          IS_PR: ${{ github.event.pull_request != null || github.event.issue.pull_request != null }}
+          RELEASED: github:cv/pit#v0.37.0
+        run: |
+          extension="$RELEASED"
+          if [ "$IS_PR" = "true" ]; then
+            read -r head sha labelled < <(gh api "repos/$REPO/pulls/$NUMBER" \
+              --jq '[.head.repo.full_name // "", .head.sha, (any(.labels[]; .name == "pi:pit-from-pr"))] | @tsv')
+            if [ "$labelled" = "true" ] && [ "$head" = "$REPO" ]; then
+              extension="github:$REPO#$sha"
+              echo "::notice title=Pit under test::PR #$NUMBER is labelled pi:pit-from-pr: loading $extension"
+            fi
+          fi
+          echo "extension=$extension" >> "$GITHUB_OUTPUT"
+
+
       - name: Run pi-action
         uses: cv/pi-action@27723deedf4b41e99924171402c657c8d4e9ff69 # v2.5.4
         with:
@@ -92,7 +116,7 @@ jobs:
           model_max_tokens: 128000 # Bedrock's maximum for Opus 5.5
           compat_force_adaptive_thinking: true
           # A released pit, not this checkout: pi edits the checkout, and its tools shouldn't change under it.
-          extensions: github:cv/pit#v0.37.0
+          extensions: ${{ steps.pit.outputs.extension }}
           # Load this repository's .pi/pit.json and .pi/functions (delivery.*, tests.*, pr.*), which AGENTS.md
           # relies on. Safe here: only OWNER/MEMBER can start a run, comment runs check out main, and fork PRs
           # get no secrets to mint the token.
