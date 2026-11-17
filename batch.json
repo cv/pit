@@ -1,1 +1,1 @@
-{"format":1,"seq":597,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"]," clipping logic adds up correctly.\n\n"]]}}]}
+{"format":1,"seq":598,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"Writing test case for many entries...\n\n"]]}}]}
