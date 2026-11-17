@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-17
+
+### Fixed
+
+- `typescript` calls that set their label or other options in a `// @pit: {...}` source header show that label and those inputs in the call's header and expanded view, as they do when the options are passed as tool arguments. A streaming, malformed, or conflicting header still renders the call as written.
+
 ## [0.38.0] - 2026-11-17
 
 ### Changed
