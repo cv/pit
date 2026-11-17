@@ -158,7 +158,10 @@ export function collapsedCallNote(
       : `originals: session.inspectEntry(id) for ${ids.map((id) => `"${id}"`).join(", ")}`;
   const named = calls.length > 1;
   for (const functions of [true, false]) {
-    const full = line(calls.map((call) => describeCall(call, functions, named)).join("; "), originals);
+    const full = line(
+      calls.map((call) => describeCall(call, functions, named)).join("; "),
+      originals,
+    );
     if (byteLength(full) <= MAX_COLLAPSED_LINE_BYTES) return full;
   }
   const budget = MAX_COLLAPSED_LINE_BYTES - byteLength(line("", originals)) - byteLength(" · ");

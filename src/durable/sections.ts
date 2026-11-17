@@ -15,7 +15,8 @@ export function createGuidelinesSection(options: { collapse: boolean }): PromptS
   const lines = [...PROMPT_GUIDELINES, ...(options.collapse ? [COLLAPSE_GUIDELINE] : [])];
   return {
     key: "pit_guidelines",
-    render: () => [`typescript: ${PROMPT_SNIPPET}.`, ...lines.map((line) => `- ${line}`)].join("\n"),
+    render: () =>
+      [`typescript: ${PROMPT_SNIPPET}.`, ...lines.map((line) => `- ${line}`)].join("\n"),
   };
 }
 

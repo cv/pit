@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { APPLY_STAGED_EDITS, createApplyEditsHook } from "../../src/durable/context/apply.js";
 import { planCollapse } from "../../src/durable/context/collapse.js";
 import { planElide, planSummarize } from "../../src/durable/context/edits.js";
-import { createPitDurableExtension } from "../../src/durable/index.js";
 import { StagedContextChanges } from "../../src/durable/context/staging.js";
 import { readContextView } from "../../src/durable/context/view.js";
+import { createPitDurableExtension } from "../../src/durable/index.js";
 import { createDurableSessionHandler } from "../../src/durable/session.js";
 
 // Conversation histories built entry by entry, read through a stand-in for a tool's commit.
@@ -570,7 +570,9 @@ describe("collapsing finished runs' tool calls", () => {
     );
     expect(new TextEncoder().encode(many).length).toBeLessThanOrEqual(512);
     expect(many).not.toContain("\uFFFD");
-    expect(many).toMatch(/^\[Pit: collapsed 30 tool calls · typescript "Step 0 of a long series" · ok; .*… · ~/);
+    expect(many).toMatch(
+      /^\[Pit: collapsed 30 tool calls · typescript "Step 0 of a long series" · ok; .*… · ~/,
+    );
     const ids = Array.from({ length: 31 }, (_, index) => `"${index + 2}"`).join(", ");
     expect(many).toContain(`originals: session.inspectEntry(id) for ${ids}]`);
   });
@@ -619,7 +621,9 @@ describe("collapsing finished runs' tool calls", () => {
     const plan = planCollapse(await view(RUNS), 18, ALL);
     const carrier = (plan?.edits.find((edit) => edit.target === 11) as any).messages[0];
     expect(carrier.content.slice(0, 2)).toEqual([THINKING, { type: "text", text: "Reading." }]);
-    expect(carrier.content[2].text).toMatch(/^\[Pit: collapsed typescript call · "async \(\) => 1" · ok/);
+    expect(carrier.content[2].text).toMatch(
+      /^\[Pit: collapsed typescript call · "async \(\) => 1" · ok/,
+    );
     expect(carrier.stopReason).toBe("stop");
 
     const head = { ...user(21, "[summary]", "pi.compaction"), head: 10 };

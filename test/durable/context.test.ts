@@ -346,20 +346,26 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
 
   /** The labels of the collapsed lines the model sees, in order. */
   function collapsedLabels(messages: readonly any[]): string[] {
-    return texts(messages).flatMap((text) => [...text.matchAll(COLLAPSED)].map((match) => match[1] as string));
+    return texts(messages).flatMap((text) =>
+      [...text.matchAll(COLLAPSED)].map((match) => match[1] as string),
+    );
   }
 
   /** The labels of the tool calls the model still sees verbatim. */
   function callLabels(messages: readonly any[]): string[] {
     return messages.flatMap((message: any) =>
       message.role === "assistant"
-        ? message.content.flatMap((block: any) => (block.type === "toolCall" ? [block.arguments.label] : []))
+        ? message.content.flatMap((block: any) =>
+            block.type === "toolCall" ? [block.arguments.label] : [],
+          )
         : [],
     );
   }
 
   const userTexts = (messages: readonly any[]) =>
-    messages.filter((message: any) => message.role === "user").flatMap((message) => texts([message]));
+    messages
+      .filter((message: any) => message.role === "user")
+      .flatMap((message) => texts([message]));
 
   async function collapseOperations(durable: DurableTestHost, conversation: any) {
     return (await durable.entries(conversation, "pit.context-edit")).flatMap((entry: any) =>
@@ -383,8 +389,12 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
   it("collapses older runs' calls, keeping the newest run, answers, user messages, and forks as they were", async () => {
     const durable = collapsing({ keepRuns: 1, minTokens: 0 });
     const conversation = await durable.root();
-    await durable.run([labelled("First run's call", "alpha")], conversation, { content: "first ask" });
-    await durable.run([labelled("Second run's call", "beta")], conversation, { content: "second ask" });
+    await durable.run([labelled("First run's call", "alpha")], conversation, {
+      content: "first ask",
+    });
+    await durable.run([labelled("Second run's call", "beta")], conversation, {
+      content: "second ask",
+    });
     const fork = await durable.fork(conversation);
     const third = await durable.run([labelled("Third run's call", "gamma")], conversation, {
       content: "third ask",
@@ -400,7 +410,9 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
     expect(userTexts(messages)).toEqual(["first ask", "second ask", "third ask"]);
     expect(texts(messages).filter((line) => line === "done")).toHaveLength(3);
     expectPairedToolCalls(messages);
-    expect(third.sections.pit_guidelines).toContain("Calls from finished runs collapse to their labels");
+    expect(third.sections.pit_guidelines).toContain(
+      "Calls from finished runs collapse to their labels",
+    );
     // A fork keeps the view it inherited: the parent's later collapse leaves its second run whole.
     const forked = await durable.messages(fork);
     expect(collapsedLabels(forked)).toEqual(["First run's call"]);
@@ -431,7 +443,11 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
     const { sections } = await durable.run([labelled("Third run's call", "gamma")], conversation);
     const messages = await durable.messages(conversation);
     expect(collapsedLabels(messages)).toEqual([]);
-    expect(callLabels(messages)).toEqual(["First run's call", "Second run's call", "Third run's call"]);
+    expect(callLabels(messages)).toEqual([
+      "First run's call",
+      "Second run's call",
+      "Third run's call",
+    ]);
     expect(await durable.entries(conversation, "pit.context-edit")).toEqual([]);
     expect(sections.pit_guidelines?.includes("collapse to their labels")).toBe(guideline);
   });
@@ -440,9 +456,14 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
     const durable = collapsing({ minTokens: 0 }, { retry: { enabled: false } });
     const conversation = await durable.root();
     await durable.run([labelled("First run's call", "alpha")], conversation);
-    await durable.run([onFirst("toolResult", "elide([entry.id])")], conversation, { content: "run" }, {
-      fail: true,
-    });
+    await durable.run(
+      [onFirst("toolResult", "elide([entry.id])")],
+      conversation,
+      { content: "run" },
+      {
+        fail: true,
+      },
+    );
     const messages = await durable.messages(conversation);
     expect(collapsedLabels(messages)).toEqual([]);
     expect(callLabels(messages)[0]).toBe("First run's call");
@@ -453,14 +474,17 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
   it("writes the model's staged elide and the collapse in one entry, leaving the elided call to the model", async () => {
     const durable = collapsing({ keepRuns: 2, minTokens: 0 });
     const conversation = await durable.root();
-    await durable.run([labelled("Elided call", "alpha"), labelled("Collapsed call", "beta")], conversation);
+    await durable.run(
+      [labelled("Elided call", "alpha"), labelled("Collapsed call", "beta")],
+      conversation,
+    );
     await durable.run([labelled("Kept call", "gamma")], conversation);
     await durable.run([onFirst("toolResult", "elide([entry.id])")], conversation);
 
     const edits = await durable.entries(conversation, "pit.context-edit");
-    expect(edits.map((entry: any) => entry.data.operations.map((operation: any) => operation.operation))).toEqual([
-      ["elide", "collapse"],
-    ]);
+    expect(
+      edits.map((entry: any) => entry.data.operations.map((operation: any) => operation.operation)),
+    ).toEqual([["elide", "collapse"]]);
     const messages = await durable.messages(conversation);
     expect(collapsedLabels(messages)).toEqual(["Collapsed call"]);
     expect(callLabels(messages).slice(0, 2)).toEqual(["Elided call", "Kept call"]);
