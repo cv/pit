@@ -391,6 +391,7 @@ describe("collapsing finished runs on a pi-durable Harness", () => {
     });
 
     const messages = await durable.messages(conversation);
+    console.log('DEBUG', JSON.stringify(texts(messages)).slice(0, 3000), JSON.stringify(await durable.entries(conversation, 'pit.context-edit')).slice(0, 1500));
     expect(collapsedLabels(messages)).toEqual(["First run's call", "Second run's call"]);
     expect(callLabels(messages)).toEqual(["Third run's call"]);
     const text = texts(messages).join("\n");
