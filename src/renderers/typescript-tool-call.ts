@@ -7,6 +7,7 @@ import { sanitizeTerminalText } from "../shared/text-sanitization.js";
 import { omitNullArguments } from "../tool/input.js";
 import { ensureRendererState, type WithRendererState } from "../tool/renderer-state.js";
 import { formatTypeScriptSource } from "../tool/source-formatter.js";
+import { applySourceOptions } from "../tool/source-options.js";
 import { generationTiming, type ToolCallTimingContext } from "../tool/timing.js";
 import { renderStructuredData } from "./compound.js";
 import { describeFunctionCall, inferFunctionCall } from "./function-call.js";
@@ -101,6 +102,15 @@ function highlightedSource(
   return lines;
 }
 
+function displayArguments(args: ToolCallArgs): ToolCallArgs {
+  try {
+    return omitNullArguments(applySourceOptions(args) as ToolCallArgs);
+  } catch {
+    // Streaming, malformed, or conflicting headers must remain inspectable, not break rendering.
+    return omitNullArguments(args);
+  }
+}
+
 function normalizedLabel(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return;
@@ -134,7 +144,7 @@ export function renderTypeScriptInputs(
   context: ToolCallContext,
 ): string {
   // Show what runs: a null option is omitted, as the tool's prepareArguments treats it.
-  args = omitNullArguments(args);
+  args = displayArguments(args);
   ensureRendererState(context);
   const lines: string[] = [];
   const functionId = normalizedLabel(args.functionId);
@@ -162,7 +172,7 @@ export function renderTypeScriptToolCall(
   context: ToolCallContext,
   registry: FunctionRegistry,
 ) {
-  args = omitNullArguments(args ?? {});
+  args = displayArguments(args ?? {});
   ensureRendererState(context);
   const code = typeof args.code === "string" ? args.code : "";
   const callLabel = describeCall(args, code, registry);

@@ -18,6 +18,16 @@ function processFixture(label: string, script: string, timeoutMs = 5000, raise =
   };
 }
 const fixtures: Record<string, ToolCall["arguments"]> = {
+  "source-label": {
+    code: '// @pit: {"label": "SOURCE HEADER: inspect the supplied input", "params": {"file": "HEADER_INPUT_SENTINEL"}, "timeoutMs": 10000}\nasync ({}, input: { file: string }) => input.file',
+  },
+  "source-label-progress": {
+    code: '// @pit: {"label": "SOURCE HEADER: follow live progress"}\nasync ({ shell: { execFile } }) => execFile("node", ["--eval", "console.log(\\"HEADER_STARTED\\");setTimeout(()=>console.log(\\"HEADER_FINISHED\\"),3000)"])',
+  },
+  "source-label-invalid": {
+    code: '// @pit: {"label": "Rejected header", "unknown": true}\nasync ({}) => 42',
+  },
+
   "trace-a": { label: "TRACE A: simple value", code: "async ({}) => 42" },
   // Validation rejects params the program has no parameter to receive.
   // Empty params, as some models send on every call, run a program without an input parameter.
