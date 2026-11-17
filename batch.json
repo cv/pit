@@ -1,1 +1,1 @@
-{"format":1,"seq":506,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",1,"status"],"running"],["s",["tools",0,"output"],"{\"baseRefName\":\"main\",\"headRefName\":\"release-0.38.0\",\"number\":399,\"state\":\"OPEN\",\"url\":\"https://github.com/cv/pit/pull/399\"}\n"]]}}]}
+{"format":1,"seq":507,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",1,"output"],"[]\n"]]}}]}
