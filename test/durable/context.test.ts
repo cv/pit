@@ -326,7 +326,7 @@ describe("session.* on a pi-durable Harness", () => {
 
 describe("collapsing finished runs on a pi-durable Harness", () => {
   function collapsing(
-    collapse: PitDurableOptions["collapse"],
+    collapse: NonNullable<PitDurableOptions["collapse"]>,
     settings?: ConstructorParameters<typeof DurableTestHost>[0]["settings"],
   ) {
     return new DurableTestHost({
