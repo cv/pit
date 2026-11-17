@@ -568,7 +568,11 @@ describe("collapsing finished runs' tool calls", () => {
     ],
     [
       "a saveOnly call, by the function it saved",
-      [ts("a", "async function check({ git: { status } }) { return status([]); }", { saveOnly: true })],
+      [
+        ts("a", "async function check({ git: { status } }) { return status([]); }", {
+          saveOnly: true,
+        }),
+      ],
       [withDetails(result(3, "a", BIG), { value: { savedFunction: "repo.check" } })],
       '[Pit: collapsed typescript call · "async function check({ git: { status } }) { return status([]); }" · saved repo.check · ~N tokens · originals: session.inspectEntry("2"), session.inspectEntry("3")]',
     ],

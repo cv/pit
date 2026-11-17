@@ -193,7 +193,8 @@ export function digestTypeScriptCall(
   const call = callArguments(args);
   const functions = call.saveOnly ? [] : injectedFunctions(call.code);
   const title = callTitle(call);
-  if (result === undefined || result.isError) return { title, functions, outcome: toolOutcome(result) };
+  if (result === undefined || result.isError)
+    return { title, functions, outcome: toolOutcome(result) };
   const details = isRecord(result.details) ? result.details : {};
   if (isRecord(details.question) && nonEmpty(details.question.title)) {
     return { title, functions, outcome: `asked: ${details.question.title}` };
