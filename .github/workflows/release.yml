@@ -36,7 +36,7 @@ jobs:
           package_version=$(node --input-type=module -e 'import manifest from "./package.json" with { type: "json" }; process.stdout.write(manifest.version)')
           test "$GITHUB_REF_NAME" = "v$package_version"
       - name: Audit runtime dependencies
-        run: npm audit --omit=dev
+        run: npm run audit:runtime
       - name: Verify package
         run: npm run package:check
       - name: Run static checks
