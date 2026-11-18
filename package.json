@@ -31,7 +31,8 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "quality:audit": "node scripts/audit-code-size.mjs",
-    "package:check": "node scripts/verify-package.mjs"
+    "package:check": "node scripts/verify-package.mjs",
+    "audit:runtime": "node --import ./scripts/typescript-resolve.mjs scripts/audit-runtime.ts"
   },
   "pi": {
     "extensions": [
