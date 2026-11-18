@@ -721,7 +721,7 @@ describe("durable inspection of rewritten and unusual entries", () => {
     const current = await view(entries);
     const note = (planElide(current, ["13"]).edits[0] as any).messages[0].content[0].text;
     expect(note).toMatch(
-      /^\[Pit: elided tool call: typescript · ~\d+ tokens · originals: session\.inspectEntry\("13"\)\]$/,
+      /^\[Pit: elided tool call: typescript · ~\d+ tokens · originals: session\.inspectEntry\("13"\) · already ran; writing this text runs nothing\]$/,
     );
   });
 });
