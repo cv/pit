@@ -4,6 +4,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Fixed
+
+- A reply that ends with an elided-call record written as text, such as `[Pit: elided tool call: typescript · …]`, and makes no tool call no longer passes silently as a finished action (#409). Nothing ran, so Pit appends a notice for the model and the user, `▲ No tool ran`, and asks the model for one more response to make the call. A reply that repeats the mistake right after the notice gets the notice without another continuation. Elided-call records now end with `already ran; writing this text runs nothing`.
+
+
 ## [0.38.1] - 2026-11-17
 
 ### Fixed
