@@ -1,1 +1,1 @@
-{"format":1,"seq":707,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"✓ Closed issue cv/pit#402 (new patch release)\n"]]}}]}
+{"format":1,"seq":708,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"✓ Closed issue cv/pit#409 (Models imitate elided calls rendered as text: they write the placeholder instead of calling the tool, and nothing runs)\n"]]}}]}
