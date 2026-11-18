@@ -30,6 +30,8 @@ export const PROVENANCE_TYPE = "pit.context-edit";
 export const ELIDED_PREFIX = "[Elided by the model";
 /** Starts the stub that replaces an elided assistant entry's tool-call arguments. */
 export const ELIDED_CALLS_PREFIX = "[Pit: elided tool call";
+/** Ends that stub: the calls already ran, and writing the stub runs nothing (#409). */
+export const ELIDED_CALLS_RECORD = "already ran; writing this text runs nothing";
 export const SUMMARY_PREFIX = "[Model summary of ";
 
 export type ContextRole =

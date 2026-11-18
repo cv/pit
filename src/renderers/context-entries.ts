@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Box, type Component, Text } from "@earendil-works/pi-tui";
 
+import { IMITATED_CALL_TYPE, type ImitatedCallDetails } from "../context/imitated-calls.js";
 import type { NoticeDetails } from "../context/notices.js";
 import { CACHE_BASIS, formatTokens, textTokens } from "../context/planning.js";
 import {
@@ -105,6 +106,26 @@ export function renderNotice(
     : "Context pressure notice";
   const lines = [theme.fg("warning", `▲ ${summary}`)];
   if (options.expanded || !details) lines.push(theme.fg("dim", clean(messageText(message))));
+  return new Text(lines.join("\n"), 1, 0);
+}
+
+export function renderImitatedCall(
+  message: CustomMessage,
+  options: { expanded: boolean },
+  theme: Theme,
+): Component {
+  const details = message.details as Partial<ImitatedCallDetails> | undefined;
+  const next =
+    details?.continued === false
+      ? "repeated after a notice; Pit did not ask again"
+      : "Pit asked the model to make the call";
+  const lines = [
+    theme.fg(
+      "warning",
+      `▲ No tool ran · the reply ended with an elided-call record, not a call · ${next}`,
+    ),
+  ];
+  if (options.expanded) lines.push(theme.fg("dim", clean(messageText(message))));
   return new Text(lines.join("\n"), 1, 0);
 }
 
@@ -219,6 +240,7 @@ export function renderProvenance(
 export function registerContextRenderers(pi: ExtensionAPI): void {
   pi.registerMessageRenderer(NOTE_TYPE, renderNote);
   pi.registerMessageRenderer(NOTICE_TYPE, renderNotice);
+  pi.registerMessageRenderer(IMITATED_CALL_TYPE, renderImitatedCall);
   pi.registerMessageRenderer(CATALOG_UPDATE_TYPE, renderCatalogUpdate);
   pi.registerEntryRenderer(PROVENANCE_TYPE, renderProvenance);
 }
