@@ -6,6 +6,7 @@ import type {
   TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 
+import { imitatedCallBoundary } from "./imitated-calls.js";
 import { registerNoteRecovery, staleNoteGroups } from "./notes.js";
 import { NOTICE_LEVELS, pressureNotice } from "./notices.js";
 import type { ContextEditQueue, StagedEdit } from "./queue.js";
@@ -184,7 +185,14 @@ export function registerContextBoundary(pi: ExtensionAPI, queue: ContextEditQueu
       entries.push(...pressureNotice(ctx));
     }
     // Boundary handlers chain: keep the entries earlier handlers proposed.
-    return entries.length === 0 ? undefined : { entries: [...event.entries, ...entries] };
+    // A reply that wrote an elided-call record instead of a call ran nothing: say so (#409).
+    const imitated = imitatedCallBoundary(event, ctx);
+    if (imitated) entries.push(imitated.entry);
+    if (entries.length === 0) return undefined;
+    return {
+      entries: [...event.entries, ...entries],
+      ...(imitated?.continue ? { continue: true } : {}),
+    };
   });
   // The next request after the run follows the user's reply, often after the cache expired.
   pi.on("agent_before_settle", (event, ctx) => {

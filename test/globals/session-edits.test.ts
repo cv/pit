@@ -282,7 +282,7 @@ describe("session.elide", () => {
         type: "text",
         text: expect.stringMatching(
           new RegExp(
-            `^\\[Pit: elided tool call: typescript · ~[\\d.]+K? tokens with its result · reason: parser written · originals: session\\.inspectEntry\\("${id}"\\), session\\.inspectEntry\\("${result}"\\)\\]$`,
+            `^\\[Pit: elided tool call: typescript · ~[\\d.]+K? tokens with its result · reason: parser written · originals: session\\.inspectEntry\\("${id}"\\), session\\.inspectEntry\\("${result}"\\) · already ran; writing this text runs nothing\\]$`,
           ),
         ),
       },
