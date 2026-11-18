@@ -42,7 +42,7 @@ jobs:
         run: npm ci
       - name: Audit runtime dependencies
         if: matrix.gates
-        run: npm audit --omit=dev
+        run: npm run audit:runtime
       - name: Verify Pi package layout
         if: matrix.gates
         run: npm run package:check
