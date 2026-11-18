@@ -1,1 +1,1 @@
-{"format":1,"seq":457,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"✓ Closed pull request cv/pit#406 (build(deps-dev): bump @earendil-works/pi-ai from 1.5.0 to 1.5.2)\n"]]}}]}
+{"format":1,"seq":458,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"✓ Closed pull request cv/pit#407 (build(deps): bump oxfmt from 0.77.0 to 0.78.0)\n"]]}}]}
