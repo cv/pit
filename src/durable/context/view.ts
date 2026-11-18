@@ -15,6 +15,7 @@ export const PENDING_EDIT_KIND = "pit.context-edit-pending";
 
 export const ELIDED_PREFIX = "[Elided by the model";
 export const ELIDED_CALLS_PREFIX = "[Pit: elided tool call";
+export const ELIDED_CALLS_RECORD = "already ran; writing this text runs nothing";
 export const COLLAPSED_CALLS_PREFIX = "[Pit: collapsed ";
 export const SUMMARY_PREFIX = "[Model summary of ";
 
