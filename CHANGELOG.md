@@ -4,6 +4,11 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Pit supports Pi 1.5.2, the version `package-lock.json` now pins, including `@earendil-works/pi-codemode` 1.5.2, which Pit installs as its own copy. Update Pi to 1.5.2 with this release.
+- The runtime dependency audit in CI and the Release workflow skips the withdrawn picomatch advisory GHSA-fc5q-39xc-vjpf (#411).
+
 ## [0.38.1] - 2026-11-17
 
 ### Fixed
