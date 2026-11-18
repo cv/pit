@@ -1,1 +1,1 @@
-{"format":1,"seq":243,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"Switched to a new branch 'deps/combined-1.5.2'\n"]]}}]}
+{"format":1,"seq":244,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"\nadded 2 packages, changed 3 packages, and audited 182 packages in 1s\n\n24 packages are looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"]]}}]}
