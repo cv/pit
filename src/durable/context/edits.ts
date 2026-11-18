@@ -5,6 +5,7 @@ import {
   type ContextItem,
   type ContextView,
   ELIDED_CALLS_PREFIX,
+  ELIDED_CALLS_RECORD,
   ELIDED_PREFIX,
   type EditProvenance,
   type Message,
@@ -80,6 +81,8 @@ function callNote(item: ContextItem, results: ContextItem[], reason?: string): s
     ...(failed > 0 ? [`${failed} failed`] : []),
     ...(reason ? [`reason: ${reason}`] : []),
     `originals: ${[item.id, ...results.map((result) => result.id)].map((id) => `session.inspectEntry("${id}")`).join(", ")}`,
+    // Says the note records calls that ran, so a model does not write one as a call (#409).
+    ELIDED_CALLS_RECORD,
   ];
   return `${parts.join(" · ")}]`;
 }
