@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-18
+
 ### Changed
 
 - **Breaking:** Pit supports Pi 1.5.2, the version `package-lock.json` now pins, including `@earendil-works/pi-codemode` 1.5.2, which Pit installs as its own copy. Update Pi to 1.5.2 with this release.
