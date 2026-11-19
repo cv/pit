@@ -69,11 +69,11 @@ export function registerRawCallRecovery(pi: ExtensionAPI): ReadonlyMap<string, s
  * Pi never refreshes a streamed row's arguments after `message_end` replaces the call, so the row
  * still holds the empty, stale arguments. Show the recovered source unless the row has its own.
  */
-export function withRecoveredSource(
+export function withRecoveredSource<T extends ToolCallArgs | null | undefined>(
   sources: ReadonlyMap<string, string>,
   toolCallId: string,
-  args: ToolCallArgs | null | undefined,
-): ToolCallArgs | null | undefined {
+  args: T,
+): T | ToolCallArgs {
   const code = sources.get(toolCallId);
   return code === undefined || (args && Object.hasOwn(args, "code")) ? args : { code };
 }
