@@ -41,12 +41,14 @@ import {
   PROMPT_SNIPPET,
   SAVE_ONLY_DESCRIPTION,
 } from "./metadata.js";
+import { withRecoveredSource } from "./raw-call-recovery.js";
 import { appliedEditDetails, buildToolResult } from "./result.js";
 import { formatTypeScriptSource } from "./source-formatter.js";
 import { applySourceOptions, PIT_SOURCE_GRAMMAR } from "./source-options.js";
 
 interface TypeScriptToolServices {
   contextEdits: ContextEditQueue;
+  recoveredSources: ReadonlyMap<string, string>;
   pi: ExtensionAPI;
   functionState: FunctionState;
   commitFunctionState: FunctionStateCommit;
@@ -318,7 +320,7 @@ const TOOL_PARAMETERS = Type.Object({
 });
 
 export function registerTypeScriptTool(services: TypeScriptToolServices): void {
-  const { pi, functionState } = services;
+  const { pi, functionState, recoveredSources } = services;
   const pendingFailures = new Map<string, TypeScriptFailureDetails>();
   const recoverableCalls = new RecoverableCallStore();
   // Recoverable values stay in memory only, for the Pi session that produced them.
@@ -354,10 +356,12 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     reachesTools: (input) =>
       piToolReach(input.code, [functionState.user, functionState.project, functionState.session]),
     renderCall(args, theme, context) {
-      return renderTypeScriptToolCall(args, theme, context, functionState.effective);
+      const input = withRecoveredSource(recoveredSources, context.toolCallId, args);
+      return renderTypeScriptToolCall(input, theme, context, functionState.effective);
     },
     renderResult(result, options, theme, context) {
-      return renderTypeScriptToolResult(result, options, theme, context);
+      const args = withRecoveredSource(recoveredSources, context.toolCallId, context.args);
+      return renderTypeScriptToolResult(result, options, theme, { ...context, args });
     },
     // oxlint-disable-next-line max-params -- Pi defines the tool execute signature.
     execute(id, params, signal, update, ctx) {

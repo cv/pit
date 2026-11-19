@@ -15,6 +15,7 @@ import { createPitToolSelection } from "./functions/tool-loadout.js";
 import { registerContextRenderers } from "./renderers/context-entries.js";
 import { createCodemodeFunctionExecutor } from "./sandbox/codemode-executor.js";
 import { installHostPlatform } from "./shared/host-platform.js";
+import { registerRawCallRecovery } from "./tool/raw-call-recovery.js";
 import { registerTypeScriptTool } from "./tool/typescript.js";
 
 export { GLOBAL_METHODS } from "./functions/globals.js";
@@ -31,6 +32,7 @@ export default function pit(pi: ExtensionAPI) {
   const commitFunctionState = createFunctionStateCommitQueue();
   const toolSelection = createPitToolSelection();
   const contextEdits = new ContextEditQueue();
+  const recoveredSources = registerRawCallRecovery(pi);
   registerContextBoundary(pi, contextEdits);
   registerContextRenderers(pi);
   const savedFunctionService = new SavedFunctionService({
@@ -48,5 +50,6 @@ export default function pit(pi: ExtensionAPI) {
     functionExecutor,
     toolSelection,
     contextEdits,
+    recoveredSources,
   });
 }
