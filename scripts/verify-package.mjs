@@ -6,11 +6,20 @@ const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "ut
 const packageLock = JSON.parse(await readFile(resolve(root, "package-lock.json"), "utf8"));
 
 const readme = await readFile(resolve(root, "README.md"), "utf8");
-const piProvided = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"];
+const piProvided = [
+  "@earendil-works/pi-ai",
+  "@earendil-works/pi-coding-agent",
+  "@earendil-works/pi-tui",
+  "typebox",
+];
 // Pit supports only the Pi version it pins, so its peer range for Pi's own packages matches the
 // development range. Pi ignores peer ranges when it installs packages, so the range documents the
 // requirement rather than enforcing it.
-const pinnedPiPackages = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui"]);
+const pinnedPiPackages = new Set([
+  "@earendil-works/pi-ai",
+  "@earendil-works/pi-coding-agent",
+  "@earendil-works/pi-tui",
+]);
 const requiredRuntimeFiles = [
   "src/index.ts",
   "src/sandbox/run.ts",

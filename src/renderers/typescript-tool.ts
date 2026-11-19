@@ -36,6 +36,7 @@ interface ToolResultLike {
 }
 
 interface ToolResultContext {
+  displayInputResolved?: boolean;
   args?: ToolCallArgs;
   isError?: boolean;
   executionStarted?: boolean;
