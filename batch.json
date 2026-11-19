@@ -1,1 +1,1 @@
-{"format":1,"seq":179,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," RUN  v5.1.0 /home/runner/work/pit/pit\n\n"]]}}]}
+{"format":1,"seq":180,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ test/extension/raw-grammar-call.test.ts (24 tests) 147ms\n"]]}}]}
