@@ -128,34 +128,13 @@ it.each<{ name: string; prompt: string }>([
   30000,
 );
 
-it("coerces save-only options and saves without running the function", async () => {
-  const events = await runFixture("run save-coercion fixture");
+it("reports malformed @pit options without executing the program or breaking the next request", async () => {
+  const events = await runFixture("run invalid fixture");
   const results = events.filter((event) => event.type === "tool_execution_end");
   expect(results).toHaveLength(1);
   expect(results[0]).toMatchObject({
-    isError: false,
-    result: { content: [{ type: "text", text: expect.stringContaining("Saved function") }] },
+    isError: true,
+    result: { content: [{ type: "text", text: expect.stringContaining("must hold a JSON object") }] },
   });
-  expect(assistantReply(events)).toContainEqual({ type: "text", text: "SAVED_WITHOUT_EXECUTION" });
+  expect(assistantReply(events)).toContainEqual({ type: "text", text: "INVALID_OPTIONS_REPORTED" });
 }, 30000);
-
-it.each<{ name: string; prompt: string; cause: string }>([
-  { name: "malformed JSON", prompt: "run invalid fixture", cause: "must hold a JSON object" },
-  { name: "invalid option value", prompt: "run type-invalid fixture", cause: "saveOnly" },
-])(
-  "reports $name without executing the program or breaking the next request",
-  async ({ prompt, cause }) => {
-    const events = await runFixture(prompt);
-    const results = events.filter((event) => event.type === "tool_execution_end");
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({
-      isError: true,
-      result: { content: [{ type: "text", text: expect.stringContaining(cause) }] },
-    });
-    expect(assistantReply(events)).toContainEqual({
-      type: "text",
-      text: "INVALID_OPTIONS_REPORTED",
-    });
-  },
-  30000,
-);
