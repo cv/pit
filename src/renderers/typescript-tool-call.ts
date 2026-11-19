@@ -28,8 +28,6 @@ export interface ToolCallArgs {
 }
 
 interface ToolCallContext extends ToolCallTimingContext {
-  /** The caller has already selected prepared or intentionally raw display input. */
-  displayInputResolved?: boolean;
   expanded: boolean;
 }
 
@@ -146,7 +144,7 @@ export function renderTypeScriptInputs(
   context: ToolCallContext,
 ): string {
   // Show what runs: a null option is omitted, as the tool's prepareArguments treats it.
-  args = context.displayInputResolved ? omitNullArguments(args) : displayArguments(args);
+  args = displayArguments(args);
   ensureRendererState(context);
   const lines: string[] = [];
   const functionId = normalizedLabel(args.functionId);
@@ -174,9 +172,7 @@ export function renderTypeScriptToolCall(
   context: ToolCallContext,
   registry: FunctionRegistry,
 ) {
-  args = context.displayInputResolved
-    ? omitNullArguments(args ?? {})
-    : displayArguments(args ?? {});
+  args = displayArguments(args ?? {});
   ensureRendererState(context);
   const code = typeof args.code === "string" ? args.code : "";
   const callLabel = describeCall(args, code, registry);
