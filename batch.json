@@ -1,1 +1,1 @@
-{"format":1,"seq":81,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"For raw-call-recovery, I'm considering minor cleanup like simplifying the recover function's return shape, but most of the guard logic should stay as-is since it's not central to this f"]]}}]}
+{"format":1,"seq":82,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",0,"thinking"],"ix.\n\n"]]}}]}
