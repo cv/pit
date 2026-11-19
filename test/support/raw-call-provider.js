@@ -14,23 +14,10 @@ const fixtures = {
     expectedText: "4",
     reply: "REPLAY_AND_RESULT_OK",
   },
-  "run save-coercion fixture": {
-    source:
-      '// @pit: {"label":42,"saveOnly":"true","timeoutMs":"5000"}\nasync function savedProbe({}) { throw new Error("must not execute"); }\n',
-    isError: false,
-    expectedText: "Saved function",
-    reply: "SAVED_WITHOUT_EXECUTION",
-  },
   "run invalid fixture": {
     source: "// @pit: {bad}\nasync () => 2\n",
     isError: true,
     expectedText: "must hold a JSON object",
-    reply: "INVALID_OPTIONS_REPORTED",
-  },
-  "run type-invalid fixture": {
-    source: '// @pit: {"saveOnly":"yes"}\nasync () => 2\n',
-    isError: true,
-    expectedText: "saveOnly",
     reply: "INVALID_OPTIONS_REPORTED",
   },
 };

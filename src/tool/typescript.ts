@@ -25,12 +25,12 @@ import type { FunctionExecutor } from "../sandbox/executor.js";
 import { runWithFunctionExecutor } from "../sandbox/run.js";
 import { LIMITS } from "../shared/bounds.js";
 import { createImageCollector, type ImageCollector } from "../workspace/view-image.js";
-import { createDisplayInputResolver } from "./display-input.js";
 import {
   captureTypeScriptFailure,
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
+import { withRecoveredSource } from "./raw-call-recovery.js";
 import { omitNullArguments, resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
@@ -321,7 +321,6 @@ const TOOL_PARAMETERS = Type.Object({
 
 export function registerTypeScriptTool(services: TypeScriptToolServices): void {
   const { pi, functionState, recoveredSources } = services;
-  const resolveDisplayInput = createDisplayInputResolver(TOOL_PARAMETERS, recoveredSources);
   const pendingFailures = new Map<string, TypeScriptFailureDetails>();
   const recoverableCalls = new RecoverableCallStore();
   // Recoverable values stay in memory only, for the Pi session that produced them.
@@ -357,22 +356,12 @@ export function registerTypeScriptTool(services: TypeScriptToolServices): void {
     reachesTools: (input) =>
       piToolReach(input.code, [functionState.user, functionState.project, functionState.session]),
     renderCall(args, theme, context) {
-      const input = resolveDisplayInput(args, context);
-      return renderTypeScriptToolCall(
-        input,
-        theme,
-        { ...context, displayInputResolved: true },
-        functionState.effective,
-      );
+      const input = withRecoveredSource(recoveredSources, context.toolCallId, args);
+      return renderTypeScriptToolCall(input, theme, context, functionState.effective);
     },
     renderResult(result, options, theme, context) {
-      const displayContext = { ...context, isPartial: options.isPartial };
-      const args = resolveDisplayInput(context.args, displayContext);
-      return renderTypeScriptToolResult(result, options, theme, {
-        ...displayContext,
-        args,
-        displayInputResolved: true,
-      });
+      const args = withRecoveredSource(recoveredSources, context.toolCallId, context.args);
+      return renderTypeScriptToolResult(result, options, theme, { ...context, args });
     },
     // oxlint-disable-next-line max-params -- Pi defines the tool execute signature.
     execute(id, params, signal, update, ctx) {
