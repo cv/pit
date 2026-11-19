@@ -4,6 +4,12 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.39.1] - 2026-11-19
+
+### Fixed
+
+- OpenAI Codex models that send a `typescript` call as a JSON function call holding the raw program, instead of a grammar call, no longer fail with an argument parse error (#415). Pit recovers the program, including any `// @pit: {...}` options line, before Pi validates and saves the call, so it runs once and replays correctly in later requests. Calls already saved this way in a session are repaired in what Pit sends the model, and the call's row shows the recovered source and label.
+
 ## [0.39.0] - 2026-11-18
 
 ### Changed
