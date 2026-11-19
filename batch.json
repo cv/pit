@@ -1,1 +1,1 @@
-{"format":1,"seq":374,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":375,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"== resumed\n › Calculate with input (time unavailable)\n ✓ Returned number: 4 (282ms)\n REPLAY_AND_RESULT_OK\n"]]}}]}
