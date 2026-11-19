@@ -134,7 +134,9 @@ it("reports malformed @pit options without executing the program or breaking the
   expect(results).toHaveLength(1);
   expect(results[0]).toMatchObject({
     isError: true,
-    result: { content: [{ type: "text", text: expect.stringContaining("must hold a JSON object") }] },
+    result: {
+      content: [{ type: "text", text: expect.stringContaining("must hold a JSON object") }],
+    },
   });
   expect(assistantReply(events)).toContainEqual({ type: "text", text: "INVALID_OPTIONS_REPORTED" });
 }, 30000);

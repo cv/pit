@@ -30,7 +30,6 @@ import {
   registerTypeScriptFailureEnrichment,
   type TypeScriptFailureDetails,
 } from "./failure-context.js";
-import { withRecoveredSource } from "./raw-call-recovery.js";
 import { omitNullArguments, resolveToolInput } from "./input.js";
 import {
   CODE_DESCRIPTION,
@@ -42,6 +41,7 @@ import {
   PROMPT_SNIPPET,
   SAVE_ONLY_DESCRIPTION,
 } from "./metadata.js";
+import { withRecoveredSource } from "./raw-call-recovery.js";
 import { appliedEditDetails, buildToolResult } from "./result.js";
 import { formatTypeScriptSource } from "./source-formatter.js";
 import { applySourceOptions, PIT_SOURCE_GRAMMAR } from "./source-options.js";
