@@ -1,1 +1,1 @@
-{"format":1,"seq":357,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"== after-turn\n › Calculate with input (0.0s)\n ✓ Returned number: 4 (271ms)\n"]]}}]}
+{"format":1,"seq":358,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"== expanded\n › Calculate with input (0.0s)\n ✓ Returned number (271ms)\n"]]}}]}
