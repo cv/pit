@@ -4,6 +4,13 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Pit supports Pi 1.6.0, the version `package-lock.json` now pins, including `@earendil-works/pi-codemode` 1.6.0, which Pit installs as its own copy, and pi-durable 1.6. Update Pi to 1.6.0 with this release. Oxfmt is 0.80.0, Oxlint 1.95.0, and Vitest 5.1.1.
+- `workspace.viewImage` no longer stores a note saying the current model does not support images in the result the model reads, which stayed in the conversation after switching to a vision model. On Pi this follows Pi 1.6.0's `read`; the pi-durable entry now does the same. The image is still left out of requests to a text-only model, and the result row still shows `image omitted for text-only model`.
+- With Pi 1.6.0, a command that `pi.exec` kills by a signal reports 128 + the signal number instead of exit code 0, so `shell` calls with `raise: true` that do not stream now throw when the command is stopped.
+
+
 ## [0.39.1] - 2026-11-19
 
 ### Fixed
