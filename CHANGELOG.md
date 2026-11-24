@@ -10,7 +10,6 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 - `workspace.viewImage` no longer stores a note saying the current model does not support images in the result the model reads, which stayed in the conversation after switching to a vision model. On Pi this follows Pi 1.6.0's `read`; the pi-durable entry now does the same. The image is still left out of requests to a text-only model, and the result row still shows `image omitted for text-only model`.
 - With Pi 1.6.0, a command that `pi.exec` kills by a signal reports 128 + the signal number instead of exit code 0. Pit runs `shell` commands through `pi.exec` when Pi sends no progress updates, so there `raise: true` now throws a named timeout or cancellation when a command is stopped.
 
-
 ## [0.39.1] - 2026-11-19
 
 ### Fixed
