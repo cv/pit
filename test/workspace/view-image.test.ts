@@ -279,7 +279,7 @@ describe("workspace image collector", () => {
     expect(attached()).toHaveLength(1);
   });
 
-  it("uses model resize limits and keeps non-vision processing notes", async () => {
+  it("uses model resize limits and flags non-vision omission outside the note", async () => {
     await writeFile(join(cwd, "large.png"), png(32, 16));
     const model = {
       provider: "test",
@@ -291,7 +291,7 @@ describe("workspace image collector", () => {
     await expect(view("large.png")).resolves.toMatchObject({ queued: true });
     const [attachment] = attached();
     expect(attachment?.info.note).toContain("original 32x16, displayed at 8x4");
-    expect(attachment?.info.note).toContain("does not support images");
+    expect(attachment?.info.note).not.toContain("does not support images");
     expect(attachment?.info.omitted).toBe(true);
     expect(attachment && pngDimensions(attachment.image.data)).toEqual({ width: 8, height: 4 });
   });

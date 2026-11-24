@@ -74,7 +74,10 @@ function processSettings(options: Record<string, unknown>, defaultCwd: string): 
   };
 }
 
-/** Why the host stopped a command: Pit's streaming runner says so; `pi.exec` reports only `killed`. */
+/**
+ * Why the host stopped a command: Pit's streaming runner says so; `pi.exec` reports only `killed`,
+ * with 128 + the signal number as its exit code, so `raise` throws for a killed command.
+ */
 function terminationOf(
   result: { killed: boolean; truncated: boolean; termination?: ProcessTermination },
   signal: AbortSignal | undefined,
