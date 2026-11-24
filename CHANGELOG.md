@@ -4,6 +4,8 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.39.2] - 2026-11-24
+
 ### Changed
 
 - **Breaking:** Pit supports Pi 1.6.0, the version `package-lock.json` now pins, including `@earendil-works/pi-codemode` 1.6.0, which Pit installs as its own copy, and pi-durable 1.6. Update Pi to 1.6.0 with this release. Oxfmt is 0.80.0, Oxlint 1.95.0, and Vitest 5.1.1.
