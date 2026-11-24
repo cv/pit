@@ -113,14 +113,18 @@ describe("pit extension", () => {
     expect(result.content[0].text).toMatch(/Image: wide\.png[\s\S]*Image: small\.png/);
   });
 
-  it("allows retry after failed image read and retains text-only model warning", async () => {
+  it("allows retry after failed image read and flags the text-only model omission", async () => {
     await writeFile(`${cwd}/pixel.png`, makePng());
     const result = await run(
       `async ({ workspace: { viewImage } }) => { try { await viewImage("missing.png"); } catch {} await viewImage("pixel.png"); }`,
       context({ model: { provider: "test", id: "text-only", input: ["text"] } }),
     );
     expect(result.content.some((item: any) => item.type === "image")).toBe(true);
-    expect(result.content[0].text).toContain("does not support images");
+    expect(result.details.imageAttachments).toEqual([
+      expect.objectContaining({ file: "pixel.png", omitted: true }),
+    ]);
+    // Pi's read leaves the warning to the TUI, so a later switch to a vision model sees no stale note.
+    expect(result.content[0].text).not.toContain("does not support images");
   });
 
   it("attaches images after a saved helper call and leaves saveOnly side-effect free", async () => {
