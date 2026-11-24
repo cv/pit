@@ -8,7 +8,7 @@ import { generationTiming } from "../../src/tool/timing.js";
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 const options = { expanded: true, isPartial: false };
-const plain = (component: { render(width: number): string[] }) =>
+const plain = (component: { render(width: number): readonly string[] }) =>
   component
     .render(80)
     .map((line) => stripTerminalSequences(line).trimEnd())
