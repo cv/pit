@@ -12,7 +12,7 @@ import { type Mock, vi } from "vitest";
 import pit from "../../src/index.js";
 
 interface RenderedComponent {
-  render(width: number): string[];
+  render(width: number): readonly string[];
   invalidate(): void;
 }
 
