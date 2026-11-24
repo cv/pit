@@ -19,7 +19,7 @@ const theme = {
   bold: (text: string) => text,
 } as any;
 
-const rows = (component: { render(width: number): string[] }, width = 80) =>
+const rows = (component: { render(width: number): readonly string[] }, width = 80) =>
   component.render(width).map((line) => line.trimEnd());
 
 const note = (body: string, key = "progress") => ({

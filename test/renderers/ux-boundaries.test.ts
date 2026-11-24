@@ -8,7 +8,7 @@ import { renderTypeScriptToolResult } from "../../src/renderers/typescript-tool.
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 const options = { expanded: true, isPartial: false };
-const plain = (component: { render(width: number): string[] }) =>
+const plain = (component: { render(width: number): readonly string[] }) =>
   component
     .render(120)
     .map((row) => stripTerminalSequences(row).trimEnd())
