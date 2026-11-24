@@ -100,9 +100,9 @@ async function loadImage(
   }
   if (Buffer.byteLength(image.data, "utf8") > MAX_ENCODED_BYTES)
     throw new Error("Encoded image exceeds 5 MiB");
+  // Like pi-durable's `read`, no note says the model cannot see the image: a stored note would
+  // stay in the result after a switch to a vision model. `omitted` tells the TUI instead.
   const omitted = textOnly(input.model);
-  if (omitted)
-    notes.push("The current model does not support images; it is left out of its requests.");
   return {
     image: { type: "image", data: image.data, mimeType: image.mimeType },
     info: {
