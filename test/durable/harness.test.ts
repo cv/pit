@@ -567,7 +567,7 @@ describe("images on pi-durable hosts", () => {
     ]);
   });
 
-  it("says a text-only model is not shown the image", async () => {
+  it("flags an image a text-only model is not shown without storing a note for the model", async () => {
     await writeFile(join(cwd, "shot.png"), png());
     const textOnly = new DurableTestHost({
       extension: createPitDurableExtension({ agentDir }),
@@ -575,9 +575,8 @@ describe("images on pi-durable hosts", () => {
       model: { input: ["text"] },
     });
     const { results } = await textOnly.run([view("shot.png")]);
-    expect(results[0]?.text).toContain(
-      "The current model does not support images; it is left out of its requests.",
-    );
+    expect(results[0]?.text).toContain("\nImage: shot.png\nRead image file [image/png].");
+    expect(results[0]?.text).not.toContain("does not support images");
     expect(results[0]?.details.imageAttachments).toEqual([
       expect.objectContaining({ file: "shot.png", omitted: true }),
     ]);
