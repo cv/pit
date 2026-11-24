@@ -1,1 +1,1 @@
-{"format":1,"seq":295,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ test/process/process-runner.test.ts (12 tests) 80ms\n"]]}}]}
+{"format":1,"seq":296,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"]," ✓ test/workspace/view-image.test.ts (17 tests) 1971ms\n   ✓ workspace image collector (17)\n     ✓ rejects a FIFO in a disposable subprocess before its deadline 999ms\n"]]}}]}
