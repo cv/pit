@@ -1,1 +1,1 @@
-{"format":1,"seq":452,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"[]\n"]]}}]}
+{"format":1,"seq":453,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"[{\"conclusion\":\"\",\"databaseId\":45320939472,\"headSha\":\"f5a3ebdbb9866611fe4494eae5cbd240be67b92e\",\"name\":\"CI\",\"status\":\"in_progress\",\"url\":\"https://github.com/cv/pit/actions/runs/45320939472\"}]\n"]]}}]}
