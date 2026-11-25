@@ -1,1 +1,1 @@
-{"format":1,"seq":63,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@oxfmt/binding-linux-x64-gnu@0.79.0 bmi=0 GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0;GCC: (crosstool-NG 1.24.0.388_94b98a4) 4.8.5;\n"]]}}]}
+{"format":1,"seq":64,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"@oxlint/binding-linux-x64-gnu@1.94.0 bmi=0 GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0;GCC: (crosstool-NG 1.24.0.388_94b98a4) 4.8.5;\n"]]}}]}
