@@ -1,1 +1,1 @@
-{"format":1,"seq":38,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"]]}}]}
+{"format":1,"seq":39,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"output"],"node_modules/@oxfmt/binding-linux-x64-gnu 0.80.0 bmi=150 GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0;GCC: (crosstool-NG 1.24.0.388_94b98a4) 4.8.5;\n"]]}}]}
