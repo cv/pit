@@ -6,7 +6,7 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ### Fixed
 
-- Pit pins Oxfmt 0.79.0 (from 0.80.0) and Oxlint 1.94.0 (from 1.95.0). The 0.80.0 and 1.95.0 linux-x64 bindings were built with BMI2 instructions and crash with `Illegal instruction` (SIGILL) on x86-64 CPUs without BMI2/AVX2, such as Ivy Bridge and older (oxc-project/oxc#30164, #420). Pit loads Oxfmt when its extension starts, so on those CPUs Pi crashed at startup.
+- Pit pins Oxfmt 0.79.0 (from 0.80.0) and Oxlint 1.94.0 (from 1.95.0). The 0.80.0 and 1.95.0 linux-x64 bindings were built with BMI2 instructions and crash with `Illegal instruction` (SIGILL) on x86-64 CPUs without BMI2/AVX2, such as Ivy Bridge and older (oxc-project/oxc#30164, #420). Pit's runtime loads Oxfmt to format `typescript` programs, so on those CPUs it could take Pi down with it; Oxlint is a development dependency and only affected contributors.
 
 ## [0.39.2] - 2026-11-24
 
