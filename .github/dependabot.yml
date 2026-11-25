@@ -9,6 +9,13 @@ updates:
     # so typebox moves only with a Pi upgrade.
     ignore:
       - dependency-name: typebox
+      # oxfmt 0.80.0 and oxlint 1.95.0 ship linux-x64 bindings that crash with SIGILL on
+      # CPUs without BMI2 (oxc-project/oxc#30164, cv/pit#420). Before accepting a newer
+      # release, check its linux-x64 .node binding for rorx/shlx/shrx/andn/bzhi with objdump.
+      - dependency-name: oxfmt
+        versions: ["0.80.0"]
+      - dependency-name: oxlint
+        versions: ["1.95.0"]
     groups:
       compatible-development-dependencies:
         dependency-type: development
