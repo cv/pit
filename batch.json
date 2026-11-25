@@ -1,1 +1,1 @@
-{"format":1,"seq":191,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"]," pin **oxfmt 0.80.0** and **oxlint 1."]]}}]}
+{"format":1,"seq":192,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["generation","message","content",1,"text"],"95.0**. Both of their linux-x64 builds contain instructions that older CPUs (pre-Haswell, roughly 2013 and earlier) don't support, so they crash with `Illegal instruction` (SIGILL). I checked the install"]]}}]}
