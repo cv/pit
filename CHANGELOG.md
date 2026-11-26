@@ -4,6 +4,13 @@ Notable changes to Pit are documented here. GitHub release notes remain the auth
 
 ## [Unreleased]
 
+## [0.39.4] - 2026-11-26
+
+### Changed
+
+- **Breaking:** Pit supports Pi 1.6.1, the version `package-lock.json` now pins, including `@earendil-works/pi-codemode` 1.6.1, which Pit installs as its own copy, and pi-durable 1.6.1. Update Pi to 1.6.1 with this release.
+- Development dependencies: Vitest 5.1.2, `@types/node` 26.6.11, and npm 12.2.3 for contributors and CI. Oxfmt stays at 0.79.0 and Oxlint at 1.94.0 to avoid the SIGILL crash on CPUs without BMI2 (#420); TypeBox stays at 1.3.27, the version Pi pins.
+
 ## [0.39.3] - 2026-11-25
 
 ### Fixed
