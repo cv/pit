@@ -1,1 +1,1 @@
-{"format":1,"seq":65,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["s",["tools",0,"status"],"running"],["s",["tools",0,"output"],"[\n  {\n    \"node\": \"^22.22.2 || ^24.15.0 || >=26.0.0\"\n  }\n]\n"]]}}]}
+{"format":1,"seq":66,"writes":[{"type":"document.change","id":2,"content":{"version":3,"kind":"delta","ops":[["a",["tools",0,"output"],"12.2.3\n"]]}}]}
