@@ -1,6 +1,6 @@
 {
   "name": "pit",
-  "version": "0.39.3",
+  "version": "0.39.4",
   "description": "A single, dependency-injected TypeScript tool for Pi",
   "type": "module",
   "files": [
