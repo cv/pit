@@ -8,6 +8,30 @@ export function recordValue(value: unknown, label = "options"): Record<string, u
   return value as Record<string, unknown>;
 }
 
+/**
+ * Rejects keys an options object does not define, so a misspelled or invented option fails
+ * instead of being silently ignored. Keys set to `undefined` are treated as absent.
+ */
+export function knownKeysValue(
+  value: Record<string, unknown>,
+  label: string,
+  keys: readonly string[],
+  hints: Readonly<Record<string, string>> = {},
+): Record<string, unknown> {
+  const unknown = Object.keys(value).filter(
+    (key) => value[key] !== undefined && !keys.includes(key),
+  );
+  if (unknown.length > 0) {
+    const hint = unknown.map((key) => hints[key]).find((text) => text !== undefined);
+    throw new Error(
+      `${label} has unknown ${unknown.length === 1 ? "key" : "keys"} ${unknown
+        .map((key) => JSON.stringify(key))
+        .join(", ")}; expected ${keys.join(", ")}${hint === undefined ? "" : `. ${hint}`}`,
+    );
+  }
+  return value;
+}
+
 export function stringValue(value: unknown, label: string): string {
   if (typeof value !== "string") {
     throw new TypeError(`${label} must be a string`);

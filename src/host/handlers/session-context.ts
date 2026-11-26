@@ -11,6 +11,7 @@ import type { ContextEditQueue } from "../../context/queue.js";
 import { buildContextView, CONTEXT_ROLES, type ContextRole } from "../../context/view.js";
 import {
   boundedIntegerValue as boundedInteger,
+  knownKeysValue as knownKeys,
   recordValue as record,
   stringArrayValue as stringArray,
   stringValue as string,
@@ -25,6 +26,10 @@ export interface SessionContextServices extends PiControlServices {
 }
 
 export type ContextMethod = (args: unknown[]) => unknown;
+
+const CURSOR_HINT = "Outline pages with a cursor: pass the previous page's nextAfter as after";
+const OUTLINE_OPTIONS = ["after", "limit", "roles", "tool", "previewChars"] as const;
+const OUTLINE_HINTS = { offset: CURSOR_HINT, page: CURSOR_HINT, cursor: CURSOR_HINT };
 
 function optionalString(value: unknown, label: string): string | undefined {
   return value === undefined ? undefined : string(value, label);
@@ -51,7 +56,10 @@ export function createSessionContextHandlers({
     buildContextView(ctx.sessionManager, toolCallId === undefined ? {} : { toolCallId });
   return {
     outline: (args) => {
-      const options = args[0] === undefined ? {} : record(args[0], "options");
+      const options =
+        args[0] === undefined
+          ? {}
+          : knownKeys(record(args[0], "options"), "options", OUTLINE_OPTIONS, OUTLINE_HINTS);
       const usage = ctx.getContextUsage();
       const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow;
       const after = optionalString(options.after, "options.after");
@@ -81,7 +89,10 @@ export function createSessionContextHandlers({
         pending: contextEdits?.pending() ?? new Map(),
       }),
     inspectEntry: (args) => {
-      const options = args[1] === undefined ? {} : record(args[1], "options");
+      const options =
+        args[1] === undefined
+          ? {}
+          : knownKeys(record(args[1], "options"), "options", ["offset", "limit"]);
       return inspectContextEntry(view(), ctx.sessionManager, {
         id: string(args[0], "entry id"),
         offset: boundedInteger(options.offset, "options.offset", {

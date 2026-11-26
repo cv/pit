@@ -309,6 +309,13 @@ describe("session.outline", () => {
       options: { after: "missing" },
       message: "Cursor missing",
     },
+    {
+      // Offset paging would otherwise return the first page again on every call.
+      name: "offset paging, pointing at the cursor",
+      options: { offset: 200, limit: 200 },
+      message:
+        'options has unknown key "offset"; expected after, limit, roles, tool, previewChars. Outline pages with a cursor',
+    },
   ])("rejects $name", async ({ options, message }) => {
     const { session } = longTask();
     // Untyped params reach the host guard that type checking otherwise enforces.

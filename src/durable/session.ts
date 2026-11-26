@@ -3,6 +3,7 @@ import type { ToolExecutionApi } from "@earendil-works/pi-durable";
 import type { NativeFunctionHandler } from "../host/native-dispatcher.js";
 import {
   boundedIntegerValue as boundedInteger,
+  knownKeysValue as knownKeys,
   recordValue as object,
   stringArrayValue as stringArray,
   stringValue as string,
@@ -29,6 +30,9 @@ const OUTLINE_LIMITS = {
   previewChars: { maximum: 2_000, fallback: 200 },
 } as const;
 const INSPECT_LIMITS = { limit: { maximum: 40_000, fallback: 20_000 }, visibleChars: 4_000 };
+const CURSOR_HINT = "Outline pages with a cursor: pass the previous page's nextAfter as after";
+const OUTLINE_OPTIONS = ["after", "limit", "roles", "tool", "previewChars"] as const;
+const OUTLINE_HINTS = { offset: CURSOR_HINT, page: CURSOR_HINT, cursor: CURSOR_HINT };
 // pi-durable does not report the provider's cache, so receipts estimate as Pi does when unknown.
 const CACHE = { state: "unknown", idleSeconds: null, ttlSeconds: null, refreshedBy: null } as const;
 
@@ -72,7 +76,10 @@ function roles(value: unknown): Set<ContextRole> | undefined {
 }
 
 function outline(view: ContextView, args: unknown[]) {
-  const options = args[0] === undefined ? {} : object(args[0]);
+  const options =
+    args[0] === undefined
+      ? {}
+      : knownKeys(object(args[0]), "options", OUTLINE_OPTIONS, OUTLINE_HINTS);
   const after = options.after === undefined ? undefined : string(options.after, "options.after");
   const limit = boundedInteger(options.limit, "options.limit", OUTLINE_LIMITS.limit);
   const previewChars = boundedInteger(
@@ -128,7 +135,8 @@ function outlineEntry(view: ContextView, item: ContextItem, previewChars: number
 
 async function inspectEntry(services: DurableSessionServices, view: ContextView, args: unknown[]) {
   const id = string(args[0], "id");
-  const options = args[1] === undefined ? {} : object(args[1]);
+  const options =
+    args[1] === undefined ? {} : knownKeys(object(args[1]), "options", ["offset", "limit"]);
   const offset = boundedInteger(options.offset, "options.offset", {
     minimum: 0,
     maximum: Number.MAX_SAFE_INTEGER,
@@ -253,7 +261,8 @@ export function createDurableSessionHandler(
         return inspectEntry(services, await view(), args);
       case "elide": {
         const current = await view();
-        const options = args[1] === undefined ? {} : object(args[1]);
+        const options =
+          args[1] === undefined ? {} : knownKeys(object(args[1]), "options", ["reason", "when"]);
         const reason =
           options.reason === undefined ? undefined : string(options.reason, "options.reason");
         const plan = planElide(current, stringArray(args[0], "ids"), reason);
@@ -263,7 +272,12 @@ export function createDurableSessionHandler(
       }
       case "summarize": {
         const current = await view();
-        const input = object(args[0], "input");
+        const input = knownKeys(object(args[0], "input"), "input", [
+          "from",
+          "to",
+          "summary",
+          "when",
+        ]);
         const plan = planSummarize(current, {
           from: string(input.from, "input.from"),
           to: string(input.to, "input.to"),
