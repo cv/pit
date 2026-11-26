@@ -48,6 +48,7 @@ export function resolveHiddenTools(input: PitDurableLoadoutInput): string[] {
  */
 export function hideFromModel(name: string): Wrap {
   return {
+    kind: "tool",
     tool: name,
     wrap: (tool: ToolRegistration) => {
       if (tool.deferred === true) return tool;
