@@ -103,7 +103,7 @@ export const APPLY_STAGED_EDITS: Task<ApplyInput, { phase: "apply" }, null, obje
             }
           }
           if (handle && edits.length > 0) {
-            await handle.submit(tx, {
+            await handle.admit(tx, {
               type: "write",
               entry: { kind: EDIT_KIND, data: { operations, pending: task.input.pending }, edits },
             });
