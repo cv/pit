@@ -9,6 +9,7 @@ import {
 import { planSummarize, summaryTokenCap } from "../../context/summarize.js";
 import { buildContextView, type ContextView } from "../../context/view.js";
 import {
+  knownKeysValue as knownKeys,
   recordValue as record,
   stringArrayValue as stringArray,
   stringValue as string,
@@ -78,7 +79,10 @@ export function createSessionEditHandlers({
   };
   return {
     elide: (args) => {
-      const options = args[1] === undefined ? {} : record(args[1], "options");
+      const options =
+        args[1] === undefined
+          ? {}
+          : knownKeys(record(args[1], "options"), "options", ["reason", "when"]);
       const current = view();
       const basis = basisOf(current);
       return stage(
@@ -88,7 +92,7 @@ export function createSessionEditHandlers({
       );
     },
     summarize: (args) => {
-      const input = record(args[0], "input");
+      const input = knownKeys(record(args[0], "input"), "input", ["from", "to", "summary", "when"]);
       const current = view();
       const basis = basisOf(current);
       return stage(

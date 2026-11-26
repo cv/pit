@@ -421,6 +421,16 @@ describe("durable session handler", () => {
     );
   });
 
+  it("rejects session options it does not define", async () => {
+    const { call: session } = await handler(HISTORY);
+    await expect(session("outline", [{ offset: 50 }], undefined as never)).rejects.toThrow(
+      /unknown key "offset".*pass the previous page's nextAfter as after/,
+    );
+    await expect(
+      session("summarize", [{ from: "8", to: "9", summary: "s", wen: "now" }], undefined as never),
+    ).rejects.toThrow(/input has unknown key "wen"; expected from, to, summary, when/);
+  });
+
   it("reports an empty conversation without a tail", async () => {
     const { call: session } = await handler([]);
     await expect(session("info", [], undefined as never)).resolves.toMatchObject({ leafId: null });

@@ -483,6 +483,12 @@ describe("session.elide", () => {
       options: { reason: "x".repeat(201) },
       message: "options.reason must be at most 200 characters",
     },
+    {
+      name: "a misspelled option instead of ignoring it",
+      ids: ["a"],
+      options: { reason: "stale", wehn: "now" },
+      message: 'options has unknown key "wehn"; expected reason, when',
+    },
   ])("rejects $name", async ({ ids, options, message }) => {
     const { session } = longTask();
     await expect(
