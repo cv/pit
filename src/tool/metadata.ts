@@ -44,7 +44,7 @@ export function createToolDescription(maxOutputBytes: number): string {
     "```",
     "",
     "LABEL",
-    "Begin every program with its transcript label, about 15 words, as its own first line:",
+    "Give every call a ~15-word transcript label, either in label or line one (not both):",
     "```ts",
     '// @pit: {"label": "Run the test suite with coverage enabled"}',
     "async ({ npm: { test } }) => test({ coverage: true })",
